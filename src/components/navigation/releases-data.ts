@@ -14,20 +14,76 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.1.0",
-    "date": "em desenvolvimento",
+    "version": "1.0.8",
+    "date": "maio 2026",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "handle existing release (409) by updating instead of failing"
+      },
+      {
+        "kind": "fix",
+        "text": "provider encryption fallback + CI node-pty cross-compile"
+      },
+      {
+        "kind": "feat",
+        "text": "CI/CD pipeline + bug fixes"
+      },
+      {
+        "kind": "feat",
+        "text": "CodeBrain v1.0.7 — Multi-agent AI IDE"
+      }
+    ]
+  },
+  {
+    "version": "1.2.1",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "migrate to generic provider with GitLab Package Registry"
+      },
+      {
+        "kind": "feat",
+        "text": "add clipboard copy functionality and update providers section"
+      }
+    ]
+  },
+  {
+    "version": "1.2.0",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "attach provider modal event listener"
+      },
+      {
+        "kind": "fix",
+        "text": "modal overlays blocking titlebar drag"
+      },
+      {
+        "kind": "fix",
+        "text": "draggable titlebar regions"
+      },
+      {
+        "kind": "fix",
+        "text": "modal position below titlebar"
+      },
+      {
+        "kind": "feat",
+        "text": "remove subscription menu items"
+      },
+      {
+        "kind": "fix",
+        "text": "pane dropdown position"
+      },
+      {
+        "kind": "fix",
+        "text": "account dropdown position"
+      },
       {
         "kind": "feat",
         "text": "add Linux deb package link to release artifacts"
-      },
-      {
-        "kind": "feat",
-        "text": "bump version to 1.1.0 and fix navbar z-index issue"
-      },
-      {
-        "kind": "feat",
-        "text": "update squad prompts for improved clarity and functionality"
       }
     ]
   },

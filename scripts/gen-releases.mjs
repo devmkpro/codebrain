@@ -102,10 +102,14 @@ if (tags.length === 0) {
     const parsed = parseCommit(c.subject);
     if (parsed) highlights.push(parsed);
   }
-  if (highlights.length > 0) {
-    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).version;
-    releases.push({ version: pkg, date: "em desenvolvimento", highlights });
-  }
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).version;
+  releases.push({ version: pkg, date: "em desenvolvimento", highlights });
+}
+
+// Always ensure at least one entry so RELEASES[0] is never undefined
+if (releases.length === 0) {
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).version;
+  releases.push({ version: pkg, date: "", highlights: [] });
 }
 
 // Deduplicate highlights within each release (same text)

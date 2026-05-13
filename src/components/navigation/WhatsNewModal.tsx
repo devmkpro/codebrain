@@ -24,7 +24,7 @@ export function WhatsNewModal({
     window.codeBrainApp?.audio?.getConfig().then(cfg => setAudioConfig(cfg)).catch(() => setAudioConfig(null)).finally(() => setAudioConfigLoaded(true));
   }, [open]);
   if (!open) return null;
-  const primaryRelease = RELEASES[0];
+  const primaryRelease = RELEASES[0] ?? { version: "", date: "", highlights: [] };
   const priorReleases = RELEASES.slice(1);
   const BrainVoiceAllowed = true;
   return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -126,7 +126,7 @@ export function WhatsNewModal({
       </div>
     </div>;
 }
-export const LATEST_RELEASE_VERSION = RELEASES[0].version;
+export const LATEST_RELEASE_VERSION = RELEASES[0]?.version ?? "";
 export function formatDuration(ms) {
   if (ms < 0) return "—";
   const s = Math.floor(ms / 1e3);
