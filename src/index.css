@@ -1,0 +1,297 @@
+@import "tailwindcss";
+
+/* ── CodeBrain custom theme ───────────────────────────────────── */
+@theme {
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas,
+    "Cascadia Code", "Courier New", monospace;
+
+  --color-codebrain-accent: #6366f1;
+  --color-codebrain-accent-soft: #818cf8;
+  --color-codebrain-purple: #a855f7;
+  --color-codebrain-bg: #000000;
+  --color-codebrain-surface: #07070f;
+  --color-codebrain-muted: #64648a;
+  --color-codebrain-text: #c8c8e0;
+}
+
+/* ── Base reset ───────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+  color: #c8c8e0;
+  font-family: var(--font-mono);
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* ── Light theme — CodeBrain ──────────────────────────────────── */
+.light {
+  background: #f0f0f8;   /* off-white with subtle indigo tint */
+  color: #18182c;
+}
+.light body,
+.light #root {
+  background: #f0f0f8;
+  color: #18182c;
+}
+
+/* ── Surface overrides (CodeBrain light palette) ──────────────── */
+/* Dark bg hex classes → light surfaces with indigo tint */
+.light .bg-black               { background: #f0f0f8 !important; }
+.light [class*="bg-[#0"]       { background: #f8f8ff !important; }  /* ghostwhite */
+.light [class*="bg-[#1"]       { background: #eaeaf5 !important; }
+.light [class*="bg-black/3"],
+.light [class*="bg-black/6"]   { background: rgba(245,245,255,0.90) !important; }
+.light [class*="bg-black/7"],
+.light [class*="bg-black/8"],
+.light [class*="bg-black/9"]   { background: rgba(30,30,60,0.12) !important; }
+.light [class*="bg-white/["]   { background: rgba(30,30,70,0.04) !important; }
+
+/* ── Text overrides ───────────────────────────────────────────── */
+.light .text-white             { color: #18182c !important; }
+.light .text-gray-200          { color: #28283e !important; }
+.light .text-gray-300          { color: #3c3c58 !important; }
+.light .text-gray-400          { color: #545475 !important; }
+.light .text-gray-500          { color: #727290 !important; }
+.light .text-gray-600          { color: #9494aa !important; }
+.light .text-gray-700          { color: #b8b8cc !important; }
+.light .text-gray-800          { color: #d8d8e8 !important; }
+
+/* ── Slate text overrides (Settings/Dashboard use slate-* classes) */
+.light .text-slate-100         { color: #18182c !important; }
+.light .text-slate-200         { color: #1e1e38 !important; }
+.light .text-slate-300         { color: #2e2e4e !important; }
+.light .text-slate-400         { color: #484868 !important; }
+.light .text-slate-500         { color: #606080 !important; }
+.light .text-slate-600         { color: #484868 !important; }
+.light .text-slate-700         { color: #9090b0 !important; }
+.light .text-slate-800         { color: #c0c0d8 !important; }
+.light .hover\:text-slate-300:hover { color: #1e1e38 !important; }
+.light .hover\:text-slate-400:hover { color: #2e2e4e !important; }
+
+/* ── Border overrides ─────────────────────────────────────────── */
+.light .border-white\/5        { border-color: rgba(30,30,70,0.08) !important; }
+.light .border-white\/10       { border-color: rgba(30,30,70,0.12) !important; }
+.light .border-white\/20       { border-color: rgba(30,30,70,0.18) !important; }
+.light .border-white\/30       { border-color: rgba(30,30,70,0.25) !important; }
+.light [class*="border-white\/\[0\.06\]"] { border-color: rgba(30,30,70,0.10) !important; }
+.light [class*="border-gray-900"] { border-color: rgba(30,30,70,0.10) !important; }
+
+/* ── Hover overrides ──────────────────────────────────────────── */
+.light .hover\:text-white:hover        { color: #18182c !important; }
+.light .hover\:text-gray-200:hover     { color: #28283e !important; }
+.light .hover\:text-gray-300:hover     { color: #3c3c58 !important; }
+.light .hover\:border-white\/20:hover  { border-color: rgba(30,30,70,0.18) !important; }
+.light .hover\:border-white\/30:hover  { border-color: rgba(30,30,70,0.25) !important; }
+.light .hover\:border-white\/60:hover  { border-color: rgba(30,30,70,0.45) !important; }
+.light .hover\:bg-white\/\[0\.02\]:hover,
+.light .hover\:bg-white\/\[0\.05\]:hover { background: rgba(30,30,70,0.06) !important; }
+
+/* ── Divide overrides ─────────────────────────────────────────── */
+.light .divide-white\/5 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(30,30,70,0.08) !important; }
+.light .divide-white\/10 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(30,30,70,0.12) !important; }
+
+/* ── Scrollbar ────────────────────────────────────────────────── */
+.light ::-webkit-scrollbar-thumb { background: rgba(30,30,80,0.15); }
+.light ::-webkit-scrollbar-thumb:hover { background: rgba(30,30,80,0.25); }
+
+/* ── Form fields ──────────────────────────────────────────────── */
+.light input,
+.light select {
+  background: #ffffff !important;
+  color: #18182c !important;
+  border-color: rgba(30,30,70,0.20) !important;
+}
+.light input::placeholder { color: #9494aa !important; }
+.light select option { background: #ffffff; color: #18182c; }
+
+/* ── Modal overlays stay semi-opaque even in light mode ──────── */
+.light .bg-black\/70 { background: rgba(0,0,0,0.55) !important; }
+
+/* ── CodeBrain accent: indigo darker in light mode for contrast ─ */
+.light .text-indigo-300      { color: #4f46e5 !important; }
+.light .text-indigo-400      { color: #4338ca !important; }
+.light .text-indigo-500      { color: #3730a3 !important; }
+.light .hover\:text-indigo-400:hover { color: #4338ca !important; }
+.light .hover\:text-indigo-300:hover { color: #4f46e5 !important; }
+
+/* ── Active tab text: stays very dark on light navbar ────────── */
+.light .text-gray-100        { color: #1a1a30 !important; }
+
+/* ══════════════════════════════════════════════════════════════════
+   LIGHT MODE — refinamentos v2
+   ══════════════════════════════════════════════════════════════════ */
+
+/* 1. Botões primários: indigo levemente mais suave, texto BRANCO forçado */
+.light [class*="bg-[#4F46E5]"][class*="text-white"] {
+  background: #6366f1 !important;
+  color: #ffffff !important;
+}
+.light [class*="bg-[#4338CA]"][class*="text-white"] {
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+}
+.light [class*="hover:bg-[#4338CA]"]:hover { background: #4f46e5 !important; }
+.light [class*="hover:bg-[#4F46E5]"]:hover { background: #6366f1 !important; }
+
+/* 2. Hierarquia de superfícies: cards brancos puros, sidebars off-white */
+.light [class*="bg-[#0A0A0B]"] { background: #ffffff !important; }
+.light [class*="bg-[#0F0F13]"] { background: #f5f5fc !important; }
+.light [class*="bg-[#0B0B0E]"] { background: #f5f5fc !important; }
+.light [class*="bg-[#1A1A22]"] { background: #ffffff !important; }
+
+/* 3. bg-white/N sem colchetes (Toggle, Stepper buttons, sub-nav) */
+.light [class~="bg-white/5"]           { background: rgba(30,30,70,0.06) !important; }
+.light [class~="bg-white/10"]          { background: rgba(30,30,70,0.09) !important; }
+.light [class~="bg-white/15"]          { background: rgba(30,30,70,0.13) !important; }
+.light [class~="hover:bg-white/5"]:hover  { background: rgba(30,30,70,0.09) !important; }
+.light [class~="hover:bg-white/15"]:hover { background: rgba(30,30,70,0.14) !important; }
+
+/* 4. Profundidade: sombra suave em cards rounded-xl */
+.light .rounded-xl.border {
+  box-shadow: 0 1px 4px rgba(30,30,80,0.09), 0 0 0 1px rgba(30,30,80,0.04);
+}
+
+/* 5. Sliders: trilho mais espesso e thumb com sombra 3D */
+.light input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: rgba(99,102,241,0.28);
+  border-radius: 9999px;
+}
+.light input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #6366f1;
+  margin-top: -6px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.20), 0 0 0 2px rgba(99,102,241,0.22);
+}
+
+/* 6. Cores de status mais escuras para legibilidade no fundo claro */
+.light .text-emerald-400  { color: #047857 !important; }
+.light .text-amber-400    { color: #b45309 !important; }
+.light .text-cyan-400     { color: #0e7490 !important; }
+.light .text-red-400      { color: #b91c1c !important; }
+.light [class*="bg-emerald-500/10"] { background: #d1fae5 !important; }
+.light [class*="bg-amber-500/10"]   { background: #fef3c7 !important; }
+.light [class*="bg-cyan-500/10"]    { background: #cffafe !important; }
+.light [class*="bg-red-500/"]       { background: rgba(239,68,68,0.09) !important; }
+
+/* 7. Recent projects hover: preenchimento sutil em vez de só borda */
+.light [class*="hover:bg-[#4F46E5]/5"]:hover  { background: #eeeffd !important; }
+
+/* ── Electron drag regions ────────────────────────────────────── */
+[style*="WebkitAppRegion: drag"]    { -webkit-app-region: drag; }
+[style*="WebkitAppRegion: no-drag"] { -webkit-app-region: no-drag; }
+
+/* ── xterm.js base styles ──────────────────────────────────────── */
+.xterm {
+    cursor: text;
+    position: relative;
+    user-select: none;
+    -ms-user-select: none;
+    -webkit-user-select: none;
+    height: 100%;
+}
+.xterm.focus,
+.xterm:focus {
+    outline: none;
+}
+.xterm .xterm-helpers {
+    position: absolute;
+    top: 0;
+    z-index: 5;
+}
+.xterm .xterm-helper-textarea {
+    position: absolute;
+    opacity: 0;
+    left: -9999em;
+    top: 0;
+    width: 0;
+    height: 0;
+    z-index: -5;
+    white-space: nowrap;
+    overflow: hidden;
+    resize: none;
+}
+.xterm .composition-view {
+    background: #000;
+    color: #FFF;
+    display: none;
+    position: absolute;
+    white-space: nowrap;
+    z-index: 1;
+}
+.xterm .composition-view.active {
+    display: block;
+}
+.xterm .xterm-viewport {
+    background-color: transparent !important;
+    overflow-y: scroll;
+    cursor: default;
+    position: absolute;
+    right: 0;
+    left: 0;
+    top: 0;
+    bottom: 0;
+}
+.xterm .xterm-screen {
+    position: relative;
+}
+.xterm .xterm-screen canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+.xterm .xterm-scroll-area {
+    visibility: hidden;
+}
+.xterm-char-measure-element {
+    display: inline-block;
+    visibility: hidden;
+    position: absolute;
+    top: 0;
+    left: -9999em;
+    line-height: normal;
+}
+.xterm.enable-mouse-events {
+    cursor: default;
+}
+.xterm.xterm-cursor-pointer {
+    cursor: pointer;
+}
+.xterm.column-select.focus {
+    cursor: crosshair;
+}
+.xterm .xterm-accessibility,
+.xterm .xterm-message {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    z-index: 10;
+    color: transparent;
+    pointer-events: none;
+}
+.xterm .live-region {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}

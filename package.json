@@ -1,0 +1,183 @@
+{
+  "name": "codebrain",
+  "productName": "Codebrain",
+  "version": "1.2.2",
+  "description": "Electron shell — React UI + IPC layer for Codebrain App",
+  "homepage": "https://gitlab.com/maikeofc18/codebrain",
+  "author": {
+    "name": "MK",
+    "email": "devmkbr@proton.me"
+  },
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "gen:releases": "node scripts/gen-releases.mjs",
+    "dev": "npm run gen:releases && electron-vite dev",
+    "build": "npm run gen:releases && electron-vite build",
+    "preview": "electron-vite preview",
+    "pack:win": "node scripts/build-exe.mjs",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:win:nsis": "npm run build && electron-builder --win nsis --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "typecheck": "tsc --noEmit",
+    "typecheck:node": "tsc -p tsconfig.node.json --noEmit"
+  },
+  "dependencies": {
+    "@lydell/node-pty": "1.2.0-beta.12",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@tailwindcss/vite": "^4.2.4",
+    "@xhayper/discord-rpc": "^1.3.4",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
+    "autoprefixer": "^10.5.0",
+    "better-sqlite3": "^12.9.0",
+    "clsx": "^2.1.1",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.8.3",
+    "express": "^4.21.0",
+    "lucide-react": "^1.14.0",
+    "motion": "^12.38.0",
+    "nanoid": "^5.0.9",
+    "react-resizable-panels": "^4.11.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.4",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/generator": "^7.29.1",
+    "@babel/parser": "^7.29.3",
+    "@babel/template": "^7.28.6",
+    "@babel/traverse": "^7.29.0",
+    "@babel/types": "^7.29.0",
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron/asar": "^4.2.0",
+    "@electron/packager": "^20.0.0",
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.5.4",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^33.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^3.0.0",
+    "prettier": "^3.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.6.2",
+    "vite": "^6.0.0"
+  },
+  "build": {
+    "appId": "sh.codebrain.app",
+    "productName": "Codebrain",
+    "copyright": "Copyright © 2026 Codebrain",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://gitlab.com/api/v4/projects/82138843/packages/generic/updates/latest",
+        "requestHeaders": {
+          "PRIVATE-TOKEN": "${env.GITLAB_UPDATE_TOKEN}"
+        }
+      }
+    ],
+    "directories": {
+      "buildResources": "resources",
+      "output": "dist"
+    },
+    "files": [
+      "out/**",
+      "!out/**/*.map",
+      "packages/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/codebrain-skill",
+        "to": "codebrain-skill",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "**/node_modules/@lydell/node-pty*/**",
+      "**/node_modules/better-sqlite3/**/*.node"
+    ],
+    "artifactName": "Codebrain-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.ico",
+      "signingHashAlgorithms": null,
+      "sign": null
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Codebrain"
+    },
+    "portable": {
+      "artifactName": "Codebrain-${version}-portable.exe"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "darkModeSupport": true
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png",
+      "category": "Development"
+    }
+  }
+}

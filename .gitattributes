@@ -1,0 +1,9 @@
+# Force LF line endings in repo (Windows-compatible)
+* text=auto eol=lf
+
+# Binaries — no conversion
+*.woff2 binary
+*.node  binary
+*.exe   binary
+*.dll   binary
+*.asar  binary

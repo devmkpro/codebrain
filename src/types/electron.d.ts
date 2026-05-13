@@ -1,0 +1,406 @@
+// Window API exposed by the Electron preload script via contextBridge
+
+export interface AuthStatus {
+  authenticated: boolean;
+  email?: string;
+  reason?: "no_license" | "license_unavailable" | "session_expired" | "auth_failed";
+}
+
+export interface PtyConfig {
+  paneId?: string;
+  agent: string;
+  cwd?: string;
+  workspacePath?: string;
+  args?: string[];
+  session?: Session;
+  claudeSessionId?: string;
+  providerId?: string;
+  model?: string;
+  permissionMode?: string;
+  role?: string;
+  sessionContext?: string;
+}
+
+export interface PtyInfo {
+  paneId: string;
+  agent: string;
+  cwd: string;
+  workspacePath?: string;
+  args?: string[];
+  session?: Session;
+  claudeSessionId?: string;
+  providerId?: string;
+  model?: string;
+}
+
+export interface Session {
+  provider: string;
+  id: string;
+  capturedAt: number;
+  confidence: "high" | "medium" | "low";
+  source: string;
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+  templateId?: string;
+  [key: string]: unknown;
+}
+
+export interface ProviderTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  fields: ProviderTemplateField[];
+}
+
+export interface ProviderTemplateField {
+  key: string;
+  label: string;
+  type: "text" | "password" | "select";
+  required?: boolean;
+  options?: string[];
+}
+
+export interface TokenPayload {
+  taskId?: string;
+  workspacePath?: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  totalTokens: number;
+}
+
+export interface Squad {
+  id: string;
+  name: string;
+  description?: string;
+  agents: SquadAgent[];
+}
+
+export interface SquadAgent {
+  id: string;
+  agent: string;
+  model?: string;
+  providerId?: string;
+  role?: string;
+}
+
+export interface Task {
+  id: string;
+  label: string;
+  status: "pending" | "running" | "done" | "error";
+  workspacePath?: string;
+  paneId?: string;
+  activityId?: string;
+  createdAt: number;
+}
+
+export interface TasksState {
+  tasks: Task[];
+}
+
+export interface WorkspaceConfig {
+  [key: string]: unknown;
+}
+
+export interface AppConfig {
+  theme?: "dark" | "light";
+  [key: string]: unknown;
+}
+
+export interface AudioConfig {
+  enabled?: boolean;
+  transcribe?: boolean;
+  [key: string]: unknown;
+}
+
+export interface LogEntry {
+  level: string;
+  message: string;
+  timestamp: string;
+  data?: unknown;
+}
+
+export interface UpdateInfo {
+  version: string;
+  releaseDate?: string;
+  releaseNotes?: string;
+}
+
+export interface DownloadProgress {
+  percent: number;
+  bytesPerSecond: number;
+  total: number;
+  transferred: number;
+}
+
+export interface DiagnosticsSnapshot {
+  panes: unknown[];
+  processes: unknown[];
+  memory: unknown;
+  [key: string]: unknown;
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  extension?: string;
+}
+
+export interface NetworkEntry {
+  id: string;
+  timestamp: number;
+  method: string;
+  url: string;
+  status: number;
+  duration?: number;
+  requestHeaders?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
+  requestBody?: string;
+  responseBody?: string;
+  error?: string;
+}
+
+export interface ConsoleEntry {
+  id: string;
+  timestamp: number;
+  level: "log" | "warn" | "error";
+  message: string;
+  source?: string;
+}
+
+export interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ElementInfo {
+  selector: string;
+  tag: string;
+  role?: string;
+  text?: string;
+  value?: string;
+  href?: string;
+  id?: string;
+  classes: string[];
+  attributes: Record<string, string>;
+  bounds: Bounds;
+  visible: boolean;
+  disabled: boolean;
+  checked?: boolean;
+  focused: boolean;
+}
+
+export interface Annotation {
+  type: "box" | "arrow" | "text";
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+  label?: string;
+  color?: string;
+}
+
+export interface CodebrainApp {
+  app: {
+    version: () => Promise<string>;
+    onReloadShortcut: (callback: () => void) => () => void;
+    reloadShell: () => Promise<void>;
+  };
+  auth: {
+    status: () => Promise<AuthStatus>;
+    profile: () => Promise<{ email: string; [key: string]: unknown }>;
+    logout: () => Promise<void>;
+    openLogin: () => Promise<void>;
+    openSignup: () => Promise<void>;
+    openTerms: () => Promise<void>;
+    openPrivacy: () => Promise<void>;
+    openBilling: () => Promise<void>;
+    onAuthSuccess: (callback: (data: { email: string }) => void) => () => void;
+    onAuthState: (callback: (state: AuthStatus) => void) => () => void;
+    onAuthenticating: (callback: (data: { email: string }) => void) => () => void;
+  };
+  workspaces: {
+    recent: () => Promise<string[]>;
+    touch: (path: string) => Promise<void>;
+    remove: (path: string) => Promise<void>;
+  };
+  pty: {
+    spawn: (config: PtyConfig) => Promise<string>;
+    write: (paneId: string, data: string) => Promise<void>;
+    read: (paneId: string, lastN?: number) => Promise<string[]>;
+    readRaw: (paneId: string, lastN?: number) => Promise<Uint8Array>;
+    readRawText: (paneId: string) => Promise<string>;
+    kill: (paneId: string) => Promise<void>;
+    list: () => Promise<PtyInfo[]>;
+    resize: (paneId: string, cols: number, rows: number) => Promise<void>;
+    onOutput: (callback: (paneId: string, data: string) => void) => () => void;
+    onExit: (callback: (paneId: string, exitCode: number) => void) => () => void;
+    onPaneAdded: (callback: (info: PtyInfo) => void) => () => void;
+    onPaneSession: (callback: (info: { paneId: string; session?: Session; claudeSessionId?: string }) => void) => () => void;
+  };
+  workspace: {
+    open: () => Promise<string | null>;
+    set: (dir: string) => Promise<void>;
+    save: (config: WorkspaceConfig) => Promise<void>;
+    scan: (path: string) => Promise<FileEntry[]>;
+  };
+  tokens: {
+    byTask: (taskId: string) => Promise<TokenPayload>;
+    byWorkspace: (sinceMs: number) => Promise<TokenPayload>;
+    onUpdated: (callback: (payload: TokenPayload) => void) => () => void;
+  };
+  session: {
+    load: (workspacePath: string) => Promise<unknown>;
+    loadAll: (workspacePath: string) => Promise<unknown[]>;
+    clear: (workspacePath: string) => Promise<void>;
+    deleteOne: (workspacePath: string, sessionId: string) => Promise<void>;
+    saveSnapshot: (workspacePath: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
+    loadSnapshot: (workspacePath: string) => Promise<{ ok: boolean; snapshot?: unknown; error?: string }>;
+  };
+  claude: {
+    summary: (sessionId: string) => Promise<string>;
+    sessions: (workspacePath: string) => Promise<unknown[]>;
+  };
+  files: {
+    list: (workspacePath: string, subPath?: string) => Promise<FileEntry[]>;
+    read: (workspacePath: string, relPath: string) => Promise<string>;
+    write: (workspacePath: string, relPath: string, content: string) => Promise<void>;
+    pathForFile: (file: File) => string;
+    saveDropped: (name: string, bytes: ArrayBuffer) => Promise<string>;
+  };
+  providers: {
+    list: () => Promise<Provider[]>;
+    templates: () => Promise<ProviderTemplate[]>;
+    save: (provider: Provider) => Promise<{ ok: boolean; error?: string }>;
+    delete: (id: string) => Promise<{ ok: boolean; error?: string }>;
+    testToken: (args: { providerId: string; token: string }) => Promise<{ ok: boolean; error?: string }>;
+    onUpdated: (callback: (providers: Provider[]) => void) => () => void;
+  };
+  diagnostics: {
+    snapshot: () => Promise<DiagnosticsSnapshot>;
+  };
+  audio: {
+    getConfig: () => Promise<AudioConfig>;
+    saveConfig: (patch: Partial<AudioConfig>) => Promise<void>;
+    transcribe: (args: { audio: ArrayBuffer; mimeType: string }) => Promise<string>;
+  };
+  workspaceConfig: {
+    get: (wsPath: string) => Promise<WorkspaceConfig>;
+    set: (wsPath: string, cfg: WorkspaceConfig) => Promise<void>;
+  };
+  appConfig: {
+    get: () => Promise<AppConfig>;
+    set: (patch: Partial<AppConfig>) => Promise<void>;
+  };
+  shells: {
+    list: () => Promise<string[]>;
+  };
+  skill: {
+    status: () => Promise<{ installed: boolean }>;
+    install: () => Promise<void>;
+    uninstall: () => Promise<void>;
+  };
+  cli: {
+    detect: () => Promise<{ found: boolean; path?: string }>;
+    redetect: () => Promise<{ found: boolean; path?: string }>;
+  };
+  tasks: {
+    list: () => Promise<Task[]>;
+    onUpdated: (cb: (state: TasksState) => void) => () => void;
+  };
+  squads: {
+    list: () => Promise<Squad[]>;
+    save: (squad: Squad) => Promise<void>;
+    delete: (id: string) => Promise<void>;
+  };
+  browser: {
+    // Navigation
+    navigate(url: string, paneId?: string): Promise<{ ok: boolean; finalUrl?: string; title?: string }>;
+    open(url: string): Promise<{ ok: boolean; paneId?: string; finalUrl?: string }>;
+    back(paneId?: string): Promise<{ ok: boolean }>;
+    forward(paneId?: string): Promise<{ ok: boolean }>;
+    reload(hard?: boolean, paneId?: string): Promise<{ ok: boolean }>;
+    // DOM reading
+    getHtml(selector?: string, paneId?: string): Promise<{ ok: boolean; html?: string; lengthChars?: number }>;
+    getText(selector?: string, paneId?: string): Promise<{ ok: boolean; text?: string }>;
+    getA11yTree(maxDepth?: number, paneId?: string): Promise<{ ok: boolean; tree?: unknown }>;
+    findByText(text: string, role?: string, exact?: boolean, paneId?: string): Promise<{ ok: boolean; elements?: ElementInfo[] }>;
+    getElement(selector: string, paneId?: string): Promise<{ ok: boolean; element?: ElementInfo }>;
+    getUrl(paneId?: string): Promise<{ ok: boolean; url?: string; title?: string }>;
+    // DOM interaction
+    click(selector: string, paneId?: string): Promise<{ ok: boolean; error?: string }>;
+    fill(selector: string, value: string, clearFirst?: boolean, paneId?: string): Promise<{ ok: boolean; error?: string }>;
+    select(selector: string, valueOrText: string, paneId?: string): Promise<{ ok: boolean; selectedValue?: string }>;
+    check(selector: string, checked?: boolean, paneId?: string): Promise<{ ok: boolean; isChecked?: boolean }>;
+    clear(selector: string, paneId?: string): Promise<{ ok: boolean; error?: string }>;
+    focus(selector: string, paneId?: string): Promise<{ ok: boolean; error?: string }>;
+    hover(selector: string, paneId?: string): Promise<{ ok: boolean; bounds?: Bounds }>;
+    // Coordinate interaction
+    clickAt(x: number, y: number, button?: string, paneId?: string): Promise<{ ok: boolean; elementAtPoint?: ElementInfo }>;
+    hoverAt(x: number, y: number, paneId?: string): Promise<{ ok: boolean; elementAtPoint?: ElementInfo }>;
+    drag(x1: number, y1: number, x2: number, y2: number, steps?: number, paneId?: string): Promise<{ ok: boolean }>;
+    scroll(selector: string | undefined, direction: string, amount: number, paneId?: string): Promise<{ ok: boolean; scrollY?: number; scrollX?: number }>;
+    // Keyboard
+    type(text: string, delayMs?: number, paneId?: string): Promise<{ ok: boolean }>;
+    key(key: string, paneId?: string): Promise<{ ok: boolean }>;
+    shortcut(keys: string, paneId?: string): Promise<{ ok: boolean }>;
+    // Wait
+    waitFor(selector: string, timeoutMs?: number, paneId?: string): Promise<{ ok: boolean; found?: boolean; timedOut?: boolean; waitedMs?: number }>;
+    waitForText(text: string, selector?: string, timeoutMs?: number, paneId?: string): Promise<{ ok: boolean; found?: boolean; timedOut?: boolean }>;
+    waitForUrl(pattern: string, timeoutMs?: number, paneId?: string): Promise<{ ok: boolean; matched?: boolean; finalUrl?: string }>;
+    waitForLoad(timeoutMs?: number, paneId?: string): Promise<{ ok: boolean; loadTimeMs?: number }>;
+    // Screenshots
+    screenshot(fullPage?: boolean, paneId?: string): Promise<{ ok: boolean; path?: string }>;
+    screenshotElement(selector: string, paneId?: string): Promise<{ ok: boolean; path?: string; bounds?: Bounds }>;
+    annotate(screenshotPath: string, annotations: Annotation[]): Promise<{ ok: boolean; path?: string }>;
+    // Eval
+    eval(js: string, paneId?: string): Promise<{ ok: boolean; result?: unknown; error?: string }>;
+    // Logs
+    consoleLog(level?: string, sinceMs?: number, limit?: number, paneId?: string): Promise<{ ok: boolean; entries?: ConsoleEntry[]; total?: number }>;
+    clearConsole(): Promise<{ ok: boolean }>;
+    networkLog(urlFilter?: string, method?: string, status?: string, sinceMs?: number, limit?: number, paneId?: string): Promise<{ ok: boolean; entries?: NetworkEntry[]; total?: number }>;
+    networkWait(pattern: string, method?: string, timeoutMs?: number): Promise<{ ok: boolean; entry?: NetworkEntry | null; timedOut?: boolean }>;
+    clearNetwork(): Promise<{ ok: boolean }>;
+    // Send console entry from renderer to main
+    reportConsoleEntry(entry: ConsoleEntry): void;
+    // Send network entry from JS interceptor to main process
+    reportNetworkEntry(entry: NetworkEntry): void;
+    // Register/unregister browser pane IDs with main process
+    registerPane(paneId: string): void;
+    unregisterPane(paneId: string): void;
+    // Events
+    onNetworkEntry(cb: (entry: NetworkEntry) => void): () => void;
+    onConsoleEntry(cb: (entry: ConsoleEntry) => void): () => void;
+  };
+  notify: (title: string, body: string) => void;
+  log: {
+    list: (opts?: Record<string, unknown>) => Promise<LogEntry[]>;
+    onAppended: (callback: (entry: LogEntry) => void) => () => void;
+  };
+  update: {
+    check: () => Promise<void>;
+    install: () => Promise<void>;
+    onChecking: (cb: () => void) => () => void;
+    onAvailable: (cb: (data: UpdateInfo) => void) => () => void;
+    onNone: (cb: () => void) => () => void;
+    onProgress: (cb: (data: DownloadProgress) => void) => () => void;
+    onDownloaded: (cb: (data: UpdateInfo) => void) => () => void;
+    onError: (cb: (data: { message: string }) => void) => () => void;
+  };
+}
+
+declare global {
+  interface Window {
+    codeBrainApp: CodebrainApp;
+  }
+}

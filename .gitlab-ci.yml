@@ -1,0 +1,73 @@
+stages:
+  - verify
+  - build
+  - release
+
+variables:
+  GIT_DEPTH: 0
+
+# ── Verify (master push — fast compile check) ─────────────────────────────────
+verify:
+  stage: verify
+  image: node:20-bookworm
+  before_script:
+    - npm ci --prefer-offline
+  script:
+    - npm run build
+  only:
+    - master
+
+# ── Linux Build (AppImage + deb) ───────────────────────────────────────────────
+build:linux:
+  stage: build
+  image: node:20-bookworm
+  before_script:
+    - apt-get update && apt-get install -y libarchive-tools dpkg-dev fakeroot rpm
+    - npm ci --prefer-offline
+  script:
+    - npm run build
+    - npx electron-builder --linux AppImage deb --publish never
+  artifacts:
+    paths:
+      - dist/*.AppImage
+      - dist/*.deb
+      - dist/latest-linux.yml
+    expire_in: 1 week
+  only:
+    - tags
+    - master
+
+# ── Windows Build (cross-compile with Wine) ───────────────────────────────────
+build:windows:
+  stage: build
+  image: electronuserland/builder:wine-mono
+  before_script:
+    - npm ci --prefer-offline
+    # Force-install Windows platform-specific native modules
+    # npm skips @lydell/node-pty-win32-x64 on Linux due to os:["win32"] constraint
+    - npm install @lydell/node-pty-win32-x64@1.2.0-beta.12 --no-save --force
+  script:
+    - npm run build
+    - npx electron-builder --win nsis --x64 --publish never
+  artifacts:
+    paths:
+      - dist/*.exe
+      - dist/latest.yml
+    expire_in: 1 week
+  only:
+    - tags
+    - master
+
+# ── Create GitLab Release ──────────────────────────────────────────────────────
+release:
+  stage: release
+  image: node:20-alpine
+  needs:
+    - job: build:linux
+      artifacts: true
+    - job: build:windows
+      artifacts: true
+  script:
+    - node scripts/create-release.mjs
+  only:
+    - tags

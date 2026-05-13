@@ -1,0 +1,3 @@
+provider: generic
+url: https://gitlab.com/api/v4/projects/82138843/packages/generic/updates/latest
+updaterCacheDirName: codebrain-appshell-updater

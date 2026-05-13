@@ -1,0 +1,62 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+
+# ── MCP (local runtime config, port changes per session) ─────────────────────
+.mcp.json
+
+# ── GitLab Runner ────────────────────────────────────────────────────────────
+config.toml
+.runner_system_id
+builds/
+
+# ── Build output (all rebuilt by electron-vite build) ─────────────────────────
+out/
+dist/
+*-bundle.js
+*.tsbuildinfo
+
+# ── Electron app / binaries (never commit) ────────────────────────────────────
+*.exe
+*.dll
+*.asar
+*.pak
+*.bin
+*.dat
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/settings.json
+
+# ── Logs / temp ───────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+.tmp/
+
+# ── Secrets / env ─────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── AI tool configs ───────────────────────────────────────────────────────────
+.gemini/*
+.claude/*
+
+# ── Temp build configs (electron-vite creates these sometimes) ────────────────
+electron.vite.config.*.mjs
+
+# ── Temp code snippets ───────────────────────────────────────────────────────
+*.snippet
+*.tail
+
+# ── Codebrain workspace data ─────────────────────────────────────────────────
+.codebrain/
+
+# ── Decompilation utilities (one-time use) ──────────────────────────────────
+decompile.mjs
+
+# ── Local scripts (dev/build/release .bats) ─────────────────────────────────
+local/
+.github/*
