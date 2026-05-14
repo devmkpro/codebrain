@@ -51,6 +51,9 @@ electron.vite.config.*.mjs
 *.snippet
 *.tail
 
+# ── Codebrain pane system-prompt temp files ──────────────────────────────────
+.codebrain-sys-*.txt
+
 # ── Codebrain workspace data ─────────────────────────────────────────────────
 .codebrain/
 

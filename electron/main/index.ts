@@ -635,8 +635,8 @@ async function spawnPaneInternal(config: {
     const { nanoid } = await import("nanoid");
     const paneId = config.paneId ?? nanoid();
 
-    // System prompt injection
-    if (isClaudeCompatible && !args.includes("--append-system-prompt")) {
+    // System prompt injection — write to file to avoid Windows ARG_MAX limits
+    if (isClaudeCompatible && !args.includes("--append-system-prompt") && !args.includes("--append-system-prompt-file")) {
       let sysPrompt = CODEBRAIN_SYSTEM_PROMPT;
 
       // Inject workspace directory so the agent knows where it is
@@ -668,7 +668,15 @@ async function spawnPaneInternal(config: {
 
       sysPrompt += `\n\n## Providers e Modelos Disponíveis\n\n${providersInfo}`;
 
-      args.push("--append-system-prompt", sysPrompt);
+      // Write to file to avoid Windows CLI argument length limits (8191 chars)
+      const sysPromptFile = path.join(cwd, `.codebrain-sys-${paneId}.txt`);
+      try {
+        fs.writeFileSync(sysPromptFile, sysPrompt, "utf-8");
+        args.push("--append-system-prompt-file", sysPromptFile);
+      } catch {
+        // Fallback to inline arg if file write fails
+        args.push("--append-system-prompt", sysPrompt);
+      }
     }
 
     // Provider-specific env vars
@@ -681,6 +689,9 @@ async function spawnPaneInternal(config: {
     if (isClaudeCompatible) {
       if (provider?.label) env["CLAUDE_CODE_PROVIDER_NAME"] = provider.label;
       if (model) env["CLAUDE_CODE_MODEL_NAME"] = model;
+      // Prevent openclaude v0.10 from overriding our --provider with Codex
+      // defaults in buildStartupEnvFromProfile when no saved profile exists.
+      if (provider) env["CLAUDE_CODE_PROVIDER_PROFILE_ENV_APPLIED"] = "1";
 
       // Ensure openclaude uses correct provider flag if needed
       if (provider?.type) {
@@ -767,6 +778,19 @@ async function spawnPaneInternal(config: {
       claudeSessionId: config.claudeSessionId,
       role: config.role,
     });
+
+    // Clean up temp system-prompt file when pane exits
+    const sysPromptFileIdx = args.indexOf("--append-system-prompt-file");
+    const sysPromptFileArg = sysPromptFileIdx !== -1 ? args[sysPromptFileIdx + 1] : undefined;
+    if (sysPromptFileArg?.includes(".codebrain-sys-")) {
+      const onExit = (exitPaneId: string) => {
+        if (exitPaneId === paneId) {
+          ptyManager.off("exit", onExit);
+          try { fs.unlinkSync(sysPromptFileArg); } catch {}
+        }
+      };
+      ptyManager.on("exit", onExit);
+    }
 
     // Track pane config
     paneConfigs.set(paneId, {
