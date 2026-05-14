@@ -20,7 +20,18 @@ function git(cmd) {
 function getTags() {
   const raw = git("tag -l --sort=-v:refname");
   if (!raw) return [];
-  return raw.split("\n").filter(Boolean);
+  // Normalize tags (remove 'v' prefix) and deduplicate
+  const tags = raw.split("\n").filter(Boolean);
+  const uniqueTags = new Set();
+  const result = [];
+  for (const t of tags) {
+    const norm = t.replace(/^v/, "");
+    if (!uniqueTags.has(norm)) {
+      uniqueTags.add(norm);
+      result.push(t); // keep original format for git log
+    }
+  }
+  return result;
 }
 
 function getCommitsBetween(from, to) {

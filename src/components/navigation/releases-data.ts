@@ -14,9 +14,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.2.6",
+    "version": "1.2.8",
     "date": "em desenvolvimento",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "pass anthropic as provider arg for mimo-compat/anthropic-compat to override codex default"
+      },
       {
         "kind": "fix",
         "text": "pass --provider arg for openclaude v0.10+ compatibility"
@@ -50,6 +54,16 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "CodeBrain v1.0.7 — Multi-agent AI IDE"
+      }
+    ]
+  },
+  {
+    "version": "1.2.7",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "pass anthropic as provider arg for mimo-compat/anthropic-compat to override codex default"
       }
     ]
   },
@@ -154,13 +168,7 @@ export const RELEASES: Release[] = [
       {
         "kind": "fix",
         "text": "provider encryption fallback + CI node-pty cross-compile"
-      }
-    ]
-  },
-  {
-    "version": "1.0.8",
-    "date": "maio 2026",
-    "highlights": [
+      },
       {
         "kind": "feat",
         "text": "CI/CD pipeline + bug fixes"

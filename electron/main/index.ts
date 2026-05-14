@@ -687,7 +687,7 @@ async function spawnPaneInternal(config: {
         if (!args.includes("--provider")) {
           // Map provider types to openclaude provider arg values
           let providerArg = "";
-          switch (provider.type) {
+          switch (provider.type as string) {
             case "openai-compat": providerArg = "openai"; break;
             case "gemini-compat": providerArg = "gemini"; break;
             case "bedrock-compat": providerArg = "bedrock"; break;
@@ -697,6 +697,11 @@ async function spawnPaneInternal(config: {
             case "mimo-compat":
             case "anthropic":
               providerArg = "anthropic"; break;
+            case "custom":
+            case "oauth":
+            case "api-key":
+            case "env":
+              break;
             default: break;
           }
           if (providerArg) args.push("--provider", providerArg);
