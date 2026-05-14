@@ -1079,36 +1079,69 @@ function registerIpcHandlers(): void {
     ];
   });
   ipcMain.handle("cli:install", async () => {
+    const { execSync, spawn } = require("node:child_process") as typeof import("node:child_process");
+    const IS_WIN = process.platform === "win32";
+
+    // Verify npm is available before attempting install
+    let npmPath: string | null = null;
     try {
-      const paneId = `install_${Date.now()}`;
-      await ptyManager.spawn({
-        paneId,
-        agent: "shell",
-        args: ["npm", "install", "-g", "@gitlawb/openclaude"],
-        role: "worker",
+      const out = execSync(IS_WIN ? "where npm" : "which npm", {
+        encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      npmPath = out.split(/\r?\n/)[0]?.trim() || null;
+    } catch {
+      npmPath = null;
+    }
+
+    if (!npmPath) {
+      return {
+        ok: false,
+        error: "npm não foi encontrado no PATH. Instale o Node.js em nodejs.org e tente novamente.",
+      };
+    }
+
+    const TIMEOUT_MS = 120_000;
+
+    return new Promise<{ ok: boolean; error?: string; info?: object }>((resolve) => {
+      // On Windows, .cmd files require shell:true to execute correctly
+      const child = spawn(npmPath!, ["install", "-g", "@gitlawb/openclaude"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        shell: IS_WIN,
       });
 
-      return new Promise((resolve) => {
-        const onExit = async (id: string, code: number) => {
-          if (id === paneId) {
-            ptyManager.off("exit", onExit);
-            const info = cliDetector.redetect();
-            resolve({
-              ok: code === 0,
-              info: {
-                name: "openclaude",
-                found: info.openclaude.found,
-                path: info.openclaude.path,
-                version: info.openclaude.version
-              }
-            });
-          }
-        };
-        ptyManager.on("exit", onExit);
+      let stderr = "";
+      let done = false;
+      child.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        try { child.kill(); } catch {}
+        resolve({ ok: false, error: "Timeout: a instalação demorou mais de 2 minutos. Verifique sua conexão e tente novamente." });
+      }, TIMEOUT_MS);
+
+      child.on("close", (code: number | null) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        const info = cliDetector.redetect();
+        if (code === 0) {
+          resolve({
+            ok: true,
+            info: { name: "openclaude", found: info.openclaude.found, path: info.openclaude.path, version: info.openclaude.version },
+          });
+        } else {
+          resolve({ ok: false, error: stderr.trim() || `npm install saiu com código ${code}` });
+        }
       });
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
+
+      child.on("error", (err: Error) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve({ ok: false, error: err.message });
+      });
+    });
   });
   ipcMain.handle("shells:list", () => cliDetector.detectShells());
 

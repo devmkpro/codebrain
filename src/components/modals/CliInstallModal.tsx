@@ -127,12 +127,20 @@ export function CliInstallModal({ open, onClose, onInstalled }: CliInstallModalP
               <p className="text-red-400/80 text-xs font-mono bg-red-500/5 p-3 rounded border border-red-500/10 mb-6 w-full text-left overflow-auto max-h-[100px]">
                 {error}
               </p>
-              <button
-                onClick={handleInstall}
-                className="w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-lg font-medium transition-all"
-              >
-                Tentar novamente
-              </button>
+              {error?.includes("npm não foi encontrado") ? (
+                <p className="text-[11px] text-gray-500 text-center">
+                  Instale o Node.js em{" "}
+                  <span className="text-indigo-400 font-mono">nodejs.org</span>{" "}
+                  e reinicie o app.
+                </p>
+              ) : (
+                <button
+                  onClick={handleInstall}
+                  className="w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-lg font-medium transition-all"
+                >
+                  Tentar novamente
+                </button>
+              )}
             </>
           )}
         </div>
