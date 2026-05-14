@@ -197,6 +197,8 @@ html, body, #root {
 /* ── Electron drag regions ────────────────────────────────────── */
 [style*="WebkitAppRegion: drag"]    { -webkit-app-region: drag; }
 [style*="WebkitAppRegion: no-drag"] { -webkit-app-region: no-drag; }
+.app-region-drag { -webkit-app-region: drag; }
+.app-region-no-drag { -webkit-app-region: no-drag; }
 
 /* ── xterm.js base styles ──────────────────────────────────────── */
 .xterm {

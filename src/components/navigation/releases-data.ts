@@ -14,7 +14,7 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.2.3",
+    "version": "1.2.4",
     "date": "em desenvolvimento",
     "highlights": [
       {
@@ -46,6 +46,16 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "CodeBrain v1.0.7 — Multi-agent AI IDE"
+      }
+    ]
+  },
+  {
+    "version": "1.2.4",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add MIT License to the project"
       }
     ]
   },

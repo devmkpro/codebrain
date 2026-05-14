@@ -51,13 +51,8 @@ export function UpdateNotificationBanner() {
     };
   }, []);
   const baseClasses = "fixed top-0 left-0 right-0 z-[9999] flex items-center justify-between pl-20 pr-[140px] bg-gray-900/95 backdrop-blur border-b border-gray-700/60 font-mono text-[10px] shadow-lg";
-  const dragStyle = {
-    WebkitAppRegion: "drag",
-    height: "38px"
-  } as React.CSSProperties;
-  const noDragStyle = {
-    WebkitAppRegion: "no-drag"
-  };
+  const dragClasses = "app-region-drag";
+  const noDragClasses = "app-region-no-drag";
   const versionLabel = version ? `v${version}` : "";
   const renderStatus = () => {
     switch (state.kind) {
@@ -108,10 +103,7 @@ export function UpdateNotificationBanner() {
                 });
               }
             });
-          }} style={{
-            WebkitAppRegion: "no-drag",
-            cursor: "pointer"
-          }} className="px-2 py-0.5 text-green-400 border border-green-500/30 hover:border-green-500/60 hover:bg-green-500/10 rounded transition-colors">
+          }} className="app-region-no-drag cursor-pointer px-2 py-0.5 text-green-400 border border-green-500/30 hover:border-green-500/60 hover:bg-green-500/10 rounded transition-colors relative z-50 pointer-events-auto">
               Reiniciar agora
             </button>
           </div>;
@@ -127,11 +119,11 @@ export function UpdateNotificationBanner() {
           </div>;
     }
   };
-  return <div className={baseClasses} style={dragStyle}>
+  return <div className={`${baseClasses} ${dragClasses} h-[38px]`}>
       <div className="flex items-center gap-2 text-gray-500">
         <span className="text-gray-600">CodeBrain</span>
         <span className="text-gray-300">{versionLabel}</span>
       </div>
-      <div style={noDragStyle}>{renderStatus()}</div>
+      <div className={noDragClasses}>{renderStatus()}</div>
     </div>;
 }

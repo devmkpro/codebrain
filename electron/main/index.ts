@@ -1897,10 +1897,13 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", async (e) => {
-  if (isUpdateInstallRequested()) return;
   if (mcpServerInfo) {
     mcpServerInfo.close();
     mcpServerInfo = null;
   }
+  // Make sure all background shells and agents are killed so they don't lock files during an update
+  ptyManager.killAll();
+  
+  if (isUpdateInstallRequested()) return;
   teardownAutoUpdater();
 });
