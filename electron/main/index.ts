@@ -683,7 +683,7 @@ async function spawnPaneInternal(config: {
       if (model) env["CLAUDE_CODE_MODEL_NAME"] = model;
 
       // Ensure openclaude uses correct provider flag if needed
-      if (provider?.type && provider.type !== "anthropic" && provider.type !== "mimo-compat" && provider.type !== "anthropic-compat" && provider.type !== "custom") {
+      if (provider?.type) {
         if (!args.includes("--provider")) {
           // Map provider types to openclaude provider arg values
           let providerArg = "";
@@ -693,6 +693,10 @@ async function spawnPaneInternal(config: {
             case "bedrock-compat": providerArg = "bedrock"; break;
             case "vertex-compat": providerArg = "vertex"; break;
             case "ollama-compat": providerArg = "ollama"; break;
+            case "anthropic-compat":
+            case "mimo-compat":
+            case "anthropic":
+              providerArg = "anthropic"; break;
             default: break;
           }
           if (providerArg) args.push("--provider", providerArg);

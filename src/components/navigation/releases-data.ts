@@ -14,9 +14,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.2.5",
+    "version": "1.2.6",
     "date": "em desenvolvimento",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "pass --provider arg for openclaude v0.10+ compatibility"
+      },
       {
         "kind": "feat",
         "text": "add MIT License to the project"
@@ -46,6 +50,16 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "CodeBrain v1.0.7 — Multi-agent AI IDE"
+      }
+    ]
+  },
+  {
+    "version": "1.2.6",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "pass --provider arg for openclaude v0.10+ compatibility"
       }
     ]
   },
