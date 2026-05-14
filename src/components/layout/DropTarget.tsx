@@ -131,7 +131,7 @@ function jaccard(a, b) {
     shared
   };
 }
-function buildEdges(nodes) {
+export function buildEdges(nodes) {
   const edges = [];
   const TEN_MIN = 10 * 60 * 1e3;
   const TOPIC_THRESHOLD = 0.08;

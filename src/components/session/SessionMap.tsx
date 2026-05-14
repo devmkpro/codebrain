@@ -1,5 +1,5 @@
 ﻿import React from "react";
-import { NODE_R, AGENT_COLORS, agentColor, paneSession, isPathWithin } from "../layout/DropTarget";
+import { NODE_R, AGENT_COLORS, agentColor, paneSession, isPathWithin, buildEdges } from "../layout/DropTarget";
 import { FileLock, FileBraces, FileCode, FileText, FileImage, FileType, File } from "../../stores/providers-store";
 
 // SessionMap
