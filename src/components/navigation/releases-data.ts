@@ -19,11 +19,7 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "fix",
-        "text": "fix banner showing Codex for Gemini/Mimo providers in openclaude v0.10"
-      },
-      {
-        "kind": "fix",
-        "text": "use --append-system-prompt-file to avoid Windows CLI argument length limits"
+        "text": "fix provider banner and system prompt flag for openclaude v0.10"
       }
     ]
   },
@@ -33,19 +29,7 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "fix",
-        "text": "pass anthropic as provider arg for mimo-compat/anthropic-compat to override codex default"
-      },
-      {
-        "kind": "fix",
-        "text": "pass --provider arg for openclaude v0.10+ compatibility"
-      },
-      {
-        "kind": "feat",
-        "text": "add MIT License to the project"
-      },
-      {
-        "kind": "fix",
-        "text": "guard against empty RELEASES array causing black screen"
+        "text": "remove generic openai fallback provider argument that forced codex model on custom providers"
       }
     ]
   },
@@ -69,4 +53,24 @@ export const RELEASES: Release[] = [
       }
     ]
   },
+  {
+    "version": "1.2.4",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add MIT License to the project"
+      }
+    ]
+  },
+  {
+    "version": "1.2.3",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "guard against empty RELEASES array causing black screen"
+      }
+    ]
+  }
 ];
