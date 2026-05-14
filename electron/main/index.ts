@@ -682,6 +682,23 @@ async function spawnPaneInternal(config: {
       if (provider?.label) env["CLAUDE_CODE_PROVIDER_NAME"] = provider.label;
       if (model) env["CLAUDE_CODE_MODEL_NAME"] = model;
 
+      // Ensure openclaude uses correct provider flag if needed
+      if (provider?.type && provider.type !== "anthropic" && provider.type !== "mimo-compat" && provider.type !== "anthropic-compat" && provider.type !== "custom") {
+        if (!args.includes("--provider")) {
+          // Map provider types to openclaude provider arg values
+          let providerArg = "";
+          switch (provider.type) {
+            case "openai-compat": providerArg = "openai"; break;
+            case "gemini-compat": providerArg = "gemini"; break;
+            case "bedrock-compat": providerArg = "bedrock"; break;
+            case "vertex-compat": providerArg = "vertex"; break;
+            case "ollama-compat": providerArg = "ollama"; break;
+            default: break;
+          }
+          if (providerArg) args.push("--provider", providerArg);
+        }
+      }
+
       if (isMimo) {
         if (model) {
           env["MODEL"] = model;
