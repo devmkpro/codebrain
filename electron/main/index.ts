@@ -444,6 +444,12 @@ async function transcribeWithGroq(
 
 let mainWindow: BrowserWindow | null = null;
 
+function safeSend(channel: string, ...args: unknown[]): void {
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send(channel, ...args);
+  }
+}
+
 // ── Recent Workspaces ────────────────────────────────────────────────────────
 
 function readRecentWorkspaces(): string[] {
@@ -786,7 +792,7 @@ async function spawnPaneInternal(config: {
     paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
 
     // Notify renderer
-    mainWindow?.webContents.send("pane:added", {
+    safeSend("pane:added", {
       paneId,
       agent,
       cwd,
@@ -822,7 +828,7 @@ function sendBrowserCmd(paneId: string, cmd: Record<string, unknown>): Promise<{
       reject(new Error("browser command timeout"));
     }, 30000);
     browserPending.set(requestId, { resolve: resolve as (v: unknown) => void, timer });
-    mainWindow.webContents.send("codebrain:browser:cmd", { ...cmd, requestId, paneId });
+    safeSend("codebrain:browser:cmd", { ...cmd, requestId, paneId });
   });
 }
 
@@ -1059,7 +1065,7 @@ function registerIpcHandlers(): void {
   });
 
   providerStore.onChange(() => {
-    mainWindow?.webContents.send("providers:updated", getEnhancedProviders());
+    safeSend("providers:updated", getEnhancedProviders());
   });
 
   // ── Workspace / App Config ─────────────────────────────────────────────────
@@ -1103,11 +1109,13 @@ function registerIpcHandlers(): void {
     const TIMEOUT_MS = 120_000;
 
     return new Promise<{ ok: boolean; error?: string; info?: object }>((resolve) => {
-      // On Windows, .cmd files require shell:true to execute correctly
-      const child = spawn(npmPath!, ["install", "-g", "@gitlawb/openclaude"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        shell: IS_WIN,
-      });
+      // On Windows use shell:true with "npm" by name — avoids path-with-spaces issues
+      // with .cmd files. On Linux spawn the resolved binary directly.
+      const child = spawn(
+        IS_WIN ? "npm" : npmPath!,
+        ["install", "-g", "@gitlawb/openclaude"],
+        { stdio: ["ignore", "pipe", "pipe"], shell: IS_WIN },
+      );
 
       let stderr = "";
       let done = false;
@@ -1202,7 +1210,7 @@ function registerIpcHandlers(): void {
           resolve(createdPaneId);
         };
         ipcMain.on("codebrain:browser:pane-created", handler);
-        mainWindow?.webContents.send("codebrain:browser:create-pane", { url });
+        safeSend("codebrain:browser:create-pane", { url });
       });
       browserPaneIds.add(paneId);
       // Wait for webview to initialize
@@ -1724,10 +1732,10 @@ app.whenReady().then(() => {
 
   // Global PTY event forwarding — single set of listeners for all panes
   ptyManager.on("output", (paneId: string, data: string) => {
-    mainWindow?.webContents.send("pty:output", paneId, data);
+    safeSend("pty:output", paneId, data);
   });
   ptyManager.on("exit", (paneId: string, exitCode: number) => {
-    mainWindow?.webContents.send("pty:exit", paneId, exitCode);
+    safeSend("pty:exit", paneId, exitCode);
     paneConfigs.delete(paneId);
     paneRegistry.delete(paneId);
   });
@@ -1737,7 +1745,7 @@ app.whenReady().then(() => {
   const mcpServerStartPromise = startMCPServer(ptyManager, {
     spawnPaneFn: (req: { agent?: string; providerId?: string; model?: string; cwd?: string }) => spawnPaneInternal(req),
     onPaneCreated: (info: { paneId: string; agent: string; cwd?: string; providerId?: string; model?: string }) => {
-      mainWindow?.webContents.send("pane:added", info);
+      safeSend("pane:added", info);
     },
     sendBrowserCmd,
     saveScreenshot,
@@ -1767,7 +1775,7 @@ app.whenReady().then(() => {
           }, 1000);
         };
         ipcMain.on("codebrain:browser:pane-created", handler);
-        mainWindow?.webContents.send("codebrain:browser:create-pane", { url });
+        safeSend("codebrain:browser:create-pane", { url });
       });
     },
     getCurrentWorkspacePath: () => currentWorkspacePath,
@@ -1807,7 +1815,7 @@ app.whenReady().then(() => {
       const retryPromise = startMCPServer(ptyManager, {
         spawnPaneFn: (req: { agent?: string; providerId?: string; model?: string; cwd?: string }) => spawnPaneInternal(req),
         onPaneCreated: (info: { paneId: string; agent: string; cwd?: string; providerId?: string; model?: string }) => {
-          mainWindow?.webContents.send("pane:added", info);
+          safeSend("pane:added", info);
         },
         sendBrowserCmd,
         saveScreenshot,
@@ -1836,7 +1844,7 @@ app.whenReady().then(() => {
               }, 1000);
             };
             ipcMain.on("codebrain:browser:pane-created", handler);
-            mainWindow?.webContents.send("codebrain:browser:create-pane", { url });
+            safeSend("codebrain:browser:create-pane", { url });
           });
         },
         getCurrentWorkspacePath: () => currentWorkspacePath,
@@ -1889,7 +1897,7 @@ app.whenReady().then(() => {
       };
       browserNetworkLog.push(entry);
       if (browserNetworkLog.length > BROWSER_LOG_MAX) browserNetworkLog.splice(0, browserNetworkLog.length - BROWSER_LOG_MAX);
-      mainWindow?.webContents.send("codebrain:browser:network-entry", entry);
+      safeSend("codebrain:browser:network-entry", entry);
     });
 
     sess.webRequest.onErrorOccurred((details) => {
@@ -1913,7 +1921,7 @@ app.whenReady().then(() => {
       };
       browserNetworkLog.push(entry);
       if (browserNetworkLog.length > BROWSER_LOG_MAX) browserNetworkLog.splice(0, browserNetworkLog.length - BROWSER_LOG_MAX);
-      mainWindow?.webContents.send("codebrain:browser:network-entry", entry);
+      safeSend("codebrain:browser:network-entry", entry);
     });
   }
 
