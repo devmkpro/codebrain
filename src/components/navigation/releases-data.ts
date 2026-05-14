@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.2.10",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "fix auto-update failing with 'Falha ao desinstalar' error on Windows by repairing missing registry keys on startup"
+      }
+    ]
+  },
+  {
     "version": "1.2.9",
     "date": "maio 2026",
     "highlights": [

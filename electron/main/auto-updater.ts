@@ -2,19 +2,69 @@
  * Auto-update module (Disabled)
  */
 import type { BrowserWindow } from "electron";
-import { ipcMain } from "electron";
+import { app, ipcMain } from "electron";
 import { autoUpdater } from "electron-updater";
 import log from "electron-log/main.js";
+import { execSync } from "node:child_process";
+import * as path from "node:path";
 
 let windowRef: BrowserWindow | null = null;
 let updateRequested = false;
 let ipcRegistered = false;
+
+/**
+ * Writes the Windows registry keys that the NSIS installer needs to locate
+ * the existing installation during an auto-update. If these keys are missing
+ * (e.g., first install didn't write them), quitAndInstall() fails with error 2.
+ */
+export function repairWindowsRegistryIfNeeded(): void {
+  if (process.platform !== "win32" || !app.isPackaged) return;
+
+  try {
+    const appId = "sh.codebrain.app";
+    const installDir = path.dirname(process.execPath);
+    const productName = "Codebrain";
+    const version = app.getVersion();
+    const uninstaller = path.join(installDir, `Uninstall ${productName}.exe`);
+
+    // Key 1: HKCU\Software\{appId} — install dir, read by NSIS update script
+    const softwareKey = `HKCU\\Software\\${appId}`;
+    execSync(`reg query "${softwareKey}" /ve`, { stdio: "ignore" });
+  } catch {
+    // Key doesn't exist — write it
+    try {
+      const appId = "sh.codebrain.app";
+      const installDir = path.dirname(process.execPath);
+      const productName = "Codebrain";
+      const version = app.getVersion();
+      const uninstaller = path.join(installDir, `Uninstall ${productName}.exe`);
+
+      const softwareKey = `HKCU\\Software\\${appId}`;
+      execSync(`reg add "${softwareKey}" /ve /d "${installDir}" /f`, { stdio: "ignore" });
+
+      const uninstallKey = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${appId}`;
+      execSync(`reg add "${uninstallKey}" /v "DisplayName" /d "${productName}" /f`, { stdio: "ignore" });
+      execSync(`reg add "${uninstallKey}" /v "DisplayVersion" /d "${version}" /f`, { stdio: "ignore" });
+      execSync(`reg add "${uninstallKey}" /v "UninstallString" /d "\\"${uninstaller}\\"" /f`, { stdio: "ignore" });
+      execSync(`reg add "${uninstallKey}" /v "InstallLocation" /d "${installDir}" /f`, { stdio: "ignore" });
+      execSync(`reg add "${uninstallKey}" /v "Publisher" /d "Codebrain" /f`, { stdio: "ignore" });
+      execSync(`reg add "${uninstallKey}" /v "NoModify" /t REG_DWORD /d 1 /f`, { stdio: "ignore" });
+      execSync(`reg add "${uninstallKey}" /v "NoRepair" /t REG_DWORD /d 1 /f`, { stdio: "ignore" });
+
+      log.info("[auto-updater] Registry repair: wrote missing uninstall keys for", installDir);
+    } catch (err) {
+      log.warn("[auto-updater] Registry repair failed:", err);
+    }
+  }
+}
 
 export function setupAutoUpdater(
   window: BrowserWindow,
   _onBeforeInstall?: () => Promise<void>,
 ): void {
   windowRef = window;
+
+  repairWindowsRegistryIfNeeded();
 
   autoUpdater.logger = log;
   autoUpdater.autoDownload = true;
