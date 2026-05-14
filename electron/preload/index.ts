@@ -218,6 +218,8 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
 
   skill: {
     status: () => ipcRenderer.invoke("skill:status"),
+    list: () => ipcRenderer.invoke("skill:list"),
+    openFolder: () => ipcRenderer.invoke("skill:openFolder"),
     install: () => ipcRenderer.invoke("skill:installCodebrain"),
     uninstall: () => ipcRenderer.invoke("skill:uninstallCodebrain"),
   },

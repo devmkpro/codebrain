@@ -93,6 +93,7 @@ export function SettingsPage() {
   const [saved,     setSaved]  = useState(false);
   const [shells,    setShells] = useState<string[]>([]);
   const [skillStatus, setSkillStatus] = useState<{ installed: boolean } | null>(null);
+  const [installedSkills, setInstalledSkills] = useState<string[]>([]);
   const [cliStatus,   setCliStatus]   = useState<{ found: boolean; path?: string } | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
@@ -129,6 +130,10 @@ export function SettingsPage() {
     (window as any).codeBrainApp?.skill?.status?.()
       .then((s: any) => setSkillStatus(s))
       .catch(() => {});
+    // Load skills list
+    (window as any).codeBrainApp?.skill?.list?.()
+      .then((skills: string[]) => setInstalledSkills(skills))
+      .catch(() => {});
     // Load CLI status — detect returns AllCliInfo { openclaude, shell }
     (window as any).codeBrainApp?.cli?.detect?.()
       .then((s: any) => setCliStatus(s?.openclaude ?? s))
@@ -151,6 +156,9 @@ export function SettingsPage() {
         await (window as any).codeBrainApp?.skill?.install?.();
         setSkillStatus({ installed: true });
       }
+      // Update skills list
+      const list = await (window as any).codeBrainApp?.skill?.list?.();
+      if (list) setInstalledSkills(list);
     } catch {
       (window as any).codeBrainApp?.notify?.('Erro', 'Falha ao alterar skill.');
     } finally {
@@ -331,7 +339,37 @@ export function SettingsPage() {
 
           {/* ── Skill & CLI ──────────────────────────────────────────── */}
           <SectionCard id="skill" icon={<Download size={13} />} title="Skill & CLI" active={open.includes('skill')} onToggle={toggleSection}>
-            {/* Skill */}
+            {/* Outras skills */}
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-medium text-slate-300">Skills do OpenClaude</p>
+                  <p className="text-[10px] text-slate-600 mt-0.5">Skills instaladas em <span className="font-mono bg-white/5 px-1 rounded">~/.claude/skills</span></p>
+                </div>
+                <button
+                  onClick={() => (window as any).codeBrainApp?.skill?.openFolder?.()}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 hover:bg-white/5 text-slate-300 transition-colors"
+                >
+                  Abrir Pasta
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {installedSkills.length === 0 ? (
+                  <span className="text-[10px] text-slate-600">Nenhuma skill encontrada (abra a pasta e coloque a sua lá).</span>
+                ) : (
+                  installedSkills.map(skill => (
+                    <span key={skill} className="px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-mono text-indigo-300 flex items-center gap-1.5">
+                      <Zap size={10} className={skill === 'codebrain-skill' ? 'text-emerald-400' : 'text-indigo-400'} />
+                      {skill}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <Divider />
+
+            {/* Codebrain Skill */}
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-medium text-slate-300">Codebrain Skill</p>

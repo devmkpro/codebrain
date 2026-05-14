@@ -299,6 +299,7 @@ export function SettingsModal({
   const setDefaultShellPath = useTerminalSettings(s => s.setDefaultShellPath);
   const [shells, setShells] = React.useState([]);
   const [skillInstalled, setSkillInstalled] = React.useState(null);
+  const [installedSkills, setInstalledSkills] = React.useState([]);
   const [skillBusy, setSkillBusy] = React.useState(false);
   const [skillMsg, setSkillMsg] = React.useState(null);
   const [audioConfig, setAudioConfig] = React.useState(null);
@@ -309,8 +310,11 @@ export function SettingsModal({
     try {
       const r = await window.codeBrainApp.skill.status();
       setSkillInstalled(!!r.installed);
+      const list = await window.codeBrainApp.skill.list();
+      setInstalledSkills(list ?? []);
     } catch {
       setSkillInstalled(false);
+      setInstalledSkills([]);
     }
   };
   const handleSkillToggle = async () => {
@@ -660,6 +664,28 @@ export function SettingsModal({
               </div>}
           </section>
           <section>
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest">
+                Skills do OpenClaude
+              </p>
+              <button
+                onClick={() => window.codeBrainApp.skill.openFolder()}
+                className="font-mono text-[9px] uppercase tracking-widest text-gray-500 hover:text-white transition-colors"
+              >
+                Abrir Pasta
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {installedSkills.length === 0 ? (
+                <span className="font-mono text-[10px] text-gray-600">Nenhuma skill na pasta.</span>
+              ) : (
+                installedSkills.map(skill => (
+                  <span key={skill} className="px-2 py-1 rounded border font-mono text-[10px] border-indigo-500/30 text-indigo-300 bg-indigo-500/10">
+                    {skill}
+                  </span>
+                ))
+              )}
+            </div>
             <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest mb-2">
               Skill BFLabs Codebrain
             </p>

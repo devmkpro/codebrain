@@ -114,6 +114,7 @@ function HomeHeader() {
     <>
       <div className="h-[38px] w-full shrink-0 flex relative z-[60]" style={{ WebkitAppRegion: 'drag' } as any}>
         <div className="flex-1" />
+        {/* Adicionado o padding na margem direita de 140px por conta dos botões window controls nativos do Electron/Windows */}
         <div className="w-[140px] shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any} />
       </div>
 
@@ -656,6 +657,7 @@ function WorkspaceHeader() {
     <>
       <div className="h-[38px] w-full shrink-0 flex relative z-[60]" style={{ WebkitAppRegion: 'drag' } as any}>
         <div className="flex-1" />
+        {/* Adicionado o padding na margem direita de 140px por conta dos botões window controls nativos do Electron/Windows */}
         <div className="w-[140px] shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any} />
       </div>
       

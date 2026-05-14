@@ -1575,6 +1575,22 @@ ${panesSummary}
     const installed = fs.existsSync(skillDir);
     return { installed };
   });
+  ipcMain.handle("skill:list", async () => {
+    const skillsDir = path.join(os.homedir(), ".claude", "skills");
+    if (!fs.existsSync(skillsDir)) return [];
+    try {
+      return fs.readdirSync(skillsDir, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+    } catch {
+      return [];
+    }
+  });
+  ipcMain.handle("skill:openFolder", async () => {
+    const skillsDir = path.join(os.homedir(), ".claude", "skills");
+    if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
+    shell.openPath(skillsDir);
+  });
   ipcMain.handle("skill:installCodebrain", async () => {
     const skillsDir = path.join(os.homedir(), ".claude", "skills");
     const skillDir = path.join(skillsDir, "codebrain-skill");

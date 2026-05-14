@@ -22,8 +22,10 @@ function commonPaths(binary: string): string[] {
     const appData = process.env["APPDATA"] ?? `${home}\\AppData\\Roaming`;
     const localAppData = process.env["LOCALAPPDATA"] ?? `${home}\\AppData\\Local`;
     const programFiles = process.env["ProgramFiles"] ?? "C:\\Program Files";
+    const roamingNpm = `${home}\\AppData\\Roaming\\npm`;
     const exts = [".cmd", ".exe", ".bat", ""];
     const dirs = [
+      roamingNpm,
       `${appData}\\npm`,
       `${localAppData}\\Programs\\${binary}`,
       `${localAppData}\\${binary}\\bin`,

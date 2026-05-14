@@ -14,6 +14,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.2.3",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add MIT License to the project"
+      },
+      {
+        "kind": "fix",
+        "text": "guard against empty RELEASES array causing black screen"
+      }
+    ]
+  },
+  {
     "version": "1.0.8",
     "date": "maio 2026",
     "highlights": [
@@ -32,6 +46,16 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "CodeBrain v1.0.7 — Multi-agent AI IDE"
+      }
+    ]
+  },
+  {
+    "version": "1.2.3",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "guard against empty RELEASES array causing black screen"
       }
     ]
   },

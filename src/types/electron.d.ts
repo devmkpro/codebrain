@@ -289,6 +289,13 @@ export interface CodebrainApp {
   diagnostics: {
     snapshot: () => Promise<DiagnosticsSnapshot>;
   };
+  skill: {
+    status: () => Promise<{ installed: boolean }>;
+    list: () => Promise<string[]>;
+    openFolder: () => Promise<void>;
+    install: () => Promise<{ ok: boolean; action?: string; path?: string; error?: string }>;
+    uninstall: () => Promise<{ ok: boolean; error?: string }>;
+  };
   audio: {
     getConfig: () => Promise<AudioConfig>;
     saveConfig: (patch: Partial<AudioConfig>) => Promise<void>;
