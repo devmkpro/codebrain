@@ -635,8 +635,8 @@ async function spawnPaneInternal(config: {
     const { nanoid } = await import("nanoid");
     const paneId = config.paneId ?? nanoid();
 
-    // System prompt injection — write to file to avoid Windows ARG_MAX limits
-    if (isClaudeCompatible && !args.includes("--append-system-prompt") && !args.includes("--append-system-prompt-file")) {
+    // System prompt injection
+    if (isClaudeCompatible && !args.includes("--system-prompt")) {
       let sysPrompt = CODEBRAIN_SYSTEM_PROMPT;
 
       // Inject workspace directory so the agent knows where it is
@@ -662,21 +662,14 @@ async function spawnPaneInternal(config: {
         .filter((p) => p.id !== "claude-oauth")
         .map((p) => {
           const models = p.models?.join(", ") || "nenhum modelo listado";
-          return `- ${p.label} (id: "${p.id}", type: "${p.type}"): ${models}`;
+          return `* ${p.label} (id: "${p.id}", type: "${p.type}"): ${models}`;
         })
         .join("\n");
 
       sysPrompt += `\n\n## Providers e Modelos Disponíveis\n\n${providersInfo}`;
 
-      // Write to file to avoid Windows CLI argument length limits (8191 chars)
-      const sysPromptFile = path.join(cwd, `.codebrain-sys-${paneId}.txt`);
-      try {
-        fs.writeFileSync(sysPromptFile, sysPrompt, "utf-8");
-        args.push("--append-system-prompt-file", sysPromptFile);
-      } catch {
-        // Fallback to inline arg if file write fails
-        args.push("--append-system-prompt", sysPrompt);
-      }
+      // Version 0.10.0 uses --system-prompt and does not support file-based prompts
+      args.push("--system-prompt", sysPrompt);
     }
 
     // Provider-specific env vars
@@ -779,18 +772,6 @@ async function spawnPaneInternal(config: {
       role: config.role,
     });
 
-    // Clean up temp system-prompt file when pane exits
-    const sysPromptFileIdx = args.indexOf("--append-system-prompt-file");
-    const sysPromptFileArg = sysPromptFileIdx !== -1 ? args[sysPromptFileIdx + 1] : undefined;
-    if (sysPromptFileArg?.includes(".codebrain-sys-")) {
-      const onExit = (exitPaneId: string) => {
-        if (exitPaneId === paneId) {
-          ptyManager.off("exit", onExit);
-          try { fs.unlinkSync(sysPromptFileArg); } catch {}
-        }
-      };
-      ptyManager.on("exit", onExit);
-    }
 
     // Track pane config
     paneConfigs.set(paneId, {

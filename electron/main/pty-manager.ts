@@ -3,6 +3,7 @@ import { execSync, existsSync } from "node:child_process";
 import * as nodefs from "node:fs";
 import * as nodeos from "node:os";
 import * as nodepath from "node:path";
+import log from "electron-log/main.js";
 import { OutputBuffer } from "./output-buffer";
 import { IdleDetector } from "./idle-detector";
 
@@ -44,8 +45,17 @@ export interface PaneInfo {
 }
 
 function defaultShell(): string {
-  if (IS_WIN) return process.env["COMSPEC"] ?? "cmd.exe";
-  return process.env["SHELL"] ?? "/bin/bash";
+  if (IS_WIN) {
+    const comspec = process.env["COMSPEC"];
+    if (comspec && nodefs.existsSync(comspec)) return comspec;
+    const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
+    const cmdPath = nodepath.join(systemRoot, "System32", "cmd.exe");
+    if (nodefs.existsSync(cmdPath)) return cmdPath;
+    return "cmd.exe";
+  }
+  const shell = process.env["SHELL"] ?? "/bin/bash";
+  if (nodefs.existsSync(shell)) return shell;
+  return "/bin/bash";
 }
 
 const pathCache = new Map<string, string | null>();
@@ -93,13 +103,43 @@ function commonPaths(binary: string): string[] {
 
 function which(binary: string): string | null {
   if (pathCache.has(binary)) return pathCache.get(binary) ?? null;
+
+  // If already an absolute path, verify existence and return
+  if (nodepath.isAbsolute(binary)) {
+    if (nodefs.existsSync(binary)) {
+      pathCache.set(binary, binary);
+      return binary;
+    }
+    // On Windows, try common extensions if absolute path doesn't have one
+    if (IS_WIN && !nodepath.extname(binary)) {
+      for (const ext of [".exe", ".cmd", ".bat"]) {
+        const withExt = binary + ext;
+        if (nodefs.existsSync(withExt)) {
+          pathCache.set(binary, withExt);
+          return withExt;
+        }
+      }
+    }
+  }
+
   try {
     const cmd = IS_WIN ? `where ${JSON.stringify(binary)}` : `which ${JSON.stringify(binary)}`;
     const result = execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     const lines = result.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const preferred = IS_WIN ? (lines.find((l) => /\.(cmd|exe|bat)$/i.test(l)) ?? lines[0]) : lines[0];
-    if (preferred) { pathCache.set(binary, preferred); return preferred; }
-  } catch {}
+    
+    // Windows: prefer known executable extensions to avoid matching extensionless files (like unix scripts)
+    const preferred = IS_WIN 
+      ? (lines.find((l) => /\.(cmd|exe|bat)$/i.test(l)) ?? lines[0]) 
+      : lines[0];
+
+    if (preferred && nodefs.existsSync(preferred)) {
+      pathCache.set(binary, preferred);
+      return preferred;
+    }
+  } catch (err) {
+    log.warn(`[pty] which(${binary}) failed:`, err instanceof Error ? err.message : String(err));
+  }
+
   if (!IS_WIN) {
     try {
       const shell = process.env["SHELL"] ?? "/bin/bash";
@@ -109,9 +149,11 @@ function which(binary: string): string | null {
       if (result && nodefs.existsSync(result)) { pathCache.set(binary, result); return result; }
     } catch {}
   }
+
   for (const candidate of commonPaths(binary)) {
     if (nodefs.existsSync(candidate)) { pathCache.set(binary, candidate); return candidate; }
   }
+
   pathCache.set(binary, null);
   return null;
 }
@@ -119,11 +161,16 @@ function which(binary: string): string | null {
 export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { binary: string; args: string[] } {
   const defaults = AGENT_DEFAULTS[agent] ?? { binary: agent, args: [] };
   const binary = defaults.binary;
-  if (agent === "shell") return { binary, args: [...defaults.args, ...extraArgs] };
+  
+  if (agent === "shell") {
+    const resolvedShell = which(binary) ?? binary;
+    return { binary: resolvedShell, args: [...defaults.args, ...extraArgs] };
+  }
+
   const resolved = which(binary);
   if (!resolved) {
     const fallback = defaultShell();
-    process.stderr.write(`[pty] WARNING: binary "${binary}" not found in PATH. Falling back to ${fallback}\n`);
+    log.warn(`[pty] binary "${binary}" not found in PATH. Falling back to shell: ${fallback}`);
     return { binary: fallback, args: [] };
   }
 
@@ -139,21 +186,27 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
     // Try node_modules direct path (bypasses .cmd wrapper entirely)
     const scriptName = nodepath.basename(resolved, nodepath.extname(resolved));
     const binDir = nodepath.dirname(resolved);
-    const directScript = nodepath.join(binDir, "node_modules", `@gitlawb`, scriptName, "bin", scriptName);
+    const directScript = nodepath.join(binDir, "node_modules", "@gitlawb", scriptName, "bin", scriptName);
     try {
       if (nodefs.existsSync(directScript)) {
-        const nodeExe = nodepath.join(binDir, "node.exe");
+        let nodeBinary = which("node");
+        if (!nodeBinary && process.env.NODE) {
+          nodeBinary = process.env.NODE;
+        }
+        // Fallback to "node" and let the OS figure it out if all else fails
+        if (!nodeBinary) nodeBinary = "node";
+        
         return {
-          binary: nodefs.existsSync(nodeExe) ? nodeExe : "node",
+          binary: nodeBinary,
           args: [directScript, ...defaults.args, ...extraArgs],
         };
       }
     } catch (e) {
-      process.stderr.write(`[resolveCommand] direct error: ${e}\n`);
+      log.error(`[resolveCommand] direct script resolution error:`, e);
     }
 
-    // Fallback to cmd.exe
-    const comspec = process.env["COMSPEC"] ?? "cmd.exe";
+    // Fallback to cmd.exe via defaultShell()
+    const comspec = defaultShell();
     return { binary: comspec, args: ["/d", "/c", resolved, ...defaults.args, ...extraArgs] };
   }
 
@@ -216,6 +269,7 @@ export class PtyManager extends EventEmitter {
       ...config.env,
     };
 
+    log.info(`[pty:spawn] binary="${binary}" args=[${args.join(", ")}] cwd="${cwd}"`);
     const ptyProcess = pty.spawn(binary, args, { name: "xterm-256color", cols, rows, cwd, env });
     const buffer = new OutputBuffer();
 
