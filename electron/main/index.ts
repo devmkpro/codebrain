@@ -728,7 +728,12 @@ async function spawnPaneInternal(config: {
       model = provider.models[0];
     }
 
-    const env: Record<string, string> = { ...(provider?.env ?? {}), ...(config.env ?? {}) };
+    // Filter out masked values from config.env (frontend sends listPublic() env which has "********" for secrets)
+    // so they don't override the real keys from providerStore.listFull() in provider.env.
+    const configEnv = Object.fromEntries(
+      Object.entries(config.env ?? {}).filter(([, v]) => !/^\*+$/.test(v))
+    );
+    const env: Record<string, string> = { ...(provider?.env ?? {}), ...configEnv };
 
     // Build args
     const args = [...(config.args ?? [])];
@@ -841,11 +846,9 @@ async function spawnPaneInternal(config: {
             case "vertex-compat": providerArg = "vertex"; break;
             case "ollama-compat": providerArg = "ollama"; break;
             case "anthropic-compat":
+            case "mimo-compat":
             case "anthropic":
               providerArg = "anthropic"; break;
-            case "mimo-compat":
-              // Don't set --provider for MIMO; OpenClaude detects it via MIMO_API_KEY + OPENAI_BASE_URL
-              break;
             case "custom":
             case "oauth":
             case "api-key":
@@ -869,6 +872,9 @@ async function spawnPaneInternal(config: {
         if (provider?.baseUrl) {
           env["ANTHROPIC_BASE_URL"] = provider.baseUrl;
           env["OPENAI_BASE_URL"] = provider.baseUrl;
+        } else if (env["ANTHROPIC_BASE_URL"]) {
+          // URL saved as env.ANTHROPIC_BASE_URL (no top-level baseUrl field) — mirror to OPENAI_BASE_URL
+          env["OPENAI_BASE_URL"] = env["ANTHROPIC_BASE_URL"];
         }
         // Sync keys: ANTHROPIC_AUTH_TOKEN ↔ MIMO_API_KEY ↔ OPENAI_API_KEY
         const mimoKey = env["ANTHROPIC_AUTH_TOKEN"] || env["MIMO_API_KEY"] || "";
@@ -910,8 +916,8 @@ async function spawnPaneInternal(config: {
       env["CODEBRAIN_MCP_PORT"] = String(mcpServerInfo.port);
     }
 
-    // Settings for anthropic-compat
-    if (isClaudeCompatible && isAnthropicCompat && !args.includes("--settings")) {
+    // Settings for anthropic-compat and mimo-compat
+    if (isClaudeCompatible && (isAnthropicCompat || isMimo) && !args.includes("--settings")) {
       const settings: Record<string, unknown> = { alwaysThinkingEnabled: false, effortLevel: "low" };
       if (model) settings.model = model;
       args.push("--settings", JSON.stringify(settings));
@@ -923,6 +929,7 @@ async function spawnPaneInternal(config: {
       log.info("[spawnPaneInternal] MIMO ANTHROPIC_AUTH_TOKEN:", env["ANTHROPIC_AUTH_TOKEN"] ? "SET" : "MISSING");
       log.info("[spawnPaneInternal] MIMO MIMO_API_KEY:", env["MIMO_API_KEY"] ? "SET" : "MISSING");
       log.info("[spawnPaneInternal] MIMO ANTHROPIC_BASE_URL:", env["ANTHROPIC_BASE_URL"] ?? "MISSING");
+      log.info("[spawnPaneInternal] MIMO OPENAI_BASE_URL:", env["OPENAI_BASE_URL"] ?? "MISSING");
       log.info("[spawnPaneInternal] MIMO ANTHROPIC_MODEL:", env["ANTHROPIC_MODEL"] ?? "MISSING");
     }
 

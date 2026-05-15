@@ -175,11 +175,10 @@ export function WorkspaceTabs() {
     const nextModel = explicit ? model : favoritePane?.model;
     const provider = nextProviderId ? providers.find(p => p.id === nextProviderId) : null;
       const agent = explicit ? provider?.host ?? "openclaude" : favoritePane?.agent ?? provider?.host ?? "openclaude";
-    // Build env from provider so backend gets credentials (ANTHROPIC_AUTH_TOKEN,
-    // ANTHROPIC_BASE_URL, etc.) even when its provider-lookup doesn't fire for MIMO.
-    const providerEnv: Record<string, string> = provider?.env ?? {};
+    // Only pass non-secret hints in env — backend reads full provider.env via listFull().
+    // Passing provider.env from frontend would include masked "********" secrets (listPublic())
+    // which would override the real keys in the backend. See: provider-store.ts maskProvider().
     const spawnEnv: Record<string, string> = {
-      ...providerEnv,
       ...(nextModel ? { ANTHROPIC_MODEL: nextModel, MODEL: nextModel } : {}),
     };
     window.codeBrainApp?.pty.spawn({
