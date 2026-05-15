@@ -9,6 +9,10 @@ variables:
   ELECTRON_CACHE: "$CI_PROJECT_DIR/.cache/electron"
   ELECTRON_BUILDER_CACHE: "$CI_PROJECT_DIR/.cache/electron-builder"
 
+default:
+  tags:
+    - local
+
 # ── Verify (master push — fast compile check) ─────────────────────────────────
 verify:
   stage: verify
@@ -53,7 +57,6 @@ build:linux:
     expire_in: 1 week
   only:
     - tags
-    - master
 
 # ── Windows Build (cross-compile with Wine) ───────────────────────────────────
 build:windows:
@@ -84,7 +87,6 @@ build:windows:
     expire_in: 1 week
   only:
     - tags
-    - master
 
 # ── Create GitLab Release ──────────────────────────────────────────────────────
 release:
