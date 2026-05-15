@@ -43,8 +43,8 @@ const BUILTIN_TEMPLATES = [
       {
         type: "mimo-compat",
         host: "openclaude",
-        baseUrl: "https://api.xiaomimimo.com/v1",
-        tokenEnvVar: "ANTHROPIC_AUTH_TOKEN",
+        baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+        tokenEnvVar: "MIMO_API_KEY",
         label: "MIMO",
         models: ["mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"]
       }
@@ -981,14 +981,14 @@ function resolveBrowserPaneId(paneId?: string): string | null {
   return ids.length > 0 ? ids[ids.length - 1] : null;
 }
 
-async function saveScreenshot(paneId?: string): Promise<{ ok: boolean; path?: string; error?: string }> {
+async function saveScreenshot(paneId?: string, fullPage?: boolean): Promise<{ ok: boolean; path?: string; error?: string }> {
   const pid = resolveBrowserPaneId(paneId);
   if (!pid) return { ok: false, error: "no browser pane" };
   try {
     const screenshotDir = path.join(currentWorkspacePath, ".codebrain", "screenshots");
     fs.mkdirSync(screenshotDir, { recursive: true });
     const screenshotPath = path.join(screenshotDir, `${Date.now()}.png`);
-    const result = await sendBrowserCmd(pid, { type: "screenshot" });
+    const result = await sendBrowserCmd(pid, { type: "screenshot", fullPage });
     const res = result?.result as { dataUrl?: string } | undefined;
     if (result?.ok && res?.dataUrl) {
       const base64 = res.dataUrl.split(",")[1];
@@ -1482,7 +1482,7 @@ function registerIpcHandlers(): void {
     catch (err) { return { ok: false, error: String(err) }; }
   });
 
-  ipcMain.handle("browser:screenshot", async (_event, fullPage?: boolean, paneId?: string) => saveScreenshot(paneId));
+  ipcMain.handle("browser:screenshot", async (_event, fullPage?: boolean, paneId?: string) => saveScreenshot(paneId, fullPage));
   ipcMain.handle("browser:screenshot-el", async (_event, selector: string, paneId?: string) => saveScreenshotElement(selector, paneId));
 
   // Eval (direct JS execution)

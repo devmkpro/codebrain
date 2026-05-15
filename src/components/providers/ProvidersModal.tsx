@@ -64,7 +64,7 @@ export function ProvidersModal({
   };
   const pickTemplate = (template, integration) => {
     const env = {};
-    if (integration.type === "anthropic-compat") {
+    if (integration.type === "anthropic-compat" || integration.type === "mimo-compat") {
       env.ANTHROPIC_BASE_URL = integration.baseUrl;
       env[integration.tokenEnvVar] = "";
     } else if (integration.type === "gemini-compat") {
@@ -89,8 +89,8 @@ export function ProvidersModal({
   const pickTemplateDirect = template => {
     setBulkTemplate(template);
     setBulkToken("");
-    const existingAnthropic = providers.find(p => p.id.startsWith(`${template.id}-`) && p.type === "anthropic-compat");
-    const defaultAnthropicUrl = template.integrations.find(i => i.type === "anthropic-compat")?.baseUrl ?? "";
+    const existingAnthropic = providers.find(p => p.id.startsWith(`${template.id}-`) && (p.type === "anthropic-compat" || p.type === "mimo-compat"));
+    const defaultAnthropicUrl = template.integrations.find(i => i.type === "anthropic-compat" || i.type === "mimo-compat")?.baseUrl ?? "";
     const existingUrl = existingAnthropic?.env?.ANTHROPIC_BASE_URL ?? "";
     setBulkAnthropicBaseUrl(template.id === "mimo" ? existingUrl || defaultAnthropicUrl || DEFAULT_MIMO_ANTHROPIC_BASE_URL : "");
     setError(null);

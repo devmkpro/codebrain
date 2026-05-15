@@ -171,7 +171,16 @@ export function BrowserPane({
           await loadPromise;
           try { result = { ok: true, finalUrl: wv.getURL(), title: wv.getTitle() }; } catch { result = { ok: true }; }
         } else if (type === "screenshot") {
-          const nativeImage = await wv.capturePage();
+          let rect;
+          if (payload.fullPage) {
+            const dims = await wv.executeJavaScript(
+              "({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })"
+            );
+            if (dims && dims.width > 0 && dims.height > 0) {
+              rect = { x: 0, y: 0, width: dims.width, height: dims.height };
+            }
+          }
+          const nativeImage = await wv.capturePage(rect);
           const pngBuffer = nativeImage.toPNG();
           // Chunked encoding to avoid stack overflow on large screenshots
           let binary = "";

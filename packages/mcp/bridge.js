@@ -213,7 +213,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     async browserWaitForLoad(timeoutMs, paneId) { return browserCmd("wait-for-load", { timeoutMs, paneId }); },
     async browserScreenshot(fullPage, paneId) {
       if (!opts.saveScreenshot) throw new Error("screenshot not available");
-      return opts.saveScreenshot(paneId);
+      return opts.saveScreenshot(paneId, fullPage);
     },
     async browserScreenshotElement(selector, paneId) {
       if (!opts.saveScreenshotElement) throw new Error("screenshot not available");
