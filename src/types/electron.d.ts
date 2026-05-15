@@ -243,7 +243,7 @@ export interface CodebrainApp {
     kill: (paneId: string) => Promise<void>;
     list: () => Promise<PtyInfo[]>;
     resize: (paneId: string, cols: number, rows: number) => Promise<void>;
-    onOutput: (callback: (paneId: string, data: string) => void) => () => void;
+    onOutput: (callback: (paneId: string, data: string, echo?: boolean) => void) => () => void;
     onExit: (callback: (paneId: string, exitCode: number) => void) => () => void;
     onPaneAdded: (callback: (info: PtyInfo) => void) => () => void;
     onPaneSession: (callback: (info: { paneId: string; session?: Session; claudeSessionId?: string }) => void) => () => void;

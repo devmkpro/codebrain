@@ -82,7 +82,7 @@ export function App() {
     return subscribeProviderUpdates();
   }, []);
   React.useEffect(() => {
-    const off = window.codeBrainApp?.pty.onOutput?.((_paneId, data) => {
+    const off = window.codeBrainApp?.pty.onOutput?.((_paneId, data, _echo) => {
       const url = extractUrl(data);
       if (url) {
         const current = useBrowserStore.getState().detectedUrl;

@@ -161,8 +161,11 @@ export function TerminalPane({
     }
   }, [pane.id]);
   React.useEffect(() => {
-    const unsub = window.codeBrainApp?.pty.onOutput((paneId, data) => {
+    const unsub = window.codeBrainApp?.pty.onOutput((paneId, data, echo) => {
       if (paneId === pane.id && termRef.current) {
+        // Suppress echo from programmatic writes (MCP pane_write / pane_send_message)
+        // so the sent text doesn't appear duplicated in the terminal
+        if (echo) return;
         termRef.current.write(data);
       }
     });

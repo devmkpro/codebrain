@@ -71,10 +71,10 @@ function createMCPBridge(ptyManager, opts = {}) {
 
     async writePane(paneId, text, submit = true) {
       if (!ptyManager.hasPane(paneId)) return { ok: false, error: "pane not found" };
-      // Send text + Enter in a single atomic write so the PTY delivers them
-      // together — avoids race conditions where the \r arrives before the CLI
-      // finishes processing the pasted text.
-      ptyManager.write(paneId, submit ? text + "\r" : text);
+      // Use writeSilent to suppress PTY echo — the sent text won't appear
+      // duplicated in the terminal input. The echo is filtered out in the
+      // onData handler via the pendingEcho tracking.
+      ptyManager.writeSilent(paneId, submit ? text + "\r" : text);
       return { ok: true };
     },
 

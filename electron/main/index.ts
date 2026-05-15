@@ -1879,7 +1879,10 @@ app.whenReady().then(() => {
 
   // Global PTY event forwarding — single set of listeners for all panes
   ptyManager.on("output", (paneId: string, data: string) => {
-    safeSend("pty:output", paneId, data);
+    safeSend("pty:output", paneId, data, false);
+  });
+  ptyManager.on("output-echo", (paneId: string, data: string) => {
+    safeSend("pty:output", paneId, data, true);
   });
   ptyManager.on("exit", (paneId: string, exitCode: number) => {
     safeSend("pty:exit", paneId, exitCode);

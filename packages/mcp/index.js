@@ -225,12 +225,17 @@ function createCodebrainMCPServer(bridge) {
           fs.closeSync(fd);
         } catch {}
 
-        // Inject notification into recipient's terminal so they see it immediately and it activates the agent
-        if (bridge.notifyPane) {
+        // Write trigger to PTY stdin, then send Enter AFTER a small delay.
+        // This avoids the race condition where \r arrives before the CLI finishes
+        // processing the pasted text (which caused the "broken line" issue).
+        if (bridge.writePane) {
           const typeLabel = msgType.toUpperCase();
-          // Use injectOutput so it just prints without interfering with user input
-          const notification = `\r\n\x1b[33m═══ ⚡ MENSAGEM DE ${args.from.toUpperCase()} (${typeLabel}) ═══\x1b[0m\r\n${args.content.replace(/\r?\n/g, " ")}\r\n\x1b[33m═══════════════════════════════════════════════\x1b[0m\r\n`;
-          await bridge.notifyPane(args.to, notification);
+          const trigger = `[⚡ MENSAGEM DE ${args.from} (${typeLabel}) — use pane_read_messages]`;
+          // Step 1: write text WITHOUT submit
+          await bridge.writePane(args.to, trigger, false);
+          // Step 2: wait for CLI to process the text, then send Enter
+          await new Promise(r => setTimeout(r, 150));
+          await bridge.writePane(args.to, "", true);
         }
 
         return { content: [{ type: "text", text: JSON.stringify({ ok: true, messageId: id }) }] };

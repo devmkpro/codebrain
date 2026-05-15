@@ -11,15 +11,15 @@ const TOKENS_BY_WORKSPACE = "tokens:byWorkspace";
 
 // PTY output is high-frequency — use a shared listener + fanout to avoid
 // registering N separate ipcRenderer.on handlers.
-const ptyOutputCallbacks = new Set<(paneId: string, data: string) => void>();
+const ptyOutputCallbacks = new Set<(paneId: string, data: string, echo: boolean) => void>();
 let ptyOutputListenerInstalled = false;
 
 function ensurePtyOutputListener(): void {
   if (ptyOutputListenerInstalled) return;
   ptyOutputListenerInstalled = true;
-  ipcRenderer.on("pty:output", (_evt, paneId: string, data: string) => {
+  ipcRenderer.on("pty:output", (_evt, paneId: string, data: string, echo: boolean) => {
     for (const callback of ptyOutputCallbacks) {
-      try { callback(paneId, data); } catch {}
+      try { callback(paneId, data, echo || false); } catch {}
     }
   });
 }
@@ -113,7 +113,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     kill: (paneId: string) => ipcRenderer.invoke("pty:kill", paneId),
     list: () => ipcRenderer.invoke("pty:list"),
     resize: (paneId: string, cols: number, rows: number) => ipcRenderer.invoke("pty:resize", paneId, cols, rows),
-    onOutput: (callback: (paneId: string, data: string) => void) => {
+    onOutput: (callback: (paneId: string, data: string, echo?: boolean) => void) => {
       ensurePtyOutputListener();
       ptyOutputCallbacks.add(callback);
       return () => { ptyOutputCallbacks.delete(callback); };

@@ -229,6 +229,8 @@ export class PtyManager extends EventEmitter {
   private panes = new Map<string, PaneState>();
   private zombieBuffers = new Map<string, { buffer: OutputBuffer; exitedAt: number }>();
   private idleDetector = new IdleDetector();
+  // Echo suppression: tracks text sent programmatically that should be suppressed from output
+  private pendingEcho = new Map<string, { cleanText: string; consumed: number; time: number }>();
 
   constructor() {
     super();
@@ -274,6 +276,33 @@ export class PtyManager extends EventEmitter {
     const buffer = new OutputBuffer();
 
     ptyProcess.onData((data: string) => {
+      // Check if this output is an echo of text sent via writeSilent()
+      const pending = this.pendingEcho.get(paneId);
+      if (pending && Date.now() - pending.time < 500 && pending.consumed < pending.cleanText.length) {
+        const cleanData = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "").replace(/\n/g, "");
+        if (cleanData.length > 0) {
+          // Match character by character — only suppress the exact echo of what we sent
+          let matchedCount = 0;
+          for (let i = 0; i < cleanData.length && pending.consumed + i < pending.cleanText.length; i++) {
+            if (cleanData[i] === pending.cleanText[pending.consumed + i]) {
+              matchedCount++;
+            } else {
+              break;
+            }
+          }
+          if (matchedCount > 0) {
+            pending.consumed += matchedCount;
+            if (pending.consumed >= pending.cleanText.length) {
+              this.pendingEcho.delete(paneId);
+            }
+            // Push to buffer (for pane_read) but signal echo to renderer
+            buffer.push(data);
+            this.idleDetector.activity(paneId, buffer);
+            this.emit("output-echo", paneId, data);
+            return;
+          }
+        }
+      }
       buffer.push(data);
       this.idleDetector.activity(paneId, buffer);
       this.emit("output", paneId, data);
@@ -296,6 +325,21 @@ export class PtyManager extends EventEmitter {
   write(paneId: string, data: string): void {
     const state = this.panes.get(paneId);
     if (!state) return;
+    (state.pty as any).write(data);
+  }
+
+  /**
+   * Write text to PTY stdin while suppressing the echo from the output.
+   * The PTY normally echoes stdin back as output — this method tracks the
+   * sent text so the onData handler can filter it out from the output events.
+   */
+  writeSilent(paneId: string, data: string): void {
+    const state = this.panes.get(paneId);
+    if (!state) return;
+    const cleanText = data.replace(/\r/g, "").replace(/\n/g, "");
+    if (cleanText.length > 0) {
+      this.pendingEcho.set(paneId, { cleanText, consumed: 0, time: Date.now() });
+    }
     (state.pty as any).write(data);
   }
 
