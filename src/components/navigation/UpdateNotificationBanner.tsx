@@ -3,7 +3,12 @@ import { RELEASES } from "./releases-data";
 
 // UpdateNotificationBanner
 export function UpdateNotificationBanner() {
-  const [state, setState] = React.useState({
+  const [state, setState] = React.useState<{
+    kind: "idle" | "checking" | "up_to_date" | "downloading" | "downloaded" | "installing" | "error";
+    version?: string;
+    percent?: number;
+    message?: string;
+  }>({
     kind: "idle"
   });
   const [version, setVersion] = React.useState("");
@@ -41,6 +46,16 @@ export function UpdateNotificationBanner() {
     const off6 = window.codeBrainApp.update.onNone(() => setState({
       kind: "up_to_date"
     }));
+    // onInstalling may not exist if preload hasn't been rebuilt yet
+    const off7 = typeof window.codeBrainApp.update.onInstalling === "function"
+      ? window.codeBrainApp.update.onInstalling(() =>
+          setState(prev =>
+            "version" in prev
+              ? { kind: "installing", version: prev.version }
+              : { kind: "installing", version: "" }
+          )
+        )
+      : () => {};
     return () => {
       off1();
       off2();
@@ -48,6 +63,7 @@ export function UpdateNotificationBanner() {
       off4();
       off5();
       off6();
+      off7();
     };
   }, []);
   const baseClasses = "fixed top-0 left-0 right-0 z-[9999] flex items-center justify-between pl-20 pr-[140px] bg-gray-900/95 backdrop-blur border-b border-gray-700/60 font-mono text-[10px] shadow-lg";
@@ -95,6 +111,7 @@ export function UpdateNotificationBanner() {
               <span>v{state.version} pronta</span>
             </div>
             <button onClick={() => {
+            setState({ kind: "installing", version: state.version });
             void window.codeBrainApp.update.install().then(result => {
               if (!result.ok) {
                 setState({
@@ -106,6 +123,11 @@ export function UpdateNotificationBanner() {
           }} className="app-region-no-drag cursor-pointer px-2 py-0.5 text-green-400 border border-green-500/30 hover:border-green-500/60 hover:bg-green-500/10 rounded transition-colors relative z-50 pointer-events-auto">
               Reiniciar agora
             </button>
+          </div>;
+      case "installing":
+        return <div className="flex items-center gap-2 text-blue-400">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+            <span>Instalando v{state.version}…</span>
           </div>;
       case "error":
         return <div className="flex items-center gap-2">

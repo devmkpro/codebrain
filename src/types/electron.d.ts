@@ -396,13 +396,14 @@ export interface CodebrainApp {
   };
   update: {
     check: () => Promise<void>;
-    install: () => Promise<void>;
+    install: () => Promise<{ ok: boolean; error?: string }>;
     onChecking: (cb: () => void) => () => void;
     onAvailable: (cb: (data: UpdateInfo) => void) => () => void;
     onNone: (cb: () => void) => () => void;
     onProgress: (cb: (data: DownloadProgress) => void) => () => void;
     onDownloaded: (cb: (data: UpdateInfo) => void) => () => void;
     onError: (cb: (data: { message: string }) => void) => () => void;
+    onInstalling: (cb: () => void) => () => void;
   };
 }
 

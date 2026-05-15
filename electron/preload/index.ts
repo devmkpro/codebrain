@@ -358,5 +358,10 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
       ipcRenderer.on("update:error", handler);
       return () => ipcRenderer.off("update:error", handler);
     },
+    onInstalling: (cb: () => void) => {
+      const handler = () => cb();
+      ipcRenderer.on("update:installing", handler);
+      return () => ipcRenderer.off("update:installing", handler);
+    },
   },
 });

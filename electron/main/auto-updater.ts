@@ -107,11 +107,20 @@ export function setupAutoUpdater(
     });
 
     ipcMain.handle("update:install", async () => {
-      updateRequested = true;
-      if (_onBeforeInstall) {
-        await _onBeforeInstall();
+      try {
+        updateRequested = true;
+        // Notify renderer that install is starting (for UI feedback)
+        windowRef?.webContents.send("update:installing");
+        if (_onBeforeInstall) {
+          await _onBeforeInstall();
+        }
+        autoUpdater.quitAndInstall(false, true);
+        return { ok: true };
+      } catch (err: any) {
+        log.error("[auto-updater] quitAndInstall failed:", err);
+        updateRequested = false;
+        return { ok: false, error: err.message ?? "Falha ao instalar atualização" };
       }
-      autoUpdater.quitAndInstall();
     });
   }
 
