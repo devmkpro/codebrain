@@ -630,6 +630,38 @@ async function spawnPaneInternal(config: {
 
     if (!agent) agent = "openclaude";
 
+    // ── Hardcoded model-to-provider-type mapping (mirrors getEnhancedProviders) ──
+    const ENHANCED_MODEL_MAP: Record<string, string[]> = {
+      "gemini-compat": [
+        "gemini-3.1-pro", "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools",
+        "gemini-3.1-flash-lite-preview", "gemini-3-flash-preview", "gemini-3-flash",
+        "gemini-3.1-flash-lite", "gemini-3.1-flash-live-preview",
+        "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"
+      ],
+      "mimo-compat": [
+        "mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"
+      ],
+      "anthropic-compat": [
+        "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5-20251101",
+        "claude-opus-4-1-20250805", "claude-opus-4-20250514",
+        "claude-sonnet-4-6", "claude-sonnet-4-5-20250929", "claude-sonnet-4-20250514",
+        "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022",
+        "claude-haiku-4-5-20251001", "claude-3-5-haiku-20241022"
+      ],
+    };
+
+    /** Determine provider type from model name using enhanced/hardcoded lists. */
+    function getProviderTypeForModel(m: string): string | null {
+      for (const [type, models] of Object.entries(ENHANCED_MODEL_MAP)) {
+        if (models.includes(m)) return type;
+      }
+      // Prefix-based fallback for unknown models
+      if (m.startsWith("gemini-")) return "gemini-compat";
+      if (m.startsWith("mimo-")) return "mimo-compat";
+      if (m.startsWith("claude-")) return "anthropic-compat";
+      return null;
+    }
+
     // Provider auto-detection based on agent type
     let provider = providerId ? providerStore.listFull().find((p) => p.id === providerId) ?? null : null;
 
@@ -638,12 +670,25 @@ async function spawnPaneInternal(config: {
       if (agent === "gemini") {
         provider = allProviders.find((p) => p.host === "gemini" || p.id?.toLowerCase().includes("gemini")) ?? null;
       } else if (agent === "openclaude" || agent === "claude") {
-        // If a model is specified, find the provider that actually has this model
+        // Step 1: If a model is specified, find provider by enhanced model lists first
         if (model) {
+          // 1a. Try raw store match (provider.models includes the model)
           provider = allProviders.find((p) => p.models?.includes(model)) ?? null;
+
+          // 1b. If no raw match, use enhanced model map to determine provider type
+          if (!provider) {
+            const targetType = getProviderTypeForModel(model);
+            if (targetType) {
+              provider = allProviders.find((p) => p.type === targetType) ?? null;
+              if (provider) {
+                log.info(`[spawnPaneInternal] Model "${model}" matched to provider type "${targetType}" via enhanced map → provider "${provider.id}"`);
+              }
+            }
+          }
         }
-        // Fallback: priority cascade when no model match
-        if (!provider) {
+
+        // Step 2: Fallback cascade (only when no model was specified, or model type couldn't be determined)
+        if (!provider && !model) {
           provider = allProviders.find((p) => p.type === "mimo-compat") ?? null;
           if (!provider) provider = allProviders.find((p) => p.type === "anthropic-compat") ?? null;
           if (!provider) provider = allProviders.find((p) => p.type === "gemini-compat") ?? null;
@@ -659,8 +704,22 @@ async function spawnPaneInternal(config: {
     if (provider && model) {
       const providerModels = provider.models ?? [];
       if (providerModels.length > 0 && !providerModels.includes(model)) {
-        log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}". Available: ${providerModels.join(", ")}. Falling back to first model.`);
-        model = providerModels[0];
+        // Before silently replacing, check if another provider actually has this model
+        const targetType = getProviderTypeForModel(model);
+        if (targetType && targetType !== provider.type) {
+          const betterProvider = providerStore.listFull().find((p) => p.type === targetType);
+          if (betterProvider) {
+            log.info(`[spawnPaneInternal] Model "${model}" belongs to "${targetType}", switching from provider "${provider.id}" to "${betterProvider.id}"`);
+            provider = betterProvider;
+            providerId = betterProvider.id;
+          } else {
+            log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}". Available: ${providerModels.join(", ")}. Falling back to first model.`);
+            model = providerModels[0];
+          }
+        } else {
+          log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}". Available: ${providerModels.join(", ")}. Falling back to first model.`);
+          model = providerModels[0];
+        }
       }
     } else if (provider && !model && provider.models?.length > 0) {
       model = provider.models[0];

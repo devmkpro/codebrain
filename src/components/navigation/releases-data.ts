@@ -14,69 +14,83 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.2.10",
+    "version": "1.2.16",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
-        "text": "fix auto-update failing with 'Falha ao desinstalar' error on Windows by repairing missing registry keys on startup"
+        "text": "fix pane_spawn routing: model-based provider resolution now uses enhanced model map instead of falling back to MIMO-first cascade"
       }
     ]
   },
   {
-    "version": "1.2.9",
+    "version": "1.2.15",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
-        "text": "fix provider banner and system prompt flag for openclaude v0.10"
+        "text": "restore MIMO regional routes, mimo-compat provider handling, and fullPage screenshot"
+      },
+      {
+        "kind": "fix",
+        "text": "MIMO 404 error, provider env var mapping, and pane_write submit reliability"
       }
     ]
   },
   {
-    "version": "1.2.8",
+    "version": "1.2.14",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
-        "text": "remove generic openai fallback provider argument that forced codex model on custom providers"
+        "text": "auto-update feedback e reinício automático"
       }
     ]
   },
   {
-    "version": "1.2.7",
-    "date": "maio 2026",
-    "highlights": [
-      {
-        "kind": "fix",
-        "text": "pass anthropic as provider arg for mimo-compat/anthropic-compat to override codex default"
-      }
-    ]
-  },
-  {
-    "version": "1.2.6",
-    "date": "maio 2026",
-    "highlights": [
-      {
-        "kind": "fix",
-        "text": "pass --provider arg for openclaude v0.10+ compatibility"
-      }
-    ]
-  },
-  {
-    "version": "1.2.4",
+    "version": "1.2.13",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "feat",
+        "text": "export buildEdges function and import it in SessionMap"
+      },
+      {
+        "kind": "fix",
+        "text": "guard webContents.send against destroyed window on close; fix npm install path-with-spaces on Windows"
+      },
+      {
+        "kind": "fix",
+        "text": "fix openclaude install on linux and windows with npm check and timeout"
+      },
+      {
+        "kind": "fix",
+        "text": "repair missing Windows registry keys to fix auto-update error"
+      },
+      {
+        "kind": "feat",
+        "text": "implement PtyManager for cross-platform process management and terminal session handling"
+      },
+      {
+        "kind": "fix",
+        "text": "fix provider banner and system prompt flag for openclaude v0.10"
+      },
+      {
+        "kind": "fix",
+        "text": "remove generic openai fallback provider argument that forced codex model on custom providers"
+      },
+      {
+        "kind": "fix",
+        "text": "pass anthropic as provider arg for mimo-compat/anthropic-compat to override codex default"
+      },
+      {
+        "kind": "fix",
+        "text": "pass --provider arg for openclaude v0.10+ compatibility"
+      },
+      {
+        "kind": "feat",
         "text": "add MIT License to the project"
-      }
-    ]
-  },
-  {
-    "version": "1.2.3",
-    "date": "maio 2026",
-    "highlights": [
+      },
       {
         "kind": "fix",
         "text": "guard against empty RELEASES array causing black screen"
