@@ -210,6 +210,8 @@ function loadPrompt(filename: string): string {
 // Cache prompts at startup
 const WORKER_PROMPT = loadPrompt("squad-worker.md");
 const ORCHESTRATOR_PROMPT = loadPrompt("squad-orchestrator.md");
+const UI_TESTER_PROMPT = loadPrompt("squad-ui-tester.md");
+const GEMINI_WORKER_PROMPT = loadPrompt("squad-worker-gemini.md");
 
 // Pane tracking Maps — shared between IPC handler and MCP bridge
 const paneConfigs = new Map<string, {
@@ -776,8 +778,17 @@ async function spawnPaneInternal(config: {
       // Inject paneId so the agent knows its own ID for inter-agent messaging
       sysPrompt += `\n\n## Seu ID de Pane\n\nSeu paneId é: \`${paneId}\`\n\nUse este ID como campo "from" ao enviar mensagens via pane_send_message, e como campo "paneId" ao ler mensagens via pane_read_messages.`;
 
-      // Inject role-specific prompt (worker or orchestrator)
-      const rolePrompt = config.role === "orchestrator" ? ORCHESTRATOR_PROMPT : WORKER_PROMPT;
+      // Inject role-specific prompt based on role and model
+      let rolePrompt = "";
+      if (config.role === "orchestrator") {
+        rolePrompt = ORCHESTRATOR_PROMPT;
+      } else if (config.role === "ui-tester") {
+        rolePrompt = UI_TESTER_PROMPT || WORKER_PROMPT;
+      } else if (model && model.startsWith("gemini")) {
+        rolePrompt = GEMINI_WORKER_PROMPT || WORKER_PROMPT;
+      } else {
+        rolePrompt = WORKER_PROMPT;
+      }
       if (rolePrompt) {
         sysPrompt += `\n\n---\n\n${rolePrompt}`;
       }
