@@ -70,11 +70,15 @@ function createMCPBridge(ptyManager, opts = {}) {
     },
 
     async writePane(paneId, text, submit = true) {
+      if (!ptyManager.hasPane(paneId)) return { ok: false, error: "pane not found" };
       ptyManager.write(paneId, text);
       if (submit) {
-        // Longer delay then carriage return to submit (OpenClaude uses \r to detect Enter)
-        await new Promise(r => setTimeout(r, 800));
-        ptyManager.write(paneId, "\r");
+        // Small delay so the agent can register the pasted text before Enter arrives.
+        // Verify pane still exists after delay to avoid silently dropping the \r.
+        await new Promise(r => setTimeout(r, 300));
+        if (ptyManager.hasPane(paneId)) {
+          ptyManager.write(paneId, "\r");
+        }
       }
       return { ok: true };
     },

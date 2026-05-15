@@ -71,16 +71,10 @@ function extractUrl(text) {
   if (!matches || matches.length === 0) return null;
   return matches[matches.length - 1].replace(/[)\]>'"`,.;]+$/, "");
 }
-export const DEFAULT_MIMO_ANTHROPIC_BASE_URL = "https://token-plan-sgp.xiaomimimo.com/anthropic";
+export const DEFAULT_MIMO_ANTHROPIC_BASE_URL = "https://api.xiaomimimo.com/v1";
 export const MIMO_ANTHROPIC_ROUTES = [{
-  label: "SGP",
+  label: "Global",
   url: DEFAULT_MIMO_ANTHROPIC_BASE_URL
-}, {
-  label: "CN",
-  url: "https://token-plan-cn.xiaomimimo.com/anthropic"
-}, {
-  label: "AMS",
-  url: "https://token-plan-ams.xiaomimimo.com/anthropic"
 }];
 export function normalizeBaseUrl(value) {
   return value.trim().replace(/\/+$/, "");

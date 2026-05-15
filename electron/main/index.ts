@@ -29,6 +29,11 @@ const PROVIDERS_FILE = path.join(DATA_DIR, "providers.json");
 const WORKSPACES_FILE = path.join(DATA_DIR, "recent-workspaces.json");
 const AUDIO_CONFIG_FILE = path.join(DATA_DIR, "audio-config.json");
 
+// ProviderForm shows these env var keys based on provider type:
+//   mimo-compat / anthropic-compat → ANTHROPIC_AUTH_TOKEN
+//   gemini-compat → GEMINI_API_KEY
+//   openai-compat → OPENAI_API_KEY
+// tokenEnvVar MUST match what the form shows, otherwise the key won't be in the env dict.
 const BUILTIN_TEMPLATES = [
   {
     id: "mimo",
@@ -38,8 +43,8 @@ const BUILTIN_TEMPLATES = [
       {
         type: "mimo-compat",
         host: "openclaude",
-        baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
-        tokenEnvVar: "MIMO_API_KEY",
+        baseUrl: "https://api.xiaomimimo.com/v1",
+        tokenEnvVar: "ANTHROPIC_AUTH_TOKEN",
         label: "MIMO",
         models: ["mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"]
       }
@@ -57,7 +62,7 @@ const BUILTIN_TEMPLATES = [
         baseUrl: "https://generativelanguage.googleapis.com/v1beta",
         tokenEnvVar: "GEMINI_API_KEY",
         label: "OpenClaude via Gemini API",
-        models: ["gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools", "gemini-3.1-flash-lite-preview", "gemini-3-flash-preview", "gemini-3.1-flash-live-preview", "gemini-3-flash", "gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+        models: ["gemini-3.1-pro", "gemini-3.1-flash-lite-preview", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"]
       }
     ]
   },
@@ -89,7 +94,7 @@ const BUILTIN_TEMPLATES = [
         baseUrl: "https://api.anthropic.com",
         tokenEnvVar: "ANTHROPIC_AUTH_TOKEN",
         label: "OpenClaude Code",
-        models: ["claude-3-5-sonnet-20241022", "claude-3-7-sonnet-20250219", "claude-3-5-haiku-20241022"]
+        models: ["claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5-20251101", "claude-opus-4-1-20250805", "claude-opus-4-20250514", "claude-sonnet-4-6", "claude-sonnet-4-5-20250929", "claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-haiku-4-5-20251001", "claude-3-5-haiku-20241022"]
       }
     ]
   },
@@ -105,7 +110,70 @@ const BUILTIN_TEMPLATES = [
         baseUrl: "https://api.openai.com/v1",
         tokenEnvVar: "OPENAI_API_KEY",
         label: "OpenClaude via OpenAI",
-        models: ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini"]
+        models: ["gpt-5.5", "gpt-5.5-mini", "gpt-5.5-nano", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini", "o3", "o4-mini", "o3-mini", "o1-pro", "o1"]
+      }
+    ]
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    icon: "DS",
+    signupUrl: "https://platform.deepseek.com/api_keys",
+    integrations: [
+      {
+        type: "openai-compat",
+        host: "openclaude",
+        baseUrl: "https://api.deepseek.com/v1",
+        tokenEnvVar: "OPENAI_API_KEY",
+        label: "OpenClaude via DeepSeek",
+        models: ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-reasoner", "deepseek-chat"]
+      }
+    ]
+  },
+  {
+    id: "mistral",
+    label: "Mistral",
+    icon: "M",
+    signupUrl: "https://console.mistral.ai/api-keys",
+    integrations: [
+      {
+        type: "openai-compat",
+        host: "openclaude",
+        baseUrl: "https://api.mistral.ai/v1",
+        tokenEnvVar: "OPENAI_API_KEY",
+        label: "OpenClaude via Mistral",
+        models: ["mistral-large-latest", "mistral-small-latest", "devstral-latest", "codestral"]
+      }
+    ]
+  },
+  {
+    id: "xai",
+    label: "xAI (Grok)",
+    icon: "X",
+    signupUrl: "https://console.x.ai/team/default/api-keys",
+    integrations: [
+      {
+        type: "openai-compat",
+        host: "openclaude",
+        baseUrl: "https://api.x.ai/v1",
+        tokenEnvVar: "OPENAI_API_KEY",
+        label: "OpenClaude via Grok",
+        models: ["grok-4.3", "grok-4", "grok-3"]
+      }
+    ]
+  },
+  {
+    id: "ollama",
+    label: "Ollama (Local)",
+    icon: "🦙",
+    integrations: [
+      {
+        type: "openai-compat",
+        host: "openclaude",
+        baseUrl: "http://localhost:11434/v1",
+        tokenEnvVar: "OPENAI_API_KEY",
+        label: "OpenClaude via Ollama",
+        models: []
       }
     ]
   }
@@ -332,11 +400,9 @@ Ignorar o guia resultará em testes incorretos, 404s desperdiçados, e erros evi
 function getEnhancedProviders() {
   const list = providerStore.listPublic();
   const GEMINI_MODELS = [
-    "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools", 
-    "gemini-3.1-flash-lite-preview", "gemini-3-flash-preview", 
-    "gemini-3.1-flash-live-preview", "gemini-3-flash", 
-    "gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-2.5-flash", 
-    "gemini-2.5-flash-lite"
+    "gemini-3.1-pro", "gemini-3.1-flash-lite-preview",
+    "gemini-3-flash-preview", "gemini-2.5-pro",
+    "gemini-2.5-flash", "gemini-2.0-flash"
   ];
   const MIMO_MODELS = [
     "mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"
@@ -704,9 +770,11 @@ async function spawnPaneInternal(config: {
             case "vertex-compat": providerArg = "vertex"; break;
             case "ollama-compat": providerArg = "ollama"; break;
             case "anthropic-compat":
-            case "mimo-compat":
             case "anthropic":
               providerArg = "anthropic"; break;
+            case "mimo-compat":
+              // Don't set --provider for MIMO; OpenClaude detects it via MIMO_API_KEY + OPENAI_BASE_URL
+              break;
             case "custom":
             case "oauth":
             case "api-key":
@@ -719,22 +787,42 @@ async function spawnPaneInternal(config: {
       }
 
       if (isMimo) {
+        // User key is stored as ANTHROPIC_AUTH_TOKEN (form field for mimo-compat).
+        // OpenClaude MIMO needs: MIMO_API_KEY + OPENAI_BASE_URL.
         if (model) {
           env["MODEL"] = model;
           env["ANTHROPIC_MODEL"] = model;
+          env["OPENAI_MODEL"] = model;
           if (!args.includes("--model")) args.push("--model", model);
         }
-        if (provider?.baseUrl) env["ANTHROPIC_BASE_URL"] = provider.baseUrl;
-        if (env["MIMO_API_KEY"]) env["ANTHROPIC_AUTH_TOKEN"] = env["MIMO_API_KEY"];
-        else if (env["ANTHROPIC_AUTH_TOKEN"]) env["MIMO_API_KEY"] = env["ANTHROPIC_AUTH_TOKEN"];
+        if (provider?.baseUrl) {
+          env["ANTHROPIC_BASE_URL"] = provider.baseUrl;
+          env["OPENAI_BASE_URL"] = provider.baseUrl;
+        }
+        // Sync keys: ANTHROPIC_AUTH_TOKEN ↔ MIMO_API_KEY ↔ OPENAI_API_KEY
+        const mimoKey = env["ANTHROPIC_AUTH_TOKEN"] || env["MIMO_API_KEY"] || "";
+        if (mimoKey) {
+          env["ANTHROPIC_AUTH_TOKEN"] = mimoKey;
+          env["MIMO_API_KEY"] = mimoKey;
+          env["OPENAI_API_KEY"] = mimoKey;
+        }
       } else if (isGeminiCompat) {
         env["CLAUDE_CODE_USE_GEMINI"] = "1";
         if (model) env["GEMINI_MODEL"] = model;
         if (env["GEMINI_BASE_URL"]) env["CLAUDE_CODE_DISABLE_PROXY"] = "1";
       } else if (isOpenAICompat) {
+        // User key is stored as OPENAI_API_KEY (form field for openai-compat).
+        // Map to provider-specific env vars that OpenClaude expects.
         if (model) {
           env["MODEL"] = model;
           env["OPENAI_MODEL"] = model;
+        }
+        if (provider?.baseUrl) env["OPENAI_BASE_URL"] = provider.baseUrl;
+        const base = provider?.baseUrl?.toLowerCase() ?? "";
+        const openaiKey = env["OPENAI_API_KEY"] || "";
+        if (openaiKey) {
+          if (base.includes("x.ai")) env["XAI_API_KEY"] = openaiKey;
+          if (base.includes("deepseek")) env["DEEPSEEK_API_KEY"] = openaiKey;
         }
       } else if (isAnthropicCompat) {
         if (model) {
@@ -752,7 +840,7 @@ async function spawnPaneInternal(config: {
     }
 
     // Settings for anthropic-compat
-    if (isClaudeCompatible && (isAnthropicCompat || isMimo) && !args.includes("--settings")) {
+    if (isClaudeCompatible && isAnthropicCompat && !args.includes("--settings")) {
       const settings: Record<string, unknown> = { alwaysThinkingEnabled: false, effortLevel: "low" };
       if (model) settings.model = model;
       args.push("--settings", JSON.stringify(settings));

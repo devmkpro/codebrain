@@ -299,6 +299,10 @@ export class PtyManager extends EventEmitter {
     (state.pty as any).write(data);
   }
 
+  hasPane(paneId: string): boolean {
+    return this.panes.has(paneId);
+  }
+
   /**
    * Inject text directly into a pane's output buffer and emit as output.
    * Used for system notifications (e.g., inter-agent messages).
