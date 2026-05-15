@@ -5,11 +5,19 @@ stages:
 
 variables:
   GIT_DEPTH: 0
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+  ELECTRON_CACHE: "$CI_PROJECT_DIR/.cache/electron"
+  ELECTRON_BUILDER_CACHE: "$CI_PROJECT_DIR/.cache/electron-builder"
 
 # ── Verify (master push — fast compile check) ─────────────────────────────────
 verify:
   stage: verify
   image: node:20-bookworm
+  cache:
+    key: npm-$CI_COMMIT_REF_SLUG
+    paths:
+      - .npm/
+    policy: pull-push
   before_script:
     - npm ci --prefer-offline
   script:
@@ -21,6 +29,16 @@ verify:
 build:linux:
   stage: build
   image: node:20-bookworm
+  cache:
+    - key: npm-$CI_COMMIT_REF_SLUG
+      paths:
+        - .npm/
+      policy: pull
+    - key: electron-builder-linux
+      paths:
+        - .cache/electron/
+        - .cache/electron-builder/
+      policy: pull-push
   before_script:
     - apt-get update && apt-get install -y libarchive-tools dpkg-dev fakeroot rpm
     - npm ci --prefer-offline
@@ -41,6 +59,16 @@ build:linux:
 build:windows:
   stage: build
   image: electronuserland/builder:wine-mono
+  cache:
+    - key: npm-$CI_COMMIT_REF_SLUG
+      paths:
+        - .npm/
+      policy: pull
+    - key: electron-builder-windows
+      paths:
+        - .cache/electron/
+        - .cache/electron-builder/
+      policy: pull-push
   before_script:
     - npm ci --prefer-offline
     # Force-install Windows platform-specific native modules
