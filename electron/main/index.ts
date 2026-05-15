@@ -604,6 +604,7 @@ async function spawnPaneInternal(config: {
   squadOrchestratorWorkerId?: string;
   role?: string;
   sessionContext?: string;
+  env?: Record<string, string>;
 }): Promise<{ ok: boolean; paneId?: string; providerId?: string; error?: string }> {
   try {
     const cwd = config.cwd ?? currentWorkspacePath;
@@ -727,7 +728,7 @@ async function spawnPaneInternal(config: {
       model = provider.models[0];
     }
 
-    const env: Record<string, string> = { ...(provider?.env ?? {}) };
+    const env: Record<string, string> = { ...(provider?.env ?? {}), ...(config.env ?? {}) };
 
     // Build args
     const args = [...(config.args ?? [])];

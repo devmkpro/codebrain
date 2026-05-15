@@ -265,24 +265,43 @@ function useWorkspaceSquadSpawner() {
     const workspace = squad.workspacePath ?? activeWorkspace;
     if (!workspace) return;
     const activityId = nanoid(8);
+    const pty = (window as any).codeBrainApp?.pty;
+
+    // ── Detect role from worker label ──
+    const detectRole = (label: string): string => {
+      const l = (label ?? '').toLowerCase();
+      if (l.includes('tester') || l.includes('test')) return 'ui-tester';
+      return 'worker';
+    };
+
+    // ── Spawn workers first ──
     const workers    = squad.workers ?? (squad.worker ? [squad.worker] : []);
     const workerIds: string[] = [];
     for (const w of workers) {
       const prov  = providers.find(p => p.id === w.providerId);
       const agent = w.agent ?? prov?.host ?? 'openclaude';
       const validModel = resolveValidModel(w.providerId, w.model);
-      const r     = await (window as any).codeBrainApp?.pty.spawn({ agent, cwd: workspace, activityId, providerId: w.providerId, model: validModel, permissionMode: permMode });
+      const role = detectRole(w.role ?? '');
+      const r = await pty.spawn({ agent, cwd: workspace, activityId, providerId: w.providerId, model: validModel, permissionMode: permMode, role });
       if (!r?.ok || !r.paneId) continue;
       workerIds.push(r.paneId);
       addPane({ id: r.paneId, agent, cwd: workspace, workspacePath: workspace, activityId, providerId: w.providerId, model: validModel, externallySpawned: true });
     }
     if (!workerIds.length) return;
+
+    // ── Spawn orchestrator with role=orchestrator ──
     const orchProv  = providers.find(p => p.id === squad.orchestrator.providerId);
     const orchAgent = squad.orchestrator.agent ?? orchProv?.host ?? 'openclaude';
     const validOrchModel = resolveValidModel(squad.orchestrator.providerId, squad.orchestrator.model);
-    const orchRes   = await (window as any).codeBrainApp?.pty.spawn({ agent: orchAgent, cwd: workspace, activityId, providerId: squad.orchestrator.providerId, model: validOrchModel, permissionMode: permMode, env: { SQUAD_WORKER_IDS: workerIds.join(','), SQUAD_ACTIVITY_ID: activityId } });
+    const orchRes = await pty.spawn({
+      agent: orchAgent, cwd: workspace, activityId,
+      providerId: squad.orchestrator.providerId, model: validOrchModel,
+      permissionMode: permMode, role: 'orchestrator',
+      env: { SQUAD_WORKER_IDS: workerIds.join(','), SQUAD_ACTIVITY_ID: activityId }
+    });
     if (orchRes?.ok && orchRes.paneId)
       addPane({ id: orchRes.paneId, agent: orchAgent, cwd: workspace, workspacePath: workspace, activityId, providerId: squad.orchestrator.providerId, model: validOrchModel, externallySpawned: true });
+
     // Switch to the workspace tab after spawning
     const tabIdx = useNavStore.getState().tabs.findIndex((t: any) => t.workspacePath === workspace);
     if (tabIdx >= 0) useNavStore.getState().setActiveTab(tabIdx);
