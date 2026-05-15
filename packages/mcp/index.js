@@ -226,10 +226,11 @@ function createCodebrainMCPServer(bridge) {
         } catch {}
 
         // Inject notification into recipient's terminal so they see it immediately and it activates the agent
-        if (bridge.writePane) {
+        if (bridge.notifyPane) {
           const typeLabel = msgType.toUpperCase();
-          const notification = `MENSAGEM DE ${args.from.toUpperCase()} (${typeLabel}):\n${args.content}`;
-          await bridge.writePane(args.to, notification, true);
+          // Use injectOutput so it just prints without interfering with user input
+          const notification = `\r\n\x1b[33m═══ ⚡ MENSAGEM DE ${args.from.toUpperCase()} (${typeLabel}) ═══\x1b[0m\r\n${args.content.replace(/\r?\n/g, " ")}\r\n\x1b[33m═══════════════════════════════════════════════\x1b[0m\r\n`;
+          await bridge.notifyPane(args.to, notification);
         }
 
         return { content: [{ type: "text", text: JSON.stringify({ ok: true, messageId: id }) }] };

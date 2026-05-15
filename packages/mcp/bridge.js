@@ -71,15 +71,10 @@ function createMCPBridge(ptyManager, opts = {}) {
 
     async writePane(paneId, text, submit = true) {
       if (!ptyManager.hasPane(paneId)) return { ok: false, error: "pane not found" };
-      ptyManager.write(paneId, text);
-      if (submit) {
-        // Small delay so the agent can register the pasted text before Enter arrives.
-        // Verify pane still exists after delay to avoid silently dropping the \r.
-        await new Promise(r => setTimeout(r, 300));
-        if (ptyManager.hasPane(paneId)) {
-          ptyManager.write(paneId, "\r");
-        }
-      }
+      // Send text + Enter in a single atomic write so the PTY delivers them
+      // together — avoids race conditions where the \r arrives before the CLI
+      // finishes processing the pasted text.
+      ptyManager.write(paneId, submit ? text + "\r" : text);
       return { ok: true };
     },
 
