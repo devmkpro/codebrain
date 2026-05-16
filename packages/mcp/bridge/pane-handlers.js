@@ -40,7 +40,15 @@ function createPaneHandlers(ptyManager, opts) {
       if (!ptyManager.hasPane(paneId)) return { ok: false, error: "pane not found" };
       // Sanitize newlines — readline treats \n as Enter, causing premature submission
       const sanitized = text.replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/\r/g, "");
-      ptyManager.writeSilent(paneId, submit ? sanitized + "\r" : sanitized);
+      ptyManager.writeSilent(paneId, sanitized);
+      if (submit) {
+        // Send Enter as a separate write after a tick so readline can finish
+        // processing pasted text before receiving the submit signal.
+        // Sending sanitized+"\r" as one chunk causes readline to buffer the \r
+        // inside paste-mode and never submit.
+        await new Promise((r) => setTimeout(r, 80));
+        ptyManager.write(paneId, "\r");
+      }
       return { ok: true };
     },
 
