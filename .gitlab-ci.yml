@@ -5,7 +5,7 @@ stages:
 
 variables:
   GIT_DEPTH: 0
-  GIT_CLEAN_FLAGS: -ffdx --exclude=.cache/
+  NODE_ENV: development
   npm_config_cache: "/tmp/npm-cache"
   ELECTRON_CACHE: "/tmp/.cache/electron"
   ELECTRON_BUILDER_CACHE: "/tmp/.cache/electron-builder"
@@ -31,7 +31,7 @@ build:linux:
   stage: build
   image: node:22-bookworm
   before_script:
-    - apt-get update && apt-get install -y libarchive-tools dpkg-dev fakeroot rpm
+    - apt-get update -qq && apt-get install -y -qq libarchive-tools dpkg-dev fakeroot rpm
     - rm -rf node_modules
     - npm ci --prefer-offline
   script:
@@ -53,7 +53,7 @@ build:windows:
   variables:
     GIT_STRATEGY: clone
   before_script:
-    - npm ci --prefer-offline || (rm -rf node_modules && npm ci --prefer-offline)
+    - npm ci --prefer-offline
     - npm install @lydell/node-pty-win32-x64@1.2.0-beta.12 --no-save --force
   script:
     - npm run build
