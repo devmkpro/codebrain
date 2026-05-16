@@ -50,9 +50,10 @@ build:linux:
 build:windows:
   stage: build
   image: electronuserland/builder:wine-mono
+  variables:
+    GIT_STRATEGY: clone
   before_script:
-    - rm -rf node_modules
-    - npm install --prefer-offline --force
+    - npm ci --prefer-offline || (rm -rf node_modules && npm ci --prefer-offline)
     - npm install @lydell/node-pty-win32-x64@1.2.0-beta.12 --no-save --force
   script:
     - npm run build
