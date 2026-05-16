@@ -5,9 +5,10 @@ stages:
 
 variables:
   GIT_DEPTH: 0
-  npm_config_cache: "$CI_PROJECT_DIR/.npm"
-  ELECTRON_CACHE: "$CI_PROJECT_DIR/.cache/electron"
-  ELECTRON_BUILDER_CACHE: "$CI_PROJECT_DIR/.cache/electron-builder"
+  GIT_CLEAN_FLAGS: -ffdx --exclude=.cache/
+  npm_config_cache: "/tmp/npm-cache"
+  ELECTRON_CACHE: "/tmp/.cache/electron"
+  ELECTRON_BUILDER_CACHE: "/tmp/.cache/electron-builder"
 
 default:
   tags:
@@ -16,13 +17,9 @@ default:
 # ── Verify (master push — fast compile check) ─────────────────────────────────
 verify:
   stage: verify
-  image: node:20-bookworm
-  cache:
-    key: npm-$CI_COMMIT_REF_SLUG
-    paths:
-      - .npm/
-    policy: pull-push
+  image: node:22-bookworm
   before_script:
+    - rm -rf node_modules
     - npm ci --prefer-offline
   script:
     - npm run build
@@ -32,19 +29,10 @@ verify:
 # ── Linux Build (AppImage + deb) ───────────────────────────────────────────────
 build:linux:
   stage: build
-  image: node:20-bookworm
-  cache:
-    - key: npm-$CI_COMMIT_REF_SLUG
-      paths:
-        - .npm/
-      policy: pull
-    - key: electron-builder-linux
-      paths:
-        - .cache/electron/
-        - .cache/electron-builder/
-      policy: pull-push
+  image: node:22-bookworm
   before_script:
     - apt-get update && apt-get install -y libarchive-tools dpkg-dev fakeroot rpm
+    - rm -rf node_modules
     - npm ci --prefer-offline
   script:
     - npm run build
@@ -62,20 +50,9 @@ build:linux:
 build:windows:
   stage: build
   image: electronuserland/builder:wine-mono
-  cache:
-    - key: npm-$CI_COMMIT_REF_SLUG
-      paths:
-        - .npm/
-      policy: pull
-    - key: electron-builder-windows
-      paths:
-        - .cache/electron/
-        - .cache/electron-builder/
-      policy: pull-push
   before_script:
+    - rm -rf node_modules
     - npm ci --prefer-offline
-    # Force-install Windows platform-specific native modules
-    # npm skips @lydell/node-pty-win32-x64 on Linux due to os:["win32"] constraint
     - npm install @lydell/node-pty-win32-x64@1.2.0-beta.12 --no-save --force
   script:
     - npm run build
@@ -91,7 +68,7 @@ build:windows:
 # ── Create GitLab Release ──────────────────────────────────────────────────────
 release:
   stage: release
-  image: node:20-alpine
+  image: node:22-alpine
   needs:
     - job: build:linux
       artifacts: true
