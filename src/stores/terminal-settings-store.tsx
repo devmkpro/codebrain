@@ -80,7 +80,6 @@ export const TERMINAL_THEMES = {
   dark: {
     background: "#000000",
     foreground: "#cccccc",
-    cursor: "#ef4444",
     selectionBackground: "#242736",
     selectionForeground: "#ffffff",
     black: "#000000",

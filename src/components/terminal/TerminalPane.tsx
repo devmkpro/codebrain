@@ -415,7 +415,7 @@ export function TerminalPane({
         </div>
 
         {/* Input Feedback & Quick Actions Rodapé */}
-        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-black via-black/80 to-transparent flex items-end px-3 pb-1">
+        <div className="absolute bottom-0 left-0 right-0 h-8 bg-linear-gradient-to-t from-zinc-300 via-zinc-700  dark:from-black dark:via-black/80 to-transparent flex items-end px-3 pb-1">
           <div className="flex items-center justify-between w-full border-t border-white/5 pt-1.5">
             <div className="flex items-center gap-2">
               <span className="text-red-500 font-mono text-[10px] font-bold animate-pulse">❯</span>
