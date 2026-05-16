@@ -81,7 +81,7 @@ export const TERMINAL_THEMES = {
     background: "#000000",
     foreground: "#cccccc",
     cursor: "#ef4444",
-    selectionBackground: "rgba(255, 255, 255, 0.4)",
+    selectionBackground: "#242736",
     selectionForeground: "#ffffff",
     black: "#000000",
     brightBlack: "#666666",
