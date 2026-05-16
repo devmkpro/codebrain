@@ -120,9 +120,9 @@ export function TerminalPane({
     const fitAddon = new addonFitExports.FitAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(new L(openWebLink));
-    
+
     term.open(containerRef.current);
-    
+
     try {
       const webgl = new WebglAddon();
       webgl.onContextLoss(() => webgl.dispose());
@@ -130,7 +130,7 @@ export function TerminalPane({
     } catch (e) {
       console.warn("WebGL addon failed to load, falling back to canvas/dom renderer", e);
     }
-    
+
     fitAddon.fit();
     termRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -391,7 +391,7 @@ export function TerminalPane({
         spawnedPaneIds.delete(pane.id);
         usePanesStore.getState().removePane(pane.id);
       }} title="Close pane (Cmd+W)">
-        <X$1 size={10} strokeWidth={2} />
+        <X$1 size={20} strokeWidth={2} />
       </button>
     </div>
     <div className="relative z-0 h-full flex flex-col">
