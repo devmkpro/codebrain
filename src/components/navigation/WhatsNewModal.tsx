@@ -27,7 +27,7 @@ export function WhatsNewModal({
   const primaryRelease = RELEASES[0] ?? { version: "", date: "", highlights: [] };
   const priorReleases = RELEASES.slice(1);
   const BrainVoiceAllowed = true;
-  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm cursor-pointer" onClick={onClose}>
       <div className="w-[680px] max-w-[92vw] max-h-[84vh] bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <div className="flex items-center gap-2">
@@ -36,7 +36,7 @@ export function WhatsNewModal({
               CodeBrain v{primaryRelease.version}
             </h2>
           </div>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors">
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors cursor-pointer">
             <X$1 size={14} strokeWidth={1.5} />
           </button>
         </div>

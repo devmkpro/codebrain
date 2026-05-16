@@ -146,7 +146,7 @@ export function SettingsModal({ open, onClose }) {
   if (!open) return null;
   return (
     <div
-      className="fixed top-[38px] left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed top-[38px] left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm cursor-pointer"
       onClick={onClose}
     >
       <div
@@ -157,7 +157,7 @@ export function SettingsModal({ open, onClose }) {
           <h2 className="font-mono text-[12px] font-bold text-white tracking-tight">
             Configurações
           </h2>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors">
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors cursor-pointer">
             <X$1 size={14} strokeWidth={1.5} />
           </button>
         </div>

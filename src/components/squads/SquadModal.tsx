@@ -132,14 +132,14 @@ export function SquadModal({
     return count === 1 ? "1 worker" : `${count} workers`;
   };
 
-  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm cursor-pointer" onClick={onClose}>
       <div className="bg-[#0c0c14] border border-white/10 rounded-xl shadow-2xl w-[520px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
           <div className="flex items-center gap-2">
             <Users size={14} strokeWidth={1.5} className="text-[#4F46E5]" />
             <h2 className="font-mono text-[12px] font-bold text-white tracking-wider">NEW SQUAD</h2>
           </div>
-          <button onClick={onClose} className="text-slate-600 hover:text-red-400 transition-colors">
+          <button onClick={onClose} className="text-slate-600 hover:text-red-400 transition-colors cursor-pointer">
             <X$1 size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -411,13 +411,13 @@ export function SettingsModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
   if (!open) return null;
-  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm cursor-pointer" onClick={onClose}>
       <div className="w-[440px] max-w-[90vw] max-h-[88vh] flex flex-col bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <h2 className="font-mono text-[12px] font-bold text-white tracking-tight">
             Configurações
           </h2>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors">
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors cursor-pointer">
             <X$1 size={14} strokeWidth={1.5} />
           </button>
         </div>

@@ -278,7 +278,7 @@ export function TerminalPane({
     const text = paths.map(p => /\s/.test(p) ? `"${p}"` : p).join(" ");
     api.pty.write(pane.id, text + " ");
   }, [pane.id]);
-  return <div className={`flex flex-col h-full border ${isActive ? "border-indigo-500/40 shadow-[0_0_12px_rgba(239,68,68,0.1)]" : "border-white/5"} rounded-lg overflow-hidden bg-black backdrop-blur transition-all duration-300 relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane}>
+  return <div className={`flex flex-col h-full border cursor-pointer ${isActive ? "border-indigo-500/40 shadow-[0_0_12px_rgba(239,68,68,0.1)]" : "border-white/5 hover:border-white/10"} rounded-lg overflow-hidden bg-black backdrop-blur transition-all duration-300 relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane}>
       <div className="absolute top-2 right-2 z-10 flex items-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity duration-300 bg-black/60 backdrop-blur-sm border border-white/10 rounded-md px-2 py-1 select-none cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("application/x-codebrain-pane", pane.id);

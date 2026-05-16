@@ -378,7 +378,7 @@ export function BrowserPane({
     updatePane(pane.id, { url: target });
   };
 
-  return <div onClick={onClick} className={`h-full flex flex-col bg-black rounded overflow-hidden border ${isActive ? "border-indigo-500/40" : "border-white/5"}`}>
+  return <div onClick={onClick} className={`h-full flex flex-col bg-black rounded overflow-hidden border cursor-pointer ${isActive ? "border-indigo-500/40" : "border-white/5 hover:border-white/10"}`}>
       <div className="flex items-center gap-1 px-2 py-1 border-b border-white/5 shrink-0 bg-black cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("application/x-codebrain-pane", pane.id);

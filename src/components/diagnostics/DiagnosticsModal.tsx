@@ -109,7 +109,7 @@ export function DiagnosticsModal({
   }, [rendererPanes, snapshot?.backendPanes]);
   if (!open) return null;
   const hasDivergence = divergence.backendOnly.length > 0 || divergence.rendererOnly.length > 0;
-  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
+  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm cursor-pointer" onClick={onClose}>
       <div className="flex max-h-[88vh] w-[920px] max-w-[96vw] flex-col overflow-hidden rounded-xl border border-indigo-500/20 bg-[#080808] shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-indigo-500/10 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -128,7 +128,7 @@ export function DiagnosticsModal({
               <RefreshCw size={12} strokeWidth={1.6} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
-            <button onClick={onClose} className="rounded p-1.5 text-gray-600 transition-colors hover:text-gray-300">
+            <button onClick={onClose} className="rounded p-1.5 text-gray-600 transition-colors hover:text-gray-300 cursor-pointer">
               <X$1 size={14} strokeWidth={1.6} />
             </button>
           </div>

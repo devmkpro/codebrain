@@ -44,7 +44,7 @@ export function CliInstallModal({ open, onClose, onInstalled }: CliInstallModalP
   };
 
   return (
-    <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10001] flex items-center justify-center bg-black/80 backdrop-blur-md" onClick={() => status !== "installing" && onClose()}>
+    <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10001] flex items-center justify-center bg-black/80 backdrop-blur-md cursor-pointer" onClick={() => status !== "installing" && onClose()}>
       <div className="w-[500px] max-w-[90vw] bg-[#0d0d0d] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-white/[0.02]">
           <div className="flex items-center gap-2.5">
@@ -59,7 +59,7 @@ export function CliInstallModal({ open, onClose, onInstalled }: CliInstallModalP
             </div>
           </div>
           {status !== "installing" && (
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-all">
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-all cursor-pointer">
               <X size={16} />
             </button>
           )}

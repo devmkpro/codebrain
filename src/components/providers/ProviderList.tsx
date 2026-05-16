@@ -26,17 +26,17 @@ export function ProviderList({
                 </p>
               </div>
               {!isBuiltin && <React.Fragment>
-                  <button onClick={() => onEdit(p)} className="opacity-0 group-hover:opacity-100 font-mono text-[10px] text-gray-500 hover:text-white transition-opacity">
+                  <button onClick={() => onEdit(p)} className="opacity-0 group-hover:opacity-100 font-mono text-[10px] text-gray-500 hover:text-white transition-opacity cursor-pointer">
                     edit
                   </button>
-                  <button onClick={() => onDelete(p.id)} className="opacity-0 group-hover:opacity-100 text-gray-700 hover:text-red-500 transition-opacity">
+                  <button onClick={() => onDelete(p.id)} className="opacity-0 group-hover:opacity-100 text-gray-700 hover:text-red-500 transition-opacity cursor-pointer">
                     <Trash2 size={12} strokeWidth={1.5} />
                   </button>
                 </React.Fragment>}
             </div>;
       })}
       </div>
-      <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 hover:bg-red-500/10 font-mono text-[10px] font-bold text-red-400">
+      <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 hover:bg-red-500/10 font-mono text-[10px] font-bold text-red-400 cursor-pointer">
         <Plus size={11} strokeWidth={1.5} /> ADD PROVIDER
       </button>
     </div>;
