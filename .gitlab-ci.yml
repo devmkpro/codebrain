@@ -52,7 +52,7 @@ build:windows:
   image: electronuserland/builder:wine-mono
   before_script:
     - rm -rf node_modules
-    - npm ci --prefer-offline
+    - npm install --prefer-offline --force
     - npm install @lydell/node-pty-win32-x64@1.2.0-beta.12 --no-save --force
   script:
     - npm run build
