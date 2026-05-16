@@ -1,7 +1,7 @@
 {
   "name": "codebrain",
   "productName": "Codebrain",
-  "version": "1.2.20",
+  "version": "1.2.21",
   "description": "Electron shell — React UI + IPC layer for Codebrain App",
   "homepage": "https://gitlab.com/maikeofc18/codebrain",
   "author": {

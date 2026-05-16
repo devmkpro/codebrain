@@ -278,16 +278,22 @@ export class PtyManager extends EventEmitter {
     ptyProcess.onData((data: string) => {
       // Check if this output is an echo of text sent via writeSilent()
       const pending = this.pendingEcho.get(paneId);
-      if (pending && Date.now() - pending.time < 500 && pending.consumed < pending.cleanText.length) {
+      if (pending && Date.now() - pending.time < 10000 && pending.consumed < pending.cleanText.length) {
         const cleanData = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "").replace(/\n/g, "");
         if (cleanData.length > 0) {
-          // Match character by character — only suppress the exact echo of what we sent
+          // Search for the expected echo text as a substring of cleanData.
+          // Readline prefixes the echo with the prompt ("> ") and cursor movement
+          // codes, so we can't match from position 0 — we search for the text anywhere.
+          const remaining = pending.cleanText.substring(pending.consumed);
+          const startIdx = cleanData.indexOf(remaining[0]);
           let matchedCount = 0;
-          for (let i = 0; i < cleanData.length && pending.consumed + i < pending.cleanText.length; i++) {
-            if (cleanData[i] === pending.cleanText[pending.consumed + i]) {
-              matchedCount++;
-            } else {
-              break;
+          if (startIdx >= 0) {
+            for (let i = 0; i < cleanData.length - startIdx && i < remaining.length; i++) {
+              if (cleanData[startIdx + i] === remaining[i]) {
+                matchedCount++;
+              } else {
+                break;
+              }
             }
           }
           if (matchedCount > 0) {

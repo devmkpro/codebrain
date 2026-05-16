@@ -14,12 +14,56 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.2.20",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "MIMO 401 — masked secrets from frontend overwriting real API key on spawn"
+      }
+    ]
+  },
+  {
+    "version": "1.2.19",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "squad spawner passes role + env to inject correct prompts"
+      }
+    ]
+  },
+  {
+    "version": "1.2.18",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "auto-inject role-specific prompts on pane spawn"
+      }
+    ]
+  },
+  {
+    "version": "1.2.17",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "echo suppression for MCP inter-agent communication"
+      },
+      {
+        "kind": "fix",
+        "text": "use notifyPane instead of writePane for inter-agent messages to avoid bypassing permissions issue"
+      }
+    ]
+  },
+  {
     "version": "1.2.16",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
-        "text": "fix pane_spawn routing: model-based provider resolution now uses enhanced model map instead of falling back to MIMO-first cascade"
+        "text": "pane_spawn model-based provider resolution using enhanced model map"
       }
     ]
   },
