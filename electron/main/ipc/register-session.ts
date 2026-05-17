@@ -38,9 +38,10 @@ ${panesSummary}
 
 ## Instruções
 
-1. Analise o contexto acima para entender o que cada worker estava fazendo.
-2. Re-spawn os workers necessários usando mcp__codebrain__pane_spawn.
-3. Para cada worker, use mcp__codebrain__pane_write com um prompt detalhado que inclua:
+1. Primeiro, chame pane_list() para verificar se algum worker já está ativo.
+2. Analise o contexto acima para entender o que cada worker estava fazendo.
+3. Re-spawn SOMENTE os workers necessários que NÃO estão na pane_list — NUNCA crie duplicatas.
+4. Para cada worker (novo ou existente), use mcp__codebrain__pane_write com um prompt detalhado que inclua:
    - O contexto do que ele estava fazendo antes (extraído das últimas linhas)
    - Instruções para continuar de onde parou
 4. Não re-spawn workers que já completaram suas tarefas (marcados como "done").

@@ -19,16 +19,20 @@ function createPaneHandlers(ptyManager, opts) {
   return {
     roleMap,
 
-    async spawnPane({ agent, cwd, providerId, model }) {
+    async spawnPane({ agent, cwd, providerId, model, label }) {
       try {
         if (opts.spawnPaneFn) {
           const result = await opts.spawnPaneFn({ agent, cwd, providerId, model });
-          if (result.ok && result.paneId) roleMap.set(result.paneId, "worker");
+          if (result.ok && result.paneId) {
+            roleMap.set(result.paneId, "worker");
+            if (label && opts.paneLabels) opts.paneLabels.set(result.paneId, label);
+          }
           return result;
         }
         const config = { agent: agent || "openclaude", cwd: cwd || undefined, providerId: providerId || undefined, model: model || undefined };
         const paneId = await ptyManager.spawn(config);
         roleMap.set(paneId, "worker");
+        if (label && opts.paneLabels) opts.paneLabels.set(paneId, label);
         if (opts.onPaneCreated) opts.onPaneCreated({ paneId, agent: config.agent, cwd: config.cwd, providerId, model });
         return { paneId };
       } catch (err) {
