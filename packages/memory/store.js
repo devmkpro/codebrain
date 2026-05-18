@@ -1,8 +1,77 @@
 "use strict";
 
-const Database = require("better-sqlite3");
 const path = require("path");
 const fs = require("fs");
+
+/**
+ * Resolve better-sqlite3 with fallback to system Node.js native binary.
+ *
+ * When running inside the packaged Electron app via MCP stdio (CLI mode),
+ * the default better-sqlite3 binary is compiled for Electron's ABI, which
+ * doesn't match the system Node.js that Claude Code uses. This loader
+ * tries the default first, then falls back to the system ABI binary
+ * shipped in resources/native/ (copied by prebuild-native.mjs before
+ * electron-builder recompiles for Electron).
+ *
+ * better-sqlite3 supports `nativeBinding` option per Database instance,
+ * so we create a wrapper Database that always specifies the correct binary.
+ */
+function loadBetterSqlite3() {
+  // Try default first (works in dev mode and when ABI matches)
+  try {
+    const DefaultDatabase = require("better-sqlite3");
+    // Quick smoke test to ensure it actually works
+    new DefaultDatabase(":memory:").close();
+    return DefaultDatabase;
+  } catch (err) {
+    const msg = String(err.message || err);
+    // Only fall back on ABI/compile mismatch errors
+    const isAbiMismatch =
+      msg.includes("NODE_MODULE_VERSION") ||
+      msg.includes("was compiled against") ||
+      msg.includes("not a valid Win32 application") ||
+      msg.includes("is not a valid Win32 application") ||
+      msg.includes("The specified module could not be found") ||
+      msg.includes("ERR_DLOPEN_FAILED");
+    if (!isAbiMismatch) {
+      throw err;
+    }
+  }
+
+  // ABI mismatch — find the system Node.js binary from resources/native/
+  // In packaged mode: resources/native/ is at process.resourcesPath/native/
+  // In dev mode: resources/native/ is at <project>/resources/native/
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, "native", "better_sqlite3.node") : null,
+    path.join(__dirname, "..", "..", "resources", "native", "better_sqlite3.node"),
+  ].filter(Boolean);
+
+  for (const bindingPath of candidates) {
+    if (!fs.existsSync(bindingPath)) continue;
+    try {
+      const Database = require("better-sqlite3");
+      // better-sqlite3 v12+ accepts { nativeBinding: string } which loads
+      // the .node file from the given path instead of the compiled-for-Electron one
+      new Database(":memory:", { nativeBinding: bindingPath }).close();
+
+      // Return a wrapper that always uses the correct native binding
+      function DatabaseWrapper(filename, options) {
+        return new Database(filename, { ...options, nativeBinding: bindingPath });
+      }
+      DatabaseWrapper.prototype = Database.prototype;
+      return DatabaseWrapper;
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error(
+    "better-sqlite3 ABI mismatch and no system Node.js binary found in resources/native/. " +
+    "Run 'npm run prebuild-native' before building the app."
+  );
+}
+
+const Database = loadBetterSqlite3();
 
 /**
  * SQLite-backed shared memory store for CodeBrain multi-agent sessions.

@@ -1,7 +1,7 @@
 {
   "name": "codebrain",
   "productName": "Codebrain",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Electron shell — React UI + IPC layer for Codebrain App",
   "homepage": "https://gitlab.com/maikeofc18/codebrain",
   "author": {
@@ -15,11 +15,13 @@
     "dev": "npm run gen:releases && electron-vite dev",
     "build": "npm run gen:releases && electron-vite build",
     "preview": "electron-vite preview",
+    "prebuild:native": "node scripts/prebuild-native.mjs",
+    "bundle:stdio": "node scripts/bundle-stdio.mjs",
     "pack:win": "node scripts/build-exe.mjs",
-    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:win": "npm run prebuild:native && npm run bundle:stdio && npm run build && electron-builder --win --publish never",
     "dist:win:nsis": "npm run build && electron-builder --win nsis --publish never",
-    "dist:mac": "npm run build && electron-builder --mac --publish never",
-    "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "dist:mac": "npm run prebuild:native && npm run bundle:stdio && npm run build && electron-builder --mac --publish never",
+    "dist:linux": "npm run prebuild:native && npm run bundle:stdio && npm run build && electron-builder --linux --publish never",
     "typecheck": "tsc --noEmit",
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit"
   },
@@ -33,7 +35,7 @@
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "autoprefixer": "^10.5.0",
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^12.10.0",
     "clsx": "^2.1.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.3",
@@ -101,6 +103,20 @@
       {
         "from": ".claude",
         "to": "codebrain-claude",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/native",
+        "to": "native",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/mcp-stdio",
+        "to": "mcp-stdio",
         "filter": [
           "**/*"
         ]

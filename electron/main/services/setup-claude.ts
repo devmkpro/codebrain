@@ -28,14 +28,27 @@ function copyDirRecursive(src: string, dest: string): void {
 }
 
 /**
- * Resolve the absolute path to packages/mcp/stdio.js.
- * In packaged mode: <asar>/packages/mcp/stdio.js
- * In dev mode:      <project>/packages/mcp/stdio.js
+ * Resolve the absolute path to the MCP stdio server.
+ *
+ * In packaged mode: <install>/resources/mcp-stdio/stdio.cjs
+ *   (bundled standalone file outside app.asar — Node.js can load it)
+ *
+ * In dev mode: <project>/resources/mcp-stdio/stdio.cjs
+ *   (created by `npm run bundle:stdio`)
+ *
+ * Fallback (dev without bundle): <project>/packages/mcp/stdio.js
  */
 function getStdioPath(): string {
   if (app.isPackaged) {
+    const bundledPath = path.join(process.resourcesPath, "mcp-stdio", "stdio.cjs");
+    if (fs.existsSync(bundledPath)) return bundledPath;
+    // Fallback to asar path (may not work with system Node.js)
     return path.join(app.getAppPath(), "packages", "mcp", "stdio.js");
   }
+  // Dev mode — prefer the bundle if it exists
+  const bundledPath = path.resolve(__dirname, "..", "..", "..", "resources", "mcp-stdio", "stdio.cjs");
+  if (fs.existsSync(bundledPath)) return bundledPath;
+  // Dev fallback — direct source
   return path.resolve(__dirname, "..", "..", "..", "packages", "mcp", "stdio.js");
 }
 
