@@ -176,10 +176,15 @@ function createMemoryStore(dbPath) {
       created_at   INTEGER NOT NULL DEFAULT (unixepoch())
     );
     CREATE INDEX IF NOT EXISTS idx_snapshots_aggregate ON event_snapshots(aggregate_id);
-
-    ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'project' CHECK(scope IN ('project','local','user'));
-    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
   `);
+
+  // Migration: add scope column if not already present (ALTER TABLE lacks IF NOT EXISTS)
+  try {
+    db.exec(`ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'project' CHECK(scope IN ('project','local','user'))`);
+  } catch (e) {
+    if (!String(e.message).includes("duplicate column")) throw e;
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope)`);
 
   // ── Knowledge Graph + Vector Store ────────────────────────────────────────
   let knowledgeGraph;
