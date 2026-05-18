@@ -480,7 +480,6 @@ function PaneMenu({
           </>
         )}
       </div>
-      <Modals modals={m} activeWorkspace={activeWorkspace} />
     </>
   );
 }
@@ -575,6 +574,7 @@ function WorkspaceHeader() {
   const [dropIndex,     setDropIndex]     = React.useState<number|null>(null);
 
   const accountRef  = React.useRef<HTMLDivElement>(null);
+  const paneMenuRef = React.useRef<HTMLDivElement>(null);
 
   const activeTab       = !onHome ? tabs[activeTabIndex] : undefined;
   const activeWorkspace = activeTab?.workspacePath as string | undefined;
@@ -599,6 +599,13 @@ function WorkspaceHeader() {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [showAccount]);
+
+  React.useEffect(() => {
+    if (!showPaneMenu) return;
+    const h = (e: MouseEvent) => { if (paneMenuRef.current && !paneMenuRef.current.contains(e.target as Node)) setShowPaneMenu(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [showPaneMenu]);
 
   React.useEffect(() => {
     if (!showAccount) return;
@@ -774,7 +781,7 @@ function WorkspaceHeader() {
 
           {/* + PANE */}
           {activeWorkspace && (
-            <>
+            <div ref={paneMenuRef} className="flex items-stretch shrink-0">
               <VDiv />
               <button
                 onClick={() => setShowPaneMenu(v => !v)}
@@ -783,7 +790,20 @@ function WorkspaceHeader() {
               >
                 <Plus size={12} strokeWidth={2.5} /> TERMINAL
               </button>
-            </>
+              {showPaneMenu && (
+                <PaneMenu
+                  onClose={() => setShowPaneMenu(false)}
+                  activeWorkspace={activeWorkspace}
+                  permissionMode={permMode}
+                  setPermissionMode={setPermMode}
+                  savedPanes={savedPanes}
+                  snapshotBusy={snapshotBusy}
+                  onSave={handleSave}
+                  onRestore={handleRestore}
+                  onRestorePane={handleRestorePane}
+                />
+              )}
+            </div>
           )}
 
           <VDiv />
@@ -814,21 +834,6 @@ function WorkspaceHeader() {
 
       {/* ── Files Navbar ──────────────────────────────────────────── */}
       {isFilesView && activeWorkspace && <FilesNavBar workspacePath={activeWorkspace} />}
-
-      {/* ── Pane menu ─────────────────────────────────────────────── */}
-      {showPaneMenu && activeWorkspace && (
-        <PaneMenu
-          onClose={() => setShowPaneMenu(false)}
-          activeWorkspace={activeWorkspace}
-          permissionMode={permMode}
-          setPermissionMode={setPermMode}
-          savedPanes={savedPanes}
-          snapshotBusy={snapshotBusy}
-          onSave={handleSave}
-          onRestore={handleRestore}
-          onRestorePane={handleRestorePane}
-        />
-      )}
 
       <Modals modals={m} activeWorkspace={activeWorkspace} />
     </>

@@ -1,7 +1,10 @@
-﻿import React from "react";
+import React from "react";
 import { X$1 } from "../../stores/providers-store";
 import { usePushToTalk, spawnedPaneIds, openWebLink } from "../../stores/voice-store";
 import { xtermExports, addonFitExports, L } from "../../lib/xterm-exports";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { Copy, Clipboard, Square, MessageSquare, Terminal as TerminalIcon } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 // TerminalPane
 import { usePanesStore } from "../../stores/panes-store";
@@ -31,6 +34,57 @@ export function TerminalPane({
   const fontStack = (FONT_OPTIONS.find(f => f.id === fontFamilyId) ?? FONT_OPTIONS[0]).stack;
   const [dropHover, setDropHover] = React.useState(false);
   const [showSavedContext, setShowSavedContext] = React.useState(true);
+  const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
+  const savedSelectionRef = React.useRef('');
+
+  const handleContextMenu = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    // Capture selection before xterm loses focus when menu opens
+    savedSelectionRef.current = termRef.current?.getSelection() ?? '';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const menuWidth = 160;
+    const menuHeight = 130;
+
+    let adjustedX = x;
+    let adjustedY = y;
+
+    if (x + menuWidth > rect.width) adjustedX = x - menuWidth;
+    if (y + menuHeight > rect.height) adjustedY = y - menuHeight;
+
+    setContextMenu({ x: adjustedX, y: adjustedY });
+  }, []);
+
+  const closeMenu = React.useCallback(() => setContextMenu(null), []);
+
+  const copyToClipboard = React.useCallback(() => {
+    const sel = savedSelectionRef.current;
+    if (sel) window.codeBrainApp?.app.copyToClipboard(sel);
+    closeMenu();
+  }, [closeMenu]);
+
+  const pasteFromClipboard = React.useCallback(async () => {
+    try {
+      const text = await window.codeBrainApp?.app.readFromClipboard();
+      if (text) window.codeBrainApp?.pty.write(pane.id, text);
+    } catch { }
+    closeMenu();
+  }, [pane.id, closeMenu]);
+
+  const stopTerminal = React.useCallback(() => {
+    window.codeBrainApp?.pty.kill(pane.id);
+    closeMenu();
+  }, [pane.id, closeMenu]);
+
+  const sendQuickCommand = React.useCallback((cmd: string) => {
+    if (cmd === "/btw") {
+      window.codeBrainApp?.pty.write(pane.id, "Dúvida/Pergunta: ");
+    }
+  }, [pane.id]);
+
   const pushToTalk = usePushToTalk({
     paneId: pane.id,
     enabled: isActive
@@ -61,7 +115,17 @@ export function TerminalPane({
     const fitAddon = new addonFitExports.FitAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(new L(openWebLink));
+
     term.open(containerRef.current);
+
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch (e) {
+      console.warn("WebGL addon failed to load, falling back to canvas/dom renderer", e);
+    }
+
     fitAddon.fit();
     termRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -98,14 +162,14 @@ export function TerminalPane({
         e.preventDefault();
         navigator.clipboard.readText().then(text => {
           if (text) window.codeBrainApp?.pty.write(currentPane.id, text);
-        }).catch(() => {});
+        }).catch(() => { });
         return false;
       }
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "c") {
         const sel = term.getSelection();
         if (sel) {
           e.preventDefault();
-          navigator.clipboard.writeText(sel).catch(() => {});
+          navigator.clipboard.writeText(sel).catch(() => { });
           return false;
         }
       }
@@ -193,10 +257,10 @@ export function TerminalPane({
       if (containerRef.current.clientWidth < 10 || containerRef.current.clientHeight < 10) return;
       try {
         fitAddonRef.current?.fit();
-      } catch (err) {}
+      } catch (err) { }
       const term = termRef.current;
       if (term && term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
-        window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => {});
+        window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => { });
       }
     };
     const obs = new ResizeObserver(doFit);
@@ -221,10 +285,10 @@ export function TerminalPane({
       if (!containerRef.current || containerRef.current.clientWidth < 10 || containerRef.current.clientHeight < 10) return;
       try {
         fitAddonRef.current?.fit();
-      } catch (err) {}
+      } catch (err) { }
       const term = termRef.current;
       if (term && term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
-        window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => {});
+        window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => { });
       }
     }, 50);
     return () => clearTimeout(t);
@@ -278,55 +342,107 @@ export function TerminalPane({
     const text = paths.map(p => /\s/.test(p) ? `"${p}"` : p).join(" ");
     api.pty.write(pane.id, text + " ");
   }, [pane.id]);
-  return <div className={`flex flex-col h-full border cursor-pointer ${isActive ? "border-indigo-500/40 shadow-[0_0_12px_rgba(239,68,68,0.1)]" : "border-white/5 hover:border-white/10"} rounded-lg overflow-hidden bg-black backdrop-blur transition-all duration-300 relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane}>
+  return <div className={`flex flex-col h-full border cursor-pointer ${isActive ? "border-indigo-500/40 shadow-[0_0_12px_rgba(239,68,68,0.1)]" : "border-white/5 hover:border-white/10"} rounded-lg overflow-hidden bg-black backdrop-blur transition-all duration-300 relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onContextMenu={handleContextMenu}>
+
+    <AnimatePresence>
+      {contextMenu && (
+        <>
+          <div className="absolute inset-0 z-[9998]" onClick={closeMenu} onContextMenu={(e) => { e.preventDefault(); closeMenu(); }} />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            className="absolute z-[9999] min-w-[160px] bg-[#0A0A0B] border border-white/10 rounded-lg shadow-2xl py-1 overflow-hidden backdrop-blur-xl"
+          >
+            <button onClick={copyToClipboard} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
+              <Copy size={12} className="text-slate-500" />
+              <span>Copiar</span>
+            </button>
+            <button onClick={pasteFromClipboard} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
+              <Clipboard size={12} className="text-slate-500" />
+              <span>Colar</span>
+            </button>
+            <div className="h-[1px] bg-white/5 my-1" />
+            <button onClick={stopTerminal} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors">
+              <Square size={10} className="fill-current" />
+              <span>Parar Terminal</span>
+            </button>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+
       <div className="absolute top-2 right-2 z-10 flex items-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity duration-300 bg-black/60 backdrop-blur-sm border border-white/10 rounded-md px-2 py-1 select-none cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("application/x-codebrain-pane", pane.id);
     }}>
-        <StatusDot status={pane.status} />
-        <PaneTitle pane={pane} />
-        <ProviderBadge providerId={pane.providerId} model={pane.model} />
-        <button className="text-gray-500 hover:text-indigo-400 ml-1 leading-none transition-colors" onClick={e => {
+      <StatusDot status={pane.status} />
+      <PaneTitle pane={pane} />
+      <ProviderBadge providerId={pane.providerId} model={pane.model} />
+      <button className="text-gray-500 hover:text-indigo-400 ml-1 leading-none transition-colors" onClick={e => {
         e.stopPropagation();
         window.codeBrainApp?.pty.kill(pane.id);
         spawnedPaneIds.delete(pane.id);
         usePanesStore.getState().removePane(pane.id);
       }} title="Close pane (Cmd+W)">
-          <X$1 size={10} strokeWidth={2} />
-        </button>
-      </div>
-      <div className="relative z-0 h-full flex flex-col">
-        <SavedContextPanel pane={pane} open={showSavedContext} onToggle={() => setShowSavedContext(v2 => !v2)} />
-        <div className={`flex-1 min-h-0 relative ${dropHover ? "ring-2 ring-red-500/40" : ""}`} onDragEnter={e => {
-      if (e.dataTransfer.types.includes("Files")) {
-        e.preventDefault();
-        setDropHover(true);
-      }
-    }} onDragOver={e => {
-      if (e.dataTransfer.types.includes("Files")) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
-      }
-    }} onDragLeave={e => {
-      if (e.currentTarget === e.target) setDropHover(false);
-    }} onDrop={handleDrop}>
-        
+        <X$1 size={20} strokeWidth={2} />
+      </button>
+    </div>
+    <div className="relative z-0 h-full flex flex-col">
+      <SavedContextPanel pane={pane} open={showSavedContext} onToggle={() => setShowSavedContext(v2 => !v2)} />
+      <div className={`flex-1 min-h-0 relative ${dropHover ? "ring-2 ring-red-500/40" : ""}`} onDragEnter={e => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          setDropHover(true);
+        }
+      }} onDragOver={e => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }
+      }} onDragLeave={e => {
+        if (e.currentTarget === e.target) setDropHover(false);
+      }} onDrop={handleDrop}>
+
         <div className="absolute inset-0 px-2 pt-2 pb-6 overflow-hidden">
           <div ref={containerRef} className="h-full w-full" />
         </div>
-        
-        {/* Input Feedback Rodapé */}
-        <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-black to-transparent pointer-events-none flex items-end px-3 pb-1">
-          <div className="flex items-center gap-2 w-full border-t border-white/5 pt-1">
-            <span className="text-red-500 font-mono text-[10px] font-bold">❯</span>
-            {pane.status === "running" ? (
-              <span className="flex items-center gap-2 text-[10px] font-mono text-red-400/80">
-                <span className="w-1.5 h-3 bg-red-500 animate-pulse"></span>
-                agent thinking...
-              </span>
-            ) : (
-              <span className="w-1.5 h-3 bg-gray-500/50 animate-[pulse_2s_infinite]"></span>
-            )}
+
+        {/* Input Feedback & Quick Actions Rodapé */}
+        <div className="absolute bottom-0 left-0 right-0 h-8 bg-linear-gradient-to-t from-zinc-300 via-zinc-700  dark:from-black dark:via-black/80 to-transparent flex items-end px-3 pb-1">
+          <div className="flex items-center justify-between w-full border-t border-white/5 pt-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-red-500 font-mono text-[10px] font-bold animate-pulse">❯</span>
+              {pane.status === "running" ? (
+                <span className="flex items-center gap-2 text-[10px] font-mono text-red-400/80">
+                  <span className="w-1.5 h-3 bg-red-500 animate-pulse"></span>
+                  agent thinking...
+                </span>
+              ) : (
+                <span className="w-1.5 h-3 bg-gray-500/50 animate-[pulse_2s_infinite]"></span>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              <button
+                onClick={(e) => { e.stopPropagation(); sendQuickCommand("/btw"); }}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-indigo-500/20 bg-indigo-500/5 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500/40 transition-all group/btn"
+                title="Enviar dúvida/pergunta (/btw)"
+              >
+                <MessageSquare size={10} className="group-hover/btn:scale-110 transition-transform" />
+                <span className="text-[9px] font-bold uppercase tracking-tighter">/btw</span>
+              </button>
+
+              <button
+                onClick={(e) => { e.stopPropagation(); stopTerminal(); }}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-white/5 bg-white/5 text-slate-500 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 transition-all group/btn"
+                title="Parar execução"
+              >
+                <Square size={10} className="group-hover/btn:scale-110 transition-transform" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

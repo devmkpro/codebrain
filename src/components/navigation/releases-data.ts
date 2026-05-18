@@ -14,6 +14,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.2.23",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "pane_write large text submit + cursor-pointer on all clickable elements (v1.2.23)"
+      },
+      {
+        "kind": "fix",
+        "text": "pane_write Enter not submitting in readline paste-mode (v1.2.22)"
+      }
+    ]
+  },
+  {
     "version": "1.2.20",
     "date": "maio 2026",
     "highlights": [
@@ -82,9 +96,51 @@ export const RELEASES: Release[] = [
     ]
   },
   {
-    "version": "1.2.14",
+    "version": "1.2.22",
     "date": "maio 2026",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "pane_write Enter not submitting in readline paste-mode (v1.2.22)"
+      }
+    ]
+  },
+  {
+    "version": "1.2.21",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "MIMO 401 — masked secrets from frontend overwriting real API key on spawn"
+      },
+      {
+        "kind": "feat",
+        "text": "squad spawner passes role + env to inject correct prompts"
+      },
+      {
+        "kind": "feat",
+        "text": "auto-inject role-specific prompts on pane spawn"
+      },
+      {
+        "kind": "feat",
+        "text": "echo suppression for MCP inter-agent communication"
+      },
+      {
+        "kind": "fix",
+        "text": "use notifyPane instead of writePane for inter-agent messages to avoid bypassing permissions issue"
+      },
+      {
+        "kind": "fix",
+        "text": "pane_spawn model-based provider resolution using enhanced model map"
+      },
+      {
+        "kind": "fix",
+        "text": "restore MIMO regional routes, mimo-compat provider handling, and fullPage screenshot"
+      },
+      {
+        "kind": "fix",
+        "text": "MIMO 404 error, provider env var mapping, and pane_write submit reliability"
+      },
       {
         "kind": "fix",
         "text": "auto-update feedback e reinício automático"
@@ -98,43 +154,97 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "export buildEdges function and import it in SessionMap"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.12",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "guard webContents.send against destroyed window on close; fix npm install path-with-spaces on Windows"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.11",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "fix openclaude install on linux and windows with npm check and timeout"
       },
       {
-        "kind": "fix",
-        "text": "repair missing Windows registry keys to fix auto-update error"
-      },
-      {
         "kind": "feat",
         "text": "implement PtyManager for cross-platform process management and terminal session handling"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.10",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "repair missing Windows registry keys to fix auto-update error"
+      }
+    ]
+  },
+  {
+    "version": "1.2.9",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "fix provider banner and system prompt flag for openclaude v0.10"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.8",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "remove generic openai fallback provider argument that forced codex model on custom providers"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.7",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "pass anthropic as provider arg for mimo-compat/anthropic-compat to override codex default"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.6",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "pass --provider arg for openclaude v0.10+ compatibility"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.4",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "feat",
         "text": "add MIT License to the project"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.3",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "guard against empty RELEASES array causing black screen"
