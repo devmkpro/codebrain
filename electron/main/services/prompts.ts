@@ -43,6 +43,41 @@ NÃO há exceções. Se você precisa delegar trabalho para outro agente, SEMPRE
 - mcp__codebrain__pane_read_messages(paneId, unreadOnly?) — LÊ MENSAGENS enviadas para você.
 - mcp__codebrain__todo_manager(action, ...) — gerencia lista de tarefas visível ao usuário.
 
+## Shared Memory (Memória Compartilhada)
+
+Use these tools to share context, decisions, and findings between agents. Memory persists across sessions.
+
+- mcp__codebrain__memory_write(type?, key, content, tags?, agent_id?, workspace?, id?) — Salva contexto na memória compartilhada.
+  * type: "episodic" (eventos), "semantic" (conhecimento), "procedural" (como fazer), "working" (rascunho)
+  * key: chave única (ex: "api-schema-users", "decision-auth-jwt")
+  * tags: array de tags para busca (ex: ["api", "backend"])
+- mcp__codebrain__memory_read(id?, key?, workspace?) — Lê memória específica por id ou key.
+- mcp__codebrain__memory_search(query, type?, workspace?, limit?) — Busca memórias por keyword.
+- mcp__codebrain__memory_list(type?, agent_id?, workspace?, limit?, offset?) — Lista memórias com filtros.
+- mcp__codebrain__memory_delete(id?, key?, workspace?) — Deleta memória.
+- mcp__codebrain__memory_stats(workspace?) — Estatísticas da memória.
+
+**PADRÃO DE USO:**
+1. Antes de iniciar trabalho: memory_search("contexto relevante") para ver se outro agente já salvou info
+2. Durante trabalho: memory_write(key="minha-decisao-X", content="decidi usar JWT porque...", tags=["auth","decision"])
+3. Ao completar: memory_write(type="procedural", key="como-fazer-X", content="passo a passo...", tags=["howto"])
+
+## Learned Patterns (Padrões Aprendidos)
+
+- mcp__codebrain__pattern_write(pattern_type, description, source_trajectory?, quality_score?) — Salva padrão aprendido.
+- mcp__codebrain__pattern_list(pattern_type?, limit?) — Lista padrões ordenados por qualidade.
+- mcp__codebrain__pattern_update(id, quality_score?) — Atualiza score após uso bem-sucedido.
+- mcp__codebrain__pattern_delete(id) — Deleta padrão.
+
+## Swarm Coordination (Coordenação de Enxame)
+
+- mcp__codebrain__swarm_status() — Status do swarm: workers ativos, roles, health, topology.
+- mcp__codebrain__swarm_broadcast(message, from?) — Broadcast mensagem para todos workers.
+- mcp__codebrain__swarm_assign_task(paneId, task, from?) — Atribui tarefa a worker específico.
+- mcp__codebrain__swarm_worker_health(paneId) — Health check de worker.
+- mcp__codebrain__swarm_respawn(paneId) — Re-spawn worker crashado.
+- mcp__codebrain__swarm_set_topology(type) — Define topology: hierarchical, mesh, centralized.
+
 ## PROMPTS DETALHADOS — REGRA MAIS IMPORTANTE
 
 **Mesmo se o usuário for raso ou vago, você DEVE elaborar prompts completos e detalhados para cada worker.**

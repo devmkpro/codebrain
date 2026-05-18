@@ -4,7 +4,7 @@ import {
   X, Plus, Settings, Activity, FolderOpen, Save, RotateCcw,
   ListTodo, Terminal, Globe, Users, Zap, Map, FileText,
   ChevronRight, ChevronDown, Home, Mic, MicOff, Volume2,
-  Shield, Cpu, MoreHorizontal, FolderTree, ArrowLeft,
+  Shield, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database,
 } from 'lucide-react';
 import { Logo } from '../auth/Logo';
 import { Link, useRouter } from '../../lib/router';
@@ -18,6 +18,7 @@ import {
   outputModeForInteractionMode,
   normalizedVoiceMode,
 } from '../../stores/tasks-store';
+import { useMemoryStore } from '../../stores/memory-store';
 import { useVoiceStore } from '../../stores/voice-store';
 import { useBrowserStore } from '../../stores/browser-store';
 import { useTerminalSettings } from '../../stores/terminal-settings-store';
@@ -555,6 +556,9 @@ function WorkspaceHeader() {
   const tasksCount   = useTasksStore(s => s.list.length);
   const toggleTasks  = useTasksStore(s => s.toggle);
 
+  const memoryVisible = useMemoryStore(s => s.visible);
+  const toggleMemory  = useMemoryStore(s => s.toggle);
+
   const appZoom          = useTerminalSettings(s => s.appZoom);
   const increaseAppZoom  = useTerminalSettings(s => s.increaseAppZoom);
   const decreaseAppZoom  = useTerminalSettings(s => s.decreaseAppZoom);
@@ -749,6 +753,9 @@ function WorkspaceHeader() {
 
           {/* Tasks */}
           <IconBtn icon={<ListTodo size={15} strokeWidth={1.5} />} label="Tasks" onClick={toggleTasks} active={tasksVisible} badge={tasksCount} />
+
+          {/* Memory */}
+          <IconBtn icon={<Database size={15} strokeWidth={1.5} />} label="Memory" onClick={toggleMemory} active={memoryVisible} />
           <VDiv />
 
           {/* Session Map */}

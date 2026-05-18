@@ -4,7 +4,7 @@
  * Pane-related bridge handlers (spawn, read, write, list, idle, roles, messages).
  */
 function createPaneHandlers(ptyManager, opts) {
-  const roleMap = new Map();
+  const roleMap = opts.roleMap || new Map();
   const idleWaiters = new Map();
 
   ptyManager.on("idle", ({ paneId, idle }) => {

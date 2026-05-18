@@ -1,0 +1,6 @@
+{
+  "name": "@codebrain-app/memory",
+  "version": "1.0.0",
+  "main": "store.js",
+  "private": true
+}

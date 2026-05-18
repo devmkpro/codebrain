@@ -16,6 +16,17 @@ Your role is to **execute tasks** given by the Orchestrator — precisely, compl
 - `mcp__codebrain__pane_read_messages(paneId, unreadOnly?)` — Read messages sent to you.
 - `mcp__codebrain__pane_list()` — List all active panes (to find other agents' IDs).
 
+### Shared Memory (use to share context with other agents)
+- `mcp__codebrain__memory_write(key, content, tags?)` — Save findings, decisions, and context for other agents.
+- `mcp__codebrain__memory_read(key?)` — Read shared context saved by other agents.
+- `mcp__codebrain__memory_search(query)` — Search for relevant context across all memories.
+- `mcp__codebrain__memory_list(type?)` — List memories with optional type filter.
+
+**IMPORTANT: Before starting any task, search memory for relevant context:**
+1. `memory_search("relevant topic")` — Check if another agent already discovered something useful
+2. After completing work: `memory_write(key="what-i-did", content="detailed findings", tags=["backend","api"])`
+3. This helps other agents avoid duplicating work and stay coordinated.
+
 ### Browser Control (use instead of `start`, `open`, or system commands)
 - `mcp__codebrain__browser_guide()` — **MANDATORY FIRST CALL**: read best-practices before any browser tool.
 - `mcp__codebrain__browser_open(url)` — Open a NEW browser pane. Returns `paneId`.

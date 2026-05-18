@@ -292,6 +292,467 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // MEMORY TOOLS — Shared memory for multi-agent coordination
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── mcp__codebrain__memory_write ───────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__memory_write",
+    "Write to shared memory. Use this to persist context, decisions, and findings that other agents need to access. Memory types: episodic (events), semantic (knowledge), procedural (how-to), working (scratch).",
+    {
+      type:     z.enum(["episodic", "semantic", "procedural", "working"]).optional()
+                  .describe("Memory type. Default: working."),
+      key:      z.string().describe("Unique key for this memory (e.g. 'api-schema-users', 'decision-auth-jwt')."),
+      content:  z.string().describe("The memory content to store."),
+      tags:     z.array(z.string()).optional()
+                  .describe("Tags for categorization and search (e.g. ['api', 'backend', 'decision'])."),
+      agent_id: z.string().optional()
+                  .describe("ID of the agent writing this memory."),
+      workspace: z.string().optional()
+                   .describe("Workspace path. Defaults to current workspace."),
+      id:       z.string().optional()
+                  .describe("If provided and exists, updates the existing memory instead of creating."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.memoryWrite(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__memory_read ────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__memory_read",
+    "Read a specific memory by id or key. Use this to retrieve context saved by other agents.",
+    {
+      id:        z.string().optional().describe("Memory ID to read."),
+      key:       z.string().optional().describe("Memory key to read (returns most recent)."),
+      workspace: z.string().optional().describe("Workspace scope."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.memoryRead(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__memory_search ──────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__memory_search",
+    "Search shared memories by keyword. Searches across content, keys, and tags. Use this to find context saved by other agents.",
+    {
+      query:     z.string().describe("Search keyword or phrase."),
+      type:      z.enum(["episodic", "semantic", "procedural", "working"]).optional()
+                   .describe("Filter by memory type."),
+      workspace: z.string().optional().describe("Filter by workspace."),
+      limit:     z.number().optional().describe("Max results (default 20)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.memorySearch(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__memory_list ────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__memory_list",
+    "List shared memories with optional filters. Returns most recent first.",
+    {
+      type:      z.enum(["episodic", "semantic", "procedural", "working"]).optional()
+                   .describe("Filter by memory type."),
+      agent_id:  z.string().optional().describe("Filter by agent ID."),
+      workspace: z.string().optional().describe("Filter by workspace."),
+      limit:     z.number().optional().describe("Max results (default 50)."),
+      offset:    z.number().optional().describe("Pagination offset."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.memoryList(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__memory_delete ──────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__memory_delete",
+    "Delete a memory by id or key.",
+    {
+      id:        z.string().optional().describe("Memory ID to delete."),
+      key:       z.string().optional().describe("Memory key to delete."),
+      workspace: z.string().optional().describe("Workspace scope."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.memoryDelete(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__memory_stats ───────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__memory_stats",
+    "Get shared memory statistics: count and size per memory type.",
+    {
+      workspace: z.string().optional().describe("Filter by workspace."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.memoryStats(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SWARM TOOLS — Multi-agent coordination
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── mcp__codebrain__swarm_status ───────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__swarm_status",
+    "Get swarm status: active workers, roles, health, topology, and counts. Use this to understand the current state of the agent swarm.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.swarmStatus();
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__swarm_broadcast ────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__swarm_broadcast",
+    "Broadcast a message to all active worker panes. Use for announcements that all workers should see (e.g. architecture changes, priority shifts).",
+    {
+      message: z.string().describe("The message to broadcast to all workers."),
+      from:    z.string().optional().describe("Sender identification (usually orchestrator pane ID)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.swarmBroadcast(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__swarm_assign_task ──────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__swarm_assign_task",
+    "Assign a task to a specific worker by injecting a task message into its terminal. Prefer pane_send_message for detailed task assignments.",
+    {
+      paneId: z.string().describe("Target worker pane ID."),
+      task:   z.string().describe("Task description to assign."),
+      from:   z.string().optional().describe("Sender identification."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.swarmAssignTask(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__swarm_worker_health ────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__swarm_worker_health",
+    "Check health of a specific worker: is it alive, what's its recent output, what's its status.",
+    {
+      paneId: z.string().describe("Worker pane ID to check."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.swarmWorkerHealth(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__swarm_respawn ──────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__swarm_respawn",
+    "Respawn a crashed worker. Creates a new pane with the same configuration as the original.",
+    {
+      paneId: z.string().describe("The pane ID of the crashed worker to respawn."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.swarmRespawn(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__swarm_set_topology ─────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__swarm_set_topology",
+    "Set the swarm topology: hierarchical (orchestrator→workers), mesh (any-to-any), centralized (all→one).",
+    {
+      type: z.enum(["hierarchical", "mesh", "centralized"]).describe("Topology type."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.swarmSetTopology(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PATTERN TOOLS — Learned pattern management
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── mcp__codebrain__pattern_write ──────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__pattern_write",
+    "Save a learned pattern extracted from successful task trajectories. Use after completing a task to record what worked.",
+    {
+      pattern_type:      z.string().describe("Pattern category (e.g. 'api-design', 'refactor', 'test-strategy')."),
+      description:       z.string().describe("What the pattern describes and when to apply it."),
+      source_trajectory: z.string().optional().describe("The task/actions that led to this pattern."),
+      quality_score:     z.number().optional().describe("Confidence score 0-1 (default 0.5)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.patternWrite(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__pattern_list ───────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__pattern_list",
+    "List learned patterns. Sorted by quality score (highest first).",
+    {
+      pattern_type: z.string().optional().describe("Filter by pattern type."),
+      limit:        z.number().optional().describe("Max results (default 20)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.patternList(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__pattern_update ─────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__pattern_update",
+    "Update a pattern's quality score after it was successfully applied.",
+    {
+      id:            z.string().describe("Pattern ID."),
+      quality_score: z.number().describe("New quality score 0-1."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.patternUpdate(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__pattern_delete ─────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__pattern_delete",
+    "Delete a learned pattern.",
+    {
+      id: z.string().describe("Pattern ID to delete."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.patternDelete(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // FILE TOOLS — Structured file access for agents
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── mcp__codebrain__file_read ──────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__file_read",
+    "Read a file or list directory contents from the workspace. Returns file content (max 100KB) or directory listing.",
+    {
+      path:     z.string().describe("Relative or absolute path within the workspace."),
+      encoding: z.string().optional().describe("File encoding (default: utf-8)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.fileRead(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__file_write ─────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__file_write",
+    "Write content to a file in the workspace. Creates parent directories if needed.",
+    {
+      path:        z.string().describe("Relative or absolute path within the workspace."),
+      content:     z.string().describe("Content to write."),
+      encoding:    z.string().optional().describe("File encoding (default: utf-8)."),
+      createDirs:  z.boolean().optional().describe("Create parent directories if they don't exist (default: true)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.fileWrite({ ...args, createDirs: args.createDirs !== false });
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__file_search ────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__file_search",
+    "Search for files by name pattern or content. Supports glob patterns (*.ts, **/*.tsx). Skips node_modules and .git.",
+    {
+      pattern: z.string().optional().describe("Glob pattern for filename matching (e.g. '*.ts', '**/*.tsx')."),
+      content: z.string().optional().describe("Search for files containing this text."),
+      path:    z.string().optional().describe("Base directory for search. Defaults to workspace root."),
+      limit:   z.number().optional().describe("Max results (default 20)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.fileSearch(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SYSTEM TOOLS — System info and diagnostics
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── mcp__codebrain__system_info ────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__system_info",
+    "Get system information: OS, CPU, memory, Node version, workspace path.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.systemInfo();
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__system_diagnostics ─────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__system_diagnostics",
+    "Get full diagnostics: system health, all pane statuses, MCP server health, memory usage.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.systemDiagnostics();
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // WORKER DISPATCH TOOLS — Trigger detection and background workers
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── mcp__codebrain__worker_detect ──────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__worker_detect",
+    "Scan text for task triggers (optimize, audit, document, refactor, benchmark, testgaps, deepdive). Use to detect if a background worker should be dispatched.",
+    {
+      text: z.string().describe("Text to scan for trigger patterns (e.g. a user prompt or task description)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.workerDetect(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__worker_list_triggers ───────────────────────────────────
+  server.tool(
+    "mcp__codebrain__worker_list_triggers",
+    "List all available trigger definitions with their patterns and priorities.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.workerListTriggers();
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__provider_health ────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__provider_health",
+    "Get provider health status: success/error counts, error rates, status (healthy/degraded/critical).",
+    {},
+    async () => {
+      try {
+        const result = await bridge.providerHealth();
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
   return server;
 }
 

@@ -10,6 +10,9 @@ import { ConfigStore } from "./config-store";
 import { CliDetector } from "./cli-detector";
 import { AudioConfigStore } from "./audio-config-store";
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { createMemoryStore } = require("../../packages/memory/store.js");
+
 export interface McpServerInfo {
   port: number;
   sseUrl: string;
@@ -32,6 +35,16 @@ export interface PaneRegistryEntry {
   paneId: string;
   cwd: string;
   spawnedAt: number;
+}
+
+export interface ProviderHealth {
+  providerId: string;
+  successCount: number;
+  errorCount: number;
+  lastError?: string;
+  lastErrorAt?: number;
+  lastSuccessAt?: number;
+  avgLatencyMs?: number;
 }
 
 export interface BrowserPendingEntry {
@@ -61,6 +74,7 @@ export function createAppContext() {
   const PROVIDERS_FILE = path.join(DATA_DIR, "providers.json");
   const WORKSPACES_FILE = path.join(DATA_DIR, "recent-workspaces.json");
   const AUDIO_CONFIG_FILE = path.join(DATA_DIR, "audio-config.json");
+  const MEMORY_DB_FILE = path.join(DATA_DIR, "memory.db");
 
   return {
     // Window
@@ -77,6 +91,9 @@ export function createAppContext() {
     paneConfigs: new Map<string, PaneConfig>(),
     paneRegistry: new Map<string, PaneRegistryEntry>(),
 
+    // Provider health tracking
+    providerHealth: new Map<string, ProviderHealth>(),
+
     // Browser state
     browserPending: new Map<string, BrowserPendingEntry>(),
     browserPaneIds: new Set<string>(),
@@ -90,6 +107,7 @@ export function createAppContext() {
     configStore: new ConfigStore(),
     cliDetector: new CliDetector(),
     audioConfigStore: new AudioConfigStore(AUDIO_CONFIG_FILE),
+    memoryStore: createMemoryStore(MEMORY_DB_FILE),
 
     // Paths
     DATA_DIR,

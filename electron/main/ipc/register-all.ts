@@ -9,6 +9,7 @@ import { registerSessionHandlers } from "./register-session";
 import { registerCliHandlers } from "./register-cli";
 import { registerSkillHandlers } from "./register-skill";
 import { registerMiscHandlers } from "./register-misc";
+import { registerMemoryIpc } from "./register-memory";
 
 export function registerAllIpcHandlers(ctx: AppContext): void {
   registerAppHandlers(ctx);
@@ -21,4 +22,5 @@ export function registerAllIpcHandlers(ctx: AppContext): void {
   registerCliHandlers(ctx);
   registerSkillHandlers(ctx);
   registerMiscHandlers(ctx);
+  registerMemoryIpc(ctx);
 }

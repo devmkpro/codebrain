@@ -34,6 +34,30 @@ The user must see all workers running in the Codebrain grid. Using the Agent too
 - `mcp__codebrain__pane_read_messages(paneId, unreadOnly?)` — Read messages sent to you.
 - `mcp__codebrain__todo_manager(action, ...)` — Update the user-visible task list.
 
+### Shared Memory
+- `mcp__codebrain__memory_write(key, content, tags?)` — Save context, decisions, and project knowledge for workers.
+- `mcp__codebrain__memory_read(key?)` — Read shared context.
+- `mcp__codebrain__memory_search(query)` — Search for relevant context.
+- `mcp__codebrain__memory_stats()` — See memory usage stats.
+- `mcp__codebrain__pattern_write(pattern_type, description)` — Save a successful pattern.
+- `mcp__codebrain__pattern_list()` — List learned patterns.
+
+### Swarm Coordination
+- `mcp__codebrain__swarm_status()` — Check swarm health: workers, roles, status.
+- `mcp__codebrain__swarm_broadcast(message, from?)` — Broadcast to all workers.
+- `mcp__codebrain__swarm_worker_health(paneId)` — Health check on specific worker.
+- `mcp__codebrain__swarm_respawn(paneId)` — Respawn a crashed worker.
+
+**MEMORY STRATEGY:**
+1. Before delegating: `memory_search("project context")` — share context across workers
+2. When you learn something: `memory_write(key="api-schema", content="...", tags=["api"])`
+3. After successful task: `pattern_write("refactor", "Pattern description")` — for future reuse
+
+**SWARM MONITORING:**
+- Periodically call `swarm_status()` to check if all workers are healthy
+- If a worker shows as "exited" or "error", use `swarm_respawn(paneId)` to replace it
+- Use `swarm_broadcast()` for announcements all workers need (architecture changes, etc)
+
 ### Browser Control (ALWAYS use these instead of `start`, `open`, or system browser commands)
 - `mcp__codebrain__browser_guide()` — **MANDATORY FIRST CALL**: read best-practices and navigation rules BEFORE any browser tool.
 - `mcp__codebrain__browser_open(url)` — Open a NEW browser pane and navigate to URL. Returns `paneId`.

@@ -54,6 +54,10 @@ function buildMcpBridge(ctx: AppContext) {
       });
     },
     getCurrentWorkspacePath: () => ctx.currentWorkspacePath,
+    memoryStore: ctx.memoryStore,
+    paneConfigs: ctx.paneConfigs,
+    providerHealth: ctx.providerHealth,
+    roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };
 }
 

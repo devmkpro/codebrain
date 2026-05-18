@@ -317,6 +317,16 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
 
   notify: (title: string, body: string) => ipcRenderer.send("notify", title, body),
 
+  memory: {
+    list: (opts?: Record<string, unknown>) => ipcRenderer.invoke("memory:list", opts ?? {}),
+    search: (opts: Record<string, unknown>) => ipcRenderer.invoke("memory:search", opts),
+    read: (opts: Record<string, unknown>) => ipcRenderer.invoke("memory:read", opts),
+    delete: (opts: Record<string, unknown>) => ipcRenderer.invoke("memory:delete", opts),
+    stats: () => ipcRenderer.invoke("memory:stats"),
+    listPatterns: (opts?: Record<string, unknown>) => ipcRenderer.invoke("memory:listPatterns", opts ?? {}),
+    deletePattern: (opts: Record<string, unknown>) => ipcRenderer.invoke("memory:deletePattern", opts),
+  },
+
   log: {
     list: (opts?: Record<string, unknown>) => ipcRenderer.invoke("log:list", opts ?? {}),
     onAppended: (callback: (entry: unknown) => void) => {

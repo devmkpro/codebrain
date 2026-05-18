@@ -324,8 +324,24 @@ export async function spawnPaneInternal(
       model: model ?? undefined,
     });
 
+    // Track provider health — success
+    if (providerId) {
+      const health = ctx.providerHealth.get(providerId) || { providerId, successCount: 0, errorCount: 0 };
+      health.successCount++;
+      health.lastSuccessAt = Date.now();
+      ctx.providerHealth.set(providerId, health);
+    }
+
     return { ok: true, paneId, providerId: providerId ?? undefined };
   } catch (err) {
+    // Track provider health — failure
+    if (config.providerId) {
+      const health = ctx.providerHealth.get(config.providerId) || { providerId: config.providerId, successCount: 0, errorCount: 0 };
+      health.errorCount++;
+      health.lastError = err instanceof Error ? err.message : String(err);
+      health.lastErrorAt = Date.now();
+      ctx.providerHealth.set(config.providerId, health);
+    }
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

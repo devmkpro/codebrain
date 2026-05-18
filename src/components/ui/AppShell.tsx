@@ -8,6 +8,7 @@ import { LogsPage }      from '../../views/home/LogsPage';
 import { SettingsPage }  from '../../views/home/SettingsPage';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { TasksSidebar }  from '../tasks/TasksSidebar';
+import { MemoryPanel }   from '../memory/MemoryPanel';
 import { WhatsNewModal } from '../navigation/WhatsNewModal';
 import { useNavStore }   from '../../stores/nav-store';
 
@@ -77,6 +78,7 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
           ))}
 
           <TasksSidebar />
+          <MemoryPanel />
         </div>
 
         <AppFooter />
