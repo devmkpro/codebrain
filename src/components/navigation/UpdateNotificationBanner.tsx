@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { RELEASES } from "./releases-data";
 
 // UpdateNotificationBanner
@@ -13,7 +13,7 @@ export function UpdateNotificationBanner() {
   });
   const [version, setVersion] = React.useState("");
   React.useEffect(() => {
-    window.codeBrainApp.app.version().then(setVersion).catch(() => {});
+    window.codeBrainApp.app.version().then(setVersion).catch(() => { });
     const off1 = window.codeBrainApp.update.onChecking(() => setState({
       kind: "checking"
     }));
@@ -49,13 +49,13 @@ export function UpdateNotificationBanner() {
     // onInstalling may not exist if preload hasn't been rebuilt yet
     const off7 = typeof window.codeBrainApp.update.onInstalling === "function"
       ? window.codeBrainApp.update.onInstalling(() =>
-          setState(prev =>
-            "version" in prev
-              ? { kind: "installing", version: prev.version }
-              : { kind: "installing", version: "" }
-          )
+        setState(prev =>
+          "version" in prev
+            ? { kind: "installing", version: prev.version }
+            : { kind: "installing", version: "" }
         )
-      : () => {};
+      )
+      : () => { };
     return () => {
       off1();
       off2();
@@ -66,27 +66,26 @@ export function UpdateNotificationBanner() {
       off7();
     };
   }, []);
-  const baseClasses = "fixed top-0 left-0 right-0 z-[9999] flex items-center justify-between pl-20 pr-[140px] bg-gray-900/95 backdrop-blur border-b border-gray-700/60 font-mono text-[10px] shadow-lg";
-  const dragClasses = "app-region-drag";
-  const noDragClasses = "app-region-no-drag";
+  const baseClasses = "fixed top-0 left-0 right-0 z-[9999] flex items-center justify-between pl-20 pr-[140px] bg-gray-900/95 backdrop-blur border-b border-gray-700/60 font-mono text-[10px] shadow-lg select-none";
+  // removed unused variables
   const versionLabel = version ? `v${version}` : "";
   const renderStatus = () => {
     switch (state.kind) {
       case "idle":
         return <div className="flex items-center gap-2 text-gray-500">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-600" />
-            <span>—</span>
-          </div>;
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-600" />
+          <span>—</span>
+        </div>;
       case "checking":
         return <div className="flex items-center gap-2 text-gray-400">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-500 animate-pulse" />
-            <span>Verificando…</span>
-          </div>;
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-500 animate-pulse" />
+          <span>Verificando…</span>
+        </div>;
       case "up_to_date":
         return <div className="flex items-center gap-2 text-green-500">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-            <span>Atualizado</span>
-          </div>;
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+          <span>Atualizado</span>
+        </div>;
       case "available":
       case "downloading":
         {
@@ -95,22 +94,22 @@ export function UpdateNotificationBanner() {
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
             <span>Baixando v{state.version}</span>
             {percent > 0 && <React.Fragment>
-                <div className="h-1 w-20 bg-gray-800 rounded overflow-hidden">
-                  <div className="h-full bg-amber-400 transition-all duration-300" style={{
+              <div className="h-1 w-20 bg-gray-800 rounded overflow-hidden">
+                <div className="h-full bg-amber-400 transition-all duration-300" style={{
                   width: `${Math.max(2, percent)}%`
                 }} />
-                </div>
-                <span className="text-amber-500/70">{Math.round(percent)}%</span>
-              </React.Fragment>}
+              </div>
+              <span className="text-amber-500/70">{Math.round(percent)}%</span>
+            </React.Fragment>}
           </div>;
         }
       case "downloaded":
         return <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-green-400">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-              <span>v{state.version} pronta</span>
-            </div>
-            <button onClick={() => {
+          <div className="flex items-center gap-2 text-green-400">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+            <span>v{state.version} pronta</span>
+          </div>
+          <button onClick={() => {
             setState({ kind: "installing", version: state.version });
             void window.codeBrainApp.update.install().then(result => {
               if (!result.ok) {
@@ -120,32 +119,40 @@ export function UpdateNotificationBanner() {
                 });
               }
             });
-          }} className="app-region-no-drag cursor-pointer px-2 py-0.5 text-green-400 border border-green-500/30 hover:border-green-500/60 hover:bg-green-500/10 rounded transition-colors relative z-50 pointer-events-auto">
-              Reiniciar agora
-            </button>
-          </div>;
+          }} className="cursor-pointer px-2 py-0.5 text-green-400 border border-green-500/30 hover:border-green-500/60 hover:bg-green-500/10 rounded transition-colors relative z-50 pointer-events-auto" style={{ WebkitAppRegion: 'no-drag' } as any}>
+            Reiniciar agora
+          </button>
+        </div>;
       case "installing":
         return <div className="flex items-center gap-2 text-blue-400">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span>Instalando v{state.version}…</span>
-          </div>;
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+          <span>Instalando v{state.version}…</span>
+        </div>;
       case "error":
         return <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 text-red-400">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
-              <span>Erro: {state.message.slice(0, 60)}</span>
-            </div>
-            <button onClick={() => window.codeBrainApp.update.check()} className="px-2 py-0.5 text-gray-400 hover:text-gray-200 transition-colors">
-              Tentar de novo
-            </button>
-          </div>;
+          <div className="flex items-center gap-2 text-red-400">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
+            <span>Erro: {state.message.slice(0, 60)}</span>
+          </div>
+          <button onClick={() => window.codeBrainApp.update.check()} className="px-2 py-0.5 text-gray-400 hover:text-gray-200 transition-colors">
+            Tentar de novo
+          </button>
+        </div>;
     }
   };
-  return <div className={`${baseClasses} ${dragClasses} h-[38px]`}>
+  return <div className={`${baseClasses} h-[38px] relative`}>
+    {/* Background drag region */}
+    <div className="absolute inset-0" style={{ WebkitAppRegion: 'drag' } as any} />
+
+    {/* Content wrapper */}
+    <div className="relative z-10 flex items-center justify-between w-full h-full pointer-events-none">
       <div className="flex items-center gap-2 text-gray-500">
         <span className="text-gray-600">CodeBrain</span>
         <span className="text-gray-300">{versionLabel}</span>
       </div>
-      <div className={noDragClasses}>{renderStatus()}</div>
-    </div>;
+      <div className="pointer-events-auto flex items-center mr-4" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        {renderStatus()}
+      </div>
+    </div>
+  </div>;
 }
