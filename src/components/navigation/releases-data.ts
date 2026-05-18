@@ -14,9 +14,23 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.3.2",
+    "version": "1.3.3",
     "date": "em desenvolvimento",
     "highlights": [
+      {
+        "kind": "feat",
+        "text": "add stdio MCP server for CLI mode + fix statusline model parsing"
+      }
+    ]
+  },
+  {
+    "version": "1.3.2",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add Codebrain statusline for Claude Code + bump version to 1.3.2"
+      },
       {
         "kind": "fix",
         "text": "context menu position accounting for CSS zoom"
