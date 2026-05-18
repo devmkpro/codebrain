@@ -13,7 +13,7 @@
   "scripts": {
     "gen:releases": "node scripts/gen-releases.mjs",
     "dev": "npm run gen:releases && electron-vite dev",
-    "build": "npm run gen:releases && electron-vite build",
+    "build": "npm run gen:releases && npm run bundle:stdio && electron-vite build",
     "preview": "electron-vite preview",
     "prebuild:native": "node scripts/prebuild-native.mjs",
     "bundle:stdio": "node scripts/bundle-stdio.mjs",

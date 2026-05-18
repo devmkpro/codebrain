@@ -40,10 +40,20 @@ function copyDirRecursive(src: string, dest: string): void {
  */
 function getStdioPath(): string {
   if (app.isPackaged) {
+    // Primary: bundled standalone file outside app.asar
     const bundledPath = path.join(process.resourcesPath, "mcp-stdio", "stdio.cjs");
     if (fs.existsSync(bundledPath)) return bundledPath;
-    // Fallback to asar path (may not work with system Node.js)
-    return path.join(app.getAppPath(), "packages", "mcp", "stdio.js");
+    // Fallback: unpacked native modules dir (in case user hasn't rebuilt yet)
+    const unpackedPath = path.join(process.resourcesPath, "app.asar.unpacked", "packages", "mcp", "stdio.js");
+    if (fs.existsSync(unpackedPath)) return unpackedPath;
+    // Last resort: resolve from project source (works if user has dev checkout)
+    const homeDir = os.homedir();
+    const devCheckout = path.join(homeDir, "Desktop", "codebrain", "resources", "mcp-stdio", "stdio.cjs");
+    if (fs.existsSync(devCheckout)) return devCheckout;
+    const devSource = path.join(homeDir, "Desktop", "codebrain", "packages", "mcp", "stdio.js");
+    if (fs.existsSync(devSource)) return devSource;
+    // Return the bundled path anyway — will fail with a clear error
+    return bundledPath;
   }
   // Dev mode — prefer the bundle if it exists
   const bundledPath = path.resolve(__dirname, "..", "..", "..", "resources", "mcp-stdio", "stdio.cjs");
