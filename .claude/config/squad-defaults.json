@@ -1,0 +1,103 @@
+{
+  "version": "1.3.1",
+  "defaultTopology": "hierarchical",
+  "maxWorkers": 8,
+  "roles": {
+    "orchestrator": {
+      "label": "orchestrator",
+      "agent": "openclaude",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "prompts/squad-orchestrator.md",
+      "description": "Plans, delegates, and synthesizes. Never implements directly.",
+      "capabilities": [
+        "task_planning",
+        "worker_delegation",
+        "memory_management",
+        "swarm_coordination",
+        "pattern_learning"
+      ]
+    },
+    "backend": {
+      "label": "backend",
+      "agent": "openclaude",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "prompts/squad-worker-gemini.md",
+      "description": "APIs, databases, server logic, authentication",
+      "capabilities": [
+        "api_design",
+        "database_schema",
+        "authentication",
+        "server_logic",
+        "middleware"
+      ]
+    },
+    "frontend": {
+      "label": "frontend",
+      "agent": "openclaude",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "prompts/squad-worker-gemini.md",
+      "description": "React components, styling, state management, UI/UX",
+      "capabilities": [
+        "component_design",
+        "state_management",
+        "styling",
+        "responsive_design",
+        "accessibility"
+      ]
+    },
+    "ui-tester": {
+      "label": "ui-tester",
+      "agent": "openclaude",
+      "model": "gemini-2.5-flash",
+      "prompt": "prompts/squad-ui-tester.md",
+      "description": "Browser automation, console/network monitoring, bug detection",
+      "capabilities": [
+        "browser_automation",
+        "console_monitoring",
+        "network_monitoring",
+        "visual_verification",
+        "bug_detection"
+      ]
+    },
+    "gemini-worker": {
+      "label": "gemini-worker",
+      "agent": "gemini",
+      "model": "gemini-2.5-pro",
+      "prompt": "prompts/squad-worker-gemini.md",
+      "description": "Long context analysis, complex reasoning, advanced tool use",
+      "capabilities": [
+        "long_context_analysis",
+        "complex_reasoning",
+        "code_generation",
+        "architecture_design"
+      ]
+    }
+  },
+  "communication": {
+    "protocol": "pane_send_message + pane_read_messages",
+    "memory": "shared SQLite per workspace",
+    "patterns": "auto-learned on task completion",
+    "events": [
+      "pane_spawned",
+      "pane_exited",
+      "pane_idle",
+      "message_sent",
+      "message_received",
+      "squad_spawned",
+      "task_started",
+      "task_completed"
+    ]
+  },
+  "models": {
+    "default": "gemini-3.1-pro-preview",
+    "fast": "gemini-2.5-flash",
+    "advanced": "gemini-2.5-pro",
+    "mimo": "mimo-v2.5-pro"
+  },
+  "conventions": {
+    "labelRequired": true,
+    "memoryProtocol": "mandatory",
+    "patternLearning": "automatic",
+    "uiTesterGate": true
+  }
+}

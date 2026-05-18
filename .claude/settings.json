@@ -1,0 +1,240 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" pre-bash) ELSE (echo codebrain:pre-bash)\"",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" pre-edit) ELSE (echo codebrain:pre-edit)\"",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" post-edit) ELSE (echo codebrain:post-edit)\"",
+            "timeout": 10000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" post-bash) ELSE (echo codebrain:post-bash)\"",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" route) ELSE (echo codebrain:route)\"",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" session-start) ELSE (echo codebrain:session-start)\"",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" session-end) ELSE (echo codebrain:session-end)\"",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" stop) ELSE (echo codebrain:stop)\"",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" compact-manual) ELSE (echo codebrain:compact-manual)\""
+          }
+        ]
+      },
+      {
+        "matcher": "auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" compact-auto) ELSE (echo codebrain:compact-auto)\""
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" subagent-start) ELSE (echo codebrain:subagent-start)\"",
+            "timeout": 3000
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" subagent-stop) ELSE (echo codebrain:subagent-stop)\"",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"IF EXIST \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" (node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\hook-handler.cjs\" notify) ELSE (echo codebrain:notify)\"",
+            "timeout": 3000
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "mcp__codebrain__*",
+      "Bash(npm run *)",
+      "Bash(npx *)",
+      "Bash(node scripts/*)",
+      "Bash(electron-vite *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./electron-builder.yml)"
+    ]
+  },
+  "env": {
+    "CODEBRAIN_VERSION": "1.3.1",
+    "CODEBRAIN_MCP_ENABLED": "true",
+    "CODEBRAIN_SQUADS_ENABLED": "true",
+    "CODEBRAIN_SKILLS_ENABLED": "true",
+    "CODEBRAIN_MEMORY_BACKEND": "sqlite",
+    "CODEBRAIN_WORKSPACE": "."
+  },
+  "codebrain": {
+    "version": "1.3.1",
+    "platform": {
+      "os": "windows",
+      "arch": "x64",
+      "runtime": "electron",
+      "shell": "powershell"
+    },
+    "architecture": {
+      "main": "electron/main/",
+      "preload": "electron/preload/",
+      "renderer": "src/",
+      "mcp": "packages/mcp/",
+      "memory": "packages/memory/",
+      "prompts": "prompts/",
+      "skills": "resources/codebrain-skill/"
+    },
+    "mcp": {
+      "totalTools": 91,
+      "categories": [
+        "pane (6 tools)",
+        "todo (1 tool)",
+        "browser (30 tools)",
+        "memory (6 tools)",
+        "pattern (4 tools)",
+        "swarm (6 tools)",
+        "trajectory (8 tools)",
+        "hooks (3 tools)",
+        "file (3 tools)",
+        "system (2 tools)",
+        "worker-dispatch (3 tools)",
+        "skills (5 tools)"
+      ],
+      "bridgePattern": "bridge handler -> index.js registration -> mcp.ts wiring"
+    },
+    "squads": {
+      "maxWorkers": 8,
+      "defaultTopology": "hierarchical",
+      "roles": ["orchestrator", "backend", "frontend", "ui-tester", "gemini-worker"],
+      "models": {
+        "orchestrator": "gemini-3.1-pro-preview",
+        "worker": "gemini-3.1-pro-preview",
+        "ui-tester": "gemini-2.5-flash",
+        "gemini": "gemini-2.5-pro"
+      },
+      "communication": {
+        "protocol": "pane_send_message + pane_read_messages",
+        "memory": "shared SQLite per workspace",
+        "patterns": "auto-learned on task completion"
+      }
+    },
+    "skills": {
+      "localDir": "~/.codebrain/skills/",
+      "registryUrl": "https://gitlab.com/maikeofc18/codebrain-skills/-/raw/main/index.json",
+      "types": ["prompt", "squad"],
+      "format": "skill.json manifest + prompt.md / squad.json"
+    },
+    "providers": [
+      "openclaude (gemini-compat)",
+      "mimo (mimo-compat)"
+    ],
+    "conventions": {
+      "language": "TypeScript",
+      "framework": "React + Electron + Vite",
+      "stateManagement": "Zustand",
+      "styling": "Tailwind CSS",
+      "testing": "Vitest",
+      "packageManager": "npm",
+      "ipcPattern": "register-*.ts files in electron/main/ipc/",
+      "componentPattern": "Functional components with hooks",
+      "naming": "kebab-case files, PascalCase components, camelCase functions"
+    }
+  }
+}
