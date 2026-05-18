@@ -1,7 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\statusline.cjs\""
+    "command": "node -e \"const fs=require('fs'),p=require('path');const d=process.env.CLAUDE_PROJECT_DIR||process.cwd();const f=p.join(d,'.claude/helpers/statusline.cjs');if(fs.existsSync(f))require(f);else console.log('Codebrain v1.3.2');\""
   },
   "hooks": {
     "PreToolUse": [

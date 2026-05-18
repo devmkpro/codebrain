@@ -300,12 +300,57 @@ export function registerSkillHandlers(_ctx: AppContext): void {
         return { ok: false, error: `Claude config not found at ${bundledDir}` };
       }
 
-      if (fs.existsSync(CLAUDE_CONFIG_DIR)) {
-        fs.rmSync(CLAUDE_CONFIG_DIR, { recursive: true, force: true });
+      // Install to ~/.claude/ (user-level) so Claude Code CLI detects it globally.
+      // We only copy: skills/, helpers/, agents/, commands/, config/
+      // We do NOT overwrite ~/.claude/settings.json or ~/.claude/CLAUDE.md
+      // to preserve user's existing Claude Code configuration.
+      const userClaudeDir = path.join(os.homedir(), ".claude");
+      const dirsToCopy = ["skills", "helpers", "agents", "commands", "config"];
+      const filesToAppend = ["CLAUDE.md"];
+
+      // Copy directories
+      for (const dirName of dirsToCopy) {
+        const srcDir = path.join(bundledDir, dirName);
+        if (!fs.existsSync(srcDir)) continue;
+        const destDir = path.join(userClaudeDir, dirName);
+        copyDirRecursive(srcDir, destDir);
       }
 
-      copyDirRecursive(bundledDir, CLAUDE_CONFIG_DIR);
-      return { ok: true, path: CLAUDE_CONFIG_DIR };
+      // Append CLAUDE.md content if it doesn't already contain Codebrain info
+      for (const fileName of filesToAppend) {
+        const srcFile = path.join(bundledDir, fileName);
+        const destFile = path.join(userClaudeDir, fileName);
+        if (!fs.existsSync(srcFile)) continue;
+        const srcContent = fs.readFileSync(srcFile, "utf-8");
+        if (fs.existsSync(destFile)) {
+          const existing = fs.readFileSync(destFile, "utf-8");
+          if (!existing.includes("Codebrain")) {
+            fs.appendFileSync(destFile, "\n\n" + srcContent, "utf-8");
+          }
+        } else {
+          fs.writeFileSync(destFile, srcContent, "utf-8");
+        }
+      }
+
+      // Merge statusLine into user settings.json (don't overwrite)
+      const settingsSrc = path.join(bundledDir, "settings.json");
+      const settingsDest = path.join(userClaudeDir, "settings.json");
+      if (fs.existsSync(settingsSrc)) {
+        const bundledSettings = JSON.parse(fs.readFileSync(settingsSrc, "utf-8"));
+        let userSettings: Record<string, unknown> = {};
+        try { userSettings = JSON.parse(fs.readFileSync(settingsDest, "utf-8")); } catch {}
+        // Add statusLine if not present
+        if (!userSettings.statusLine && bundledSettings.statusLine) {
+          userSettings.statusLine = bundledSettings.statusLine;
+        }
+        // Add codebrain section if not present
+        if (!userSettings.codebrain && bundledSettings.codebrain) {
+          userSettings.codebrain = bundledSettings.codebrain;
+        }
+        fs.writeFileSync(settingsDest, JSON.stringify(userSettings, null, 2), "utf-8");
+      }
+
+      return { ok: true, path: userClaudeDir };
     } catch (err: any) {
       return { ok: false, error: err?.message || String(err) };
     }

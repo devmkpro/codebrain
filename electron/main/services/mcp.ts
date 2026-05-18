@@ -8,13 +8,21 @@ import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
 
 export function writeMcpConfig(ctx: AppContext, info: McpServerInfo): void {
-  const config = JSON.stringify({
-    mcpServers: { codebrain: { type: "sse", url: info.sseUrl } },
+  // Use stdio transport so Claude Code CLI can connect without the app running.
+  // The SSE endpoint is still available at info.sseUrl for direct connections.
+  const stdioConfig = JSON.stringify({
+    mcpServers: {
+      codebrain: {
+        command: "node",
+        args: ["packages/mcp/stdio.js"],
+        env: { CODEBRAIN_WORKSPACE: "." }
+      }
+    },
   }, null, 2);
-  try { fs.writeFileSync(path.join(os.homedir(), ".mcp.json"), config, "utf-8"); } catch {}
+  // Write to project .mcp.json only (not ~/.mcp.json) to avoid overriding user config
   try {
     if (ctx.currentWorkspacePath && ctx.currentWorkspacePath !== os.homedir()) {
-      fs.writeFileSync(path.join(ctx.currentWorkspacePath, ".mcp.json"), config, "utf-8");
+      fs.writeFileSync(path.join(ctx.currentWorkspacePath, ".mcp.json"), stdioConfig, "utf-8");
     }
   } catch {}
 }

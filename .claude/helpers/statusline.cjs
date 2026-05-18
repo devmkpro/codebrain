@@ -229,15 +229,21 @@ function countMemoryEntries() {
 // ── Session Data (from stdin) ────────────────────────────────────────────
 
 function getModel() {
-  return stdinData.model || stdinData.session?.model || null;
+  const raw = stdinData.model || stdinData.session?.model || null;
+  if (!raw) return null;
+  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'object') return raw.id || raw.name || raw.model || JSON.stringify(raw);
+  return String(raw);
 }
 
 function getContextWindow() {
-  return stdinData.context_window || stdinData.session?.context_window || null;
+  const v = stdinData.context_window || stdinData.session?.context_window || null;
+  return typeof v === 'number' ? v : (typeof v === 'string' ? parseInt(v, 10) : null);
 }
 
 function getContextUsed() {
-  return stdinData.context_used || stdinData.session?.context_used || null;
+  const v = stdinData.context_used || stdinData.session?.context_used || null;
+  return typeof v === 'number' ? v : (typeof v === 'string' ? parseInt(v, 10) : null);
 }
 
 function getCost() {
