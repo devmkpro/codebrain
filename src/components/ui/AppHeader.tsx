@@ -57,7 +57,7 @@ function IconBtn({
       onClick={onClick}
       disabled={disabled}
       title={label}
-      className={`relative flex items-center gap-1.5 px-2 h-full text-[11px] font-mono font-bold uppercase tracking-widest transition-all focus:outline-none
+      className={`relative flex items-center gap-1.5 px-2 h-full text-[11px] font-mono font-bold uppercase tracking-widest transition-all focus:outline-none cursor-pointer
         ${disabled ? 'opacity-40 cursor-not-allowed' : ''}
         ${active
           ? 'text-indigo-400 bg-indigo-500/10'
@@ -148,12 +148,12 @@ function HomeHeader() {
         <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           {/* Providers */}
           <button onClick={() => m.openProviders('list')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-slate-300 hover:border-white/20 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-slate-300 hover:border-white/20 transition-all cursor-pointer"
           ><Zap size={11} /> Providers</button>
 
           {/* Squad */}
           <button onClick={() => m.setShowSquad(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-slate-300 hover:border-white/20 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-slate-300 hover:border-white/20 transition-all cursor-pointer"
           ><Users size={11} /> Squad</button>
 
           {/* Back to workspace */}

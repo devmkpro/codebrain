@@ -347,7 +347,7 @@ export function TerminalPane({
     const text = paths.map(p => /\s/.test(p) ? `"${p}"` : p).join(" ");
     api.pty.write(pane.id, text + " ");
   }, [pane.id]);
-  return <div className={`flex flex-col h-full border ${isActive ? "border-indigo-500/40 shadow-[0_0_12px_rgba(239,68,68,0.1)]" : "border-white/5"} rounded-lg overflow-hidden bg-black backdrop-blur transition-all duration-300 relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onContextMenu={handleContextMenu}>
+  return <div className={`flex flex-col h-full border cursor-pointer ${isActive ? "border-indigo-500/40 shadow-[0_0_12px_rgba(239,68,68,0.1)]" : "border-white/5 hover:border-white/10"} rounded-lg overflow-hidden bg-black backdrop-blur transition-all duration-300 relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onContextMenu={handleContextMenu}>
 
     <AnimatePresence>
       {contextMenu && (
