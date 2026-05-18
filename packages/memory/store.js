@@ -60,6 +60,26 @@ function createMemoryStore(dbPath) {
 
     CREATE INDEX IF NOT EXISTS idx_patterns_type ON patterns(pattern_type);
     CREATE INDEX IF NOT EXISTS idx_patterns_quality ON patterns(quality_score);
+
+    CREATE TABLE IF NOT EXISTS trajectories (
+      id              TEXT PRIMARY KEY,
+      session_id      TEXT,
+      agent_id        TEXT,
+      workspace       TEXT,
+      task_type       TEXT,
+      steps           TEXT NOT NULL DEFAULT '[]',
+      outcome         TEXT NOT NULL DEFAULT 'unknown' CHECK(outcome IN ('success','failure','partial','unknown')),
+      outcome_detail  TEXT,
+      duration_ms     INTEGER,
+      tool_calls      INTEGER DEFAULT 0,
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_traj_session ON trajectories(session_id);
+    CREATE INDEX IF NOT EXISTS idx_traj_agent ON trajectories(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_traj_outcome ON trajectories(outcome);
+    CREATE INDEX IF NOT EXISTS idx_traj_type ON trajectories(task_type);
+    CREATE INDEX IF NOT EXISTS idx_traj_created ON trajectories(created_at);
   `);
 
   // ── Prepared Statements ───────────────────────────────────────────────────
@@ -116,6 +136,33 @@ function createMemoryStore(dbPath) {
       WHERE id = @id
     `),
     deletePattern: db.prepare(`DELETE FROM patterns WHERE id = ?`),
+    // Trajectories
+    insertTrajectory: db.prepare(`
+      INSERT INTO trajectories (id, session_id, agent_id, workspace, task_type, steps, outcome, outcome_detail, duration_ms, tool_calls)
+      VALUES (@id, @session_id, @agent_id, @workspace, @task_type, @steps, @outcome, @outcome_detail, @duration_ms, @tool_calls)
+    `),
+    getTrajectory: db.prepare(`SELECT * FROM trajectories WHERE id = ?`),
+    listTrajectories: db.prepare(`
+      SELECT * FROM trajectories
+      WHERE (@session_id IS NULL OR session_id = @session_id)
+        AND (@agent_id IS NULL OR agent_id = @agent_id)
+        AND (@workspace IS NULL OR workspace = @workspace)
+        AND (@outcome IS NULL OR outcome = @outcome)
+        AND (@task_type IS NULL OR task_type = @task_type)
+      ORDER BY created_at DESC LIMIT @limit OFFSET @offset
+    `),
+    deleteTrajectory: db.prepare(`DELETE FROM trajectories WHERE id = ?`),
+    trajectoryStats: db.prepare(`
+      SELECT outcome, COUNT(*) as count, AVG(duration_ms) as avg_duration, AVG(tool_calls) as avg_tool_calls
+      FROM trajectories
+      WHERE (@workspace IS NULL OR workspace = @workspace)
+      GROUP BY outcome
+    `),
+    successfulByType: db.prepare(`
+      SELECT * FROM trajectories
+      WHERE outcome = 'success' AND (@task_type IS NULL OR task_type = @task_type)
+      ORDER BY created_at DESC LIMIT @limit
+    `),
   };
 
   // ── ID Generator ──────────────────────────────────────────────────────────
@@ -287,6 +334,161 @@ function createMemoryStore(dbPath) {
      */
     deletePattern({ id }) {
       stmts.deletePattern.run(id);
+      return { ok: true };
+    },
+
+    // ── Trajectory Tracking ──────────────────────────────────────────────────
+
+    /**
+     * Record a trajectory (sequence of actions for a task).
+     * @param {{ session_id?: string, agent_id?: string, workspace?: string, task_type?: string, steps: Array, outcome: string, outcome_detail?: string, duration_ms?: number, tool_calls?: number }} opts
+     */
+    recordTrajectory({ session_id, agent_id, workspace, task_type, steps = [], outcome = "unknown", outcome_detail, duration_ms, tool_calls = 0 }) {
+      const id = `traj_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      stmts.insertTrajectory.run({
+        id,
+        session_id: session_id || null,
+        agent_id: agent_id || null,
+        workspace: workspace || null,
+        task_type: task_type || null,
+        steps: JSON.stringify(steps),
+        outcome,
+        outcome_detail: outcome_detail || null,
+        duration_ms: duration_ms || null,
+        tool_calls,
+      });
+      return { ok: true, id };
+    },
+
+    /**
+     * Add a step to an existing trajectory.
+     * @param {{ id: string, step: object }} opts
+     */
+    addTrajectoryStep({ id, step }) {
+      const row = stmts.getTrajectory.get(id);
+      if (!row) return { ok: false, error: "trajectory not found" };
+      const steps = JSON.parse(row.steps || "[]");
+      steps.push({ ...step, timestamp: Date.now() });
+      db.prepare("UPDATE trajectories SET steps = ?, tool_calls = tool_calls + 1 WHERE id = ?")
+        .run(JSON.stringify(steps), id);
+      return { ok: true, stepsCount: steps.length };
+    },
+
+    /**
+     * Update trajectory outcome.
+     * @param {{ id: string, outcome: string, outcome_detail?: string, duration_ms?: number }} opts
+     */
+    updateTrajectory({ id, outcome, outcome_detail, duration_ms }) {
+      const sets = ["outcome = @outcome"];
+      const params = { id, outcome };
+      if (outcome_detail) { sets.push("outcome_detail = @outcome_detail"); params.outcome_detail = outcome_detail; }
+      if (duration_ms !== undefined) { sets.push("duration_ms = @duration_ms"); params.duration_ms = duration_ms; }
+      db.prepare(`UPDATE trajectories SET ${sets.join(", ")} WHERE id = @id`).run(params);
+      return { ok: true };
+    },
+
+    /**
+     * List trajectories with filters.
+     */
+    listTrajectories({ session_id, agent_id, workspace, outcome, task_type, limit = 20, offset = 0 } = {}) {
+      const rows = stmts.listTrajectories.all({
+        session_id: session_id || null,
+        agent_id: agent_id || null,
+        workspace: workspace || null,
+        outcome: outcome || null,
+        task_type: task_type || null,
+        limit,
+        offset,
+      });
+      return {
+        ok: true,
+        trajectories: rows.map((r) => ({ ...r, steps: JSON.parse(r.steps || "[]") })),
+        count: rows.length,
+      };
+    },
+
+    /**
+     * Get a single trajectory by ID.
+     */
+    getTrajectory({ id }) {
+      const row = stmts.getTrajectory.get(id);
+      if (!row) return { ok: false, error: "not found" };
+      return { ok: true, trajectory: { ...row, steps: JSON.parse(row.steps || "[]") } };
+    },
+
+    /**
+     * Get trajectory statistics.
+     */
+    trajectoryStats({ workspace } = {}) {
+      const rows = stmts.trajectoryStats.all({ workspace: workspace || null });
+      const byOutcome = {};
+      for (const r of rows) {
+        byOutcome[r.outcome] = { count: r.count, avgDurationMs: Math.round(r.avg_duration || 0), avgToolCalls: Math.round(r.avg_tool_calls || 0) };
+      }
+      return { ok: true, byOutcome };
+    },
+
+    /**
+     * Get successful trajectories for pattern extraction.
+     */
+    getSuccessfulTrajectories({ task_type, limit = 10 } = {}) {
+      const rows = stmts.successfulByType.all({ task_type: task_type || null, limit });
+      return {
+        ok: true,
+        trajectories: rows.map((r) => ({ ...r, steps: JSON.parse(r.steps || "[]") })),
+        count: rows.length,
+      };
+    },
+
+    /**
+     * Extract patterns from successful trajectories.
+     * Analyzes step sequences to find common action patterns.
+     */
+    extractPatterns({ task_type, minOccurrences = 2, workspace } = {}) {
+      const rows = stmts.successfulByType.all({ task_type: task_type || null, limit: 50 });
+      if (rows.length < minOccurrences) return { ok: true, patterns: [], message: `Need at least ${minOccurrences} successful trajectories, found ${rows.length}` };
+
+      // Group by action sequence signature
+      const signatures = new Map();
+      for (const row of rows) {
+        const steps = JSON.parse(row.steps || "[]");
+        const actions = steps.map((s) => s.action || s.tool || "unknown").join(" → ");
+        if (!actions) continue;
+        const existing = signatures.get(actions) || { actions, count: 0, examples: [], avgDuration: 0, totalDuration: 0 };
+        existing.count++;
+        existing.examples.push(row.id);
+        existing.totalDuration += row.duration_ms || 0;
+        signatures.set(actions, existing);
+      }
+
+      const patterns = [];
+      for (const [, sig] of signatures) {
+        if (sig.count >= minOccurrences) {
+          // Auto-save as a pattern
+          const patternResult = this.writePattern({
+            pattern_type: task_type || "general",
+            description: `Action sequence (${sig.count} occurrences): ${sig.actions}`,
+            source_trajectory: sig.examples.slice(0, 3).join(","),
+            quality_score: Math.min(1, sig.count / 10),
+          });
+          patterns.push({
+            actions: sig.actions,
+            occurrences: sig.count,
+            avgDurationMs: Math.round(sig.totalDuration / sig.count),
+            patternId: patternResult.id,
+          });
+        }
+      }
+
+      patterns.sort((a, b) => b.occurrences - a.occurrences);
+      return { ok: true, patterns, analyzed: rows.length };
+    },
+
+    /**
+     * Delete a trajectory.
+     */
+    deleteTrajectory({ id }) {
+      stmts.deleteTrajectory.run(id);
       return { ok: true };
     },
 

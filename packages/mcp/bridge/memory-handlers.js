@@ -68,6 +68,51 @@ function createMemoryHandlers(opts) {
       const store = getStore();
       return store.deletePattern({ id });
     },
+
+    // ── Trajectory Tracking ──────────────────────────────────────────────
+    async trajectoryRecord({ session_id, agent_id, workspace, task_type, steps, outcome, outcome_detail, duration_ms, tool_calls }) {
+      const store = getStore();
+      const ws = workspace || opts.getCurrentWorkspacePath?.();
+      return store.recordTrajectory({ session_id, agent_id, workspace: ws, task_type, steps, outcome, outcome_detail, duration_ms, tool_calls });
+    },
+
+    async trajectoryAddStep({ id, step }) {
+      const store = getStore();
+      return store.addTrajectoryStep({ id, step });
+    },
+
+    async trajectoryUpdate({ id, outcome, outcome_detail, duration_ms }) {
+      const store = getStore();
+      return store.updateTrajectory({ id, outcome, outcome_detail, duration_ms });
+    },
+
+    async trajectoryList({ session_id, agent_id, workspace, outcome, task_type, limit, offset }) {
+      const store = getStore();
+      const ws = workspace || opts.getCurrentWorkspacePath?.();
+      return store.listTrajectories({ session_id, agent_id, workspace: ws, outcome, task_type, limit, offset });
+    },
+
+    async trajectoryGet({ id }) {
+      const store = getStore();
+      return store.getTrajectory({ id });
+    },
+
+    async trajectoryStats({ workspace }) {
+      const store = getStore();
+      const ws = workspace || opts.getCurrentWorkspacePath?.();
+      return store.trajectoryStats({ workspace: ws });
+    },
+
+    async trajectoryExtractPatterns({ task_type, min_occurrences, workspace }) {
+      const store = getStore();
+      const ws = workspace || opts.getCurrentWorkspacePath?.();
+      return store.extractPatterns({ task_type, minOccurrences: min_occurrences, workspace: ws });
+    },
+
+    async trajectoryDelete({ id }) {
+      const store = getStore();
+      return store.deleteTrajectory({ id });
+    },
   };
 }
 

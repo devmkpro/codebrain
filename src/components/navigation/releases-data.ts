@@ -14,6 +14,108 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.3.0",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "shared memory system — SQLite-backed memory store with 6 MCP tools (memory_write/read/search/list/delete/stats)"
+      },
+      {
+        "kind": "feat",
+        "text": "swarm coordination — 6 MCP tools for multi-agent orchestration (status/broadcast/assign_task/worker_health/respawn/set_topology)"
+      },
+      {
+        "kind": "feat",
+        "text": "learned patterns — 4 MCP tools for saving and querying learned patterns"
+      },
+      {
+        "kind": "feat",
+        "text": "hooks system — lifecycle event emitters (pane_spawned/exited/idle) with 3 MCP tools (hooks_status/log/fire)"
+      },
+      {
+        "kind": "feat",
+        "text": "trajectory tracking — action sequence recording with auto-pattern extraction, 8 MCP tools"
+      },
+      {
+        "kind": "feat",
+        "text": "file access tools — file_read/write/search for structured agent file access"
+      },
+      {
+        "kind": "feat",
+        "text": "system diagnostics — system_info/diagnostics MCP tools"
+      },
+      {
+        "kind": "feat",
+        "text": "worker trigger detection — 7 regex triggers (optimize/audit/document/refactor/benchmark/testgaps/deepdive)"
+      },
+      {
+        "kind": "feat",
+        "text": "provider health tracking — success/error counts per provider with provider_health tool"
+      },
+      {
+        "kind": "feat",
+        "text": "memory UI panel — visual sidebar with Memories/Patterns tabs, search and filters"
+      },
+      {
+        "kind": "feat",
+        "text": "shared memory protocol — all agents share memory in same workspace and auto-adapt to changes"
+      },
+      {
+        "kind": "feat",
+        "text": "squad persistence — save/load/delete squad configurations (JSON-file-backed)"
+      },
+      {
+        "kind": "feat",
+        "text": "MCP tools expanded from 37 to 86 total (+49 new tools)"
+      },
+      {
+        "kind": "fix",
+        "text": "git restriction — all agents prohibited from git add/commit/push without explicit user request"
+      }
+    ]
+  },
+  {
+    "version": "1.2.25",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "copy and paste buttons in context menu"
+      },
+      {
+        "kind": "feat",
+        "text": "add clipboard read functionality and improve context menu handling in TerminalPane"
+      },
+      {
+        "kind": "feat",
+        "text": "dropdown terminal fixed"
+      },
+      {
+        "kind": "feat",
+        "text": "Quick Actions white theme OK"
+      },
+      {
+        "kind": "feat",
+        "text": "size button close terminal 20"
+      },
+      {
+        "kind": "feat",
+        "text": "add context menu, quick actions, and fix selection visibility"
+      }
+    ]
+  },
+  {
+    "version": "1.2.24",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "orchestrator spawns duplicate workers instead of reusing idle ones (v1.2.24)"
+      }
+    ]
+  },
+  {
     "version": "1.2.23",
     "date": "maio 2026",
     "highlights": [
@@ -154,97 +256,43 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "export buildEdges function and import it in SessionMap"
-      }
-    ]
-  },
-  {
-    "version": "1.2.12",
-    "date": "maio 2026",
-    "highlights": [
+      },
       {
         "kind": "fix",
         "text": "guard webContents.send against destroyed window on close; fix npm install path-with-spaces on Windows"
-      }
-    ]
-  },
-  {
-    "version": "1.2.11",
-    "date": "maio 2026",
-    "highlights": [
+      },
       {
         "kind": "fix",
         "text": "fix openclaude install on linux and windows with npm check and timeout"
       },
       {
-        "kind": "feat",
-        "text": "implement PtyManager for cross-platform process management and terminal session handling"
-      }
-    ]
-  },
-  {
-    "version": "1.2.10",
-    "date": "maio 2026",
-    "highlights": [
-      {
         "kind": "fix",
         "text": "repair missing Windows registry keys to fix auto-update error"
-      }
-    ]
-  },
-  {
-    "version": "1.2.9",
-    "date": "maio 2026",
-    "highlights": [
+      },
+      {
+        "kind": "feat",
+        "text": "implement PtyManager for cross-platform process management and terminal session handling"
+      },
       {
         "kind": "fix",
         "text": "fix provider banner and system prompt flag for openclaude v0.10"
-      }
-    ]
-  },
-  {
-    "version": "1.2.8",
-    "date": "maio 2026",
-    "highlights": [
+      },
       {
         "kind": "fix",
         "text": "remove generic openai fallback provider argument that forced codex model on custom providers"
-      }
-    ]
-  },
-  {
-    "version": "1.2.7",
-    "date": "maio 2026",
-    "highlights": [
+      },
       {
         "kind": "fix",
         "text": "pass anthropic as provider arg for mimo-compat/anthropic-compat to override codex default"
-      }
-    ]
-  },
-  {
-    "version": "1.2.6",
-    "date": "maio 2026",
-    "highlights": [
+      },
       {
         "kind": "fix",
         "text": "pass --provider arg for openclaude v0.10+ compatibility"
-      }
-    ]
-  },
-  {
-    "version": "1.2.4",
-    "date": "maio 2026",
-    "highlights": [
+      },
       {
         "kind": "feat",
         "text": "add MIT License to the project"
-      }
-    ]
-  },
-  {
-    "version": "1.2.3",
-    "date": "maio 2026",
-    "highlights": [
+      },
       {
         "kind": "fix",
         "text": "guard against empty RELEASES array causing black screen"

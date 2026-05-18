@@ -15,6 +15,7 @@ import { createWindow } from "./window";
 import { registerAllIpcHandlers } from "./ipc/register-all";
 import { startMcpServer } from "./services/mcp";
 import { attachNetworkTracking } from "./services/network";
+import { setupHooks } from "./services/hooks";
 
 log.initialize();
 
@@ -39,6 +40,9 @@ app.whenReady().then(async () => {
     ctx.paneConfigs.delete(paneId);
     ctx.paneRegistry.delete(paneId);
   });
+
+  // Wire lifecycle hooks system
+  setupHooks(ctx.hooksManager, ctx.ptyManager, ctx);
 
   // Network tracking
   attachNetworkTracking(ctx, session.defaultSession);

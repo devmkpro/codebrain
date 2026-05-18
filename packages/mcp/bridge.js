@@ -7,6 +7,7 @@ const { createMemoryHandlers } = require("./bridge/memory-handlers.js");
 const { createSwarmHandlers } = require("./bridge/swarm-handlers.js");
 const { createFileHandlers } = require("./bridge/file-handlers.js");
 const { createWorkerDispatch } = require("./bridge/worker-dispatch.js");
+const { createHooksHandlers } = require("./bridge/hooks-handlers.js");
 
 /**
  * Creates a bridge between MCP server tools and the PtyManager.
@@ -30,6 +31,7 @@ function createMCPBridge(ptyManager, opts = {}) {
   const swarmHandlers = createSwarmHandlers(ptyManager, { ...opts, paneLabels, roleMap });
   const fileHandlers = createFileHandlers({ ...opts, paneLabels, roleMap, ptyManager });
   const workerDispatch = createWorkerDispatch({ ...opts, paneLabels, roleMap, ptyManager });
+  const hooksHandlers = createHooksHandlers({ ...opts, paneLabels, roleMap });
 
   return {
     ...paneHandlers,
@@ -39,6 +41,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...swarmHandlers,
     ...fileHandlers,
     ...workerDispatch,
+    ...hooksHandlers,
     // Override listPanes to pass paneLabels
     async listPanes() {
       return paneHandlers.listPanes(paneLabels);

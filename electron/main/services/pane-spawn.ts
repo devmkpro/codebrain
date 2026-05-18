@@ -324,6 +324,9 @@ export async function spawnPaneInternal(
       model: model ?? undefined,
     });
 
+    // Fire hook: pane_spawned
+    ctx.hooksManager.fire("pane_spawned", { agent, cwd, providerId, model, role: config.role }, paneId);
+
     // Track provider health — success
     if (providerId) {
       const health = ctx.providerHealth.get(providerId) || { providerId, successCount: 0, errorCount: 0 };

@@ -607,6 +607,160 @@ function createCodebrainMCPServer(bridge) {
   );
 
   // ══════════════════════════════════════════════════════════════════════════
+  // TRAJECTORY TOOLS — Action sequence tracking + pattern extraction
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── mcp__codebrain__trajectory_record ─────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__trajectory_record",
+    "Record a new trajectory (action sequence for a task). Returns trajectory ID for subsequent step additions.",
+    {
+      session_id:  z.string().optional().describe("Session ID for grouping."),
+      agent_id:    z.string().optional().describe("Agent performing the task."),
+      workspace:   z.string().optional().describe("Workspace path."),
+      task_type:   z.string().optional().describe("Type of task (e.g., 'refactor', 'feature', 'bugfix')."),
+      steps:       z.array(z.record(z.unknown())).optional().describe("Initial action steps."),
+      outcome:     z.enum(["success", "failure", "partial", "unknown"]).optional().describe("Task outcome."),
+      outcome_detail: z.string().optional().describe("Details about the outcome."),
+      duration_ms: z.number().optional().describe("Total task duration in ms."),
+      tool_calls:  z.number().optional().describe("Number of tool calls made."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.trajectoryRecord(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__trajectory_add_step ───────────────────────────────────
+  server.tool(
+    "mcp__codebrain__trajectory_add_step",
+    "Add a step to an existing trajectory. Use for real-time action logging.",
+    {
+      id:   z.string().describe("Trajectory ID."),
+      step: z.record(z.unknown()).describe("Step data (action, tool, params, result, duration)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.trajectoryAddStep(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__trajectory_update ─────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__trajectory_update",
+    "Update trajectory outcome (mark as success/failure after task completes).",
+    {
+      id:             z.string().describe("Trajectory ID."),
+      outcome:        z.enum(["success", "failure", "partial", "unknown"]).describe("Final outcome."),
+      outcome_detail: z.string().optional().describe("Details about the outcome."),
+      duration_ms:    z.number().optional().describe("Final duration in ms."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.trajectoryUpdate(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__trajectory_list ───────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__trajectory_list",
+    "List trajectories with optional filters (session, agent, outcome, task type).",
+    {
+      session_id: z.string().optional(),
+      agent_id:   z.string().optional(),
+      workspace:  z.string().optional(),
+      outcome:    z.enum(["success", "failure", "partial", "unknown"]).optional(),
+      task_type:  z.string().optional(),
+      limit:      z.number().optional().describe("Max results (default 20)."),
+      offset:     z.number().optional(),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.trajectoryList(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__trajectory_get ────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__trajectory_get",
+    "Get a single trajectory by ID with full step details.",
+    { id: z.string().describe("Trajectory ID.") },
+    async (args) => {
+      try {
+        const result = await bridge.trajectoryGet(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__trajectory_stats ──────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__trajectory_stats",
+    "Get trajectory statistics: counts by outcome, average duration, average tool calls.",
+    { workspace: z.string().optional() },
+    async (args) => {
+      try {
+        const result = await bridge.trajectoryStats(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__trajectory_extract_patterns ───────────────────────────
+  server.tool(
+    "mcp__codebrain__trajectory_extract_patterns",
+    "Extract common action patterns from successful trajectories. Auto-saves high-frequency patterns.",
+    {
+      task_type:       z.string().optional().describe("Filter by task type."),
+      min_occurrences: z.number().optional().describe("Minimum occurrences to count as pattern (default 2)."),
+      workspace:       z.string().optional(),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.trajectoryExtractPatterns(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__trajectory_delete ─────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__trajectory_delete",
+    "Delete a trajectory record.",
+    { id: z.string().describe("Trajectory ID.") },
+    async (args) => {
+      try {
+        const result = await bridge.trajectoryDelete(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
   // FILE TOOLS — Structured file access for agents
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -746,6 +900,51 @@ function createCodebrainMCPServer(bridge) {
     async () => {
       try {
         const result = await bridge.providerHealth();
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__hooks_status ─────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__hooks_status",
+    "Get hooks system status: registered hooks, event stats, recent lifecycle events.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.hooksStatus();
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__hooks_log ────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__hooks_log",
+    "Get recent lifecycle hook events (pane_spawned, pane_exited, pane_idle, etc).",
+    { limit: z.number().optional().describe("Max events to return (default 50)") },
+    async (args) => {
+      try {
+        const result = await bridge.hooksLog(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__hooks_fire ───────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__hooks_fire",
+    "Fire a custom hook event. Useful for testing or automation triggers.",
+    { type: z.string().describe("Hook event type (pane_spawned, pane_exited, pane_idle, task_started, task_completed, etc)"), data: z.record(z.unknown()).optional().describe("Event data payload") },
+    async (args) => {
+      try {
+        const result = await bridge.hooksFire({ type: args.type, data: args.data });
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };

@@ -57,6 +57,7 @@ function buildMcpBridge(ctx: AppContext) {
     memoryStore: ctx.memoryStore,
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
+    hooksManager: ctx.hooksManager,
     roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };
 }

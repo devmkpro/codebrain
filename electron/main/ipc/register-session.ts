@@ -1,7 +1,50 @@
 import { ipcMain } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import log from "electron-log/main.js";
 import type { AppContext } from "../context";
+
+// ── Squad Persistence ──────────────────────────────────────────────────────
+const SQUADS_FILE = path.join(
+  process.env.APPDATA || process.env.HOME || ".",
+  process.platform === "win32" ? "codebrain/squads.json" : ".codebrain/squads.json"
+);
+
+function ensureSquadsDir(): void {
+  const dir = path.dirname(SQUADS_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function loadSquads(): SquadConfig[] {
+  try {
+    if (!fs.existsSync(SQUADS_FILE)) return [];
+    return JSON.parse(fs.readFileSync(SQUADS_FILE, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveSquads(squads: SquadConfig[]): void {
+  ensureSquadsDir();
+  fs.writeFileSync(SQUADS_FILE, JSON.stringify(squads, null, 2), "utf-8");
+}
+
+interface SquadWorkerConfig {
+  label: string;
+  agent?: string;
+  providerId?: string;
+  model?: string;
+  role?: string;
+}
+
+interface SquadConfig {
+  id: string;
+  name: string;
+  description?: string;
+  workers: SquadWorkerConfig[];
+  createdAt: number;
+  updatedAt: number;
+}
 
 export function registerSessionHandlers(ctx: AppContext): void {
   ipcMain.handle("session:saveSnapshot", async (_event, workspacePath: string) => {
@@ -87,7 +130,46 @@ ${panesSummary}
   ipcMain.handle("tokens:byWorkspace", async () => ({}));
   ipcMain.handle("log:list", async () => []);
   ipcMain.handle("tasks:list", async () => ({ tasks: [] }));
-  ipcMain.handle("squads:list", async () => []);
-  ipcMain.handle("squads:save", async () => {});
-  ipcMain.handle("squads:delete", async () => {});
+
+  // ── Squad Persistence (real implementation) ────────────────────────────
+  ipcMain.handle("squads:list", async () => {
+    try {
+      return loadSquads();
+    } catch (err) {
+      log.error("[squads] list error:", err);
+      return [];
+    }
+  });
+
+  ipcMain.handle("squads:save", async (_event, squad: SquadConfig) => {
+    try {
+      const squads = loadSquads();
+      const idx = squads.findIndex((s) => s.id === squad.id);
+      const now = Date.now();
+      if (idx >= 0) {
+        squads[idx] = { ...squads[idx], ...squad, updatedAt: now };
+      } else {
+        squads.push({ ...squad, id: squad.id || `squad_${now}`, createdAt: now, updatedAt: now });
+      }
+      saveSquads(squads);
+      log.info(`[squads] saved: ${squad.name || squad.id}`);
+      return { ok: true };
+    } catch (err) {
+      log.error("[squads] save error:", err);
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcMain.handle("squads:delete", async (_event, squadId: string) => {
+    try {
+      const squads = loadSquads();
+      const filtered = squads.filter((s) => s.id !== squadId);
+      saveSquads(filtered);
+      log.info(`[squads] deleted: ${squadId}`);
+      return { ok: true };
+    } catch (err) {
+      log.error("[squads] delete error:", err);
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 }

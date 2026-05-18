@@ -9,6 +9,7 @@ import { WorkspaceConfigStore } from "./workspace-config-store";
 import { ConfigStore } from "./config-store";
 import { CliDetector } from "./cli-detector";
 import { AudioConfigStore } from "./audio-config-store";
+import { HooksManager } from "./services/hooks";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { createMemoryStore } = require("../../packages/memory/store.js");
@@ -108,6 +109,7 @@ export function createAppContext() {
     cliDetector: new CliDetector(),
     audioConfigStore: new AudioConfigStore(AUDIO_CONFIG_FILE),
     memoryStore: createMemoryStore(MEMORY_DB_FILE),
+    hooksManager: new HooksManager(),
 
     // Paths
     DATA_DIR,
