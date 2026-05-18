@@ -1,7 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "node -e \"const fs=require('fs'),p=require('path');const d=process.env.CLAUDE_PROJECT_DIR||process.cwd();const f=p.join(d,'.claude/helpers/statusline.cjs');if(fs.existsSync(f))require(f);else console.log('Codebrain v1.3.2');\""
+    "command": "node -e \"const fs=require('fs'),p=require('path'),h=require('os').homedir();const d=process.env.CLAUDE_PROJECT_DIR||process.cwd();const pf=p.join(d,'.claude/helpers/statusline.cjs');const uf=p.join(h,'.claude/helpers/statusline.cjs');if(fs.existsSync(pf))require(pf);else if(fs.existsSync(uf))require(uf);else console.log('Codebrain');\""
   },
   "hooks": {
     "PreToolUse": [
@@ -161,7 +161,7 @@
     ]
   },
   "env": {
-    "CODEBRAIN_VERSION": "1.3.3",
+    "CODEBRAIN_VERSION": "1.3.4",
     "CODEBRAIN_MCP_ENABLED": "true",
     "CODEBRAIN_SQUADS_ENABLED": "true",
     "CODEBRAIN_SKILLS_ENABLED": "true",
@@ -169,7 +169,7 @@
     "CODEBRAIN_WORKSPACE": "."
   },
   "codebrain": {
-    "version": "1.3.3",
+    "version": "1.3.4",
     "platform": {
       "os": "windows",
       "arch": "x64",

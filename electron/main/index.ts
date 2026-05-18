@@ -16,6 +16,7 @@ import { registerAllIpcHandlers } from "./ipc/register-all";
 import { startMcpServer } from "./services/mcp";
 import { attachNetworkTracking } from "./services/network";
 import { setupHooks } from "./services/hooks";
+import { setupClaudeIntegration } from "./services/setup-claude";
 
 log.initialize();
 
@@ -23,6 +24,9 @@ const ctx = createAppContext();
 
 app.whenReady().then(async () => {
   fs.mkdirSync(ctx.DATA_DIR, { recursive: true });
+
+  // Auto-install Claude Code integration (statusline, .mcp.json, helpers)
+  setupClaudeIntegration();
 
   ctx.mainWindow = createWindow();
   registerAllIpcHandlers(ctx);
