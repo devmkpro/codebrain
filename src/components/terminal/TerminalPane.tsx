@@ -43,17 +43,24 @@ export function TerminalPane({
     savedSelectionRef.current = termRef.current?.getSelection() ?? '';
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Account for CSS zoom: getBoundingClientRect returns zoomed values,
+    // but CSS pixel positions inside the element are unzoomed
+    const zoom = rect.width / (e.currentTarget as HTMLElement).offsetWidth || 1;
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
 
     const menuWidth = 160;
     const menuHeight = 130;
+    const containerWidth = (e.currentTarget as HTMLElement).offsetWidth;
+    const containerHeight = (e.currentTarget as HTMLElement).offsetHeight;
 
     let adjustedX = x;
     let adjustedY = y;
 
-    if (x + menuWidth > rect.width) adjustedX = x - menuWidth;
-    if (y + menuHeight > rect.height) adjustedY = y - menuHeight;
+    if (x + menuWidth > containerWidth) adjustedX = Math.max(0, x - menuWidth);
+    if (y + menuHeight > containerHeight) adjustedY = Math.max(0, y - menuHeight);
+    if (adjustedX < 0) adjustedX = 0;
+    if (adjustedY < 0) adjustedY = 0;
 
     setContextMenu({ x: adjustedX, y: adjustedY });
   }, []);
