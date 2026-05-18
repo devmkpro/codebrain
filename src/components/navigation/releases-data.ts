@@ -14,6 +14,26 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.4.0",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "cost per task tracking, PTY token parser, per-task UI, hooks expansion, consensus algorithms"
+      }
+    ]
+  },
+  {
+    "version": "1.3.8",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "automatic shared memory — agents auto-notify peers on file/memory changes"
+      }
+    ]
+  },
+  {
     "version": "1.3.7",
     "date": "maio 2026",
     "highlights": [
