@@ -14,6 +14,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.3.2",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "context menu position accounting for CSS zoom"
+      },
+      {
+        "kind": "feat",
+        "text": "add comprehensive .claude/ directory for Claude Code integration"
+      },
+      {
+        "kind": "feat",
+        "text": "add skill repository system with 5 MCP tools and SkillsPanel UI"
+      }
+    ]
+  },
+  {
     "version": "1.3.1",
     "date": "maio 2026",
     "highlights": [

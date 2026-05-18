@@ -1,4 +1,8 @@
 {
+  "statusLine": {
+    "type": "command",
+    "command": "node \"%CLAUDE_PROJECT_DIR%\\.claude\\helpers\\statusline.cjs\""
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -157,7 +161,7 @@
     ]
   },
   "env": {
-    "CODEBRAIN_VERSION": "1.3.1",
+    "CODEBRAIN_VERSION": "1.3.2",
     "CODEBRAIN_MCP_ENABLED": "true",
     "CODEBRAIN_SQUADS_ENABLED": "true",
     "CODEBRAIN_SKILLS_ENABLED": "true",
@@ -165,7 +169,7 @@
     "CODEBRAIN_WORKSPACE": "."
   },
   "codebrain": {
-    "version": "1.3.1",
+    "version": "1.3.2",
     "platform": {
       "os": "windows",
       "arch": "x64",
