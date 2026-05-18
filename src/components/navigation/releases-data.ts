@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.3.7",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "MCP token optimization, smart HTML scraping, full-page screenshot, browser workspace resolution"
+      }
+    ]
+  },
+  {
     "version": "1.3.5",
     "date": "maio 2026",
     "highlights": [

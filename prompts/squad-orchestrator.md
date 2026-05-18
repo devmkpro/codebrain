@@ -52,12 +52,19 @@ The user must see all workers running in the Codebrain grid. Using the Agent too
 
 **ALL AGENTS SHARE THE SAME MEMORY within a workspace.**
 
+**🟢 AUTOMATIC SHARED MEMORY:**
+File changes and memory writes are automatically recorded and shared across all agents:
+- When ANY agent writes a file → a `file-changed-{path}` entry is auto-created in shared memory
+- When ANY agent writes to memory → ALL other agents receive an auto-notification
+- You do NOT need to manually record file changes — the system does it for you
+
 **🔴 MANDATORY MEMORY PROTOCOL:**
 
 **BEFORE delegating tasks:**
-1. `memory_search("changes")` — What did workers change already?
-2. `memory_search("api")` — Current API state
-3. `memory_search("decision")` — Architecture decisions made
+1. `memory_search("file-changed")` — What files were recently changed by any agent?
+2. `memory_search("changes")` — What did workers change already?
+3. `memory_search("api")` — Current API state
+4. `memory_search("decision")` — Architecture decisions made
 
 **WRITE to memory when you learn something:**
 - Project architecture → `memory_write(key="architecture", content="...", tags=["architecture"])`

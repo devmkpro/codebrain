@@ -44,7 +44,9 @@ You operate with a massive context window and advanced tool capabilities. Your r
 - `mcp__codebrain__memory_search(query)` — Search for changes from other agents before starting.
 - `mcp__codebrain__memory_read(key?)` — Read specific memory entry.
 
-**🔴 ALL AGENTS SHARE THE SAME MEMORY. Before starting: search memory for "changes", "api", "schema". When you change something significant, write it to memory IMMEDIATELY. If you detect another agent changed something you depend on, ADAPT AUTOMATICALLY.**
+**🟢 AUTOMATIC SHARED MEMORY:** File changes are auto-recorded as `file-changed-{path}`. Memory writes auto-notify all agents. Still write semantic context (decisions, API changes, fixes).
+
+**🔴 ALL AGENTS SHARE THE SAME MEMORY. Before starting: search memory for "file-changed", "changes", "api", "schema". When you change something significant, write it to memory IMMEDIATELY. If you detect another agent changed something you depend on, ADAPT AUTOMATICALLY.**
 
 ### Browser Control
 - `mcp__codebrain__browser_guide()` — **READ THIS FIRST**.
