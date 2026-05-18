@@ -160,14 +160,14 @@ function HomeHeader() {
           {tabs.length > 0 && (
             <button
               onClick={() => useNavStore.getState().setActiveTab(useNavStore.getState().activeTabIndex)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4F46E5]/10 border border-[#4F46E5]/20 text-indigo-400 text-[10px] font-bold uppercase tracking-widest hover:bg-[#4F46E5]/20 transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4F46E5]/10 border border-[#4F46E5]/20 text-indigo-400 text-[10px] font-bold uppercase tracking-widest hover:bg-[#4F46E5]/20 transition-all cursor-pointer"
             ><Activity size={11} /> Workspace</button>
           )}
 
           {/* Account */}
           <div ref={accountRef} className="relative">
             <button onClick={() => setShowAccount(v => !v)}
-              className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/25 flex items-center justify-center hover:bg-indigo-500/30 transition-all"
+              className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/25 flex items-center justify-center hover:bg-indigo-500/30 transition-all cursor-pointer"
             >
               <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail?.slice(0,1).toUpperCase() ?? '?'}</span>
             </button>
@@ -211,7 +211,7 @@ function AccountDropdown({ profile, authEmail, activeWorkspace, modals: m, onClo
       ) */}
       {rows.map(({ label, action, danger, icon }: any) => (
         <button key={label} onClick={action}
-          className={`w-full text-left px-4 py-2.5 font-mono text-[11px] border-b border-white/5 transition-all flex items-center gap-2 ${danger ? 'text-slate-500 hover:text-rose-400 hover:bg-rose-500/5' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+          className={`w-full text-left px-4 py-2.5 font-mono text-[11px] border-b border-white/5 transition-all flex items-center gap-2 cursor-pointer ${danger ? 'text-slate-500 hover:text-rose-400 hover:bg-rose-500/5' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
         >
           {icon}{label}
         </button>
@@ -404,7 +404,7 @@ function PaneMenu({
           <div className="flex gap-1">
             {PERM_MODES.map(m => (
               <button key={m.id} onClick={() => setPermissionMode(m.id)}
-                className={`flex-1 px-1.5 py-1 rounded border font-mono text-[9px] font-bold uppercase tracking-wider transition-all ${m.cls(permissionMode === m.id)}`}
+                className={`flex-1 px-1.5 py-1 rounded border font-mono text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${m.cls(permissionMode === m.id)}`}
               >{m.label}</button>
             ))}
           </div>
@@ -412,10 +412,10 @@ function PaneMenu({
 
         {/* Types */}
         <p className="px-3 pt-2 pb-0.5 font-mono text-[9px] text-slate-600 uppercase tracking-widest border-t border-white/5">Tipo</p>
-        <button onClick={handleTerminal} className="w-full text-left px-3 py-2 font-mono text-[10px] text-slate-300 hover:text-white hover:bg-white/5 border-b border-white/5 flex items-center gap-2 transition-all">
+        <button onClick={handleTerminal} className="w-full text-left px-3 py-2 font-mono text-[10px] text-slate-300 hover:text-white hover:bg-white/5 border-b border-white/5 flex items-center gap-2 transition-all cursor-pointer">
           <Terminal size={11} className="text-slate-600" /> Terminal
         </button>
-        <button onClick={handleBrowser} className={`w-full text-left px-3 py-2 font-mono text-[10px] border-b border-white/5 flex items-center gap-2 transition-all ${detectedUrl ? 'text-indigo-400 hover:bg-indigo-500/10' : 'text-slate-300 hover:bg-white/5'}`}>
+        <button onClick={handleBrowser} className={`w-full text-left px-3 py-2 font-mono text-[10px] border-b border-white/5 flex items-center gap-2 transition-all cursor-pointer ${detectedUrl ? 'text-indigo-400 hover:bg-indigo-500/10' : 'text-slate-300 hover:bg-white/5'}`}>
           <Globe size={11} className="text-slate-600" /> Browser
           {detectedUrl && <span className="text-[9px] text-indigo-500/60 truncate">{detectedUrl}</span>}
         </button>
@@ -435,25 +435,25 @@ function PaneMenu({
                 <span className="font-mono text-[9px] text-slate-600 ml-2">{p.type === 'oauth' ? 'OAuth' : p.type === 'anthropic-compat' ? 'Compat' : 'OpenAI'}</span>
               </div>
               {models.length === 0
-                ? <button onClick={() => handleAddPane(pid)} className="w-full text-left px-3 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all">+ default</button>
+                ? <button onClick={() => handleAddPane(pid)} className="w-full text-left px-3 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">+ default</button>
                 : models.map((model: string) => (
-                    <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all truncate">+ {model}</button>
+                    <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all truncate cursor-pointer">+ {model}</button>
                   ))
               }
             </div>
           );
         })}
         <button onClick={() => { onClose(); m.openProviders('pickTemplate'); }}
-          className="w-full text-left px-3 py-2 font-mono text-[10px] text-slate-500 hover:text-slate-300 hover:bg-white/5 border-b border-white/5 transition-all"
+          className="w-full text-left px-3 py-2 font-mono text-[10px] text-slate-500 hover:text-slate-300 hover:bg-white/5 border-b border-white/5 transition-all cursor-pointer"
         >⚙ Configurar providers…</button>
 
         {/* Session */}
         <p className="px-3 pt-2 pb-0.5 font-mono text-[9px] text-slate-600 uppercase tracking-widest border-t border-white/5">Sessão</p>
         <button onClick={() => { onClose(); onSave(); }} disabled={snapshotBusy}
-          className={`w-full text-left px-3 py-2 font-mono text-[10px] border-b border-white/5 flex items-center gap-2 transition-all ${snapshotBusy ? 'text-slate-700 cursor-wait' : 'text-slate-300 hover:bg-white/5'}`}
+          className={`w-full text-left px-3 py-2 font-mono text-[10px] border-b border-white/5 flex items-center gap-2 transition-all cursor-pointer ${snapshotBusy ? 'text-slate-700 cursor-wait' : 'text-slate-300 hover:bg-white/5'}`}
         ><Save size={11} className="text-slate-600" />{snapshotBusy ? 'Salvando…' : 'Salvar Sessão'}</button>
         <button onClick={() => { onClose(); onRestore(); }} disabled={snapshotBusy}
-          className={`w-full text-left px-3 py-2 font-mono text-[10px] border-b border-white/5 flex items-center gap-2 transition-all ${snapshotBusy ? 'text-slate-700 cursor-wait' : 'text-slate-300 hover:bg-white/5'}`}
+          className={`w-full text-left px-3 py-2 font-mono text-[10px] border-b border-white/5 flex items-center gap-2 transition-all cursor-pointer ${snapshotBusy ? 'text-slate-700 cursor-wait' : 'text-slate-300 hover:bg-white/5'}`}
         ><RotateCcw size={11} className="text-slate-600" />{snapshotBusy ? 'Restaurando…' : 'Restaurar Sessão'}</button>
 
         {/* Saved panes */}
@@ -466,7 +466,7 @@ function PaneMenu({
                 const ago     = new Date(p.savedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
                 return (
                   <button key={p.id} onClick={() => { onClose(); onRestorePane(p); }}
-                    className="w-full text-left px-3 py-1.5 hover:bg-white/5 transition-all border-b border-white/[0.03]"
+                    className="w-full text-left px-3 py-1.5 hover:bg-white/5 transition-all border-b border-white/[0.03] cursor-pointer"
                   >
                     <div className="flex justify-between gap-2">
                       <span className="font-mono text-[10px] truncate text-slate-300">{preview}</span>
@@ -525,7 +525,7 @@ function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
 
       {/* Coding / Chat mode toggle */}
       <button onClick={onToggleMode}
-        className="px-2.5 flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500 hover:text-white hover:bg-white/5 transition-all focus:outline-none"
+        className="px-2.5 flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500 hover:text-white hover:bg-white/5 transition-all focus:outline-none cursor-pointer"
         title={mode === 'coding' ? 'Modo Coding — clique para Chat' : 'Modo Chat — clique para Coding'}
       >
         <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${mode === 'coding' ? 'bg-red-500' : 'bg-indigo-500'}`} />
@@ -695,7 +695,7 @@ function WorkspaceHeader() {
         {/* Brand / Home */}
         <button
           onClick={goHome}
-          className={`shrink-0 px-4 flex items-center gap-2.5 border-r border-white/[0.06] focus:outline-none group transition-all ${onHome ? 'bg-indigo-500/5' : 'hover:bg-white/[0.02]'}`}
+          className={`shrink-0 px-4 flex items-center gap-2.5 border-r border-white/[0.06] focus:outline-none group transition-all cursor-pointer ${onHome ? 'bg-indigo-500/5' : 'hover:bg-white/[0.02]'}`}
           style={{ WebkitAppRegion: 'no-drag', minWidth: 120 } as React.CSSProperties}
           title="Home"
         >
@@ -785,7 +785,7 @@ function WorkspaceHeader() {
               <VDiv />
               <button
                 onClick={() => setShowPaneMenu(v => !v)}
-                className={`px-3 flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest focus:outline-none transition-all border-l border-white/[0.06] ${showPaneMenu ? 'text-indigo-300 bg-indigo-500/10' : 'text-indigo-400/70 hover:text-indigo-300 hover:bg-indigo-500/[0.06]'}`}
+                className={`px-3 flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest focus:outline-none transition-all border-l border-white/[0.06] cursor-pointer ${showPaneMenu ? 'text-indigo-300 bg-indigo-500/10' : 'text-indigo-400/70 hover:text-indigo-300 hover:bg-indigo-500/[0.06]'}`}
                 title="Novo terminal / Restaurar sessão"
               >
                 <Plus size={12} strokeWidth={2.5} /> TERMINAL
@@ -812,7 +812,7 @@ function WorkspaceHeader() {
           <div ref={accountRef} className="relative">
             <button
               onClick={() => setShowAccount(v => !v)}
-              className="h-full px-3 flex items-center gap-1.5 text-slate-600 hover:text-slate-300 hover:bg-white/[0.03] transition-all focus:outline-none"
+              className="h-full px-3 flex items-center gap-1.5 text-slate-600 hover:text-slate-300 hover:bg-white/[0.03] transition-all focus:outline-none cursor-pointer"
               title="Conta"
             >
               <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/25 flex items-center justify-center">

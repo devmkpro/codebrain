@@ -47,6 +47,7 @@ function createCodebrainMCPServer(bridge) {
       agent:      z.string().optional().describe("Agent binary: claude, codex, gemini, openclaude, shell. Defaults to claude."),
       providerId: z.string().optional().describe("Provider ID to use for the new pane."),
       model:      z.string().optional().describe("Model to use for the new pane."),
+      label:      z.string().optional().describe("A short label to identify this pane in pane_list (e.g. 'backend', 'frontend', 'ui-tester'). Helps the orchestrator reuse existing workers."),
     },
     async (args) => {
       try {
@@ -55,6 +56,7 @@ function createCodebrainMCPServer(bridge) {
           cwd:        args.cwd,
           providerId: args.providerId,
           model:      args.model,
+          label:      args.label,
         });
         
         const paneId = result?.paneId;

@@ -13,7 +13,7 @@ const { createTodoHandlers } = require("./bridge/todo-handlers.js");
  */
 function createMCPBridge(ptyManager, opts = {}) {
   const paneLabels = new Map();
-  const paneHandlers = createPaneHandlers(ptyManager, opts);
+  const paneHandlers = createPaneHandlers(ptyManager, { ...opts, paneLabels });
   const browserHandlers = createBrowserHandlers(opts);
   const todoHandlers = createTodoHandlers();
 

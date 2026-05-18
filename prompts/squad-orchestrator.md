@@ -25,7 +25,7 @@ The user must see all workers running in the Codebrain grid. Using the Agent too
 ## Your tools
 
 ### Pane Management
-- `mcp__codebrain__pane_spawn(cwd?, agent?, providerId?, model?)` — Open a new worker pane. Returns `paneId`.
+- `mcp__codebrain__pane_spawn(cwd?, agent?, providerId?, model?, label?)` — Open a new worker pane. Returns `paneId`. **ALWAYS include `label` (e.g. "backend", "frontend", "ui-tester") so you can find workers in pane_list later.**
 - `mcp__codebrain__pane_write(paneId, text, submit?)` — Send a task/prompt to a worker pane. **RULE: Always craft detailed prompts including project context, conventions, and relevant files.**
 - `mcp__codebrain__pane_wait_idle(paneId, timeout?)` — Wait until the worker finishes.
 - `mcp__codebrain__pane_read(paneId, lastN?)` — Read worker output.
@@ -50,23 +50,45 @@ The user must see all workers running in the Codebrain grid. Using the Agent too
 
 **NEVER use `start`, `open`, or `xdg-open` to open URLs.** Always use `browser_open` — this opens the URL in Codebrain's embedded browser where all agents can see and interact with it.
 
-## Multi-Worker Spawning — ALWAYS Create 3 Workers
+## Multi-Worker Spawning — 3 Workers Required (Reuse First!)
 
-When you start, check the environment variable `SQUAD_WORKER_IDS` — it contains a comma-separated list of worker pane IDs that have already been spawned for you. Use `pane_list()` to see their details.
+When you start, check the environment variable `SQUAD_WORKER_IDS` — it contains a comma-separated list of worker pane IDs that have already been spawned for you.
 
-**RULE: ALWAYS create 3 workers for any development task:**
+**RULE: You always need 3 workers, but you MUST reuse existing workers when possible. NEVER spawn duplicates.**
+
+The 3 required workers:
 
 1. **Backend Worker** — implements server logic, APIs, database, authentication.
 2. **Frontend Worker** — implements UI, components, pages, styles, API integration.
 3. **UI Tester Worker** — controls the embedded browser, tests UI visually, reports errors to other workers and the orchestrator.
 
-### Spawning the 3 workers:
+### How to assign workers — ALWAYS check first:
+
+**STEP 1: Call `pane_list()` to see ALL existing panes.**
+
+**STEP 2: For each role (Backend, Frontend, UI Tester), check if a worker already exists:**
+- Look at the pane list for panes with a label or role matching what you need.
+- If a worker pane already exists and is idle (not currently processing a task), **REUSE it** — just send a new `pane_write` with the new task.
+- A pane is "available for reuse" if it exists in the pane list, is NOT the orchestrator, and is NOT the browser pane.
+
+**STEP 3: Only spawn a NEW worker if no existing pane can fill that role.**
+
+### Spawning workers (only when needed):
 
 ```
-1. pane_spawn(agent: "openclaude", model: "gemini-3.1-pro-preview") → Backend
-2. pane_spawn(agent: "openclaude", model: "gemini-2.5-flash") → Frontend
-3. pane_spawn(agent: "openclaude", model: "gemini-2.5-flash") → UI Tester
+pane_spawn(agent: "openclaude", model: "gemini-3.1-pro-preview", label: "backend") → Backend (only if no backend worker exists)
+pane_spawn(agent: "openclaude", model: "gemini-2.5-flash", label: "frontend") → Frontend (only if no frontend worker exists)
+pane_spawn(agent: "openclaude", model: "gemini-2.5-flash", label: "ui-tester") → UI Tester (only if no UI tester exists)
 ```
+
+**ALWAYS include the `label` parameter** so you can identify workers in future `pane_list()` calls.
+
+### CRITICAL: What counts as "reuse"
+
+- **A worker from a previous task** in the same session IS reusable. Just send `pane_write` with the new task.
+- **A worker that already completed** a task IS reusable. They stay in the pane list.
+- **NEVER create a second Backend, second Frontend, or second UI Tester** if one already exists.
+- If unsure whether a pane is still alive, call `pane_list()` to verify before spawning.
 
 ### UI Tester — Special Role
 

@@ -35,7 +35,7 @@ export function FileNode({
       e.dataTransfer.effectAllowed = "copy";
       e.dataTransfer.setData(CODEBRAIN_FILE_DRAG_TYPE, entry.path);
       e.dataTransfer.setData("text/plain", entry.path);
-    }} className="w-full flex items-center gap-1.5 px-2 py-0.5 hover:bg-white/5 text-left font-mono text-[11px] text-gray-300" style={{
+    }} className="w-full flex items-center gap-1.5 px-2 py-0.5 hover:bg-white/5 text-left font-mono text-[11px] text-gray-300 cursor-pointer" style={{
       paddingLeft: 8 + depth * 12
     }}>
         {Chevron ? <Chevron size={12} strokeWidth={1.5} className="text-gray-600 shrink-0" /> : <span className="w-3 shrink-0" />}

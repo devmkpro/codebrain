@@ -287,7 +287,7 @@ export function ProvidersModal({
       setStep("list");
     }
   };
-  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm cursor-pointer" onClick={onClose}>
       <div className="bg-black border border-white/10 rounded-xl shadow-2xl w-[640px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
           <div className="flex items-center gap-2">
@@ -302,7 +302,7 @@ export function ProvidersModal({
               {step === "form" && (editing && providers.some(p => p.id === editing.id) ? "EDIT PROVIDER" : "NEW PROVIDER")}
             </h2>
           </div>
-          <button onClick={onClose} className="text-gray-600 hover:text-red-500">
+          <button onClick={onClose} className="text-gray-600 hover:text-red-500 cursor-pointer">
             <X$1 size={14} strokeWidth={1.5} />
           </button>
         </div>

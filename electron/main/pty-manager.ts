@@ -331,7 +331,16 @@ export class PtyManager extends EventEmitter {
   write(paneId: string, data: string): void {
     const state = this.panes.get(paneId);
     if (!state) return;
-    (state.pty as any).write(data);
+
+    // Split text and newline to avoid race condition on large inputs
+    if (data.endsWith('\r')) {
+      const text = data.slice(0, -1);
+      (state.pty as any).write(text);
+      // Using a small timeout to allow the PTY to process the text before the "Enter"
+      setTimeout(() => (state.pty as any).write('\r'), 50);
+    } else {
+      (state.pty as any).write(data);
+    }
   }
 
   /**

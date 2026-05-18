@@ -378,7 +378,7 @@ export function TerminalPane({
       )}
     </AnimatePresence>
 
-    <div className="absolute top-2 right-2 z-10 flex items-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity duration-300 bg-black/60 backdrop-blur-sm border border-white/10 rounded-md px-2 py-1 select-none cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity duration-300 bg-black/60 backdrop-blur-sm border border-white/10 rounded-md px-2 py-1 select-none cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("application/x-codebrain-pane", pane.id);
     }}>

@@ -27,7 +27,7 @@ export function TasksSidebar() {
               {list.filter(t => t.status === "done").length}/{list.length}
             </span>}
         </div>
-        <button onClick={toggle} className="text-gray-600 hover:text-red-500">
+        <button onClick={toggle} className="text-gray-600 hover:text-red-500 cursor-pointer">
           <X$1 size={12} strokeWidth={1.5} />
         </button>
       </div>

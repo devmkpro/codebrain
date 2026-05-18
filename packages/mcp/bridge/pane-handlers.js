@@ -19,16 +19,20 @@ function createPaneHandlers(ptyManager, opts) {
   return {
     roleMap,
 
-    async spawnPane({ agent, cwd, providerId, model }) {
+    async spawnPane({ agent, cwd, providerId, model, label }) {
       try {
         if (opts.spawnPaneFn) {
           const result = await opts.spawnPaneFn({ agent, cwd, providerId, model });
-          if (result.ok && result.paneId) roleMap.set(result.paneId, "worker");
+          if (result.ok && result.paneId) {
+            roleMap.set(result.paneId, "worker");
+            if (label && opts.paneLabels) opts.paneLabels.set(result.paneId, label);
+          }
           return result;
         }
         const config = { agent: agent || "openclaude", cwd: cwd || undefined, providerId: providerId || undefined, model: model || undefined };
         const paneId = await ptyManager.spawn(config);
         roleMap.set(paneId, "worker");
+        if (label && opts.paneLabels) opts.paneLabels.set(paneId, label);
         if (opts.onPaneCreated) opts.onPaneCreated({ paneId, agent: config.agent, cwd: config.cwd, providerId, model });
         return { paneId };
       } catch (err) {
@@ -42,11 +46,14 @@ function createPaneHandlers(ptyManager, opts) {
       const sanitized = text.replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/\r/g, "");
       ptyManager.writeSilent(paneId, sanitized);
       if (submit) {
-        // Send Enter as a separate write after a tick so readline can finish
+        // Send Enter as a separate write after a delay so readline can finish
         // processing pasted text before receiving the submit signal.
         // Sending sanitized+"\r" as one chunk causes readline to buffer the \r
         // inside paste-mode and never submit.
-        await new Promise((r) => setTimeout(r, 80));
+        // Delay scales with text length: large prompts need more time for the
+        // shell to process all characters before it can handle the Enter key.
+        const delay = Math.min(3000, Math.max(100, 100 + sanitized.length * 0.5));
+        await new Promise((r) => setTimeout(r, delay));
         ptyManager.write(paneId, "\r");
       }
       return { ok: true };

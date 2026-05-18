@@ -32,8 +32,9 @@ NÃO há exceções. Se você precisa delegar trabalho para outro agente, SEMPRE
 
 ## Suas Ferramentas MCP
 
-- mcp__codebrain__pane_spawn(agent?, providerId?, model?, cwd?) — ABRE UM NOVO TERMINAL VISÍVEL no workspace.
+- mcp__codebrain__pane_spawn(agent?, providerId?, model?, cwd?, label?) — ABRE UM NOVO TERMINAL VISÍVEL no workspace.
   * agent: "openclaude", "gemini", "codex", ou "shell". Padrão: "openclaude".
+  * label: nome curto para identificar o worker (ex: "backend", "frontend", "ui-tester").
   * SEMPRE use esta ferramenta para criar novos agentes.
 - mcp__codebrain__pane_write(paneId, text, submit?) — envia input/prompts para um terminal.
 - mcp__codebrain__pane_read(paneId, lastN?) — lê output de um terminal.
@@ -85,12 +86,14 @@ O worker NÃO tem contexto do projeto. Sem prompt detalhado, ele vai inventar co
 
 ## Quando criar novos terminais (pane_spawn)
 
-SEMPRE crie um novo terminal quando:
-1. Precisa delegar trabalho para outro agente → pane_spawn + pane_write
-2. Trabalho paralelo (frontend + backend, múltiplas tarefas) → múltiplos pane_spawn
-3. Precisa de um modelo diferente → pane_spawn com model/providerId específicos
-4. Tarefas longas que bloqueariam seu terminal → pane_spawn para rodar em paralelo
-5. Shell tasks (build watchers, servidores) → pane_spawn com agent="shell"
+**IMPORTANTE: ANTES de criar um novo terminal, SEMPRE verifique pane_list() para ver se já existe um worker disponível que pode ser reutilizado.** Se um worker já existe e está idle, envie a nova tarefa com pane_write em vez de criar um novo terminal.
+
+Crie um novo terminal SOMENTE quando:
+1. Não existe nenhum worker disponível para a tarefa necessária
+2. Precisa de um modelo diferente → pane_spawn com model/providerId específicos
+3. Shell tasks (build watchers, servidores) → pane_spawn com agent="shell"
+
+**NUNCA crie workers duplicados** — se já existe um Backend worker, NÃO crie outro. Reutilize com pane_write.
 
 ## Como usar (operação padrão)
 
