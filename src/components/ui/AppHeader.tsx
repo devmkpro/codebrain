@@ -4,7 +4,7 @@ import {
   X, Plus, Settings, Activity, FolderOpen, Save, RotateCcw,
   ListTodo, Terminal, Globe, Users, Zap, Map, FileText,
   ChevronRight, ChevronDown, Home, Mic, MicOff, Volume2,
-  Shield, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database,
+  Shield, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, DollarSign,
 } from 'lucide-react';
 import { Logo } from '../auth/Logo';
 import { Link, useRouter } from '../../lib/router';
@@ -19,6 +19,7 @@ import {
   normalizedVoiceMode,
 } from '../../stores/tasks-store';
 import { useMemoryStore } from '../../stores/memory-store';
+import { useCostStore } from '../../stores/cost-store';
 import { useVoiceStore } from '../../stores/voice-store';
 import { useBrowserStore } from '../../stores/browser-store';
 import { useTerminalSettings } from '../../stores/terminal-settings-store';
@@ -188,6 +189,7 @@ function AccountDropdown({ profile, authEmail, activeWorkspace, modals: m, onClo
   const goHome = useNavStore(s => s.goHome);
   const rows = [
     ...(activeWorkspace ? [{ label: '⬡ Squad',        action: () => { onClose(); m.setShowSquad(true);    }, icon: <Users size={11} /> }] : []),
+    { label: '💲 Token Usage',          action: () => { onClose(); useCostStore.getState().toggle();       }, icon: <DollarSign size={11} /> },
     { label: '⚙ Configurações',        action: () => { onClose(); goHome(); navigate('/settings');       }, icon: <Settings size={11} /> },
     { label: '⚡ Diagnóstico',          action: () => { onClose(); m.setShowDiag(true);                   }, icon: <Activity size={11} /> },
     { label: 'Sair',                   action: () => { onClose(); (window as any).codeBrainApp?.auth?.logout?.(); }, danger: true },
@@ -559,6 +561,9 @@ function WorkspaceHeader() {
   const memoryVisible = useMemoryStore(s => s.visible);
   const toggleMemory  = useMemoryStore(s => s.toggle);
 
+  const costVisible = useCostStore(s => s.visible);
+  const toggleCost  = useCostStore(s => s.toggle);
+
   const appZoom          = useTerminalSettings(s => s.appZoom);
   const increaseAppZoom  = useTerminalSettings(s => s.increaseAppZoom);
   const decreaseAppZoom  = useTerminalSettings(s => s.decreaseAppZoom);
@@ -756,6 +761,9 @@ function WorkspaceHeader() {
 
           {/* Memory */}
           <IconBtn icon={<Database size={15} strokeWidth={1.5} />} label="Memory" onClick={toggleMemory} active={memoryVisible} />
+
+          {/* Usage */}
+          <IconBtn icon={<DollarSign size={15} strokeWidth={1.5} />} label="Token Usage" onClick={toggleCost} active={costVisible} />
           <VDiv />
 
           {/* Session Map */}

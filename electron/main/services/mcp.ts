@@ -68,6 +68,7 @@ function buildMcpBridge(ctx: AppContext) {
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
     hooksManager: ctx.hooksManager,
+    costTracker: ctx.costTracker, // Shared singleton — same instance for MCP + IPC
     roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };
 }
@@ -75,6 +76,13 @@ function buildMcpBridge(ctx: AppContext) {
 export async function startMcpServer(ctx: AppContext): Promise<void> {
   const { startMCPServer } = require("../../packages/mcp/server.js");
   const bridge = buildMcpBridge(ctx);
+
+  // Wire up tokens:updated event — emit to renderer on every recordUsage() call
+  if (ctx.costTracker) {
+    ctx.costTracker.onUsageRecorded = (info: { sessionId: string; model: string; inputTokens: number; outputTokens: number; cost: number }) => {
+      safeSend(ctx, "tokens:updated", info);
+    };
+  }
 
   const tryStart = async () => {
     const promise = startMCPServer(ctx.ptyManager, bridge);

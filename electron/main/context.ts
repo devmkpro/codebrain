@@ -13,6 +13,8 @@ import { HooksManager } from "./services/hooks";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { createMemoryStore } = require("../../packages/memory/store.js");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { CostTracker } = require("../../packages/mcp/bridge/cost-tracker.js");
 
 export interface McpServerInfo {
   port: number;
@@ -30,6 +32,8 @@ export interface PaneConfig {
   hasAgent?: boolean;
   role?: string;
   squadOrchestratorWorkerId?: string;
+  taskId?: string;
+  activityId?: string;
 }
 
 export interface PaneRegistryEntry {
@@ -111,6 +115,7 @@ export function createAppContext() {
     audioConfigStore: new AudioConfigStore(AUDIO_CONFIG_FILE),
     memoryStore: createMemoryStore(MEMORY_DB_FILE),
     hooksManager: new HooksManager(),
+    costTracker: new CostTracker({ dataDir: DATA_DIR }),
 
     // Paths
     DATA_DIR,

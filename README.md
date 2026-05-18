@@ -20,7 +20,13 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 - **Pattern learning** — agents automatically build and reuse project patterns
 - **Trajectory tracking** — action sequences with auto-pattern extraction
 - **Lifecycle hooks** — EventEmitter-based hooks for spawn, exit, idle events
-- **86 MCP tools** — pane, browser, memory, patterns, swarm, hooks, trajectories, files, system
+- **Knowledge graph** — memory relationships, PageRank ranking, TF-IDF similarity search
+- **Agent scoring** — multi-factor scoring (capability, load, performance, health, availability)
+- **Pipeline coordination** — fan-out/fan-in parallel task distribution and result aggregation
+- **Background workers** — 7 persistent maintenance daemons (health, patterns, security, git, learning, cache, swarm)
+- **Consensus** — majority/unanimous/weighted voting + automatic leader election
+- **Priority MessageBus** — in-memory messaging with 4 priority levels, ack/retry, TTL, metrics
+- **110 MCP tools** — pane, browser, memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus
 - **Voice input** — push-to-talk with Groq Whisper transcription
 
 ---
@@ -186,6 +192,14 @@ Agents get these tools automatically:
 | `memory_delete` | Delete a memory entry |
 | `memory_stats` | Memory usage statistics (count by type, total size) |
 
+### Knowledge Graph (3 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `memory_graph` | Get a memory node + neighbors with edge types (reference, similar, temporal, co_accessed) |
+| `memory_rank` | PageRank scores for all memories — find the most important/central ones |
+| `memory_similar` | Find similar memories using TF-IDF cosine similarity |
+
 ### Pattern Learning (4 tools)
 
 | Tool | What it does |
@@ -205,6 +219,47 @@ Agents get these tools automatically:
 | `swarm_worker_health` | Health check on individual worker |
 | `swarm_respawn` | Respawn a crashed worker |
 | `swarm_set_topology` | Set topology: hierarchical, mesh, centralized |
+
+### Agent Scoring (1 tool)
+
+| Tool | What it does |
+|------|-------------|
+| `swarm_score_agents` | Multi-factor scoring: capability(30%), load(20%), performance(25%), health(15%), availability(10%) |
+
+### Pipeline Coordination (4 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `swarm_fan_out` | Distribute N tasks to workers in parallel (round-robin) |
+| `swarm_fan_in` | Collect + aggregate results (merge, vote, or best-agent) |
+| `swarm_pipeline` | Chain sequential tasks where each step feeds the next |
+| `swarm_pipeline_status` | Check pipeline execution status |
+
+### Consensus (4 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `swarm_vote` | Start a vote: majority (>50%), unanimous (100%), or weighted (by agent score) |
+| `swarm_cast_vote` | Cast a vote in an active session |
+| `swarm_elect_leader` | Auto-elect leader by capability score |
+| `swarm_consensus_status` | Current leader, active votes, recent results |
+
+### Background Workers (6 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `worker_start` | Start a daemon (health, patterns, security, git, learning, cache, swarm) |
+| `worker_stop` | Stop a daemon |
+| `worker_status` | All daemons' status, last run, metrics |
+| `worker_alerts` | Recent system alerts from daemons |
+| `worker_start_all` | Start all 7 daemons |
+| `worker_stop_all` | Stop all daemons |
+
+### MessageBus (1 tool)
+
+| Tool | What it does |
+|------|-------------|
+| `pane_bus_metrics` | Messages/sec, avg latency, queue depths, ack timeouts |
 
 ### Trajectory Tracking (8 tools)
 
@@ -250,7 +305,7 @@ Agents get these tools automatically:
 | `worker_dispatch` | Spawn background worker for detected trigger |
 | `worker_list_bg` | List active background workers |
 
-**Total: 86 MCP tools**
+**Total: 110 MCP tools**
 
 ---
 
@@ -263,7 +318,21 @@ codebrain/
 │   ├── stores/             Zustand state
 │   └── styles/             Tailwind + design tokens
 ├── electron/main/          Electron main process
-├── packages/mcp/           MCP server (agent tools)
+├── packages/
+│   ├── mcp/                MCP server (110 agent tools)
+│   │   ├── bridge/         Handler modules (13 files)
+│   │   │   ├── message-bus.js        Priority in-memory messaging
+│   │   │   ├── agent-scorer.js       Multi-factor agent scoring
+│   │   │   ├── pipeline-handlers.js  Fan-out/fan-in/pipeline
+│   │   │   ├── background-workers.js 7 maintenance daemons
+│   │   │   ├── consensus-handlers.js Voting + leader election
+│   │   │   └── ...                   pane, browser, memory, swarm, etc.
+│   │   ├── index.js        Tool registration (Zod schemas)
+│   │   └── bridge.js       Handler composition + auto-notify
+│   └── memory/             Shared memory store
+│       ├── store.js        SQLite-backed memory + graph-aware search
+│       ├── vector-store.js TF-IDF cosine similarity (pure JS)
+│       └── knowledge-graph.js  Nodes, edges, PageRank, communities
 ├── prompts/                Squad system prompts
 ├── scripts/                Build + release scripts
 ├── resources/              Icons + bundled skill

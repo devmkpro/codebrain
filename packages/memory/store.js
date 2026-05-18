@@ -2,6 +2,8 @@
 
 const path = require("path");
 const fs = require("fs");
+const { KnowledgeGraph } = require("./knowledge-graph.js");
+const { tokenize, buildTfIdf, cosineSimilarity } = require("./vector-store.js");
 
 /**
  * Resolve better-sqlite3 with fallback to system Node.js native binary.
@@ -149,13 +151,50 @@ function createMemoryStore(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_traj_outcome ON trajectories(outcome);
     CREATE INDEX IF NOT EXISTS idx_traj_type ON trajectories(task_type);
     CREATE INDEX IF NOT EXISTS idx_traj_created ON trajectories(created_at);
+
+    CREATE TABLE IF NOT EXISTS events (
+      id           TEXT PRIMARY KEY,
+      aggregate_id TEXT NOT NULL,
+      aggregate_type TEXT NOT NULL DEFAULT 'agent',
+      event_type   TEXT NOT NULL,
+      payload      TEXT NOT NULL DEFAULT '{}',
+      metadata     TEXT DEFAULT '{}',
+      sequence     INTEGER NOT NULL,
+      snapshot_id  TEXT,
+      created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_aggregate ON events(aggregate_id, sequence);
+    CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
+
+    CREATE TABLE IF NOT EXISTS event_snapshots (
+      id           TEXT PRIMARY KEY,
+      aggregate_id TEXT NOT NULL,
+      aggregate_type TEXT NOT NULL,
+      state        TEXT NOT NULL DEFAULT '{}',
+      sequence     INTEGER NOT NULL,
+      created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_snapshots_aggregate ON event_snapshots(aggregate_id);
+
+    ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'project' CHECK(scope IN ('project','local','user'));
+    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
   `);
+
+  // ── Knowledge Graph + Vector Store ────────────────────────────────────────
+  let knowledgeGraph;
+  try {
+    knowledgeGraph = new KnowledgeGraph(db);
+  } catch (e) {
+    // If KnowledgeGraph fails to initialize, features degrade gracefully
+    knowledgeGraph = null;
+  }
 
   // ── Prepared Statements ───────────────────────────────────────────────────
   const stmts = {
     insert: db.prepare(`
-      INSERT INTO memories (id, type, key, content, tags, agent_id, workspace)
-      VALUES (@id, @type, @key, @content, @tags, @agent_id, @workspace)
+      INSERT INTO memories (id, type, key, content, tags, agent_id, workspace, scope)
+      VALUES (@id, @type, @key, @content, @tags, @agent_id, @workspace, @scope)
     `),
     update: db.prepare(`
       UPDATE memories SET content = @content, tags = @tags, updated_at = unixepoch()
@@ -168,6 +207,7 @@ function createMemoryStore(dbPath) {
       WHERE (content LIKE @query OR key LIKE @query OR tags LIKE @query)
         AND (@type IS NULL OR type = @type)
         AND (@workspace IS NULL OR workspace = @workspace)
+        AND (@scope IS NULL OR scope = @scope)
       ORDER BY updated_at DESC LIMIT @limit
     `),
     list: db.prepare(`
@@ -175,6 +215,7 @@ function createMemoryStore(dbPath) {
       WHERE (@type IS NULL OR type = @type)
         AND (@agent_id IS NULL OR agent_id = @agent_id)
         AND (@workspace IS NULL OR workspace = @workspace)
+        AND (@scope IS NULL OR scope = @scope)
       ORDER BY updated_at DESC LIMIT @limit OFFSET @offset
     `),
     deleteById: db.prepare(`DELETE FROM memories WHERE id = ?`),
@@ -232,6 +273,20 @@ function createMemoryStore(dbPath) {
       WHERE outcome = 'success' AND (@task_type IS NULL OR task_type = @task_type)
       ORDER BY created_at DESC LIMIT @limit
     `),
+    // Events
+    insertEvent: db.prepare(`
+      INSERT INTO events (id, aggregate_id, aggregate_type, event_type, payload, metadata, sequence)
+      VALUES (@id, @aggregate_id, @aggregate_type, @event_type, @payload, @metadata, @sequence)
+    `),
+    getEventsByAggregate: db.prepare(`SELECT * FROM events WHERE aggregate_id = ? AND sequence > ? ORDER BY sequence`),
+    getEventsByType: db.prepare(`SELECT * FROM events WHERE event_type = ? ORDER BY created_at DESC LIMIT ?`),
+    getLatestSnapshot: db.prepare(`SELECT * FROM event_snapshots WHERE aggregate_id = ? ORDER BY sequence DESC LIMIT 1`),
+    insertSnapshot: db.prepare(`
+      INSERT INTO event_snapshots (id, aggregate_id, aggregate_type, state, sequence)
+      VALUES (@id, @aggregate_id, @aggregate_type, @state, @sequence)
+    `),
+    eventCount: db.prepare(`SELECT COUNT(*) as count FROM events WHERE aggregate_id = ?`),
+    pruneEvents: db.prepare(`DELETE FROM events WHERE aggregate_id = ? AND sequence <= ?`),
   };
 
   // ── ID Generator ──────────────────────────────────────────────────────────
@@ -241,15 +296,21 @@ function createMemoryStore(dbPath) {
   function genPatternId() {
     return `pat_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
+  function genEventId() {
+    return `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+  function genSnapshotId() {
+    return `snap_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   // ── Public API ────────────────────────────────────────────────────────────
   return {
     /**
      * Write a memory entry. If `id` is provided and exists, updates it.
-     * @param {{ type?: string, key: string, content: string, tags?: string[], agent_id?: string, workspace?: string, id?: string }} opts
+     * @param {{ type?: string, key: string, content: string, tags?: string[], agent_id?: string, workspace?: string, id?: string, scope?: 'project'|'local'|'user' }} opts
      * @returns {{ ok: boolean, id: string }}
      */
-    write({ id, type = "working", key, content, tags = [], agent_id, workspace }) {
+    write({ id, type = "working", key, content, tags = [], agent_id, workspace, scope = 'project' }) {
       if (!key || !content) return { ok: false, error: "key and content are required" };
       const tagsJson = JSON.stringify(tags);
       if (id) {
@@ -268,21 +329,71 @@ function createMemoryStore(dbPath) {
         tags: tagsJson,
         agent_id: agent_id || null,
         workspace: workspace || null,
+        scope,
       });
+
+      // Auto-update knowledge graph and vector store
+      if (knowledgeGraph) {
+        try {
+          // Add node to graph
+          knowledgeGraph.addNode(newId, { type, key, agent_id, workspace: workspace || null, scope });
+
+          // Build and store TF-IDF vector
+          const tokens = tokenize(`${key} ${content} ${(JSON.parse(tagsJson)).join(" ")}`);
+          const vector = new Map();
+          for (const tok of tokens) {
+            vector.set(tok, (vector.get(tok) || 0) + 1);
+          }
+          // Normalize to TF
+          for (const [tok, count] of vector) {
+            vector.set(tok, count / tokens.length);
+          }
+          knowledgeGraph.storeVector(newId, vector);
+
+          // Create temporal edges to 5 most recent memories of same type
+          try {
+            const recent = db.prepare(
+              "SELECT id FROM memories WHERE type = ? AND id != ? ORDER BY created_at DESC LIMIT 5"
+            ).all(type, newId);
+            for (const r of recent) {
+              knowledgeGraph.addEdge(newId, r.id, "temporal", 0.5);
+            }
+          } catch {}
+
+          // Create similar edges using cosine similarity
+          try {
+            knowledgeGraph.createSimilarEdges(newId, 0.3, 5);
+          } catch {}
+        } catch {
+          // Graph/vector errors should never block memory writes
+        }
+      }
+
       return { ok: true, id: newId, created: true };
     },
 
     /**
      * Read a memory by id or key.
-     * @param {{ id?: string, key?: string, workspace?: string }} opts
+     * @param {{ id?: string, key?: string, workspace?: string, scope?: 'project'|'local'|'user' }} opts
      */
-    read({ id, key, workspace }) {
+    read({ id, key, workspace, scope }) {
       let row;
       if (id) {
         row = stmts.getById.get(id);
+        if (scope && row && row.scope !== scope) {
+            return { ok: false, error: "not found in specified scope" };
+        }
       } else if (key) {
+        // Simplified logic: getByKey is already workspace-aware which aligns with 'project' scope
+        // For cross-scope reads, `search` is better. This keeps `read` targeted.
         const rows = stmts.getByKey.all(key, workspace || null);
         row = rows[0];
+         if (scope && row && row.scope !== scope) {
+            const allRows = stmts.getByKey.all(key, workspace || null);
+            row = allRows.find(r => r.scope === scope);
+        } else {
+            row = rows[0];
+        }
       } else {
         return { ok: false, error: "id or key is required" };
       }
@@ -293,9 +404,10 @@ function createMemoryStore(dbPath) {
 
     /**
      * Search memories by keyword across content, key, and tags.
-     * @param {{ query: string, type?: string, workspace?: string, limit?: number }} opts
+     * When scope is NOT specified, searches across all scopes.
+     * @param {{ query: string, type?: string, workspace?: string, limit?: number, scope?: 'project'|'local'|'user' }} opts
      */
-    search({ query, type, workspace, limit = 20 }) {
+    search({ query, type, workspace, limit = 20, scope }) {
       if (!query) return { ok: false, error: "query is required" };
       const likeQuery = `%${query}%`;
       const rows = stmts.searchKeyword.all({
@@ -303,25 +415,56 @@ function createMemoryStore(dbPath) {
         type: type || null,
         workspace: workspace || null,
         limit,
+        scope: scope || null,
       });
+
+      let results = rows.map((r) => ({ ...r, tags: JSON.parse(r.tags || "[]") }));
+
+      // Graph-aware ranking: combinedScore = 0.7 * textScore + 0.3 * pageRank
+      if (knowledgeGraph && results.length > 1) {
+        try {
+          const ranks = knowledgeGraph.pageRank();
+          if (ranks && ranks.size > 0) {
+            // Normalize PageRank scores to 0-1 range
+            let maxRank = 0;
+            for (const [, score] of ranks) {
+              if (score > maxRank) maxRank = score;
+            }
+            if (maxRank > 0) {
+              results = results.map((r, i) => {
+                const textScore = 1 - (i / results.length); // higher position = higher text score
+                const pageRank = (ranks.get(r.id) || 0) / maxRank;
+                const combinedScore = 0.7 * textScore + 0.3 * pageRank;
+                return { ...r, _combinedScore: Math.round(combinedScore * 1000) / 1000 };
+              });
+              results.sort((a, b) => (b._combinedScore || 0) - (a._combinedScore || 0));
+            }
+          }
+        } catch {
+          // Graph ranking failure → fall back to default text ordering
+        }
+      }
+
       return {
         ok: true,
-        memories: rows.map((r) => ({ ...r, tags: JSON.parse(r.tags || "[]") })),
-        count: rows.length,
+        memories: results,
+        count: results.length,
       };
     },
 
     /**
      * List memories with optional filters.
-     * @param {{ type?: string, agent_id?: string, workspace?: string, limit?: number, offset?: number }} opts
+     * When scope is NOT specified, lists across all scopes.
+     * @param {{ type?: string, agent_id?: string, workspace?: string, limit?: number, offset?: number, scope?: 'project'|'local'|'user' }} opts
      */
-    list({ type, agent_id, workspace, limit = 50, offset = 0 } = {}) {
+    list({ type, agent_id, workspace, limit = 50, offset = 0, scope } = {}) {
       const rows = stmts.list.all({
         type: type || null,
         agent_id: agent_id || null,
         workspace: workspace || null,
         limit,
         offset,
+        scope: scope || null,
       });
       return {
         ok: true,
@@ -344,6 +487,16 @@ function createMemoryStore(dbPath) {
         return { ok: true, deleted: result.changes > 0 };
       }
       return { ok: false, error: "id or key is required" };
+    },
+
+    /**
+     * Moves a memory to a different scope.
+     * @param {{ id: string, targetScope: 'project'|'local'|'user' }} opts
+     */
+    memoryTransfer({ id, targetScope }) {
+        if (!id || !targetScope) return { ok: false, error: "id and targetScope are required" };
+        const result = db.prepare("UPDATE memories SET scope = ? WHERE id = ?").run(targetScope, id);
+        return { ok: true, updated: result.changes > 0 };
     },
 
     /**
@@ -561,11 +714,203 @@ function createMemoryStore(dbPath) {
       return { ok: true };
     },
 
+    // ── Event Sourcing ───────────────────────────────────────────────────────
+
+    /**
+     * Store an event and automatically create snapshots.
+     * @param {{ aggregate_id: string, aggregate_type?: string, event_type: string, payload: object, metadata?: object }} opts
+     */
+    eventStore({ aggregate_id, aggregate_type = 'agent', event_type, payload, metadata = {} }) {
+        if (!aggregate_id || !event_type || !payload) {
+            return { ok: false, error: "aggregate_id, event_type, and payload are required" };
+        }
+        const runInTx = db.transaction(() => {
+            const { count } = stmts.eventCount.get(aggregate_id) || { count: 0 };
+            const sequence = count + 1;
+            const id = genEventId();
+
+            stmts.insertEvent.run({
+                id,
+                aggregate_id,
+                aggregate_type,
+                event_type,
+                payload: JSON.stringify(payload),
+                metadata: JSON.stringify(metadata),
+                sequence
+            });
+
+            if (sequence % 100 === 0) {
+                this.eventSnapshot({ aggregate_id });
+            }
+            return { ok: true, id, sequence };
+        });
+        return runInTx();
+    },
+
+    /**
+     * Replay events for an aggregate to reconstruct its state.
+     * @param {{ aggregate_id: string, from_sequence?: number }} opts
+     */
+    eventReplay({ aggregate_id, from_sequence = 0 }) {
+        const snapshot = stmts.getLatestSnapshot.get(aggregate_id);
+        let startSequence = from_sequence;
+        if (snapshot && snapshot.sequence > startSequence) {
+            startSequence = snapshot.sequence;
+        }
+
+        const events = stmts.getEventsByAggregate.all(aggregate_id, startSequence);
+
+        return {
+            ok: true,
+            snapshot: snapshot ? { ...snapshot, state: JSON.parse(snapshot.state || '{}') } : null,
+            events: events.map(e => ({
+                ...e,
+                payload: JSON.parse(e.payload || '{}'),
+                metadata: JSON.parse(e.metadata || '{}')
+            }))
+        };
+    },
+
+    /**
+     * List events with filters.
+     * @param {{ aggregate_id?: string, event_type?: string, limit?: number }} opts
+     */
+    eventList({ aggregate_id, event_type, limit = 50 } = {}) {
+        let rows;
+        if (aggregate_id) {
+            rows = db.prepare("SELECT * FROM events WHERE aggregate_id = ? ORDER BY sequence DESC LIMIT ?").all(aggregate_id, limit);
+        } else if (event_type) {
+            rows = stmts.getEventsByType.all(event_type, limit);
+        } else {
+            rows = db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT ?").all(limit);
+        }
+        return {
+            ok: true,
+            events: rows.map(e => ({
+                ...e,
+                payload: JSON.parse(e.payload || '{}'),
+                metadata: JSON.parse(e.metadata || '{}')
+            })),
+            count: rows.length
+        };
+    },
+
+    /**
+     * Force a snapshot of an aggregate's state.
+     * @param {{ aggregate_id: string }} opts
+     */
+    eventSnapshot({ aggregate_id }) {
+        const { snapshot, events } = this.eventReplay({ aggregate_id });
+        if (!events.length && !snapshot) return { ok: false, error: "no events to snapshot" };
+
+        let state = snapshot ? snapshot.state : {};
+        let lastSequence = snapshot ? snapshot.sequence : 0;
+
+        // Apply events to state
+        for (const event of events) {
+            state = { ...state, ...event.payload }; // Example reducer
+            lastSequence = event.sequence;
+        }
+
+        const runInTx = db.transaction(() => {
+            const id = genSnapshotId();
+            const aggregate_type = events.length > 0 ? events[0].aggregate_type : (snapshot ? snapshot.aggregate_type : 'agent');
+            stmts.insertSnapshot.run({
+                id,
+                aggregate_id,
+                aggregate_type,
+                state: JSON.stringify(state),
+                sequence: lastSequence
+            });
+            stmts.pruneEvents.run(aggregate_id, lastSequence);
+            return { ok: true, id, snapshotSequence: lastSequence };
+        });
+
+        return runInTx();
+    },
+
+    /**
+     * Get event statistics.
+     * @param {{ workspace?: string }} opts - Note: workspace is for potential future use.
+     */
+    eventStats({ workspace } = {}) {
+        const total = db.prepare("SELECT COUNT(*) as count FROM events").get().count;
+        const byAggregateType = db.prepare("SELECT aggregate_type, COUNT(*) as count FROM events GROUP BY aggregate_type").all();
+        const byEventType = db.prepare("SELECT event_type, COUNT(*) as count FROM events GROUP BY event_type").all();
+        return {
+            ok: true,
+            total,
+            byAggregateType: byAggregateType.reduce((acc, row) => ({ ...acc, [row.aggregate_type]: row.count }), {}),
+            byEventType: byEventType.reduce((acc, row) => ({ ...acc, [row.event_type]: row.count }), {})
+        };
+    },
+
     /**
      * Close the database connection.
      */
     close() {
+      if (knowledgeGraph) {
+        try { knowledgeGraph.close(); } catch {}
+      }
       db.close();
+    },
+
+    // ── Knowledge Graph Methods ───────────────────────────────────────────
+
+    /**
+     * Get a memory node and its graph neighbors.
+     * @param {{ id: string }} opts
+     */
+    memoryGraph({ id }) {
+      if (!knowledgeGraph) return { ok: false, error: "knowledge graph not available" };
+      if (!id) return { ok: false, error: "id is required" };
+      try {
+        const graph = knowledgeGraph.getMemoryGraph(id);
+        return { ok: true, ...graph };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    },
+
+    /**
+     * Get PageRank scores for all memories.
+     * @param {{ workspace?: string }} opts
+     */
+    memoryRank({ workspace } = {}) {
+      if (!knowledgeGraph) return { ok: false, error: "knowledge graph not available" };
+      try {
+        const ranks = knowledgeGraph.pageRank();
+        const ranked = [];
+        for (const [memoryId, score] of ranks) {
+          // Optionally filter by workspace
+          if (workspace) {
+            try {
+              const row = stmts.getById.get(memoryId);
+              if (row && row.workspace && row.workspace !== workspace) continue;
+            } catch {}
+          }
+          ranked.push({ id: memoryId, score: Math.round(score * 10000) / 10000 });
+        }
+        ranked.sort((a, b) => b.score - a.score);
+        return { ok: true, ranks: ranked, count: ranked.length };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    },
+
+    /**
+     * Find memories similar to a given memory using TF-IDF cosine similarity.
+     * @param {{ id: string, limit?: number }} opts
+     */
+    memorySimilar({ id, limit = 10 }) {
+      if (!knowledgeGraph) return { ok: false, error: "knowledge graph not available" };
+      if (!id) return { ok: false, error: "id is required" };
+      try {
+        const similar = knowledgeGraph.findSimilar(id, limit);
+        return { ok: true, similar, count: similar.length };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
     },
   };
 }

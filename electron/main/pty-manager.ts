@@ -30,6 +30,8 @@ export interface SpawnConfig {
   cols?: number;
   rows?: number;
   role?: string;
+  taskId?: string;
+  activityId?: string;
 }
 
 export interface PaneInfo {

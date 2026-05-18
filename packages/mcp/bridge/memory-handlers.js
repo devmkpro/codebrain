@@ -113,6 +113,23 @@ function createMemoryHandlers(opts) {
       const store = getStore();
       return store.deleteTrajectory({ id });
     },
+
+    // ── Knowledge Graph ────────────────────────────────────────────────
+    async memoryGraph({ id }) {
+      const store = getStore();
+      return store.memoryGraph({ id });
+    },
+
+    async memoryRank({ workspace }) {
+      const store = getStore();
+      const ws = workspace || opts.getCurrentWorkspacePath?.();
+      return store.memoryRank({ workspace: ws });
+    },
+
+    async memorySimilar({ id, limit }) {
+      const store = getStore();
+      return store.memorySimilar({ id, limit });
+    },
   };
 }
 

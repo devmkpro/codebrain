@@ -222,6 +222,53 @@ export interface Annotation {
   color?: string;
 }
 
+export interface CostModelSummary {
+  cost: number;
+  inputTokens: number;
+  outputTokens: number;
+  sessions: number;
+}
+
+export interface CostSummaryData {
+  totalCost: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  byModel: Record<string, CostModelSummary>;
+  byAgent: Record<string, CostModelSummary>;
+}
+
+export interface CostBudget {
+  dailyLimit: number;
+  monthlyLimit: number;
+  spentToday: number;
+  spentMonth: number;
+  lastReset: number;
+}
+
+export interface CostAlert {
+  timestamp: number;
+  type: string;
+  message: string;
+  sessionId?: string;
+  cost?: number;
+}
+
+export interface CostTaskEntry {
+  taskId: string | null;
+  cost: number;
+  inputTokens: number;
+  outputTokens: number;
+  sessions: number;
+  model: string;
+  agentId?: string;
+  startedAt: number;
+}
+
+export interface CostTaskSummaryData {
+  tasks: CostTaskEntry[];
+  totalTasks: number;
+}
+
 export interface CodebrainApp {
   app: {
     version: () => Promise<string>;
@@ -407,6 +454,16 @@ export interface CodebrainApp {
     // Events
     onNetworkEntry(cb: (entry: NetworkEntry) => void): () => void;
     onConsoleEntry(cb: (entry: ConsoleEntry) => void): () => void;
+  };
+  cost: {
+    summary: (opts?: { workspace?: string; sessionId?: string; period?: "today" | "week" | "month" | "all" }) => Promise<{ ok: boolean; data?: CostSummaryData }>;
+    taskSummary: (opts?: { workspace?: string; period?: "today" | "week" | "month" | "all" }) => Promise<{ ok: boolean; data?: CostTaskSummaryData }>;
+    setBudget: (opts: { workspace: string; dailyLimit?: number; monthlyLimit?: number }) => Promise<{ ok: boolean; error?: string }>;
+    getBudget: (opts: { workspace: string }) => Promise<{ ok: boolean; data?: CostBudget; error?: string }>;
+    getAlerts: (opts?: { limit?: number; type?: string }) => Promise<{ ok: boolean; data?: CostAlert[] }>;
+    listModels: () => Promise<{ ok: boolean; data?: Record<string, { input: number; output: number }> }>;
+    estimate: (opts: { model: string; inputTokens: number; outputTokens: number }) => Promise<{ ok: boolean; data?: { cost: number }; error?: string }>;
+    reset: (opts?: { workspace?: string }) => Promise<{ ok: boolean; cleared?: { sessions: number; alerts: number; budgets: number } }>;
   };
   notify: (title: string, body: string) => void;
   log: {

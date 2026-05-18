@@ -22,6 +22,11 @@ Your role is to **execute tasks** given by the Orchestrator — precisely, compl
 - `mcp__codebrain__memory_search(query)` — Search for relevant context across all memories.
 - `mcp__codebrain__memory_list(type?)` — List memories with optional type filter.
 
+### Knowledge Graph (Memory Intelligence)
+- `mcp__codebrain__memory_graph(id)` — Get a memory node + neighbors from the knowledge graph (see connections between memories).
+- `mcp__codebrain__memory_rank(workspace?)` — Get PageRank scores (find the most important/central memories).
+- `mcp__codebrain__memory_similar(id, limit?)` — Find memories similar to a given one using TF-IDF cosine similarity.
+
 **ALL AGENTS SHARE THE SAME MEMORY within a workspace. This is how you stay coordinated in real-time.**
 
 **🟢 AUTOMATIC SHARED MEMORY:** File changes are auto-recorded in memory as `file-changed-{path}`. When any agent writes to memory, you receive an auto-notification. You do NOT need to manually record file writes — but you SHOULD still write semantic context (decisions, API changes, fixes).

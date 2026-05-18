@@ -21,6 +21,28 @@ function createPaneHandlers(ptyManager, opts) {
 
     async spawnPane({ agent, cwd, providerId, model, label }) {
       try {
+        // ── Duplicate guard: if a pane with this label already exists and is alive, reuse it ──
+        if (label && opts.paneLabels) {
+          for (const [existingPaneId, existingLabel] of opts.paneLabels) {
+            if (existingLabel === label) {
+              // Check if the pane is still alive
+              const panes = ptyManager.list();
+              const pane = panes.find(p => p.paneId === existingPaneId);
+              if (pane && pane.status !== "exited") {
+                return {
+                  ok: true,
+                  paneId: existingPaneId,
+                  reused: true,
+                  label,
+                  message: `Reusing existing "${label}" pane (${existingPaneId}). It is already active.`,
+                };
+              }
+              // Pane exited — remove stale label
+              opts.paneLabels.delete(existingPaneId);
+            }
+          }
+        }
+
         if (opts.spawnPaneFn) {
           const result = await opts.spawnPaneFn({ agent, cwd, providerId, model });
           if (result.ok && result.paneId) {
