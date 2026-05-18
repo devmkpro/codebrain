@@ -33,8 +33,14 @@ export function registerBrowserHandlers(ctx: AppContext): void {
     if (ctx.browserNetworkLog.length > BROWSER_LOG_MAX) ctx.browserNetworkLog.splice(0, ctx.browserNetworkLog.length - BROWSER_LOG_MAX);
   });
 
-  ipcMain.on("codebrain:browser:pane-created", (_event, paneId: string) => ctx.browserPaneIds.add(paneId));
-  ipcMain.on("codebrain:browser:pane-destroyed", (_event, paneId: string) => ctx.browserPaneIds.delete(paneId));
+  ipcMain.on("codebrain:browser:pane-created", (_event, paneId: string, workspacePath?: string) => {
+    ctx.browserPaneIds.add(paneId);
+    if (workspacePath) ctx.browserPaneWorkspace.set(paneId, workspacePath);
+  });
+  ipcMain.on("codebrain:browser:pane-destroyed", (_event, paneId: string) => {
+    ctx.browserPaneIds.delete(paneId);
+    ctx.browserPaneWorkspace.delete(paneId);
+  });
 
   const withPane = (paneId: string | undefined, cmd: Record<string, unknown>) => {
     const pid = resolveBrowserPaneId(ctx, paneId);

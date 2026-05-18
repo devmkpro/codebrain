@@ -402,7 +402,7 @@ export interface CodebrainApp {
     // Send network entry from JS interceptor to main process
     reportNetworkEntry(entry: NetworkEntry): void;
     // Register/unregister browser pane IDs with main process
-    registerPane(paneId: string): void;
+    registerPane(paneId: string, workspacePath?: string): void;
     unregisterPane(paneId: string): void;
     // Events
     onNetworkEntry(cb: (entry: NetworkEntry) => void): () => void;

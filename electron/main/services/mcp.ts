@@ -42,14 +42,16 @@ function buildMcpBridge(ctx: AppContext) {
     getConsoleLog: (paneId?: string, level?: string, sinceMs?: number, limit?: number) =>
       getConsoleLog(ctx, paneId, level, sinceMs, limit),
     clearBrowserLogs: () => clearBrowserLogs(ctx),
-    resolveBrowserPaneId: (paneId?: string) => resolveBrowserPaneId(ctx, paneId),
+    resolveBrowserPaneId: (paneId?: string) => resolveBrowserPaneId(ctx, paneId, ctx.currentWorkspacePath),
     createBrowserPane: (url: string) => {
       return new Promise<{ ok: boolean; paneId: string; error?: string }>((resolve, reject) => {
+        const workspacePath = ctx.currentWorkspacePath;
         const timer = setTimeout(() => reject(new Error("timeout creating browser pane")), 10000);
         const handler = (_evt: unknown, createdPaneId: string) => {
           clearTimeout(timer);
           ipcMain.off("codebrain:browser:pane-created", handler);
           ctx.browserPaneIds.add(createdPaneId);
+          ctx.browserPaneWorkspace.set(createdPaneId, workspacePath);
           setTimeout(async () => {
             try {
               const navResult = await sendBrowserCmd(ctx, createdPaneId, { type: "navigate", url });

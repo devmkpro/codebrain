@@ -175,7 +175,7 @@ export function App() {
       });
       // Register the browser pane ID with main so MCP tools can find it
       if (pane?.id) {
-        window.codeBrainApp?.browser?.registerPane?.(pane.id);
+        window.codeBrainApp?.browser?.registerPane?.(pane.id, workspace);
       }
     };
     window.addEventListener("codebrain:browser:create-pane", onCreatePane);

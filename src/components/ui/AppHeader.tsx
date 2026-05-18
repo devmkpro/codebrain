@@ -386,7 +386,7 @@ function PaneMenu({
     onClose();
     navigateInActiveTab({ kind: 'workspace' });
     const pane = addPane({ kind: 'browser', cwd: activeWorkspace, url: detectedUrl ?? 'about:blank' }) as any;
-    if (pane?.id) (window as any).codeBrainApp?.browser?.registerPane?.(pane.id);
+    if (pane?.id) (window as any).codeBrainApp?.browser?.registerPane?.(pane.id, activeWorkspace);
   };
 
   const PERM_MODES = [

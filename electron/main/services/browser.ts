@@ -86,11 +86,22 @@ export function clearBrowserLogs(ctx: AppContext): void {
   ctx.browserConsoleLog.length = 0;
 }
 
-export function resolveBrowserPaneId(ctx: AppContext, paneId?: string): string | null {
+export function resolveBrowserPaneId(ctx: AppContext, paneId?: string, workspacePath?: string): string | null {
+  // If a specific paneId was requested and it exists, use it
   if (paneId && ctx.browserPaneIds.has(paneId)) return paneId;
   if (paneId) return paneId;
+
   const ids = Array.from(ctx.browserPaneIds);
-  return ids.length > 0 ? ids[ids.length - 1] : null;
+  if (ids.length === 0) return null;
+
+  // When workspacePath is provided, prefer browser panes from the same workspace
+  if (workspacePath) {
+    const sameWorkspace = ids.filter(id => ctx.browserPaneWorkspace.get(id) === workspacePath);
+    if (sameWorkspace.length > 0) return sameWorkspace[sameWorkspace.length - 1];
+  }
+
+  // Fallback: return the last browser pane (original behavior)
+  return ids[ids.length - 1];
 }
 
 export async function saveScreenshot(
