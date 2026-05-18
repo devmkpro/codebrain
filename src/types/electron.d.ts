@@ -213,6 +213,8 @@ export interface Annotation {
 export interface CodebrainApp {
   app: {
     version: () => Promise<string>;
+    copyToClipboard: (text: string) => Promise<boolean>;
+    readFromClipboard: () => Promise<string>;
     onReloadShortcut: (callback: () => void) => () => void;
     reloadShell: () => Promise<void>;
   };
