@@ -14,6 +14,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.3.4",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "auto-setup Claude Code integration on startup + bump version to 1.3.4"
+      },
+      {
+        "kind": "fix",
+        "text": "update release date for version 1.3.3"
+      }
+    ]
+  },
+  {
     "version": "1.3.3",
     "date": "maio 2026",
     "highlights": [
