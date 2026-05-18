@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.3.5",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "MCP stdio server works outside Electron asar after install"
+      }
+    ]
+  },
+  {
     "version": "1.3.4",
     "date": "maio 2026",
     "highlights": [
