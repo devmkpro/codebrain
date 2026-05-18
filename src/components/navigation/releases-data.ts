@@ -14,64 +14,42 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.3.1",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add detail modals for memory and pattern items in MemoryPanel"
+      },
+      {
+        "kind": "feat",
+        "text": "update prompts with mandatory rich pattern-building rules (all agent types)"
+      },
+      {
+        "kind": "feat",
+        "text": "update README with all 86 MCP tools and new features"
+      },
+      {
+        "kind": "fix",
+        "text": "update landing page MCP tool count from 42 to 86"
+      }
+    ]
+  },
+  {
     "version": "1.3.0",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "shared memory system — SQLite-backed memory store with 6 MCP tools (memory_write/read/search/list/delete/stats)"
+        "text": "add hooks system, trajectory tracking, and squad persistence — v1.3.0"
       },
       {
         "kind": "feat",
-        "text": "swarm coordination — 6 MCP tools for multi-agent orchestration (status/broadcast/assign_task/worker_health/respawn/set_topology)"
+        "text": "add shared memory protocol and git restriction to all agent prompts"
       },
       {
         "kind": "feat",
-        "text": "learned patterns — 4 MCP tools for saving and querying learned patterns"
-      },
-      {
-        "kind": "feat",
-        "text": "hooks system — lifecycle event emitters (pane_spawned/exited/idle) with 3 MCP tools (hooks_status/log/fire)"
-      },
-      {
-        "kind": "feat",
-        "text": "trajectory tracking — action sequence recording with auto-pattern extraction, 8 MCP tools"
-      },
-      {
-        "kind": "feat",
-        "text": "file access tools — file_read/write/search for structured agent file access"
-      },
-      {
-        "kind": "feat",
-        "text": "system diagnostics — system_info/diagnostics MCP tools"
-      },
-      {
-        "kind": "feat",
-        "text": "worker trigger detection — 7 regex triggers (optimize/audit/document/refactor/benchmark/testgaps/deepdive)"
-      },
-      {
-        "kind": "feat",
-        "text": "provider health tracking — success/error counts per provider with provider_health tool"
-      },
-      {
-        "kind": "feat",
-        "text": "memory UI panel — visual sidebar with Memories/Patterns tabs, search and filters"
-      },
-      {
-        "kind": "feat",
-        "text": "shared memory protocol — all agents share memory in same workspace and auto-adapt to changes"
-      },
-      {
-        "kind": "feat",
-        "text": "squad persistence — save/load/delete squad configurations (JSON-file-backed)"
-      },
-      {
-        "kind": "feat",
-        "text": "MCP tools expanded from 37 to 86 total (+49 new tools)"
-      },
-      {
-        "kind": "fix",
-        "text": "git restriction — all agents prohibited from git add/commit/push without explicit user request"
+        "text": "add shared memory, swarm coordination, and 38 new MCP tools"
       }
     ]
   },

@@ -37,12 +37,22 @@ Your role is to **verify the implementation** from a user's perspective, ensurin
 
 **🔴 ALL AGENTS SHARE THE SAME MEMORY. Before testing: search memory for "changes" and "api" to know what was modified. Write test results to memory: `memory_write(key="test-result-feature-X", content="PASS/FAIL: details...", tags=["test","result"])`**
 
+## 🔴 OBRIGATÓRIO: Salvar Conhecimento de Testes via MCP
+
+**Quando você encontra bugs, padrões de teste, ou convenções do projeto, salve IMEDIATAMENTE via MCP tools:**
+
+- Bug encontrado? → `memory_write(key="bug-{feature}", content="Descrição detalhada do bug, steps to reproduce, causa raiz", tags=["bug","test"])`
+- Padrão de teste descoberto? → `pattern_write(pattern_type="testing", description="## Padrão de Teste para {feature}\n\n**Contexto:** ...\n**Steps:** ...\n**Expected:** ...")`
+- Convenção do projeto? → `memory_write(key="convention-{topic}", content="...", tags=["convention","knowledge"])`
+
+**NUNCA crie arquivos .md para armazenar conhecimento — use SEMPRE os MCP tools para que todos os agentes tenham acesso.**
+
 ## Verification Flow
 
 1. **Setup**: Navigate to the application root. NEVER guess routes.
 2. **Observe**: Read the accessibility tree and HTML to find interactive elements.
 3. **Interact**: Perform the actions described in the task.
-4. **Inspect**: 
+4. **Inspect**:
    - Check `browser_console_log` for Javascript errors.
    - Check `browser_network_log` for failed API calls or unexpected payloads.
    - Check the UI state and text.

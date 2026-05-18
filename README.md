@@ -14,7 +14,13 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 - **Live task sidebar** — agents update a shared todo list
 - **Session map** — visual graph of all agent sessions
 - **File editor** — browse and edit without leaving the app
-- **Browser automation** — 42 MCP tools for web testing
+- **Browser automation** — 42 browser MCP tools for web testing
+- **Shared memory** — agents share context in real-time via SQLite
+- **Swarm coordination** — programmatic worker management and health monitoring
+- **Pattern learning** — agents automatically build and reuse project patterns
+- **Trajectory tracking** — action sequences with auto-pattern extraction
+- **Lifecycle hooks** — EventEmitter-based hooks for spawn, exit, idle events
+- **86 MCP tools** — pane, browser, memory, patterns, swarm, hooks, trajectories, files, system
 - **Voice input** — push-to-talk with Groq Whisper transcription
 
 ---
@@ -169,6 +175,83 @@ Agents get these tools automatically:
 | **Advanced** | |
 | `browser_eval` | Execute JavaScript in page context |
 
+### Shared Memory (6 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `memory_write` | Save context (type, key, content, tags) to shared SQLite memory |
+| `memory_read` | Read specific memory by id or key |
+| `memory_search` | Search memories by keyword, type, or tags |
+| `memory_list` | List memories with filters (type, agent, workspace) |
+| `memory_delete` | Delete a memory entry |
+| `memory_stats` | Memory usage statistics (count by type, total size) |
+
+### Pattern Learning (4 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `pattern_write` | Save a learned pattern (type, description, quality score) |
+| `pattern_list` | List patterns ordered by quality score |
+| `pattern_update` | Update pattern quality score after successful use |
+| `pattern_delete` | Delete a pattern |
+
+### Swarm Coordination (6 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `swarm_status` | Swarm health: active workers, roles, topology |
+| `swarm_broadcast` | Broadcast message to all workers |
+| `swarm_assign_task` | Assign task to specific worker via message |
+| `swarm_worker_health` | Health check on individual worker |
+| `swarm_respawn` | Respawn a crashed worker |
+| `swarm_set_topology` | Set topology: hierarchical, mesh, centralized |
+
+### Trajectory Tracking (8 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `trajectory_record` | Start recording a new action trajectory |
+| `trajectory_add_step` | Add a step (tool call + result) to trajectory |
+| `trajectory_update` | Update trajectory outcome and details |
+| `trajectory_list` | List trajectories with filters |
+| `trajectory_get` | Get full trajectory by id |
+| `trajectory_stats` | Trajectory statistics (success rate, avg duration) |
+| `trajectory_extract_patterns` | Auto-extract patterns from successful trajectories |
+| `trajectory_delete` | Delete a trajectory |
+
+### Lifecycle Hooks (3 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `hooks_status` | Registered hooks and recent event stats |
+| `hooks_log` | Recent hook events (spawn, exit, idle, message) |
+| `hooks_fire` | Manually fire a hook event for testing |
+
+### File Tools (3 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `file_read` | Read file from workspace |
+| `file_write` | Write file to workspace |
+| `file_search` | Search files by pattern or content |
+
+### System Tools (2 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `system_info` | System info (OS, RAM, CPU, app version) |
+| `system_diagnostics` | Full diagnostics (pane health, MCP status, providers) |
+
+### Worker Dispatch (3 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `worker_detect` | Scan text for dispatch triggers (optimize, audit, etc) |
+| `worker_dispatch` | Spawn background worker for detected trigger |
+| `worker_list_bg` | List active background workers |
+
+**Total: 86 MCP tools**
+
 ---
 
 ## Project Structure
@@ -204,9 +287,3 @@ codebrain/
 ## License
 
 This project is licensed under the [MIT License](https://opensource.org/licenses/MIT) - see the [LICENSE](LICENSE) file for details.
-
----
-
-## License
-
-Private — all rights reserved.

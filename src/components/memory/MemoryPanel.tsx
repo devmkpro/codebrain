@@ -13,6 +13,8 @@ import {
   BookOpen,
   Wrench,
   StickyNote,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useMemoryStore, type MemoryEntry, type PatternEntry } from "../../stores/memory-store";
 
@@ -44,16 +46,187 @@ function timeAgo(ts: number): string {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
-function MemoryCard({ memory, onDelete }: { memory: MemoryEntry; onDelete: (id: string) => void }) {
-  const [expanded, setExpanded] = React.useState(false);
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      className="text-gray-600 hover:text-gray-300 cursor-pointer transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
+    </button>
+  );
+}
+
+function MemoryDetailModal({ memory, onClose, onDelete }: { memory: MemoryEntry; onClose: () => void; onDelete: (id: string) => void }) {
   const Icon = TYPE_ICONS[memory.type] || Database;
   const color = TYPE_COLORS[memory.type] || "text-gray-400";
 
   return (
-    <div className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+    <div className="absolute inset-0 z-30 bg-black/95 flex flex-col" onClick={onClose}>
+      <div className="flex-1 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0 bg-black">
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon size={14} strokeWidth={1.5} className={color} />
+            <p className="font-mono text-[11px] font-bold text-white truncate">{memory.key}</p>
+            <span className={`font-mono text-[8px] px-1.5 py-0.5 rounded bg-white/5 ${color}`}>
+              {memory.type}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <CopyButton text={memory.content} />
+            <button
+              onClick={() => { onDelete(memory.id); onClose(); }}
+              className="text-gray-600 hover:text-red-500 cursor-pointer"
+              title="Delete"
+            >
+              <Trash2 size={11} strokeWidth={1.5} />
+            </button>
+            <button onClick={onClose} className="text-gray-600 hover:text-white cursor-pointer">
+              <X size={13} strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
+
+        {/* Meta info */}
+        <div className="px-3 py-2 border-b border-white/5 shrink-0 flex flex-wrap gap-x-4 gap-y-1">
+          <span className="font-mono text-[9px] text-gray-600">
+            <Clock size={9} className="inline mr-1" />
+            Updated {timeAgo(memory.updated_at)}
+          </span>
+          {memory.agent_id && (
+            <span className="font-mono text-[9px] text-gray-600">Agent: {memory.agent_id}</span>
+          )}
+          {memory.created_at && (
+            <span className="font-mono text-[9px] text-gray-600">
+              Created {new Date(memory.created_at * 1000).toLocaleString()}
+            </span>
+          )}
+          <span className="font-mono text-[9px] text-gray-700">ID: {memory.id}</span>
+        </div>
+
+        {/* Tags */}
+        {memory.tags.length > 0 && (
+          <div className="px-3 py-2 border-b border-white/5 shrink-0 flex flex-wrap gap-1.5">
+            <Tag size={9} className="text-gray-700 shrink-0 mt-0.5" />
+            {memory.tags.map((tag) => (
+              <span key={tag} className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400/80">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Full Content */}
+        <div className="flex-1 overflow-y-auto px-3 py-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="font-mono text-[9px] text-gray-600 uppercase tracking-wider">Content</p>
+            <span className="font-mono text-[8px] text-gray-700">{memory.content.length} chars</span>
+          </div>
+          <pre className="font-mono text-[11px] text-gray-300 whitespace-pre-wrap break-words bg-white/[0.02] border border-white/5 rounded p-3 leading-relaxed">
+            {memory.content}
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PatternDetailModal({ pattern, onClose, onDelete }: { pattern: PatternEntry; onClose: () => void; onDelete: (id: string) => void }) {
+  const qualityPct = Math.round(pattern.quality_score * 100);
+  const qualityColor = qualityPct >= 70 ? "text-green-400" : qualityPct >= 40 ? "text-yellow-400" : "text-red-400";
+
+  return (
+    <div className="absolute inset-0 z-30 bg-black/95 flex flex-col" onClick={onClose}>
+      <div className="flex-1 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0 bg-black">
+          <div className="flex items-center gap-2 min-w-0">
+            <Zap size={14} strokeWidth={1.5} className="text-yellow-400" />
+            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-yellow-400/10 text-yellow-400">
+              {pattern.pattern_type}
+            </span>
+            <span className={`font-mono text-[10px] font-bold ${qualityColor}`}>
+              {qualityPct}% quality
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <CopyButton text={pattern.description} />
+            <button
+              onClick={() => { onDelete(pattern.id); onClose(); }}
+              className="text-gray-600 hover:text-red-500 cursor-pointer"
+              title="Delete"
+            >
+              <Trash2 size={11} strokeWidth={1.5} />
+            </button>
+            <button onClick={onClose} className="text-gray-600 hover:text-white cursor-pointer">
+              <X size={13} strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
+
+        {/* Meta info */}
+        <div className="px-3 py-2 border-b border-white/5 shrink-0 flex flex-wrap gap-x-4 gap-y-1">
+          <span className="font-mono text-[9px] text-gray-600">
+            Used {pattern.success_count}x successfully
+          </span>
+          {pattern.failure_count > 0 && (
+            <span className="font-mono text-[9px] text-red-400/60">
+              {pattern.failure_count}x failed
+            </span>
+          )}
+          {pattern.created_at && (
+            <span className="font-mono text-[9px] text-gray-600">
+              Created {new Date(pattern.created_at * 1000).toLocaleString()}
+            </span>
+          )}
+          <span className="font-mono text-[9px] text-gray-700">ID: {pattern.id}</span>
+        </div>
+
+        {/* Full Description */}
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="font-mono text-[9px] text-gray-600 uppercase tracking-wider">Description</p>
+              <span className="font-mono text-[8px] text-gray-700">{pattern.description.length} chars</span>
+            </div>
+            <pre className="font-mono text-[11px] text-gray-300 whitespace-pre-wrap break-words bg-white/[0.02] border border-white/5 rounded p-3 leading-relaxed">
+              {pattern.description}
+            </pre>
+          </div>
+
+          {pattern.source_trajectory && (
+            <div>
+              <p className="font-mono text-[9px] text-gray-600 uppercase tracking-wider mb-1.5">Source Trajectory</p>
+              <pre className="font-mono text-[11px] text-gray-400 whitespace-pre-wrap break-words bg-white/[0.02] border border-white/5 rounded p-3 leading-relaxed">
+                {pattern.source_trajectory}
+              </pre>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MemoryCard({ memory, onDelete, onClick }: { memory: MemoryEntry; onDelete: (id: string) => void; onClick: () => void }) {
+  const Icon = TYPE_ICONS[memory.type] || Database;
+  const color = TYPE_COLORS[memory.type] || "text-gray-400";
+
+  return (
+    <div className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
       <div
         className="flex items-start gap-2 px-3 py-2 cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
+        onClick={onClick}
       >
         <Icon size={12} strokeWidth={1.5} className={`${color} shrink-0 mt-0.5`} />
         <div className="flex-1 min-w-0">
@@ -63,11 +236,9 @@ function MemoryCard({ memory, onDelete }: { memory: MemoryEntry; onDelete: (id: 
               {memory.type}
             </span>
           </div>
-          {!expanded && (
-            <p className="font-mono text-[10px] text-gray-600 truncate mt-0.5">
-              {memory.content.slice(0, 80)}{memory.content.length > 80 ? "..." : ""}
-            </p>
-          )}
+          <p className="font-mono text-[10px] text-gray-600 truncate mt-0.5">
+            {memory.content.slice(0, 80)}{memory.content.length > 80 ? "..." : ""}
+          </p>
           <div className="flex items-center gap-2 mt-1">
             <span className="font-mono text-[8px] text-gray-700">{timeAgo(memory.updated_at)}</span>
             {memory.agent_id && (
@@ -90,27 +261,19 @@ function MemoryCard({ memory, onDelete }: { memory: MemoryEntry; onDelete: (id: 
           <Trash2 size={10} strokeWidth={1.5} />
         </button>
       </div>
-      {expanded && (
-        <div className="px-3 pb-2 ml-5">
-          <pre className="font-mono text-[10px] text-gray-400 whitespace-pre-wrap break-words bg-white/[0.02] rounded p-2 max-h-40 overflow-y-auto">
-            {memory.content}
-          </pre>
-        </div>
-      )}
     </div>
   );
 }
 
-function PatternCard({ pattern, onDelete }: { pattern: PatternEntry; onDelete: (id: string) => void }) {
-  const [expanded, setExpanded] = React.useState(false);
+function PatternCard({ pattern, onDelete, onClick }: { pattern: PatternEntry; onDelete: (id: string) => void; onClick: () => void }) {
   const qualityPct = Math.round(pattern.quality_score * 100);
   const qualityColor = qualityPct >= 70 ? "text-green-400" : qualityPct >= 40 ? "text-yellow-400" : "text-red-400";
 
   return (
-    <div className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+    <div className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
       <div
         className="flex items-start gap-2 px-3 py-2 cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
+        onClick={onClick}
       >
         <Zap size={12} strokeWidth={1.5} className="text-yellow-400 shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
@@ -136,14 +299,6 @@ function PatternCard({ pattern, onDelete }: { pattern: PatternEntry; onDelete: (
           <Trash2 size={10} strokeWidth={1.5} />
         </button>
       </div>
-      {expanded && pattern.source_trajectory && (
-        <div className="px-3 pb-2 ml-5">
-          <p className="font-mono text-[9px] text-gray-600 mb-1">Source trajectory:</p>
-          <pre className="font-mono text-[10px] text-gray-400 whitespace-pre-wrap break-words bg-white/[0.02] rounded p-2 max-h-32 overflow-y-auto">
-            {pattern.source_trajectory}
-          </pre>
-        </div>
-      )}
     </div>
   );
 }
@@ -168,6 +323,8 @@ export function MemoryPanel() {
 
   const [searchInput, setSearchInput] = React.useState("");
   const searchTimer = React.useRef<ReturnType<typeof setTimeout>>();
+  const [selectedMemory, setSelectedMemory] = React.useState<MemoryEntry | null>(null);
+  const [selectedPattern, setSelectedPattern] = React.useState<PatternEntry | null>(null);
 
   React.useEffect(() => {
     if (visible) {
@@ -314,7 +471,7 @@ export function MemoryPanel() {
         )}
 
         {tab === "memories" && !loading && memories.map((m) => (
-          <MemoryCard key={m.id} memory={m} onDelete={deleteMemory} />
+          <MemoryCard key={m.id} memory={m} onDelete={deleteMemory} onClick={() => setSelectedMemory(m)} />
         ))}
 
         {tab === "patterns" && !loading && patterns.length === 0 && (
@@ -330,9 +487,25 @@ export function MemoryPanel() {
         )}
 
         {tab === "patterns" && !loading && patterns.map((p) => (
-          <PatternCard key={p.id} pattern={p} onDelete={deletePattern} />
+          <PatternCard key={p.id} pattern={p} onDelete={deletePattern} onClick={() => setSelectedPattern(p)} />
         ))}
       </div>
+
+      {/* Detail Modals */}
+      {selectedMemory && (
+        <MemoryDetailModal
+          memory={selectedMemory}
+          onClose={() => setSelectedMemory(null)}
+          onDelete={deleteMemory}
+        />
+      )}
+      {selectedPattern && (
+        <PatternDetailModal
+          pattern={selectedPattern}
+          onClose={() => setSelectedPattern(null)}
+          onDelete={deletePattern}
+        />
+      )}
     </div>
   );
 }

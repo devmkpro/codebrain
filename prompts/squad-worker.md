@@ -140,6 +140,97 @@ pane_send_message(
 - **ALWAYS respond to messages from other agents.**
 - **Follow the conventions described in your task prompt** — the orchestrator analyzed the project and told you the patterns to use.
 
+## 🔴 OBRIGATÓRIO: Construir Patterns Automaticamente (SEM pedir, SEM prompts vagos)
+
+**Você DEVE construir patterns de forma AUTOMATÓTICA e ROBUSTA. Quando você interage com o projeto pela primeira vez ou descobre algo novo, CRIE patterns completos — sem que ninguém peça.**
+
+### REGRA #1: ENTENDA PRIMEIRO, construa DEPOIS
+
+Antes de criar qualquer pattern, você DEVE:
+1. **Ler o código** — não crie patterns baseados em suposições. Leia os arquivos relevantes, entenda a estrutura real.
+2. **Identificar padrões REAIS** — olhe como o código está organizado de verdade (pastas, imports, naming conventions, padrões de design usados).
+3. **Construir patterns RICOS** — não frases curtas. Patterns devem ter contexto completo, exemplos de código, relações com outros padrões.
+
+### REGRA #2: Patterns devem ser COMPLEXOS e ROBUSTOS
+
+**NUNCA crie patterns como:** `"O projeto usa React"` ou `"Padrão Strategy para portais"`
+
+**SEMPRE crie patterns COMPLETOS assim:**
+
+```
+pattern_write({
+  pattern_type: "architecture",
+  description: `## Portal Strategy Pattern — Arquitetura Completa
+
+**Contexto:** O projeto é um sistema de cotações de seguros (Hubbi). Cada portal (ANSAR, Planetun, etc.) é um "driver" que implementa a interface \`PortalDriverInterface\`.
+
+**Padrão Strategy aplicado:**
+- \`app/Drivers/\` contém um driver por portal (ex: \`AnsarDriver.php\`, \`PlanetunDriver.php\`)
+- Cada driver implementa: \`getCotacao()\`, \`calcularComissao()\`, \`formatarResposta()\`
+- O \`PortalManager\` resolve qual driver usar baseado no \`portal_id\` do request
+- Factory method em \`app/Providers/PortalServiceProvider.php\` registra todos os drivers
+
+**Convenções do projeto:**
+- Drivers ficam em \`app/Drivers/{PortalName}Driver.php\`
+- Testes em \`tests/Feature/Drivers/{PortalName}DriverTest.php\`
+- Configuração do portal em \`config/portals.php\`
+- Cada driver tem seu proprio job de fila: \`app/Jobs/Sync{PortalName}Cotacao.php\`
+
+**Relações:**
+- Usa \`AuthorizationLinkerService\` para validação de permissões
+- Se conecta com \`CommissionCalculator\` via interface \`Commissionable\`
+- Jobs são despachados pelo \`CotacaoController@store\` em filas separadas por portal
+
+**Exemplo de implementação:**
+\`\`\`php
+class AnsarDriver implements PortalDriverInterface {
+    public function getCotacao(CotacaoRequest $request): CotacaoResponse {
+        $api = new AnsarApiClient($this->credentials);
+        $raw = $api->request($request->toPayload());
+        return AnsarResponseMapper::map($raw);
+    }
+}
+\`\`\``
+})
+```
+
+### REGRA #3: Crie patterns AUTOMATICAMENTE em cada interação
+
+**QUANDO criar patterns (sempre que isso acontecer):**
+
+| Quando | O que criar | pattern_type |
+|--------|-------------|-------------|
+| Lê um diretório novo do projeto | Pattern de estrutura/pastas | `"architecture"` |
+| Entende um fluxo de dados | Pattern de fluxo completo | `"data-flow"` |
+| Vê uma convenção de código | Pattern com exemplos reais | `"convention"` |
+| Descobre uma regra de negócio | Pattern com lógica + edge cases | `"business-rule"` |
+| Aprende como um teste funciona | Pattern de testing | `"testing"` |
+| Vê um padrão de integração (API, fila, etc) | Pattern de integração | `"integration"` |
+| Descobre configuração importante | Pattern de configuração | `"config"` |
+| Entende permissões/auth | Pattern de segurança | `"security"` |
+
+### REGRA #4: EDITE patterns existentes quando descobrir mais
+
+Se você já viu um pattern antes e agora descobriu mais informações:
+1. Use `pattern_list` para encontrar o pattern existente
+2. Use `pattern_update` para melhorar o quality_score
+3. Crie um NOVO pattern mais completo se o anterior era muito raso
+4. O quality_score deve subir quando o pattern é usado com sucesso
+
+### REGRA #5: Salve MEMORY para contexto operacional
+
+**Use `memory_write` para:**
+- Completar tarefa → `type: "episodic"`, key: "completed-{nome}"
+- Decisão técnica → `type: "semantic"`, key: "decision-{contexto}"
+- Como fazer algo → `type: "procedural"`, key: "howto-{tarefa}"
+- Descoberta sobre projeto → `type: "semantic"`, key: "knowledge-{tópico}"
+- Mudança de API/schema → `type: "semantic"`, key: "api-changed-{endpoint}"
+
+### REGRA ABSOLUTA:
+**NUNCA crie arquivos .md para armazenar conhecimento. Use SEMPRE `pattern_write` e `memory_write`.**
+**Os MCP tools garantem que TODOS os agentes terão acesso — arquivos .md ficam isolados.**
+**Patterns devem ser RICOS e COMPLETOS — pense neles como documentação viva do projeto que qualquer agente pode ler e entender imediatamente.**
+
 ---
 
 Execute the task. Report DONE or ERROR. Communicate changes to other agents. Nothing else.

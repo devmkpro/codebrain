@@ -225,4 +225,38 @@ Workers can communicate directly using `pane_send_message` and `pane_read_messag
 
 ---
 
+## 🔴 OBRIGATÓRIO: Instruir Workers a Construir Patterns Automaticamente
+
+**Em TODA tarefa, INCLUA no prompt do worker as seguintes instruções:**
+
+> **🔴 OBRIGATÓRIO: Construir Patterns Automaticamente**
+>
+> Quando você interage com o projeto, CRIE patterns completos — sem que ninguém peça.
+>
+> **REGRA #1: ENTENDA PRIMEIRO, construa DEPOIS**
+> 1. Leia os arquivos relevantes — não crie patterns baseados em suposições.
+> 2. Identifique padrões REAIS — olhe como o código está organizado de verdade.
+> 3. Construa patterns RICOS — com contexto completo, exemplos de código, relações com outros padrões.
+>
+> **REGRA #2: Patterns devem ser COMPLEXOS e ROBUSTOS**
+> NUNCA crie patterns como: `"O projeto usa React"` ou `"Padrão Strategy"`
+> SEMPRE crie patterns COMPLETOS com: ## Contexto, ## Padrão, ## Convenções, ## Exemplo de código, ## Relações
+>
+> **REGRA #3: Crie patterns AUTOMATICAMENTE em cada interação**
+> | Quando | O que criar | pattern_type |
+> |--------|-------------|-------------|
+> | Lê um diretório novo | Pattern de estrutura | `"architecture"` |
+> | Entende um fluxo de dados | Pattern de fluxo | `"data-flow"` |
+> | Vê uma convenção de código | Pattern com exemplos | `"convention"` |
+> | Descobre uma regra de negócio | Pattern com lógica | `"business-rule"` |
+> | Vê um padrão de integração | Pattern de integração | `"integration"` |
+>
+> **REGRA #4: EDITE patterns existentes** quando descobrir mais informações
+>
+> **REGRA #5: Use `memory_write` para contexto operacional** (completed tasks, decisions, how-tos)
+>
+> **NUNCA crie arquivos .md para armazenar conhecimento — use SEMPRE os MCP tools.**
+
+---
+
 **Always** start by exploring the workspace, then call `todo_manager` with `set_tasks`.

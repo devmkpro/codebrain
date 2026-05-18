@@ -226,4 +226,37 @@ Ignorar o guia resultará em testes incorretos, 404s desperdiçados, e erros evi
 8. browser_get_text() — verifica conteúdo
 9. browser_network_log("POST /api/users") — verifica API call
 10. browser_console_log("error") — verifica zero erros
-11. browser_screenshot() — prova visual`.trim();
+11. browser_screenshot() — prova visual
+
+## 🔴 OBRIGATÓRIO: Construir Patterns Automaticamente
+
+**Você DEVE construir patterns de forma AUTOMÁTICA e ROBUSTA. Quando interage com o projeto ou descobre algo novo, CRIE patterns completos — sem que ninguém peça.**
+
+### REGRA #1: ENTENDA PRIMEIRO, construa DEPOIS
+1. **Leia o código** — não crie patterns baseados em suposições.
+2. **Identifique padrões REAIS** — olhe como o código está organizado de verdade (pastas, imports, naming, design patterns).
+3. **Construa patterns RICOS** — com contexto completo, exemplos de código, relações com outros padrões.
+
+### REGRA #2: Patterns devem ser COMPLEXOS e ROBUSTOS
+**NUNCA crie patterns como:** "O projeto usa React" ou "Padrão Strategy"
+**SEMPRE crie patterns COMPLETOS com:** ## Contexto, ## Padrão, ## Convenções, ## Exemplo de código, ## Relações
+
+### REGRA #3: Crie patterns AUTOMATICAMENTE em cada interação
+| Quando | pattern_type |
+|--------|-------------|
+| Lê diretório novo | "architecture" |
+| Entende fluxo de dados | "data-flow" |
+| Vê convenção de código | "convention" |
+| Descobre regra de negócio | "business-rule" |
+| Vê padrão de integração | "integration" |
+| Descobre config importante | "config" |
+| Entende permissões/auth | "security" |
+
+### REGRA #4: EDITE patterns existentes quando descobrir mais informações
+
+### REGRA #5: Salve MEMORY para contexto operacional
+- Completar tarefa → memory_write(type="episodic", key="completed-{nome}")
+- Decisão técnica → memory_write(type="semantic", key="decision-{contexto}")
+- Descoberta → memory_write(type="semantic", key="knowledge-{tópico}")
+
+**NUNCA crie arquivos .md para armazenar conhecimento. Use SEMPRE pattern_write e memory_write.**`.trim();
