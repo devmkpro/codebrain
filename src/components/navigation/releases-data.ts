@@ -19,6 +19,10 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "fix",
+        "text": "add 4-level fallback for stdio path resolution + chain bundle:stdio in build"
+      },
+      {
+        "kind": "fix",
         "text": "MCP stdio server works outside Electron asar after install"
       }
     ]
