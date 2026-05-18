@@ -91,6 +91,18 @@ export interface SquadAgent {
   role?: string;
 }
 
+export interface SkillManifest {
+  id: string;
+  name: string;
+  type: "prompt" | "squad";
+  version: string;
+  description: string;
+  author?: string;
+  tags?: string[];
+  entrypoint: string;
+  tools?: string[];
+}
+
 export interface Task {
   id: string;
   label: string;
@@ -297,6 +309,16 @@ export interface CodebrainApp {
     openFolder: () => Promise<void>;
     install: () => Promise<{ ok: boolean; action?: string; path?: string; error?: string }>;
     uninstall: () => Promise<{ ok: boolean; error?: string }>;
+    listInstalled: (args?: { type?: string }) => Promise<Array<{ manifest: SkillManifest; path: string }>>;
+    get: (args: { id: string }) => Promise<{ ok: boolean; manifest?: SkillManifest; content?: Record<string, string>; error?: string }>;
+    installFromRegistry: (args: { id: string }) => Promise<{ ok: boolean; manifest?: SkillManifest; error?: string }>;
+    uninstallSkill: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
+    sync: (args: { direction: "pull" | "push" }) => Promise<{ ok: boolean; results?: Array<{ id: string; action: string; version?: string }>; error?: string }>;
+    registryIndex: () => Promise<{ ok: boolean; index?: { skills: SkillManifest[] }; error?: string }>;
+    claudeConfigStatus: () => Promise<{ installed: boolean }>;
+    installClaudeConfig: () => Promise<{ ok: boolean; path?: string; error?: string }>;
+    uninstallClaudeConfig: () => Promise<{ ok: boolean; error?: string }>;
+    openClaudeConfigFolder: () => Promise<void>;
   };
   audio: {
     getConfig: () => Promise<AudioConfig>;
@@ -313,11 +335,6 @@ export interface CodebrainApp {
   };
   shells: {
     list: () => Promise<string[]>;
-  };
-  skill: {
-    status: () => Promise<{ installed: boolean }>;
-    install: () => Promise<void>;
-    uninstall: () => Promise<void>;
   };
   cli: {
     detect: () => Promise<{ found: boolean; path?: string }>;

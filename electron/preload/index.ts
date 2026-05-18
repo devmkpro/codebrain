@@ -223,6 +223,16 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     openFolder: () => ipcRenderer.invoke("skill:openFolder"),
     install: () => ipcRenderer.invoke("skill:installCodebrain"),
     uninstall: () => ipcRenderer.invoke("skill:uninstallCodebrain"),
+    listInstalled: (args?: { type?: string }) => ipcRenderer.invoke("skill:listInstalled", args),
+    get: (args: { id: string }) => ipcRenderer.invoke("skill:get", args),
+    installFromRegistry: (args: { id: string }) => ipcRenderer.invoke("skill:installFromRegistry", args),
+    uninstallSkill: (args: { id: string }) => ipcRenderer.invoke("skill:uninstall", args),
+    sync: (args: { direction: "pull" | "push" }) => ipcRenderer.invoke("skill:sync", args),
+    registryIndex: () => ipcRenderer.invoke("skill:registryIndex"),
+    claudeConfigStatus: () => ipcRenderer.invoke("skill:claudeConfigStatus"),
+    installClaudeConfig: () => ipcRenderer.invoke("skill:installClaudeConfig"),
+    uninstallClaudeConfig: () => ipcRenderer.invoke("skill:uninstallClaudeConfig"),
+    openClaudeConfigFolder: () => ipcRenderer.invoke("skill:openClaudeConfigFolder"),
   },
 
   cli: {

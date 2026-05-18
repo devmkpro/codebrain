@@ -97,6 +97,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": ".claude",
+        "to": "codebrain-claude",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "asarUnpack": [

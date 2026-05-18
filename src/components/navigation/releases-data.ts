@@ -18,6 +18,10 @@ export const RELEASES: Release[] = [
     "date": "maio 2026",
     "highlights": [
       {
+        "kind": "fix",
+        "text": "semantic version sorting in gen-releases script and regenerate releases data"
+      },
+      {
         "kind": "feat",
         "text": "add memory/pattern detail modals, rich prompt patterns, and update docs to 86 MCP tools"
       }

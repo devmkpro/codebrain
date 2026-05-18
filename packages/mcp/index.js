@@ -952,6 +952,81 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ── mcp__codebrain__skill_list ───────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__skill_list",
+    "List installed skills (prompt templates and squad templates). Returns skill manifests.",
+    { type: z.enum(["prompt", "squad"]).optional().describe("Filter by skill type") },
+    async (args) => {
+      try {
+        const result = await bridge.skillList({ type: args.type });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__skill_get ────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__skill_get",
+    "Get full skill content: manifest + all files (prompt.md, squad.json, README.md).",
+    { id: z.string().describe("Skill ID (folder name in ~/.codebrain/skills/)") },
+    async (args) => {
+      try {
+        const result = await bridge.skillGet({ id: args.id });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__skill_install ────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__skill_install",
+    "Install a skill from the GitLab registry to local ~/.codebrain/skills/.",
+    { id: z.string().describe("Skill ID to install from registry") },
+    async (args) => {
+      try {
+        const result = await bridge.skillInstall({ id: args.id });
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__skill_uninstall ──────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__skill_uninstall",
+    "Uninstall a locally installed skill.",
+    { id: z.string().describe("Skill ID to uninstall") },
+    async (args) => {
+      try {
+        const result = await bridge.skillUninstall({ id: args.id });
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__skill_sync ───────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__skill_sync",
+    "Sync skills with the GitLab registry. Pull downloads latest skills, push uploads local changes.",
+    { direction: z.enum(["pull", "push"]).describe("Sync direction: 'pull' (GitLab→local) or 'push' (local→GitLab)") },
+    async (args) => {
+      try {
+        const result = await bridge.skillSync({ direction: args.direction });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
   return server;
 }
 
