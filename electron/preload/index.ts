@@ -309,7 +309,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     // Send network entry from JS interceptor to main (for MCP tool access)
     reportNetworkEntry: (entry: unknown) => ipcRenderer.send("codebrain:browser:network-entry-js", entry),
     // Register a browser pane ID with main process so MCP tools can find it
-    registerPane: (paneId: string) => ipcRenderer.send("codebrain:browser:pane-created", paneId),
+    registerPane: (paneId: string, workspacePath?: string) => ipcRenderer.send("codebrain:browser:pane-created", paneId, workspacePath),
     // Unregister a browser pane ID
     unregisterPane: (paneId: string) => ipcRenderer.send("codebrain:browser:pane-destroyed", paneId),
     // Events

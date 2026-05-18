@@ -754,18 +754,44 @@ export function waitForLoadScript(timeoutMs?: number): string {
   })();`;
 }
 
-// ── Get HTML ─────────────────────────────────────────────────────────────────
+// ── Get HTML (smart scraping mode) ───────────────────────────────────────────
+// By default returns only meaningful body content for scraping.
+// Strips <script>, <style>, <link>, <meta>, <noscript>, comments, <svg> icons.
 export function getHtmlScript(selector?: string): string {
+  // Shared cleanup logic — clone, strip noise, return innerHTML
+  const cleanupCode = `
+    function cleanHTML(root) {
+      const clone = root.cloneNode(true);
+      clone.querySelectorAll('script,style,link[rel="stylesheet"],meta,noscript,template').forEach(el => el.remove());
+      clone.querySelectorAll('svg').forEach(svg => {
+        const w = parseInt(svg.getAttribute('width')||'0',10);
+        const h = parseInt(svg.getAttribute('height')||'0',10);
+        if ((w > 0 && w <= 24) || (h > 0 && h <= 24) || (!w && !h && svg.closest('button,a,label'))) svg.remove();
+      });
+      const tw = document.createTreeWalker(clone, NodeFilter.SHOW_COMMENT);
+      const comments = [];
+      while (tw.nextNode()) comments.push(tw.currentNode);
+      comments.forEach(c => c.remove());
+      clone.querySelectorAll('[style]').forEach(el => {
+        el.removeAttribute('style');
+      });
+      return (clone.innerHTML || '').replace(/\\s+/g, ' ').trim();
+    }
+  `;
   if (selector) {
     return `(function() {
+      ${cleanupCode}
       const el = document.querySelector(${JSON.stringify(selector)});
       if (!el) throw new Error('element not found: ' + ${JSON.stringify(selector)});
-      const html = el.outerHTML;
+      const html = cleanHTML(el);
       return { html, lengthChars: html.length };
     })();`;
   }
   return `(function() {
-    const html = document.documentElement.outerHTML;
+    ${cleanupCode}
+    const body = document.body;
+    if (!body) return { html: '', lengthChars: 0 };
+    const html = cleanHTML(body);
     return { html, lengthChars: html.length };
   })();`;
 }

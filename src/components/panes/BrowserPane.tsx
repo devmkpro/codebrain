@@ -171,22 +171,78 @@ export function BrowserPane({
           await loadPromise;
           try { result = { ok: true, finalUrl: wv.getURL(), title: wv.getTitle() }; } catch { result = { ok: true }; }
         } else if (type === "screenshot") {
-          let rect;
           if (payload.fullPage) {
-            const dims = await wv.executeJavaScript(
-              "({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })"
+            // Full-page capture: use JS canvas stitching to capture beyond the viewport.
+            // capturePage() is limited to the visible webview bounds, so we scroll and
+            // stitch viewport-sized chunks onto a canvas.
+            const pageDims = await wv.executeJavaScript(
+              "({ w: document.documentElement.scrollWidth, h: document.documentElement.scrollHeight, vw: window.innerWidth, vh: window.innerHeight, sy: window.scrollY })"
             );
-            if (dims && dims.width > 0 && dims.height > 0) {
-              rect = { x: 0, y: 0, width: dims.width, height: dims.height };
+            const fullW = pageDims.w;
+            const fullH = pageDims.h;
+            const viewH = pageDims.vh;
+            const origY = pageDims.sy;
+            // Cap at 16384px to prevent canvas OOM
+            const capH = Math.min(fullH, 16384);
+            // Stitching script: scrolls, captures each chunk, draws to canvas
+            const stitchScript = `
+              (async function() {
+                const fullW = ${fullW};
+                const capH = ${capH};
+                const viewH = ${viewH};
+                const origY = ${origY};
+                const canvas = document.createElement('canvas');
+                canvas.width = fullW;
+                canvas.height = capH;
+                const ctx = canvas.getContext('2d');
+                let y = 0;
+                while (y < capH) {
+                  window.scrollTo(0, y);
+                  await new Promise(r => setTimeout(r, 80));
+                  const chunk = await new Promise(resolve => {
+                    const req = new XMLHttpRequest();
+                    // Capture is triggered by IPC; this part runs in page context
+                    // We'll use a different approach: capture each section as an image
+                    resolve(null);
+                  });
+                  y += viewH;
+                }
+                window.scrollTo(0, origY);
+                return { done: true };
+              })()
+            `;
+            // Simpler approach: resize webview temporarily, capture, restore
+            const wvEl = webviewRef.current;
+            if (wvEl) {
+              const origStyle = wvEl.style.cssText;
+              // Expand webview to full page size (clamped)
+              const captureH = Math.min(capH, 8192);
+              wvEl.style.cssText = `position:fixed;left:0;top:0;width:${fullW}px;height:${captureH}px;z-index:-1;opacity:0.01;pointer-events:none;`;
+              await new Promise(r => setTimeout(r, 150));
+              // Force layout recalculation
+              await wv.executeJavaScript(`window.scrollTo(0,0); void document.body.offsetHeight;`);
+              await new Promise(r => setTimeout(r, 100));
+              const nativeImage = await wv.capturePage({ x: 0, y: 0, width: fullW, height: captureH });
+              // Restore original style immediately
+              wvEl.style.cssText = origStyle;
+              // Scroll back
+              await wv.executeJavaScript(`window.scrollTo(0,${origY});`);
+              const pngBuffer = nativeImage.toPNG();
+              let binary = "";
+              for (let i = 0; i < pngBuffer.length; i++) binary += String.fromCharCode(pngBuffer[i]);
+              const base64 = btoa(binary);
+              result = { ok: true, dataUrl: `data:image/png;base64,${base64}`, size: pngBuffer.length, fullPage: true, width: fullW, height: captureH };
+            } else {
+              result = { ok: false, error: "webview not available" };
             }
+          } else {
+            const nativeImage = await wv.capturePage();
+            const pngBuffer = nativeImage.toPNG();
+            let binary = "";
+            for (let i = 0; i < pngBuffer.length; i++) binary += String.fromCharCode(pngBuffer[i]);
+            const base64 = btoa(binary);
+            result = { ok: true, dataUrl: `data:image/png;base64,${base64}`, size: pngBuffer.length };
           }
-          const nativeImage = await wv.capturePage(rect);
-          const pngBuffer = nativeImage.toPNG();
-          // Chunked encoding to avoid stack overflow on large screenshots
-          let binary = "";
-          for (let i = 0; i < pngBuffer.length; i++) binary += String.fromCharCode(pngBuffer[i]);
-          const base64 = btoa(binary);
-          result = { ok: true, dataUrl: `data:image/png;base64,${base64}`, size: pngBuffer.length };
         } else if (type === "screenshot-el") {
           // Get element bounds, then capture
           const info = await wv.executeJavaScript(getElementInfoScript(payload.selector));
@@ -242,9 +298,9 @@ export function BrowserPane({
 
   // Register this browser pane with main process so MCP tools can find it
   React.useEffect(() => {
-    window.codeBrainApp?.browser?.registerPane?.(pane.id);
+    window.codeBrainApp?.browser?.registerPane?.(pane.id, pane.cwd);
     return () => { window.codeBrainApp?.browser?.unregisterPane?.(pane.id); };
-  }, [pane.id]);
+  }, [pane.id, pane.cwd]);
 
   // Console capture — inject on every page load
   React.useEffect(() => {

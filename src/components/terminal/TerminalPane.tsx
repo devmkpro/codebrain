@@ -36,6 +36,8 @@ export function TerminalPane({
   const [showSavedContext, setShowSavedContext] = React.useState(true);
   const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
   const savedSelectionRef = React.useRef('');
+  const termElementRef = React.useRef<HTMLElement | null>(null);
+  const zoomFixHandlerRef = React.useRef<((e: MouseEvent) => void) | null>(null);
 
   const handleContextMenu = React.useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -124,6 +126,28 @@ export function TerminalPane({
     term.loadAddon(new L(openWebLink));
 
     term.open(containerRef.current);
+
+    // Fix text selection with CSS zoom: xterm uses getBoundingClientRect()
+    // (returns viewport/zoomed coords) but divides by cssCellWidth (unzoomed).
+    // We override clientX/clientY getters on mouse events to return unzoomed
+    // coordinates, matching xterm's internal coordinate space.
+    const el = (term as any).element as HTMLElement | undefined;
+    if (el) {
+      termElementRef.current = el;
+      const zoomFixHandler = (e: MouseEvent) => {
+        const zoom = parseFloat(document.body.style.zoom) || 1;
+        if (zoom === 1) return;
+        // Capture raw values BEFORE overriding getters
+        const rawX = e.clientX;
+        const rawY = e.clientY;
+        Object.defineProperty(e, 'clientX', { get: () => rawX / zoom });
+        Object.defineProperty(e, 'clientY', { get: () => rawY / zoom });
+      };
+      zoomFixHandlerRef.current = zoomFixHandler;
+      el.addEventListener('mousedown', zoomFixHandler, true);
+      el.addEventListener('mousemove', zoomFixHandler, true);
+      el.addEventListener('mouseup', zoomFixHandler, true);
+    }
 
     try {
       const webgl = new WebglAddon();
@@ -252,6 +276,16 @@ export function TerminalPane({
     return () => {
       const term = termRef.current;
       if (term) {
+        // Clean up zoom-fix event listeners
+        const el = termElementRef.current;
+        const handler = zoomFixHandlerRef.current;
+        if (el && handler) {
+          el.removeEventListener('mousedown', handler, true);
+          el.removeEventListener('mousemove', handler, true);
+          el.removeEventListener('mouseup', handler, true);
+        }
+        termElementRef.current = null;
+        zoomFixHandlerRef.current = null;
         term.dispose();
         termRef.current = null;
         fitAddonRef.current = null;

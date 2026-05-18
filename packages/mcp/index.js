@@ -6,6 +6,36 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
+// ── Token-aware truncation helpers ───────────────────────────────────────────
+// These prevent massive MCP responses from flooding the LLM context window.
+// They operate ONLY on the serialized output — internal logic is untouched.
+
+/**
+ * Truncate a long string (e.g. HTML) and append a notice.
+ * Returns the original string if it's within the limit.
+ */
+function truncateText(text, maxChars = 50_000) {
+  if (typeof text !== "string" || text.length <= maxChars) return text;
+  const truncated = text.slice(0, maxChars);
+  const omitted = text.length - maxChars;
+  return (
+    truncated +
+    `\n\n<!-- [TRUNCATED by MCP — ${omitted.toLocaleString()} chars omitted. ` +
+    `Use browser_get_text() or browser_get_accessibility_tree() for a compact view, ` +
+    `or pass a CSS selector to get_html() to target a specific element.] -->`
+  );
+}
+
+/**
+ * Strip heavy fields from pane metadata returned by ptyManager.list().
+ * Keeps only what the orchestrator needs to manage workers.
+ * Internal fields like systemPrompt / toolList can be 5-20 KB each.
+ */
+function stripHeavyPaneFields(panes) {
+  if (!Array.isArray(panes)) return panes;
+  return panes.map(({ systemPrompt, toolList, config, ...rest }) => rest);
+}
+
 // ── Message Bus (file-based, cross-process) ─────────────────────────────────
 const MESSAGES_DIR = path.join(os.homedir(), ".codebrain", "messages");
 
@@ -135,7 +165,8 @@ function createCodebrainMCPServer(bridge) {
     async () => {
       try {
         const panes = await bridge.listPanes();
-        return { content: [{ type: "text", text: JSON.stringify(panes, null, 2) }] };
+        const lean = stripHeavyPaneFields(panes);
+        return { content: [{ type: "text", text: JSON.stringify(lean, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -1194,10 +1225,17 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   // ── DOM Reading ─────────────────────────────────────────────────────────
   server.tool(
     "mcp__codebrain__browser_get_html",
-    "Get the HTML content of the page or a specific element.",
-    { selector: z.string().optional().describe("CSS selector (omit for full page)"), pane_id: z.string().optional() },
+    "Get HTML content for scraping. Without a selector, returns only meaningful body content (strips <script>, <style>, <meta>, <link>, comments, icon SVGs). With a selector, returns that element's clean HTML. Response is auto-truncated at 50k chars.",
+    { selector: z.string().optional().describe("CSS selector (omit for clean body HTML)"), pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetHtml(args.selector, args.pane_id)) }] }; }
+      try {
+        const result = await bridge.browserGetHtml(args.selector, args.pane_id);
+        // Truncate the HTML field to protect the LLM context window
+        if (result && typeof result === "object" && typeof result.html === "string") {
+          result.html = truncateText(result.html);
+        }
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      }
       catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );
@@ -1439,8 +1477,8 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   // ── Screenshots ─────────────────────────────────────────────────────────
   server.tool(
     "mcp__codebrain__browser_screenshot",
-    "Capture a screenshot of the browser viewport. Saves to .codebrain/screenshots/ and returns the file path PLUS a textual description of the page (URL, title, visible text, links, inputs, buttons). Do NOT read the PNG file — use the text description instead.",
-    { full_page: z.boolean().optional().describe("Capture full page (not just viewport)"), pane_id: z.string().optional() },
+    "Capture a screenshot. Without full_page: captures the visible viewport. With full_page: resizes the webview to capture the ENTIRE scrollable page (up to 8192px height), not just the visible area. Returns file path + textual page description. Do NOT read the PNG — use the text description.",
+    { full_page: z.boolean().optional().describe("Capture the entire scrollable page (not just viewport)"), pane_id: z.string().optional() },
     async (args) => {
       try {
         const screenshot = await bridge.browserScreenshot(args.full_page, args.pane_id);

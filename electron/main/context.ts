@@ -98,6 +98,7 @@ export function createAppContext() {
     // Browser state
     browserPending: new Map<string, BrowserPendingEntry>(),
     browserPaneIds: new Set<string>(),
+    browserPaneWorkspace: new Map<string, string>(), // paneId → workspace path
     browserNetworkLog: [] as NetworkLogEntry[],
     browserConsoleLog: [] as ConsoleLogEntry[],
 
