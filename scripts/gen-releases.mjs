@@ -18,7 +18,7 @@ function git(cmd) {
 }
 
 function getTags() {
-  const raw = git("tag -l --sort=-v:refname");
+  const raw = git("tag -l");
   if (!raw) return [];
   // Normalize tags (remove 'v' prefix) and deduplicate
   const tags = raw.split("\n").filter(Boolean);
@@ -31,6 +31,15 @@ function getTags() {
       result.push(t); // keep original format for git log
     }
   }
+  // Sort by semantic version descending (not lexicographic)
+  result.sort((a, b) => {
+    const va = a.replace(/^v/, "").split(".").map(Number);
+    const vb = b.replace(/^v/, "").split(".").map(Number);
+    for (let i = 0; i < 3; i++) {
+      if ((vb[i] || 0) !== (va[i] || 0)) return (vb[i] || 0) - (va[i] || 0);
+    }
+    return 0;
+  });
   return result;
 }
 

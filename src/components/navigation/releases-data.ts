@@ -19,19 +19,7 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "feat",
-        "text": "add detail modals for memory and pattern items in MemoryPanel"
-      },
-      {
-        "kind": "feat",
-        "text": "update prompts with mandatory rich pattern-building rules (all agent types)"
-      },
-      {
-        "kind": "feat",
-        "text": "update README with all 86 MCP tools and new features"
-      },
-      {
-        "kind": "fix",
-        "text": "update landing page MCP tool count from 42 to 86"
+        "text": "add memory/pattern detail modals, rich prompt patterns, and update docs to 86 MCP tools"
       }
     ]
   },
@@ -100,7 +88,13 @@ export const RELEASES: Release[] = [
       {
         "kind": "fix",
         "text": "pane_write large text submit + cursor-pointer on all clickable elements (v1.2.23)"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.22",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "pane_write Enter not submitting in readline paste-mode (v1.2.22)"
@@ -176,51 +170,9 @@ export const RELEASES: Release[] = [
     ]
   },
   {
-    "version": "1.2.22",
+    "version": "1.2.14",
     "date": "maio 2026",
     "highlights": [
-      {
-        "kind": "fix",
-        "text": "pane_write Enter not submitting in readline paste-mode (v1.2.22)"
-      }
-    ]
-  },
-  {
-    "version": "1.2.21",
-    "date": "maio 2026",
-    "highlights": [
-      {
-        "kind": "fix",
-        "text": "MIMO 401 — masked secrets from frontend overwriting real API key on spawn"
-      },
-      {
-        "kind": "feat",
-        "text": "squad spawner passes role + env to inject correct prompts"
-      },
-      {
-        "kind": "feat",
-        "text": "auto-inject role-specific prompts on pane spawn"
-      },
-      {
-        "kind": "feat",
-        "text": "echo suppression for MCP inter-agent communication"
-      },
-      {
-        "kind": "fix",
-        "text": "use notifyPane instead of writePane for inter-agent messages to avoid bypassing permissions issue"
-      },
-      {
-        "kind": "fix",
-        "text": "pane_spawn model-based provider resolution using enhanced model map"
-      },
-      {
-        "kind": "fix",
-        "text": "restore MIMO regional routes, mimo-compat provider handling, and fullPage screenshot"
-      },
-      {
-        "kind": "fix",
-        "text": "MIMO 404 error, provider env var mapping, and pane_write submit reliability"
-      },
       {
         "kind": "fix",
         "text": "auto-update feedback e reinício automático"
