@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
   app: {
     version: () => ipcRenderer.invoke("app:version"),
     copyToClipboard: (text: string) => ipcRenderer.invoke("app:copy-to-clipboard", text),
+    readFromClipboard: (): Promise<string> => ipcRenderer.invoke("app:read-from-clipboard"),
     onReloadShortcut: (callback: () => void) => {
       const handler = () => callback();
       ipcRenderer.on("app:reload-shortcut", handler);

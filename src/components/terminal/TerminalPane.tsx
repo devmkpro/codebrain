@@ -35,9 +35,13 @@ export function TerminalPane({
   const [dropHover, setDropHover] = React.useState(false);
   const [showSavedContext, setShowSavedContext] = React.useState(true);
   const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
+  const savedSelectionRef = React.useRef('');
 
   const handleContextMenu = React.useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    // Capture selection before xterm loses focus when menu opens
+    savedSelectionRef.current = termRef.current?.getSelection() ?? '';
+
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -48,15 +52,8 @@ export function TerminalPane({
     let adjustedX = x;
     let adjustedY = y;
 
-    // Ajuste se passar da borda direita do container
-    if (x + menuWidth > rect.width) {
-      adjustedX = x - menuWidth;
-    }
-
-    // Ajuste se passar da borda inferior do container
-    if (y + menuHeight > rect.height) {
-      adjustedY = y - menuHeight;
-    }
+    if (x + menuWidth > rect.width) adjustedX = x - menuWidth;
+    if (y + menuHeight > rect.height) adjustedY = y - menuHeight;
 
     setContextMenu({ x: adjustedX, y: adjustedY });
   }, []);
@@ -64,16 +61,14 @@ export function TerminalPane({
   const closeMenu = React.useCallback(() => setContextMenu(null), []);
 
   const copyToClipboard = React.useCallback(() => {
-    const sel = termRef.current?.getSelection();
-    if (sel) {
-      navigator.clipboard.writeText(sel).catch(() => { });
-    }
+    const sel = savedSelectionRef.current;
+    if (sel) window.codeBrainApp?.app.copyToClipboard(sel);
     closeMenu();
   }, [closeMenu]);
 
   const pasteFromClipboard = React.useCallback(async () => {
     try {
-      const text = await navigator.clipboard.readText();
+      const text = await window.codeBrainApp?.app.readFromClipboard();
       if (text) window.codeBrainApp?.pty.write(pane.id, text);
     } catch { }
     closeMenu();

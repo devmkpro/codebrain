@@ -8,6 +8,10 @@ export function registerAppHandlers(ctx: AppContext): void {
     clipboard.writeText(text);
     return true;
   });
+  ipcMain.handle("app:read-from-clipboard", () => {
+    const { clipboard } = require("electron");
+    return clipboard.readText();
+  });
   ipcMain.handle("app:reload-shell", () => {
     ctx.mainWindow?.webContents.reload();
   });
