@@ -27,7 +27,7 @@ verify:
     - master
 
 # ── Linux Build (AppImage + deb) ───────────────────────────────────────────────
-build:linux:
+build_linux:
   stage: build
   image: node:22-bookworm
   before_script:
@@ -50,7 +50,7 @@ build:linux:
     - tags
 
 # ── Windows Build (cross-compile with Wine) ───────────────────────────────────
-build:windows:
+build_windows:
   stage: build
   image: electronuserland/builder:wine-mono
   variables:
@@ -74,9 +74,9 @@ release:
   stage: release
   image: node:22-alpine
   needs:
-    - job: build:linux
+    - job: build_linux
       artifacts: true
-    - job: build:windows
+    - job: build_windows
       artifacts: true
   script:
     - node scripts/create-release.mjs
