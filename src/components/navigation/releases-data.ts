@@ -28,6 +28,8 @@ export const RELEASES: Release[] = [
     ]
   },
   {
+    "version": "1.4.2",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
