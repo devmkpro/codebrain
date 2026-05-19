@@ -38,7 +38,35 @@ function commonPaths(binary: string): string[] {
     for (const d of dirs) for (const e of exts) paths.push(`${d}\\${binary}${e}`);
     return paths;
   }
+  // NVM: scan for the latest installed node version
+  const nvmPaths: string[] = [];
+  try {
+    const nvmVersionsDir = `${home}/.nvm/versions/node`;
+    if (fs.existsSync(nvmVersionsDir)) {
+      const versions = fs.readdirSync(nvmVersionsDir).sort().reverse();
+      for (const v of versions.slice(0, 3)) {
+        nvmPaths.push(`${nvmVersionsDir}/${v}/bin/${binary}`);
+      }
+    }
+  } catch {}
+
+  // FNM: scan active multishells
+  const fnmPaths: string[] = [];
+  try {
+    const fnmMultishells = `${home}/.local/share/fnm/multishells`;
+    if (fs.existsSync(fnmMultishells)) {
+      const shells = fs.readdirSync(fnmMultishells).sort().reverse();
+      for (const s of shells.slice(0, 3)) {
+        fnmPaths.push(`${fnmMultishells}/${s}/${binary}`);
+      }
+    }
+  } catch {}
+
   return [
+    ...nvmPaths,
+    ...fnmPaths,
+    `${home}/.volta/bin/${binary}`,
+    `${home}/.local/share/pnpm/${binary}`,
     `${home}/.local/bin/${binary}`,
     `${home}/.claude/local/${binary}`,
     `${home}/.bun/bin/${binary}`,
