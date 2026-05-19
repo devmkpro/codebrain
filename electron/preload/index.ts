@@ -337,6 +337,17 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     deletePattern: (opts: Record<string, unknown>) => ipcRenderer.invoke("memory:deletePattern", opts),
   },
 
+  cost: {
+    summary: (opts?: Record<string, unknown>) => ipcRenderer.invoke("cost:summary", opts ?? {}),
+    taskSummary: (opts?: Record<string, unknown>) => ipcRenderer.invoke("cost:taskSummary", opts ?? {}),
+    setBudget: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:setBudget", opts),
+    getBudget: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:getBudget", opts),
+    getAlerts: (opts?: Record<string, unknown>) => ipcRenderer.invoke("cost:getAlerts", opts ?? {}),
+    listModels: () => ipcRenderer.invoke("cost:listModels"),
+    estimate: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:estimate", opts),
+    reset: (opts?: Record<string, unknown>) => ipcRenderer.invoke("cost:reset", opts ?? {}),
+  },
+
   log: {
     list: (opts?: Record<string, unknown>) => ipcRenderer.invoke("log:list", opts ?? {}),
     onAppended: (callback: (entry: unknown) => void) => {

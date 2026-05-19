@@ -48,6 +48,8 @@ export interface SpawnPaneConfig {
   role?: string;
   sessionContext?: string;
   env?: Record<string, string>;
+  taskId?: string;
+  activityId?: string;
 }
 
 export async function spawnPaneInternal(
@@ -313,6 +315,8 @@ export async function spawnPaneInternal(
       model: model ?? undefined,
       role: config.role,
       squadOrchestratorWorkerId: config.squadOrchestratorWorkerId,
+      taskId: config.taskId,
+      activityId: config.activityId,
     });
     ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
 

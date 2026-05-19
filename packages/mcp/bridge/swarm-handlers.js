@@ -146,6 +146,17 @@ function createSwarmHandlers(ptyManager, opts) {
       topology.type = type;
       return { ok: true, topology: type };
     },
+
+    /**
+     * Score all agents using the multi-factor AgentScorer.
+     */
+    async swarmScoreAgents({ taskType, requiredCapabilities } = {}) {
+      const scorer = opts.agentScorer;
+      if (!scorer) return { ok: false, error: "agentScorer not available" };
+
+      const result = scorer.scoreAllAgents(taskType, requiredCapabilities);
+      return { ok: true, ...result };
+    },
   };
 }
 

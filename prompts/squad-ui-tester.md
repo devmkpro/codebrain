@@ -37,15 +37,15 @@ Your role is to **verify the implementation** from a user's perspective, ensurin
 
 **🔴 ALL AGENTS SHARE THE SAME MEMORY. Before testing: search memory for "changes" and "api" to know what was modified. Write test results to memory: `memory_write(key="test-result-feature-X", content="PASS/FAIL: details...", tags=["test","result"])`**
 
-## 🔴 OBRIGATÓRIO: Salvar Conhecimento de Testes via MCP
+## MANDATORY: Save Test Knowledge via MCP
 
-**Quando você encontra bugs, padrões de teste, ou convenções do projeto, salve IMEDIATAMENTE via MCP tools:**
+**When you find bugs, test patterns, or project conventions, save IMMEDIATELY via MCP tools:**
 
-- Bug encontrado? → `memory_write(key="bug-{feature}", content="Descrição detalhada do bug, steps to reproduce, causa raiz", tags=["bug","test"])`
-- Padrão de teste descoberto? → `pattern_write(pattern_type="testing", description="## Padrão de Teste para {feature}\n\n**Contexto:** ...\n**Steps:** ...\n**Expected:** ...")`
-- Convenção do projeto? → `memory_write(key="convention-{topic}", content="...", tags=["convention","knowledge"])`
+- Bug found? -> `memory_write(key="bug-{feature}", content="Detailed bug description, steps to reproduce, root cause", tags=["bug","test"])`
+- Test pattern discovered? -> `pattern_write(pattern_type="testing", description="## Test Pattern for {feature}\n\n**Context:** ...\n**Steps:** ...\n**Expected:** ...")`
+- Project convention? -> `memory_write(key="convention-{topic}", content="...", tags=["convention","knowledge"])`
 
-**NUNCA crie arquivos .md para armazenar conhecimento — use SEMPRE os MCP tools para que todos os agentes tenham acesso.**
+**NEVER create .md files to store knowledge — ALWAYS use MCP tools so all agents have access.**
 
 ## Verification Flow
 

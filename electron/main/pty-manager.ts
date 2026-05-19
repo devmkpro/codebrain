@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { execSync, existsSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import * as nodefs from "node:fs";
 import * as nodeos from "node:os";
 import * as nodepath from "node:path";
@@ -30,6 +30,8 @@ export interface SpawnConfig {
   cols?: number;
   rows?: number;
   role?: string;
+  taskId?: string;
+  activityId?: string;
 }
 
 export interface PaneInfo {
@@ -90,7 +92,35 @@ function commonPaths(binary: string): string[] {
     for (const d of dirs) for (const e of exts) paths.push(`${d}\\${binary}${e}`);
     return paths;
   }
+  // NVM: scan for the latest installed node version
+  const nvmPaths: string[] = [];
+  try {
+    const nvmVersionsDir = `${home}/.nvm/versions/node`;
+    if (nodefs.existsSync(nvmVersionsDir)) {
+      const versions = nodefs.readdirSync(nvmVersionsDir).sort().reverse();
+      for (const v of versions.slice(0, 3)) {
+        nvmPaths.push(`${nvmVersionsDir}/${v}/bin/${binary}`);
+      }
+    }
+  } catch {}
+
+  // FNM: scan active multishells
+  const fnmPaths: string[] = [];
+  try {
+    const fnmMultishells = `${home}/.local/share/fnm/multishells`;
+    if (nodefs.existsSync(fnmMultishells)) {
+      const shells = nodefs.readdirSync(fnmMultishells).sort().reverse();
+      for (const s of shells.slice(0, 3)) {
+        fnmPaths.push(`${fnmMultishells}/${s}/${binary}`);
+      }
+    }
+  } catch {}
+
   return [
+    ...nvmPaths,
+    ...fnmPaths,
+    `${home}/.volta/bin/${binary}`,
+    `${home}/.local/share/pnpm/${binary}`,
     `${home}/.local/bin/${binary}`,
     `${home}/.claude/local/${binary}`,
     `${home}/.bun/bin/${binary}`,

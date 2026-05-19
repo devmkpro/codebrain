@@ -29,11 +29,12 @@ function truncateText(text, maxChars = 50_000) {
 /**
  * Strip heavy fields from pane metadata returned by ptyManager.list().
  * Keeps only what the orchestrator needs to manage workers.
- * Internal fields like systemPrompt / toolList can be 5-20 KB each.
+ * Heavy fields: args (string[]), session (Record<string,unknown>),
+ * workspacePath, claudeSessionId — can be 5-20 KB each when present.
  */
 function stripHeavyPaneFields(panes) {
   if (!Array.isArray(panes)) return panes;
-  return panes.map(({ systemPrompt, toolList, config, ...rest }) => rest);
+  return panes.map(({ args, session, workspacePath, claudeSessionId, ...rest }) => rest);
 }
 
 // ── Message Bus (file-based, cross-process) ─────────────────────────────────
@@ -258,18 +259,7 @@ function createCodebrainMCPServer(bridge) {
           fs.closeSync(fd);
         } catch {}
 
-        // Write trigger to PTY stdin, then send Enter AFTER a small delay.
-        // This avoids the race condition where \r arrives before the CLI finishes
-        // processing the pasted text (which caused the "broken line" issue).
-        if (bridge.writePane) {
-          const typeLabel = msgType.toUpperCase();
-          const trigger = `[⚡ MENSAGEM DE ${args.from} (${typeLabel}) — use pane_read_messages]`;
-          // Step 1: write text WITHOUT submit
-          await bridge.writePane(args.to, trigger, false);
-          // Step 2: wait for CLI to process the text, then send Enter
-          await new Promise(r => setTimeout(r, 150));
-          await bridge.writePane(args.to, "", true);
-        }
+        // Keep the message silent in the terminal; the recipient reads it from inbox.
 
         return { content: [{ type: "text", text: JSON.stringify({ ok: true, messageId: id }) }] };
       } catch (err) {
@@ -1057,6 +1047,94 @@ function createCodebrainMCPServer(bridge) {
       }
     }
   );
+
+  // ── Consensus Tools ────────────────────────────────────────────────────────
+
+  server.tool("mcp__codebrain__swarm_vote", "Start a vote among agents. Modes: majority, unanimous, weighted.", { question: z.string(), options: z.array(z.string()).min(2), mode: z.enum(["majority","unanimous","weighted"]).optional(), timeoutMs: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmVote(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_cast_vote", "Cast a vote in an active vote.", { voteId: z.string(), paneId: z.string(), choice: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmCastVote(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_elect_leader", "Auto-elect a leader among workers based on capability score.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmElectLeader(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_consensus_status", "Get consensus status: leader, active votes, Raft/PBFT/Gossip node counts.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmConsensusStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Raft Protocol ──────────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__raft_start", "Start a Raft consensus node.", { nodeId: z.string(), peers: z.array(z.string()).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__raft_stop", "Stop a Raft node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__raft_append", "Append a command to the Raft log (leader only).", { nodeId: z.string(), command: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftAppend(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__raft_status", "Get status of all Raft nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── PBFT Protocol ──────────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__pbft_start", "Start a PBFT node.", { nodeId: z.string(), allNodes: z.array(z.string()) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__pbft_stop", "Stop a PBFT node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__pbft_propose", "Propose a request via PBFT (primary only).", { nodeId: z.string(), request: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftPropose(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__pbft_view_change", "Initiate PBFT view change.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftViewChange(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__pbft_status", "Get status of all PBFT nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Gossip Protocol ────────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__gossip_start", "Start a gossip node.", { nodeId: z.string(), peers: z.array(z.string()).optional(), fanout: z.number().optional(), intervalMs: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__gossip_stop", "Stop a gossip node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__gossip_set", "Set a value in gossip state (will be disseminated).", { nodeId: z.string(), key: z.string(), value: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipSet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__gossip_get", "Get a value from gossip state.", { nodeId: z.string(), key: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__gossip_sync", "Trigger manual gossip sync round.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipSync(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__gossip_status", "Get status of all gossip nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Pipeline Tools ─────────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__swarm_fan_out", "Distribute tasks to workers in parallel. Supports domain routing and batch mode.", { tasks: z.array(z.object({ taskId: z.string(), description: z.string(), targetWorker: z.string().optional(), domain: z.string().optional(), dependsOn: z.array(z.string()).optional() })), strategy: z.enum(["round_robin","least_loaded","random","domain_aware"]).optional(), batchMode: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmFanOut(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_fan_in", "Collect and merge results from parallel tasks.", { taskIds: z.array(z.string()), aggregationStrategy: z.enum(["merge","vote","best","domain_grouped"]).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmFanIn(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_pipeline", "Execute a chain of sequential tasks.", { steps: z.array(z.object({ stepId: z.string(), description: z.string(), targetWorker: z.string().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmPipeline(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_pipeline_status", "Check pipeline execution state.", { pipelineId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmPipelineStatus(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_complete_task", "Mark a pipeline task as complete with result.", { taskId: z.string(), result: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmCompleteTask(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_domain_status", "Get domain-based task routing status.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmDomainStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_worker_loads", "Get worker load distribution.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmWorkerLoads(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__swarm_steal_work", "Steal work from an overloaded worker.", { thiefId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmStealWork(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Background Worker Tools ────────────────────────────────────────────────
+  server.tool("mcp__codebrain__worker_start", "Start a background maintenance worker.", { name: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__worker_stop", "Stop a background worker.", { name: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__worker_status", "Get status of all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__worker_alerts", "Get recent worker alerts.", { limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerAlerts(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__worker_start_all", "Start all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStartAll(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__worker_stop_all", "Stop all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStopAll(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__worker_execute_trigger", "Execute an on-demand trigger manually.", { triggerName: z.string(), context: z.object({}).passthrough().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerExecuteTrigger(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__worker_trigger_history", "Get trigger execution history.", { limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerTriggerHistory(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Knowledge Graph Tools ──────────────────────────────────────────────────
+  server.tool("mcp__codebrain__memory_graph", "Get a memory node and its graph neighbors.", { memoryId: z.string(), depth: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryGraph(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__memory_rank", "Get PageRank scores for all memories.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryRank(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__memory_similar", "Find similar memories using cosine similarity.", { memoryId: z.string(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memorySimilar(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Agent Scoring ──────────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__swarm_score_agents", "Score and rank agents for a task type.", { taskType: z.string().optional(), requiredCapabilities: z.array(z.string()).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmScoreAgents(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Bus Metrics ────────────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__pane_bus_metrics", "Get MessageBus metrics: messages/sec, latency, queue depths.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.paneBusMetrics(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Event Sourcing Tools ───────────────────────────────────────────────────
+  server.tool("mcp__codebrain__event_store", "Store an event in the event sourcing system. Append-only log per aggregate.", { aggregate_id: z.string(), aggregate_type: z.string().optional(), event_type: z.string(), payload: z.string().optional(), metadata: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventStore(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__event_replay", "Replay events for an aggregate from a sequence. Uses snapshots.", { aggregate_id: z.string(), from_sequence: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventReplay(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__event_list", "List events with optional filters.", { aggregate_id: z.string().optional(), event_type: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__event_snapshot", "Force a snapshot for an aggregate.", { aggregate_id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventSnapshot(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__event_stats", "Get event sourcing statistics.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventStats(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Cost Tracker Tools ─────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__cost_record", "Record token usage for a session. Calculates cost by model.", { session_id: z.string(), model: z.string(), input_tokens: z.number(), output_tokens: z.number(), agent_id: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.recordUsage(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__cost_summary", "Get cost summary: total, by model, by agent.", { workspace: z.string().optional(), session_id: z.string().optional(), period: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.summary(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__cost_set_budget", "Set budget limits for a workspace.", { workspace: z.string(), daily_limit: z.number().optional(), monthly_limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.setBudget(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__cost_get_budget", "Get budget status for a workspace.", { workspace: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.getBudget(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__cost_alerts", "Get recent cost alerts.", { limit: z.number().optional(), type: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.getAlerts(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__cost_estimate", "Estimate cost for a model before sending.", { model: z.string(), input_tokens: z.number(), output_tokens: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.estimateCost(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__cost_models", "List all model pricing (per 1M tokens).", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.listModels(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__cost_reset", "Reset cost tracking data.", { confirm: z.boolean(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.reset(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Pattern Clustering Tools ───────────────────────────────────────────────
+  server.tool("mcp__codebrain__worker_pattern_clusters", "Get k-means pattern clusters.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.workerManager.getPatternClusters(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__worker_force_evolution", "Force pattern evolution: prune + merge.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.workerManager.forcePatternEvolution(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Expanded Hooks Tools ───────────────────────────────────────────────────
+  server.tool("mcp__codebrain__hooks_export_logs", "Export hook logs in JSONL or CSV format.", { format: z.string().optional(), since: z.number().optional(), types: z.array(z.string()).optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksExportLogs(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__hooks_event_stats", "Get hook event statistics by type and correlation.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksEventStats(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+  server.tool("mcp__codebrain__hooks_correlation_events", "Get all events for a correlation ID.", { correlation_id: z.string() }, async ({ correlation_id }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksCorrelationEvents({ correlationId: correlation_id }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Memory Scope Tool ──────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__memory_transfer", "Transfer a memory to a different scope (project/local/user).", { id: z.string(), target_scope: z.string() }, async ({ id, target_scope }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryTransfer({ id, targetScope: target_scope }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
 
   return server;
 }

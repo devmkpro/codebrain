@@ -1,6 +1,22 @@
 "use strict";
 
 /**
+ * Memory protocol injected into pane_write so the AI agent is
+ * constantly reminded to use memory_read/write/search and pattern_write.
+ * This is code-level enforcement — not just a prompt suggestion.
+ */
+const MEMORY_PROTOCOL_PREFIX = `
+🔴 MEMORY PROTOCOL (CODE-ENFORCED — you MUST follow this):
+• BEFORE working: memory_search("file-changed"), memory_search("changes"), memory_search("api"), memory_search("schema")
+• DURING work: memory_write() for EVERY significant change (api, schema, component, decision, fix)
+• AFTER completion: memory_write(type="episodic", key="completed-<task>", content="summary", tags=["result"])
+• ALWAYS: pattern_write() for new patterns discovered. NEVER create .md files for knowledge — use MCP memory/patterns only.
+• REUSE workers: call pane_list() before spawning. If a worker with the right label exists and is idle, send it a new task via pane_write.
+• Skipping memory = INCOMPLETE TASK. The system tracks whether you used memory tools.
+──────────────────────────────────────────
+`.trim();
+
+/**
  * Pane-related bridge handlers (spawn, read, write, list, idle, roles, messages).
  */
 function createPaneHandlers(ptyManager, opts) {
@@ -21,6 +37,28 @@ function createPaneHandlers(ptyManager, opts) {
 
     async spawnPane({ agent, cwd, providerId, model, label }) {
       try {
+        // ── Duplicate guard: if a pane with this label already exists and is alive, reuse it ──
+        if (label && opts.paneLabels) {
+          for (const [existingPaneId, existingLabel] of opts.paneLabels) {
+            if (existingLabel === label) {
+              // Check if the pane is still alive
+              const panes = ptyManager.list();
+              const pane = panes.find(p => p.paneId === existingPaneId);
+              if (pane && pane.status !== "exited") {
+                return {
+                  ok: true,
+                  paneId: existingPaneId,
+                  reused: true,
+                  label,
+                  message: `Reusing existing "${label}" pane (${existingPaneId}). It is already active.`,
+                };
+              }
+              // Pane exited — remove stale label
+              opts.paneLabels.delete(existingPaneId);
+            }
+          }
+        }
+
         if (opts.spawnPaneFn) {
           const result = await opts.spawnPaneFn({ agent, cwd, providerId, model });
           if (result.ok && result.paneId) {
@@ -42,8 +80,29 @@ function createPaneHandlers(ptyManager, opts) {
 
     async writePane(paneId, text, submit = true) {
       if (!ptyManager.hasPane(paneId)) return { ok: false, error: "pane not found" };
+      // ── Code-level memory protocol enforcement ────────────────────────────
+      // Prepend memory protocol instructions on the first write to each pane
+      // and whenever a pane receives a new task after going idle.
+      // This is enforced in code, not just in prompt files.
+      let finalText = text;
+      if (opts.paneMemoryState) {
+        const existing = opts.paneMemoryState.get(paneId);
+        const isFirstWrite = !existing;
+        const isAfterIdle = existing?.wentIdleSinceLastWrite === true;
+        if (isFirstWrite || isAfterIdle) {
+          finalText = MEMORY_PROTOCOL_PREFIX + "\n\n" + text;
+        }
+        // Track pane state
+        opts.paneMemoryState.set(paneId, {
+          ...(existing || {}),
+          protocolInjected: true,
+          lastWriteAt: Date.now(),
+          wentIdleSinceLastWrite: false,
+          hasMemoryActivity: false,
+        });
+      }
       // Sanitize newlines — readline treats \n as Enter, causing premature submission
-      const sanitized = text.replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/\r/g, "");
+      const sanitized = finalText.replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/\r/g, "");
       ptyManager.writeSilent(paneId, sanitized);
       if (submit) {
         // Send Enter as a separate write after a delay so readline can finish

@@ -75,8 +75,8 @@ async function uploadToRegistry(fileName, filePath) {
 const jobs = await apiGet(
   `/projects/${PROJECT_ID}/pipelines/${PIPELINE_ID}/jobs?per_page=50`
 );
-const linuxJob = jobs.find((j) => j.name === "build:linux");
-const windowsJob = jobs.find((j) => j.name === "build:windows");
+const linuxJob = jobs.find((j) => j.name === "build_linux");
+const windowsJob = jobs.find((j) => j.name === "build_windows");
 
 if (!linuxJob || !windowsJob) {
   console.error("Could not find build jobs:", jobs.map((j) => j.name));
@@ -88,14 +88,17 @@ console.log(`Linux job: ${linuxJob.id}, Windows job: ${windowsJob.id}`);
 // Upload update manifests and installers to Package Registry
 const exeFile = readdirSync("dist").find((f) => f.endsWith("-win-x64.exe"));
 const appImageFile = readdirSync("dist").find((f) => f.endsWith(".AppImage"));
+const debFile = readdirSync("dist").find((f) => f.endsWith(".deb"));
 
 if (!exeFile) throw new Error("Windows installer not found in dist/");
 if (!appImageFile) throw new Error("AppImage not found in dist/");
+if (!debFile) throw new Error("Deb package not found in dist/");
 
 await uploadToRegistry("latest.yml", "dist/latest.yml");
 await uploadToRegistry("latest-linux.yml", "dist/latest-linux.yml");
 await uploadToRegistry(exeFile, `dist/${exeFile}`);
 await uploadToRegistry(appImageFile, `dist/${appImageFile}`);
+await uploadToRegistry(debFile, `dist/${debFile}`);
 
 // Create GitLab release with download links pointing to Package Registry
 const registryBase = `${PKG_REGISTRY}`;
@@ -127,7 +130,7 @@ const release = {
       },
       {
         name: "Linux x64 Deb",
-        url: `${PROJECT_URL}/-/jobs/${linuxJob.id}/artifacts/raw/dist/Codebrain-${TAG}-linux-amd64.deb`,
+        url: `${registryBase}/${debFile}`,
         link_type: "package",
       },
     ],

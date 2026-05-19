@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import log from "electron-log/main.js";
 
 import { platform } from "./platform";
+import { enrichShellPath } from "./shell-path";
 import { setupAutoUpdater, teardownAutoUpdater, isUpdateInstallRequested } from "./auto-updater";
 import { createAppContext, safeSend } from "./context";
 import { createWindow } from "./window";
@@ -23,6 +24,11 @@ log.initialize();
 const ctx = createAppContext();
 
 app.whenReady().then(async () => {
+  // Enrich PATH on Linux/macOS — GUI-launched Electron has a minimal PATH
+  // that doesn't include NVM/FNM/bun/node paths. Must run before any
+  // service that spawns child processes (PTY, MCP, CLI detector).
+  enrichShellPath();
+
   fs.mkdirSync(ctx.DATA_DIR, { recursive: true });
 
   // Auto-install Claude Code integration (statusline, .mcp.json, helpers)

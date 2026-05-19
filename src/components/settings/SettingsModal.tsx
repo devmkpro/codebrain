@@ -1,6 +1,7 @@
 ﻿import React from "react";
 import { ArrowUpRight, Check, Cloud, Cpu, Mic, Minus, Plus, RefreshCw, RotateCcw, Save, Sparkles, Trash2, X$1 } from "../../stores/providers-store";
 import { isConversationVoiceMode, normalizedVoiceMode, outputModeForInteractionMode } from "../../stores/tasks-store";
+import { CostPanel } from "./CostPanel";
 
 // SettingsModal, BrainVoiceUpgradeCard
 import { FONT_OPTIONS, useTerminalSettings } from "../../stores/terminal-settings-store";
@@ -656,6 +657,9 @@ export function SettingsModal({ open, onClose }) {
               Arraste imagens (PNG/JPG/GIF/WEBP) pra dentro de qualquer terminal — o caminho é
               colado pro Claude anexar.
             </p>
+          </section>
+          <section>
+            <CostPanel />
           </section>
           {(() => {
             const ua = navigator.userAgent;
