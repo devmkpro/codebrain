@@ -259,18 +259,7 @@ function createCodebrainMCPServer(bridge) {
           fs.closeSync(fd);
         } catch {}
 
-        // Write trigger to PTY stdin, then send Enter AFTER a small delay.
-        // This avoids the race condition where \r arrives before the CLI finishes
-        // processing the pasted text (which caused the "broken line" issue).
-        if (bridge.writePane) {
-          const typeLabel = msgType.toUpperCase();
-          const trigger = `[⚡ MENSAGEM DE ${args.from} (${typeLabel}) — use pane_read_messages]`;
-          // Step 1: write text WITHOUT submit
-          await bridge.writePane(args.to, trigger, false);
-          // Step 2: wait for CLI to process the text, then send Enter
-          await new Promise(r => setTimeout(r, 150));
-          await bridge.writePane(args.to, "", true);
-        }
+        // Keep the message silent in the terminal; the recipient reads it from inbox.
 
         return { content: [{ type: "text", text: JSON.stringify({ ok: true, messageId: id }) }] };
       } catch (err) {

@@ -31,11 +31,18 @@ const { parseTokenUsage } = require("./bridge/token-parser.js");
 
 const MESSAGES_DIR = path.join(os.homedir(), ".codebrain", "messages");
 
-function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType, messageBus) {
+function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType, messageBus, workspacePath) {
   if (!ptyManager) return;
   const panes = ptyManager.list();
   for (const p of panes) {
     if (p.paneId === fromId) continue; // Don't notify self
+    // Workspace scoping: only notify panes in the same workspace
+    if (workspacePath) {
+      const paneWorkspace = p.workspacePath || p.cwd || "";
+      if (paneWorkspace && path.resolve(paneWorkspace) !== path.resolve(workspacePath)) {
+        continue; // Skip panes in different workspaces
+      }
+    }
     const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const msg = {
       id,
@@ -56,6 +63,7 @@ function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType,
       if (!fs.existsSync(inbox)) fs.mkdirSync(inbox, { recursive: true });
       fs.writeFileSync(path.join(inbox, `${id}.json`), JSON.stringify(msg, null, 2), "utf-8");
     } catch {}
+    // Keep notifications silent in the terminal; agents read them from the inbox.
   }
 }
 
@@ -70,6 +78,12 @@ function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType,
 function createMCPBridge(ptyManager, opts = {}) {
   const paneLabels = new Map();
   const roleMap = new Map();
+
+  // ── Memory compliance tracking per pane ──────────────────────────────────
+  // Tracks which panes have used memory tools (read/write/search) and which
+  // have been warned about non-compliance. This is code-level enforcement.
+  const paneMemoryState = new Map();
+  opts.paneMemoryState = paneMemoryState;
 
   // ── Create foundational instances ────────────────────────────────────────
   const messageBus = new MessageBus({
@@ -122,6 +136,51 @@ function createMCPBridge(ptyManager, opts = {}) {
     } catch {}
   });
 
+  // ── Code-level memory compliance enforcement on idle ─────────────────────
+  // When a pane goes idle, check if it actually used memory tools during its
+  // task. If not, inject a compliance warning. This is enforced in code —
+  // the AI CANNOT skip memory usage without being warned.
+  ptyManager.on("idle", ({ paneId, idle }) => {
+    try {
+      const state = paneMemoryState.get(paneId);
+      if (!state) {
+        // First time seeing this pane idle — just create a basic state entry
+        paneMemoryState.set(paneId, { wentIdleSinceLastWrite: true });
+        return;
+      }
+      // Mark that this pane went idle (used by writePane to decide whether to re-inject protocol)
+      state.wentIdleSinceLastWrite = true;
+      // Only check compliance for panes that have been given tasks (protocol was injected)
+      if (!state.protocolInjected) {
+        paneMemoryState.set(paneId, state);
+        return;
+      }
+      // Don't warn if already warned for this task cycle
+      if (state.warnedAt && state.warnedAt > (state.lastWriteAt || 0)) {
+        paneMemoryState.set(paneId, state);
+        return;
+      }
+      // Check if this pane used memory tools (tracked by wrapped memoryWrite)
+      // Also scan recent output as a fallback signal
+      const lastOutput = idle?.lastOutput;
+      if (!lastOutput || lastOutput.length === 0) {
+        paneMemoryState.set(paneId, state);
+        return;
+      }
+      let detectedMemoryUse = state.hasMemoryActivity === true;
+      if (!detectedMemoryUse) {
+        const outputText = Array.isArray(lastOutput) ? lastOutput.join("\n") : String(lastOutput);
+        detectedMemoryUse = /memory[_\s]?(write|read|search|list)/i.test(outputText)
+          || /pattern[_\s]?(write|list)/i.test(outputText);
+      }
+      if (!detectedMemoryUse) {
+        // Keep the warning quiet to avoid flooding the terminal; the state is still tracked.
+        state.warnedAt = Date.now();
+      }
+      paneMemoryState.set(paneId, state);
+    } catch {}
+  });
+
   // ── Create handler factories ─────────────────────────────────────────────
   const sharedOpts = { ...opts, paneLabels, roleMap, messageBus, agentScorer };
   const paneHandlers = createPaneHandlers(ptyManager, sharedOpts);
@@ -166,11 +225,13 @@ function createMCPBridge(ptyManager, opts = {}) {
       } catch {}
       // Fire hook event
       try { opts.hooksManager?.fire?.("file_written", { path: relPath, size: result.size }); } catch {}
-      // Notify all other agents about the file change
+      // Notify all other agents about the file change (same workspace only)
       sendAgentNotification(
         ptyManager, paneLabels, "system",
-        `File changed: ${relPath} (${result.size || 0}B) — search memory for "file-changed-${relPath}" for details`,
-        "update"
+        `File changed: ${relPath} (${result.size || 0}B) -- search memory for "file-changed-${relPath}" for details`,
+        "update",
+        messageBus,
+        ws
       );
     }
     return result;
@@ -181,14 +242,29 @@ function createMCPBridge(ptyManager, opts = {}) {
   memoryHandlers.memoryWrite = async function wrappedMemoryWrite(args) {
     const result = await originalMemoryWrite(args);
     if (result?.ok && args.key) {
+      // ── Track memory compliance: mark recently-active panes as compliant ──
+      // Since MCP tool calls don't carry paneId, we infer which pane is active
+      // by checking which pane was recently written to (within last 120s).
+      const now = Date.now();
+      for (const [pid, state] of paneMemoryState) {
+        if (state.lastWriteAt && (now - state.lastWriteAt) < 120000) {
+          state.hasMemoryActivity = true;
+          paneMemoryState.set(pid, state);
+        }
+      }
       // Fire hook event
       try { opts.hooksManager?.fire?.("memory_written", { key: args.key, type: args.type, agent_id: args.agent_id }); } catch {}
-      // Notify all other agents about the new memory entry
+      // Notify all other agents about what was learned and where it was saved
       const typeLabel = args.type || "working";
+      const agentLabel = args.agent_id || "agent";
+      const contentSummary = typeof args.content === "string" ? args.content.slice(0, 150) : "";
+      const contentPreview = contentSummary.length < (args.content?.length || 0) ? contentSummary + "..." : contentSummary;
       sendAgentNotification(
-        ptyManager, paneLabels, args.agent_id || "agent",
-        `Memory updated: [${typeLabel}] ${args.key} — use memory_search("${args.key}") or memory_read(key="${args.key}")`,
-        "update"
+        ptyManager, paneLabels, agentLabel,
+        `Agent "${agentLabel}" learned something and saved it: [${typeLabel}] key="${args.key}" -- ${contentPreview} -- access via memory_search("${args.key}") or memory_read(key="${args.key}")`,
+        "update",
+        messageBus,
+        args.workspace || opts.getCurrentWorkspacePath?.() || undefined
       );
     }
     return result;

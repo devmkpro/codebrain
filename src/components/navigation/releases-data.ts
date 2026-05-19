@@ -14,9 +14,63 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.4.3",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "make auto-notifications silent in the terminal and keep message delivery inbox-only"
+      },
+      {
+        "kind": "feat",
+        "text": "strengthen MCP-first prompts and automatic prompt generation from workspace state"
+      }
+    ]
+  },
+  {
+    "version": "1.4.2",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "enrich shell PATH on Linux/macOS GUI launch"
+      }
+    ]
+  },
+  {
+    "version": "1.4.1",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "detect .deb filename dynamically instead of hardcoding"
+      },
+      {
+        "kind": "fix",
+        "text": "update job names in create-release.mjs to match renamed CI jobs"
+      },
+      {
+        "kind": "fix",
+        "text": "simplify CI YAML — remove default block, em-dashes, complex shell commands"
+      },
+      {
+        "kind": "fix",
+        "text": "rename CI jobs to avoid colons in job names"
+      },
+      {
+        "kind": "fix",
+        "text": "replace multiline block with inline command in CI script"
+      }
+    ]
+  },
+  {
     "version": "1.4.0",
     "date": "maio 2026",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "wrap ALTER TABLE scope migration in try-catch to prevent crash on existing databases"
+      },
       {
         "kind": "feat",
         "text": "cost per task tracking, PTY token parser, per-task UI, hooks expansion, consensus algorithms"
