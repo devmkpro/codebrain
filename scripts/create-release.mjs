@@ -75,8 +75,8 @@ async function uploadToRegistry(fileName, filePath) {
 const jobs = await apiGet(
   `/projects/${PROJECT_ID}/pipelines/${PIPELINE_ID}/jobs?per_page=50`
 );
-const linuxJob = jobs.find((j) => j.name === "build:linux");
-const windowsJob = jobs.find((j) => j.name === "build:windows");
+const linuxJob = jobs.find((j) => j.name === "build_linux");
+const windowsJob = jobs.find((j) => j.name === "build_windows");
 
 if (!linuxJob || !windowsJob) {
   console.error("Could not find build jobs:", jobs.map((j) => j.name));
