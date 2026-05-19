@@ -36,7 +36,14 @@ build:linux:
     - npm ci --prefer-offline
   script:
     - npm run build
-    - npx electron-builder --linux AppImage deb --publish never
+    - npx electron-builder --linux AppImage deb --x64 --publish never
+    - echo "=== Generated artifacts ==="
+    - ls -lh dist/*.AppImage dist/*.deb dist/latest-linux.yml 2>/dev/null || echo "WARNING: Some expected artifacts missing!"
+    - |
+      if ! ls dist/*.deb 2>/dev/null; then
+        echo "ERROR: .deb file was NOT generated!"
+        exit 1
+      fi
   artifacts:
     paths:
       - dist/*.AppImage

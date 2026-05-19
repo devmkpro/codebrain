@@ -42,22 +42,56 @@ npm run dev
 
 That's it. Hot reload is instant.
 
+### What happens in dev mode
+
+- **Renderer** — HMR automatic (change .tsx, reloads instantly)
+- **Main** — Restarts Electron on save to `electron/main/**`
+- **Preload** — Rebuilt automatically on save
+
+### Useful shortcuts in the app
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Shift+I` | Renderer DevTools |
+| `Ctrl+R` | Reload renderer |
+
 ---
 
-## Build for Production
+## Build Executable
 
 ```bash
-# Vite build
+# Install dependencies (if needed)
+npm install
+
+# Generate releases data + bundle stdio MCP + Vite build
 npm run build
+```
 
-# Portable ZIP (no admin needed)
-node scripts/build-exe.mjs
+Then choose your packaging:
 
-# NSIS installer (.exe)
+```bash
+# Windows — Portable ZIP (no admin needed, recommended)
+npm run pack:win
+
+# Windows — NSIS installer (.exe, requires admin or Developer Mode)
 npm run dist:win:nsis
+
+# Windows — Full pipeline (prebuild native + bundle + build + package)
+npm run dist:win
+
+# macOS
+npm run dist:mac
+
+# Linux (AppImage + .deb)
+npm run dist:linux
 ```
 
 Output goes to `dist/`.
+
+### Troubleshooting build errors
+
+If NSIS fails with symlink errors, enable **Developer Mode**:
+`Settings > System > For Developers` or run the terminal as Administrator.
 
 ---
 
@@ -66,18 +100,8 @@ Output goes to `dist/`.
 Download the latest from [GitLab Releases](https://gitlab.com/maikeofc18/codebrain/-/releases).
 
 Available for:
-- Windows x64 (NSIS installer)
+- Windows x64 (NSIS installer + portable ZIP)
 - Linux x64 (AppImage + .deb)
-
-### Create a release
-
-```bash
-npm version patch        # 1.0.0 → 1.0.1 (updates package.json)
-git tag 1.0.1            # tag WITHOUT "v" prefix (must match package.json version)
-git push origin main --tags
-```
-
-GitLab CI builds Windows (via Wine) and Linux artifacts automatically and creates the release.
 
 ---
 

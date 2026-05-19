@@ -29,11 +29,12 @@ function truncateText(text, maxChars = 50_000) {
 /**
  * Strip heavy fields from pane metadata returned by ptyManager.list().
  * Keeps only what the orchestrator needs to manage workers.
- * Internal fields like systemPrompt / toolList can be 5-20 KB each.
+ * Heavy fields: args (string[]), session (Record<string,unknown>),
+ * workspacePath, claudeSessionId — can be 5-20 KB each when present.
  */
 function stripHeavyPaneFields(panes) {
   if (!Array.isArray(panes)) return panes;
-  return panes.map(({ systemPrompt, toolList, config, ...rest }) => rest);
+  return panes.map(({ args, session, workspacePath, claudeSessionId, ...rest }) => rest);
 }
 
 // ── Message Bus (file-based, cross-process) ─────────────────────────────────
