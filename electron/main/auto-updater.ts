@@ -114,7 +114,9 @@ export function setupAutoUpdater(
         if (_onBeforeInstall) {
           await _onBeforeInstall();
         }
-        autoUpdater.quitAndInstall(false, true);
+        setTimeout(() => {
+          autoUpdater.quitAndInstall(true, true);
+        }, 200);
         return { ok: true };
       } catch (err: any) {
         log.error("[auto-updater] quitAndInstall failed:", err);

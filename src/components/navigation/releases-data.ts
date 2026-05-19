@@ -334,43 +334,97 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "export buildEdges function and import it in SessionMap"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.12",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "guard webContents.send against destroyed window on close; fix npm install path-with-spaces on Windows"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.11",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "fix openclaude install on linux and windows with npm check and timeout"
       },
       {
-        "kind": "fix",
-        "text": "repair missing Windows registry keys to fix auto-update error"
-      },
-      {
         "kind": "feat",
         "text": "implement PtyManager for cross-platform process management and terminal session handling"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.10",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "repair missing Windows registry keys to fix auto-update error"
+      }
+    ]
+  },
+  {
+    "version": "1.2.9",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "fix provider banner and system prompt flag for openclaude v0.10"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.8",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "remove generic openai fallback provider argument that forced codex model on custom providers"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.7",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "pass anthropic as provider arg for mimo-compat/anthropic-compat to override codex default"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.6",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "pass --provider arg for openclaude v0.10+ compatibility"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.4",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "feat",
         "text": "add MIT License to the project"
-      },
+      }
+    ]
+  },
+  {
+    "version": "1.2.3",
+    "date": "maio 2026",
+    "highlights": [
       {
         "kind": "fix",
         "text": "guard against empty RELEASES array causing black screen"
