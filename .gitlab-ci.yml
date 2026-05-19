@@ -39,11 +39,7 @@ build:linux:
     - npx electron-builder --linux AppImage deb --x64 --publish never
     - echo "=== Generated artifacts ==="
     - ls -lh dist/*.AppImage dist/*.deb dist/latest-linux.yml 2>/dev/null || echo "WARNING: Some expected artifacts missing!"
-    - |
-      if ! ls dist/*.deb 2>/dev/null; then
-        echo "ERROR: .deb file was NOT generated!"
-        exit 1
-      fi
+    - "ls dist/*.deb 2>/dev/null || (echo 'ERROR: .deb file was NOT generated!' && exit 1)"
   artifacts:
     paths:
       - dist/*.AppImage
