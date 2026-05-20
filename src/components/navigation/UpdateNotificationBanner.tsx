@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { RELEASES } from "./releases-data";
 
 // UpdateNotificationBanner
@@ -72,9 +72,10 @@ export function UpdateNotificationBanner() {
   const renderStatus = () => {
     switch (state.kind) {
       case "idle":
-        return <div className="flex items-center gap-2 text-gray-500">
+        return
+        <div className="flex items-center gap-2 text-gray-500">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-600" />
-          <span>—</span>
+          <span></span>
         </div>;
       case "checking":
         return <div className="flex items-center gap-2 text-gray-400">

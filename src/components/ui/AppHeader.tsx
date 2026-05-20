@@ -30,20 +30,20 @@ import { DiagnosticsModal } from '../diagnostics/DiagnosticsModal';
 
 // ─── Shared modal-state hook ──────────────────────────────────────────────────
 function useModals() {
-  const [showProviders,  setShowProviders]  = React.useState(false);
-  const [providersStep,  setProvidersStep]  = React.useState('list');
-  const [showSquad,      setShowSquad]      = React.useState(false);
-  const [showSettings,   setShowSettings]   = React.useState(false);
-  const [showDiag,       setShowDiag]       = React.useState(false);
+  const [showProviders, setShowProviders] = React.useState(false);
+  const [providersStep, setProvidersStep] = React.useState('list');
+  const [showSquad, setShowSquad] = React.useState(false);
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [showDiag, setShowDiag] = React.useState(false);
 
   const openProviders = (step = 'list') => { setProvidersStep(step); setShowProviders(true); };
   const closeProviders = () => { setShowProviders(false); setProvidersStep('list'); };
 
   return {
     showProviders, openProviders, closeProviders, providersStep,
-    showSquad,    setShowSquad,
+    showSquad, setShowSquad,
     showSettings, setShowSettings,
-    showDiag,     setShowDiag,
+    showDiag, setShowDiag,
   };
 }
 
@@ -64,8 +64,8 @@ function IconBtn({
         ${active
           ? 'text-indigo-400 bg-indigo-500/10'
           : danger
-          ? 'text-slate-600 hover:text-red-400 hover:bg-red-500/5'
-          : 'text-slate-600 hover:text-slate-300 hover:bg-white/[0.04]'}`}
+            ? 'text-slate-600 hover:text-red-400 hover:bg-red-500/5'
+            : 'text-slate-600 hover:text-slate-300 hover:bg-white/[0.04]'}`}
     >
       {icon}
       {badge !== undefined && badge > 0 && (
@@ -83,13 +83,13 @@ const VDiv = () => <div className="w-px h-5 bg-white/[0.06] shrink-0 self-center
 // ─── Home Header ─────────────────────────────────────────────────────────────
 function HomeHeader() {
   const { route } = useRouter();
-  const tabs       = useNavStore(s => s.tabs);
-  const authEmail  = useAuthStore(s => s.email);
+  const tabs = useNavStore(s => s.tabs);
+  const authEmail = useAuthStore(s => s.email);
   const activeWorkspace = tabs[(useNavStore(s => s.activeTabIndex))]?.workspacePath as string | undefined;
 
   const m = useModals();
   const [showAccount, setShowAccount] = React.useState(false);
-  const [profile,     setProfile]     = React.useState<any>(null);
+  const [profile, setProfile] = React.useState<any>(null);
   const accountRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -103,22 +103,17 @@ function HomeHeader() {
     if (!showAccount) return;
     (window as any).codeBrainApp?.auth?.profile?.()
       .then((p: any) => setProfile({ plan: p.plan, status: p.status, periodEnd: p.periodEnd }))
-      .catch(() => {});
+      .catch(() => { });
   }, [showAccount]);
 
   const NAV: { label: string; href: '/' | '/workspaces' | '/logs' | '/settings' }[] = [
-    { label: 'Dashboard',  href: '/' },
+    { label: 'Dashboard', href: '/' },
     { label: 'Workspaces', href: '/workspaces' },
-    { label: 'Logs',       href: '/logs' },
+    { label: 'Logs', href: '/logs' },
   ];
 
   return (
     <>
-      <div className="h-[38px] w-full shrink-0 flex relative z-[60]" style={{ WebkitAppRegion: 'drag' } as any}>
-        <div className="flex-1" />
-        {/* Adicionado o padding na margem direita de 140px por conta dos botões window controls nativos do Electron/Windows */}
-        <div className="w-[140px] shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any} />
-      </div>
 
       <header
         className="h-14 border-b border-white/5 flex items-center px-6 justify-between bg-[#0F0F13] shrink-0 z-50 relative"
@@ -171,7 +166,7 @@ function HomeHeader() {
             <button onClick={() => setShowAccount(v => !v)}
               className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/25 flex items-center justify-center hover:bg-indigo-500/30 transition-all cursor-pointer"
             >
-              <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail?.slice(0,1).toUpperCase() ?? '?'}</span>
+              <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail?.slice(0, 1).toUpperCase() ?? '?'}</span>
             </button>
             {showAccount && <AccountDropdown profile={profile} authEmail={authEmail} activeWorkspace={activeWorkspace} modals={m} onClose={() => setShowAccount(false)} />}
           </div>
@@ -188,11 +183,11 @@ function AccountDropdown({ profile, authEmail, activeWorkspace, modals: m, onClo
   const { navigate } = useRouter();
   const goHome = useNavStore(s => s.goHome);
   const rows = [
-    ...(activeWorkspace ? [{ label: '⬡ Squad',        action: () => { onClose(); m.setShowSquad(true);    }, icon: <Users size={11} /> }] : []),
-    { label: '💲 Token Usage',          action: () => { onClose(); useCostStore.getState().toggle();       }, icon: <DollarSign size={11} /> },
-    { label: '⚙ Configurações',        action: () => { onClose(); goHome(); navigate('/settings');       }, icon: <Settings size={11} /> },
-    { label: '⚡ Diagnóstico',          action: () => { onClose(); m.setShowDiag(true);                   }, icon: <Activity size={11} /> },
-    { label: 'Sair',                   action: () => { onClose(); (window as any).codeBrainApp?.auth?.logout?.(); }, danger: true },
+    ...(activeWorkspace ? [{ label: '⬡ Squad', action: () => { onClose(); m.setShowSquad(true); }, icon: <Users size={11} /> }] : []),
+    { label: '💲 Token Usage', action: () => { onClose(); useCostStore.getState().toggle(); }, icon: <DollarSign size={11} /> },
+    { label: '⚙ Configurações', action: () => { onClose(); goHome(); navigate('/settings'); }, icon: <Settings size={11} /> },
+    { label: '⚡ Diagnóstico', action: () => { onClose(); m.setShowDiag(true); }, icon: <Activity size={11} /> },
+    { label: 'Sair', action: () => { onClose(); (window as any).codeBrainApp?.auth?.logout?.(); }, danger: true },
   ];
 
   return (
@@ -226,7 +221,7 @@ function AccountDropdown({ profile, authEmail, activeWorkspace, modals: m, onClo
 // ─── Modals renderer (shared) ─────────────────────────────────────────────────
 function Modals({ modals: m, activeWorkspace }: { modals: ReturnType<typeof useModals>; activeWorkspace?: string }) {
   const handleSpawnSquad = useWorkspaceSquadSpawner();
-  
+
   React.useEffect(() => {
     const handleOpenProviders = () => m.openProviders('list');
     document.addEventListener('open-providers-modal', handleOpenProviders);
@@ -236,20 +231,20 @@ function Modals({ modals: m, activeWorkspace }: { modals: ReturnType<typeof useM
   return (
     <>
       <ProvidersModal open={m.showProviders} initialStep={m.providersStep} onClose={m.closeProviders} />
-      <SquadModal     open={m.showSquad}     onClose={() => m.setShowSquad(false)} onSpawn={handleSpawnSquad} />
-      <SettingsModal  open={m.showSettings}  onClose={() => m.setShowSettings(false)} />
-      <DiagnosticsModal open={m.showDiag}   activeWorkspace={activeWorkspace} onClose={() => m.setShowDiag(false)} />
+      <SquadModal open={m.showSquad} onClose={() => m.setShowSquad(false)} onSpawn={handleSpawnSquad} />
+      <SettingsModal open={m.showSettings} onClose={() => m.setShowSettings(false)} />
+      <DiagnosticsModal open={m.showDiag} activeWorkspace={activeWorkspace} onClose={() => m.setShowDiag(false)} />
     </>
   );
 }
 
 // ─── Squad spawner (shared logic) ────────────────────────────────────────────
 function useWorkspaceSquadSpawner() {
-  const addPane         = usePanesStore(s => s.addPane);
-  const providers       = useProvidersStore(s => s.providers) as any[];
+  const addPane = usePanesStore(s => s.addPane);
+  const providers = useProvidersStore(s => s.providers) as any[];
   const activeWorkspace = useNavStore(s => {
     const tabs = s.tabs as any[];
-    const tab  = tabs[s.activeTabIndex];
+    const tab = tabs[s.activeTabIndex];
     return tab?.workspacePath as string | undefined;
   });
   const permMode = localStorage.getItem('codebrain.permissionMode') ?? 'bypassPermissions';
@@ -278,10 +273,10 @@ function useWorkspaceSquadSpawner() {
     };
 
     // ── Spawn workers first ──
-    const workers    = squad.workers ?? (squad.worker ? [squad.worker] : []);
+    const workers = squad.workers ?? (squad.worker ? [squad.worker] : []);
     const workerIds: string[] = [];
     for (const w of workers) {
-      const prov  = providers.find(p => p.id === w.providerId);
+      const prov = providers.find(p => p.id === w.providerId);
       const agent = w.agent ?? prov?.host ?? 'openclaude';
       const validModel = resolveValidModel(w.providerId, w.model);
       const role = detectRole(w.role ?? '');
@@ -293,7 +288,7 @@ function useWorkspaceSquadSpawner() {
     if (!workerIds.length) return;
 
     // ── Spawn orchestrator with role=orchestrator ──
-    const orchProv  = providers.find(p => p.id === squad.orchestrator.providerId);
+    const orchProv = providers.find(p => p.id === squad.orchestrator.providerId);
     const orchAgent = squad.orchestrator.agent ?? orchProv?.host ?? 'openclaude';
     const validOrchModel = resolveValidModel(squad.orchestrator.providerId, squad.orchestrator.model);
     const orchRes = await pty.spawn({
@@ -313,7 +308,7 @@ function useWorkspaceSquadSpawner() {
 
 // ─── Files navbar (path breadcrumb) ──────────────────────────────────────────
 function FilesNavBar({ workspacePath }: { workspacePath: string }) {
-  const parts   = workspacePath.replace(/\\/g, '/').split('/').filter(Boolean);
+  const parts = workspacePath.replace(/\\/g, '/').split('/').filter(Boolean);
   const navigateInActiveTab = useNavStore(s => s.navigateInActiveTab);
   return (
     <div className="h-9 border-b border-white/5 bg-[#0F0F13]/80 flex items-center px-4 gap-2 shrink-0 overflow-x-auto"
@@ -344,10 +339,10 @@ function PaneMenu({
   onClose, activeWorkspace, permissionMode, setPermissionMode,
   savedPanes, snapshotBusy, onSave, onRestore, onRestorePane,
 }: any) {
-  const addPane   = usePanesStore(s => s.addPane);
+  const addPane = usePanesStore(s => s.addPane);
   const providers = useProvidersStore(s => s.providers) as any[];
   const detectedUrl = useBrowserStore(s => s.detectedUrl);
-  const m         = useModals();
+  const m = useModals();
   const navigateInActiveTab = useNavStore(s => s.navigateInActiveTab);
   const favoritePane = React.useRef<any>(null);
   const [favLoaded, setFavLoaded] = React.useState(false);
@@ -364,14 +359,14 @@ function PaneMenu({
     onClose();
     navigateInActiveTab({ kind: 'workspace' });
     const explicit = providerId !== undefined || model !== undefined;
-    const nextPid  = explicit ? providerId : favoritePane.current?.providerId;
-    const nextMod  = explicit ? model      : favoritePane.current?.model;
-    const prov     = nextPid ? providers.find(p => p.id === nextPid) : null;
-    const agent    = explicit ? prov?.host ?? 'openclaude' : favoritePane.current?.agent ?? prov?.host ?? 'openclaude';
-    const env: Record<string,string> = { ...(prov?.env ?? {}), ...(nextMod ? { ANTHROPIC_MODEL: nextMod, MODEL: nextMod } : {}) };
+    const nextPid = explicit ? providerId : favoritePane.current?.providerId;
+    const nextMod = explicit ? model : favoritePane.current?.model;
+    const prov = nextPid ? providers.find(p => p.id === nextPid) : null;
+    const agent = explicit ? prov?.host ?? 'openclaude' : favoritePane.current?.agent ?? prov?.host ?? 'openclaude';
+    const env: Record<string, string> = { ...(prov?.env ?? {}), ...(nextMod ? { ANTHROPIC_MODEL: nextMod, MODEL: nextMod } : {}) };
     (window as any).codeBrainApp?.pty.spawn({ agent, cwd: activeWorkspace, providerId: nextPid, model: nextMod, permissionMode, ...(Object.keys(env).length ? { env } : {}) })
       .then((r: any) => { if (r?.ok && r.paneId) addPane({ id: r.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: nextPid, model: nextMod, permissionMode, externallySpawned: true }); })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const handleTerminal = () => {
@@ -380,7 +375,7 @@ function PaneMenu({
     navigateInActiveTab({ kind: 'workspace' });
     (window as any).codeBrainApp?.pty.spawn({ agent: 'shell', cwd: activeWorkspace })
       .then((r: any) => { if (r?.ok && r.paneId) addPane({ id: r.paneId, agent: 'shell', cwd: activeWorkspace, workspacePath: activeWorkspace, externallySpawned: true }); })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const handleBrowser = () => {
@@ -393,9 +388,9 @@ function PaneMenu({
 
   const PERM_MODES = [
     { id: 'bypassPermissions', label: 'Danger', cls: (a: boolean) => a ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' : 'border-white/10 text-slate-600 hover:text-rose-400' },
-    { id: 'auto',              label: 'Auto',   cls: (a: boolean) => a ? 'bg-green-500/20 text-green-300 border-green-500/40' : 'border-white/10 text-slate-600 hover:text-green-400' },
-    { id: 'default',           label: 'Pend',   cls: (a: boolean) => a ? 'bg-white/10 text-slate-200 border-white/20' : 'border-white/10 text-slate-600 hover:text-slate-300' },
-    { id: 'plan',              label: 'Plan',   cls: (a: boolean) => a ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'border-white/10 text-slate-600 hover:text-indigo-400' },
+    { id: 'auto', label: 'Auto', cls: (a: boolean) => a ? 'bg-green-500/20 text-green-300 border-green-500/40' : 'border-white/10 text-slate-600 hover:text-green-400' },
+    { id: 'default', label: 'Pend', cls: (a: boolean) => a ? 'bg-white/10 text-slate-200 border-white/20' : 'border-white/10 text-slate-600 hover:text-slate-300' },
+    { id: 'plan', label: 'Plan', cls: (a: boolean) => a ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'border-white/10 text-slate-600 hover:text-indigo-400' },
   ];
 
   return (
@@ -429,7 +424,7 @@ function PaneMenu({
           <p className="px-3 py-2 font-mono text-[10px] text-slate-700">Nenhum provider configurado</p>
         )}
         {providers.map(p => {
-          const pid    = p.id === 'claude-oauth' ? undefined : p.id;
+          const pid = p.id === 'claude-oauth' ? undefined : p.id;
           const models = p.models ?? [];
           return (
             <div key={p.id} className="border-b border-white/5">
@@ -440,8 +435,8 @@ function PaneMenu({
               {models.length === 0
                 ? <button onClick={() => handleAddPane(pid)} className="w-full text-left px-3 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">+ default</button>
                 : models.map((model: string) => (
-                    <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all truncate cursor-pointer">+ {model}</button>
-                  ))
+                  <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all truncate cursor-pointer">+ {model}</button>
+                ))
               }
             </div>
           );
@@ -466,7 +461,7 @@ function PaneMenu({
             <div className="max-h-56 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
               {savedPanes.map((p: any) => {
                 const preview = p.summary || '(sem mensagens)';
-                const ago     = new Date(p.savedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                const ago = new Date(p.savedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
                 return (
                   <button key={p.id} onClick={() => { onClose(); onRestorePane(p); }}
                     className="w-full text-left px-3 py-1.5 hover:bg-white/5 transition-all border-b border-white/[0.03] cursor-pointer"
@@ -489,14 +484,14 @@ function PaneMenu({
 
 // ─── Audio / Voice Indicator ──────────────────────────────────────────────────
 function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
-  const voiceStats        = useVoiceStore(s => s.stats);
-  const requestCancel     = useVoiceStore(s => s.requestCancel);
-  const voiceCancelable   = voiceStats.visible || voiceStats.phase !== 'idle' || voiceStats.chunksPending > 0;
+  const voiceStats = useVoiceStore(s => s.stats);
+  const requestCancel = useVoiceStore(s => s.requestCancel);
+  const voiceCancelable = voiceStats.visible || voiceStats.phase !== 'idle' || voiceStats.chunksPending > 0;
 
   const phaseColor =
-    voiceStats.phase === 'listening'    ? 'text-cyan-300 bg-cyan-500/10'
-    : voiceStats.phase === 'transcribing' ? 'text-yellow-300 bg-yellow-500/10'
-    : 'text-slate-700';
+    voiceStats.phase === 'listening' ? 'text-cyan-300 bg-cyan-500/10'
+      : voiceStats.phase === 'transcribing' ? 'text-yellow-300 bg-yellow-500/10'
+        : 'text-slate-700';
 
   const mode = normalizedVoiceMode(audioConfig?.interactionMode);
 
@@ -540,55 +535,55 @@ function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
 
 // ─── Workspace Header ─────────────────────────────────────────────────────────
 function WorkspaceHeader() {
-  const tabs             = useNavStore(s => s.tabs) as any[];
-  const activeTabIndex   = useNavStore(s => s.activeTabIndex);
-  const onHome           = useNavStore(s => s.onHome);
-  const goHome           = useNavStore(s => s.goHome);
-  const setActiveTab     = useNavStore(s => s.setActiveTab);
-  const moveTab          = useNavStore(s => s.moveTab);
-  const closeTab         = useNavStore(s => s.closeTab);
+  const tabs = useNavStore(s => s.tabs) as any[];
+  const activeTabIndex = useNavStore(s => s.activeTabIndex);
+  const onHome = useNavStore(s => s.onHome);
+  const goHome = useNavStore(s => s.goHome);
+  const setActiveTab = useNavStore(s => s.setActiveTab);
+  const moveTab = useNavStore(s => s.moveTab);
+  const closeTab = useNavStore(s => s.closeTab);
   const navigateInActiveTab = useNavStore(s => s.navigateInActiveTab);
 
-  const addPane          = usePanesStore(s => s.addPane);
-  const authEmail        = useAuthStore(s => s.email);
-  const providers        = useProvidersStore(s => s.providers) as any[];
-  const loadProviders    = useProvidersStore(s => s.load);
+  const addPane = usePanesStore(s => s.addPane);
+  const authEmail = useAuthStore(s => s.email);
+  const providers = useProvidersStore(s => s.providers) as any[];
+  const loadProviders = useProvidersStore(s => s.load);
 
   const tasksVisible = useTasksStore(s => s.visible);
-  const tasksCount   = useTasksStore(s => s.list.length);
-  const toggleTasks  = useTasksStore(s => s.toggle);
+  const tasksCount = useTasksStore(s => s.list.length);
+  const toggleTasks = useTasksStore(s => s.toggle);
 
   const memoryVisible = useMemoryStore(s => s.visible);
-  const toggleMemory  = useMemoryStore(s => s.toggle);
+  const toggleMemory = useMemoryStore(s => s.toggle);
 
   const costVisible = useCostStore(s => s.visible);
-  const toggleCost  = useCostStore(s => s.toggle);
+  const toggleCost = useCostStore(s => s.toggle);
 
-  const appZoom          = useTerminalSettings(s => s.appZoom);
-  const increaseAppZoom  = useTerminalSettings(s => s.increaseAppZoom);
-  const decreaseAppZoom  = useTerminalSettings(s => s.decreaseAppZoom);
-  const resetAppZoom     = useTerminalSettings(s => s.resetAppZoom);
+  const appZoom = useTerminalSettings(s => s.appZoom);
+  const increaseAppZoom = useTerminalSettings(s => s.increaseAppZoom);
+  const decreaseAppZoom = useTerminalSettings(s => s.decreaseAppZoom);
+  const resetAppZoom = useTerminalSettings(s => s.resetAppZoom);
 
   const m = useModals();
 
-  const [showAccount,   setShowAccount]   = React.useState(false);
-  const [showPaneMenu,  setShowPaneMenu]  = React.useState(false);
-  const [profile,       setProfile]       = React.useState<any>(null);
-  const [savedPanes,    setSavedPanes]    = React.useState<any[]>([]);
-  const [snapshotBusy,  setSnapshotBusy]  = React.useState(false);
-  const [permMode,      setPermMode]      = React.useState(() => localStorage.getItem('codebrain.permissionMode') ?? 'bypassPermissions');
-  const [audioConfig,   setAudioConfig]   = React.useState<any>(null);
+  const [showAccount, setShowAccount] = React.useState(false);
+  const [showPaneMenu, setShowPaneMenu] = React.useState(false);
+  const [profile, setProfile] = React.useState<any>(null);
+  const [savedPanes, setSavedPanes] = React.useState<any[]>([]);
+  const [snapshotBusy, setSnapshotBusy] = React.useState(false);
+  const [permMode, setPermMode] = React.useState(() => localStorage.getItem('codebrain.permissionMode') ?? 'bypassPermissions');
+  const [audioConfig, setAudioConfig] = React.useState<any>(null);
   const [audioModeBusy, setAudioModeBusy] = React.useState(false);
-  const [dragIndex,     setDragIndex]     = React.useState<number|null>(null);
-  const [dropIndex,     setDropIndex]     = React.useState<number|null>(null);
+  const [dragIndex, setDragIndex] = React.useState<number | null>(null);
+  const [dropIndex, setDropIndex] = React.useState<number | null>(null);
 
-  const accountRef  = React.useRef<HTMLDivElement>(null);
+  const accountRef = React.useRef<HTMLDivElement>(null);
   const paneMenuRef = React.useRef<HTMLDivElement>(null);
 
-  const activeTab       = !onHome ? tabs[activeTabIndex] : undefined;
+  const activeTab = !onHome ? tabs[activeTabIndex] : undefined;
   const activeWorkspace = activeTab?.workspacePath as string | undefined;
-  const isMapView       = activeTab?.view?.kind === 'map';
-  const isFilesView     = activeTab?.view?.kind === 'files';
+  const isMapView = activeTab?.view?.kind === 'map';
+  const isFilesView = activeTab?.view?.kind === 'files';
 
   // ── Effects ──────────────────────────────────────────────────────────────
   React.useEffect(() => { loadProviders(); }, [loadProviders]);
@@ -620,7 +615,7 @@ function WorkspaceHeader() {
     if (!showAccount) return;
     (window as any).codeBrainApp?.auth?.profile?.()
       .then((p: any) => setProfile({ plan: p.plan, status: p.status, periodEnd: p.periodEnd }))
-      .catch(() => {});
+      .catch(() => { });
   }, [showAccount]);
 
   // Load saved panes when pane menu opens
@@ -635,9 +630,9 @@ function WorkspaceHeader() {
       const all: any[] = [];
       for (const s of saved) for (const p of s.panes) all.push({ ...p, savedAt: s.savedAt });
       for (const s of claude) all.push({ id: s.paneId ?? s.sessionId, agent: 'openclaude', cwd: s.cwd, lastLines: s.summary ? [s.summary] : [], session: s.session ?? { provider: 'claude', id: s.sessionId, capturedAt: s.savedAt ?? s.lastUsedAt ?? s.firstSeenAt, confidence: 'high', source: 'transcript-file' }, claudeSessionId: s.sessionId, providerId: s.providerId, model: s.model, summary: s.summary, savedAt: s.savedAt ?? s.lastUsedAt ?? s.firstSeenAt });
-      const byKey = new Map<string,any>();
+      const byKey = new Map<string, any>();
       for (const p of all) { const sess = p.session ?? (p.claudeSessionId ? { provider: 'claude', id: p.claudeSessionId } : undefined); const key = sess ? `${sess.provider}:${sess.id}` : `${p.agent}:${p.id}`; const ex = byKey.get(key); if (!ex || p.savedAt > ex.savedAt) byKey.set(key, p); }
-      setSavedPanes([...byKey.values()].sort((a,b) => b.savedAt - a.savedAt));
+      setSavedPanes([...byKey.values()].sort((a, b) => b.savedAt - a.savedAt));
     }).catch(() => setSavedPanes([]));
   }, [showPaneMenu, activeWorkspace]);
 
@@ -664,7 +659,7 @@ function WorkspaceHeader() {
 
   const handleRestorePane = async (pane: any) => {
     const restProv = pane.providerId ? providers.find(p => p.id === pane.providerId) : null;
-    const env: Record<string,string> = { ...(restProv?.env ?? {}), ...(pane.model ? { ANTHROPIC_MODEL: pane.model, MODEL: pane.model } : {}) };
+    const env: Record<string, string> = { ...(restProv?.env ?? {}), ...(pane.model ? { ANTHROPIC_MODEL: pane.model, MODEL: pane.model } : {}) };
     const r = await (window as any).codeBrainApp?.pty.spawn({ paneId: pane.id, agent: pane.agent, cwd: pane.cwd, args: pane.args, session: pane.session, claudeSessionId: pane.claudeSessionId, providerId: pane.providerId, model: pane.model, ...(Object.keys(env).length ? { env } : {}) });
     if (r?.ok && r.paneId) addPane({ id: r.paneId, agent: pane.agent, cwd: pane.cwd, args: pane.args, workspacePath: activeWorkspace, session: pane.session, claudeSessionId: pane.claudeSessionId, lastLines: pane.lastLines, providerId: pane.providerId, model: pane.model, externallySpawned: true });
     if (usePanesStore.getState().panes.find((p: any) => p.session?.provider === pane.session?.provider && p.session?.id === pane.session?.id)) {
@@ -675,9 +670,9 @@ function WorkspaceHeader() {
   const handleToggleAudioMode = async () => {
     if (!audioConfig || audioModeBusy) return;
     setAudioModeBusy(true);
-    const cur     = normalizedVoiceMode(audioConfig.interactionMode);
+    const cur = normalizedVoiceMode(audioConfig.interactionMode);
     const newMode = cur === 'coding' ? 'conversation' : 'coding';
-    const patch   = { interactionMode: newMode, outputMode: outputModeForInteractionMode(newMode) };
+    const patch = { interactionMode: newMode, outputMode: outputModeForInteractionMode(newMode) };
     setAudioConfig((c: any) => c ? { ...c, ...patch } : c);
     try {
       const res = await (window as any).codeBrainApp?.audio?.saveConfig(patch);
@@ -690,12 +685,7 @@ function WorkspaceHeader() {
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <>
-      <div className="h-[38px] w-full shrink-0 flex relative z-[60]" style={{ WebkitAppRegion: 'drag' } as any}>
-        <div className="flex-1" />
-        {/* Adicionado o padding na margem direita de 140px por conta dos botões window controls nativos do Electron/Windows */}
-        <div className="w-[140px] shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any} />
-      </div>
-      
+
       {/* ── Main header row ───────────────────────────────────────── */}
       <div
         className="h-12 border-b border-white/[0.06] flex items-stretch bg-[#0F0F13] shrink-0 overflow-x-auto relative"
@@ -717,19 +707,19 @@ function WorkspaceHeader() {
         {/* Workspace Tabs */}
         <div className="flex items-stretch min-w-0 overflow-x-auto" style={{ WebkitAppRegion: 'no-drag', scrollbarWidth: 'none' } as React.CSSProperties}>
           {tabs.map((tab: any, i: number) => {
-            const isActive   = !onHome && i === activeTabIndex;
-            const label      = tabLabel(tab);
-            const isMissing  = tab.missing === true;
+            const isActive = !onHome && i === activeTabIndex;
+            const label = tabLabel(tab);
+            const isMissing = tab.missing === true;
             const isDragging = dragIndex === i;
-            const isTarget   = dropIndex === i && dragIndex !== null && dragIndex !== i;
+            const isTarget = dropIndex === i && dragIndex !== null && dragIndex !== i;
             return (
               <div
                 key={tab.id ?? i}
                 draggable
                 onDragStart={e => { setDragIndex(i); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); }}
-                onDragOver={e  => { if (dragIndex === null) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dropIndex !== i) setDropIndex(i); }}
+                onDragOver={e => { if (dragIndex === null) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dropIndex !== i) setDropIndex(i); }}
                 onDragLeave={() => { if (dropIndex === i) setDropIndex(null); }}
-                onDrop={e      => { e.preventDefault(); if (dragIndex !== null && dragIndex !== i) moveTab(dragIndex, i); setDragIndex(null); setDropIndex(null); }}
+                onDrop={e => { e.preventDefault(); if (dragIndex !== null && dragIndex !== i) moveTab(dragIndex, i); setDragIndex(null); setDropIndex(null); }}
                 onDragEnd={() => { setDragIndex(null); setDropIndex(null); }}
                 onClick={() => setActiveTab(i)}
                 title={tab.workspacePath}
@@ -831,7 +821,7 @@ function WorkspaceHeader() {
               title="Conta"
             >
               <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/25 flex items-center justify-center">
-                <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail?.slice(0,1).toUpperCase() ?? '?'}</span>
+                <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail?.slice(0, 1).toUpperCase() ?? '?'}</span>
               </div>
             </button>
             {showAccount && (
@@ -858,6 +848,6 @@ function WorkspaceHeader() {
 // ─── AppHeader ────────────────────────────────────────────────────────────────
 export function AppHeader() {
   const onHome = useNavStore(s => s.onHome);
-  const tabs   = useNavStore(s => s.tabs);
+  const tabs = useNavStore(s => s.tabs);
   return onHome || (tabs as any[]).length === 0 ? <HomeHeader /> : <WorkspaceHeader />;
 }
