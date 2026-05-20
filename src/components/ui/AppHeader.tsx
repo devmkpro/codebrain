@@ -334,40 +334,6 @@ function FilesNavBar({ workspacePath }: { workspacePath: string }) {
   );
 }
 
-// ─── Model pricing (per 1M tokens, IN/OUT USD) ─────────────────────────────
-const MODEL_PRICING: Record<string, [number, number]> = {
-  'mimo-v2.5-pro': [1.00, 3.00],
-  'mimo-v2-pro': [1.00, 3.00],
-  'mimo-v2.5': [0.40, 2.00],
-  'mimo-v2-omni': [0.40, 2.00],
-  'mimo-v2-flash': [0.10, 0.30],
-  'gemini-3.1-pro-preview': [2.00, 12.00],
-  'gemini-3.1-pro-preview-customtools': [2.00, 12.00],
-  'gemini-3-pro-preview': [2.00, 12.00],
-  'gemini-3.5-flash': [1.50, 9.00],
-  'gemini-3-flash-preview': [0.50, 3.00],
-  'gemini-2.5-pro': [1.25, 10.00],
-  'gemini-2.5-flash': [0.30, 2.50],
-  'gemini-2.5-flash-lite': [0.10, 0.40],
-  'gemini-2.0-flash': [0.10, 0.40],
-  'gemini-2.0-flash-lite': [0.075, 0.30],
-  'claude-opus-4-6': [5.00, 25.00],
-  'claude-sonnet-4-6': [3.00, 15.00],
-  'claude-sonnet-4-5-20250929': [3.00, 15.00],
-  'claude-haiku-4-5-20251001': [1.00, 5.00],
-  'claude-3-5-haiku-20241022': [1.00, 5.00],
-};
-
-function modelPricingLabel(model: string): string | null {
-  const key = model.toLowerCase();
-  for (const [k, v] of Object.entries(MODEL_PRICING)) {
-    if (k.toLowerCase() === key) {
-      return `IN $${v[0].toFixed(2)} / OUT $${v[1].toFixed(2)}`;
-    }
-  }
-  return null;
-}
-
 // ─── Model pricing map (per 1M tokens, USD) ──────────────────────────────────
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   // Anthropic
@@ -407,6 +373,16 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'mimo-v2-omni': { input: 0.40, output: 2.0 },
   'mimo-v2-flash': { input: 0.10, output: 0.30 },
 };
+
+function modelPricingLabel(model: string): string | null {
+  const key = model.toLowerCase();
+  for (const [k, v] of Object.entries(MODEL_PRICING)) {
+    if (k.toLowerCase() === key) {
+      return `IN $${v.input.toFixed(2)} / OUT $${v.output.toFixed(2)}`;
+    }
+  }
+  return null;
+}
 
 function getModelPricing(model: string): { input: number; output: number } | null {
   const lower = model.toLowerCase();
