@@ -1331,9 +1331,9 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "mcp__codebrain__browser_get_accessibility_tree",
     "Get the accessibility tree (roles, labels, bounds) of the page. Best for AI understanding of page structure.",
-    { max_depth: z.number().optional().describe("Max tree depth (default 10)"), pane_id: z.string().optional() },
+    { max_depth: z.number().optional().describe("Max tree depth (default 10)"), max_nodes: z.number().optional().describe("Max nodes to return (default 300)"), pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetA11yTree(args.max_depth, args.pane_id)) }] }; }
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetA11yTree(args.max_depth, args.max_nodes, args.pane_id)) }] }; }
       catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );

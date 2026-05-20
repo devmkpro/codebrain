@@ -23,7 +23,7 @@ function createBrowserHandlers(opts) {
     async browserReload(hard, paneId) { return browserCmd("reload", { hard, paneId }); },
     async browserGetHtml(selector, paneId) { return browserCmd("get-html", { selector, paneId }); },
     async browserGetText(selector, paneId) { return browserCmd("get-text", { selector, paneId }); },
-    async browserGetA11yTree(maxDepth, paneId) { return browserCmd("get-a11y-tree", { maxDepth, paneId }); },
+    async browserGetA11yTree(maxDepth, maxNodes, paneId) { return browserCmd("get-a11y-tree", { maxDepth, maxNodes, paneId }); },
     async browserFindByText(text, role, exact, paneId) { return browserCmd("find-by-text", { text, role, exact, paneId }); },
     async browserGetElement(selector, paneId) { return browserCmd("get-element", { selector, paneId }); },
     async browserGetUrl(paneId) { return browserCmd("get-url", { paneId }); },

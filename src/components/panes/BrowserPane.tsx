@@ -95,7 +95,8 @@ export function BrowserPane({
     webviewReadyPromiseRef.current._resolve = resolve;
   }, []);
 
-  // Track webview readiness
+  // Track webview readiness — reset on each navigation to prevent
+  // GUEST_VIEW_MANAGER_CALL errors from stale readiness state
   React.useEffect(() => {
     const wv = webviewRef.current;
     if (!wv) return;
@@ -103,8 +104,20 @@ export function BrowserPane({
       webviewReadyRef.current = true;
       webviewReadyPromiseRef.current?._resolve?.();
     };
+    const onStartLoading = () => {
+      // Reset readiness when navigating — new page context is not ready yet
+      webviewReadyRef.current = false;
+      // Create a fresh readiness promise for the new page
+      let resolve;
+      webviewReadyPromiseRef.current = new Promise(r => { resolve = r; });
+      webviewReadyPromiseRef.current._resolve = resolve;
+    };
     wv.addEventListener("dom-ready", onDomReady);
-    return () => wv.removeEventListener("dom-ready", onDomReady);
+    wv.addEventListener("did-start-loading", onStartLoading);
+    return () => {
+      wv.removeEventListener("dom-ready", onDomReady);
+      wv.removeEventListener("did-start-loading", onStartLoading);
+    };
   }, []);
 
   // Command bus — handle commands from main process (MCP tools)
