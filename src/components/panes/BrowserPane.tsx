@@ -268,15 +268,37 @@ export function BrowserPane({
           // All other commands use injection scripts
           const script = buildScript(type, payload);
           // Retry executeJavaScript — webview may be in a transitional state
+          // GUEST_VIEW_MANAGER_CALL errors happen when the webview guest process
+          // is loading, navigating, or has crashed. We retry with increasing delays.
           let lastErr;
-          for (let attempt = 0; attempt < 2; attempt++) {
+          const maxAttempts = 4;
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
             try {
+              // Pre-flight: check if webview is still alive
+              if (attempt > 0) {
+                try {
+                  await wv.executeJavaScript("1+1");
+                } catch (preCheckErr) {
+                  // Webview guest is unresponsive — wait longer before retry
+                  const waitMs = 300 * (attempt + 1);
+                  await new Promise(r => setTimeout(r, waitMs));
+                  continue;
+                }
+              }
               result = await wv.executeJavaScript(script);
               lastErr = null;
               break;
             } catch (e) {
               lastErr = e;
-              if (attempt < 1) await new Promise(r => setTimeout(r, 150));
+              const errMsg = String(e?.message || e);
+              // GUEST_VIEW_MANAGER_CALL = guest process transitional state
+              if (errMsg.includes("GUEST_VIEW_MANAGER") || errMsg.includes("Script failed to execute")) {
+                const waitMs = 300 * (attempt + 1);
+                await new Promise(r => setTimeout(r, waitMs));
+              } else {
+                // Non-transient error — don't retry
+                break;
+              }
             }
           }
           if (lastErr) throw lastErr;
@@ -401,7 +423,16 @@ export function BrowserPane({
       setError(`${e.errorCode} ${e.errorDescription} — ${e.validatedURL}`);
       setLoading(false);
     };
-    const onCrash = () => setError("webview crashed");
+    const onCrash = () => {
+      setError("webview crashed — auto-recovering…");
+      // Auto-recover: reload the webview after a brief delay
+      setTimeout(() => {
+        try {
+          webviewReadyRef.current = false;
+          wv.reload();
+        } catch {}
+      }, 1000);
+    };
     wv.addEventListener("did-start-loading", onStart);
     wv.addEventListener("did-stop-loading", onStop);
     wv.addEventListener("did-fail-load", onFail);
