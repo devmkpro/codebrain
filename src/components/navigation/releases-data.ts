@@ -14,6 +14,44 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.4.7",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "enforce MCP-only inter-agent messaging with auto-read injection"
+      }
+    ]
+  },
+  {
+    "version": "1.4.6",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "reset webview readiness on navigation + forward maxNodes for a11y tree"
+      },
+      {
+        "kind": "fix",
+        "text": "improve browser GUEST_VIEW_MANAGER_CALL error handling"
+      },
+      {
+        "kind": "fix",
+        "text": "replace gemini-3.1-pro with correct API model names"
+      }
+    ]
+  },
+  {
+    "version": "1.4.5",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add gemini-3.5-flash model support"
+      }
+    ]
+  },
+  {
     "version": "1.4.4",
     "date": "maio 2026",
     "highlights": [
