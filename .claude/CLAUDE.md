@@ -269,9 +269,9 @@ await pane_send_message({ from: backendId, to: frontendId, content: "API ready a
 ### Worker Roles
 | Role | Prompt | Model | Responsibility |
 |------|--------|-------|----------------|
-| Orchestrator | `squad-orchestrator.md` | gemini-3.1-pro | Plan, delegate, synthesize |
-| Backend | `squad-worker-gemini.md` | gemini-3.1-pro | APIs, databases, server logic |
-| Frontend | `squad-worker-gemini.md` | gemini-3.1-pro | UI components, styling, state |
+| Orchestrator | `squad-orchestrator.md` | gemini-3.1-pro-preview | Plan, delegate, synthesize |
+| Backend | `squad-worker-gemini.md` | gemini-3.1-pro-preview | APIs, databases, server logic |
+| Frontend | `squad-worker-gemini.md` | gemini-3.1-pro-preview | UI components, styling, state |
 | UI Tester | `squad-ui-tester.md` | gemini-2.5-flash | Browser testing, bug detection |
 
 ---

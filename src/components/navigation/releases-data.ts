@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.4.8",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "fix gemini model spawn using stale provider store names instead of enhanced model list"
+      }
+    ]
+  },
+  {
     "version": "1.4.7",
     "date": "maio 2026",
     "highlights": [
@@ -37,7 +47,7 @@ export const RELEASES: Release[] = [
       },
       {
         "kind": "fix",
-        "text": "replace gemini-3.1-pro with correct API model names"
+        "text": "replace gemini-3.1-pro-preview with correct API model names"
       }
     ]
   },

@@ -18,7 +18,7 @@ const DEFAULT_MODEL_COSTS = {
   // MODELOS ESPECIALIZADOS EM AGENTES / REASONING (Raciocínio Complexo)
   // ==========================================
   "claude-4.7-opus-thinking": { input: 5.0, output: 25.0 },
-  "gemini-3.1-pro-thinking": { input: 2.0, output: 12.0 }, // Conforme tabela para comandos <= 200k
+  "gemini-3.1-pro-preview-thinking": { input: 2.0, output: 12.0 }, // Conforme tabela para comandos <= 200k
 
   // Gemini 3.1 Flash-Lite
   "gemini-3.1-flash-lite": { input: 0.25, output: 1.50 },

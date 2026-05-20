@@ -98,7 +98,7 @@ export async function spawnPaneInternal(
         provider = allProviders.find((p) => p.host === "gemini" || p.id?.toLowerCase().includes("gemini")) ?? null;
       } else if (agent === "openclaude" || agent === "claude") {
         if (model) {
-          provider = allProviders.find((p) => p.models?.includes(model)) ?? null;
+          provider = allProviders.find((p) => p.models?.includes(model) || (ENHANCED_MODEL_MAP[p.type ?? ""] ?? []).includes(model)) ?? null;
           if (!provider) {
             const targetType = getProviderTypeForModel(model);
             if (targetType) {
@@ -122,7 +122,9 @@ export async function spawnPaneInternal(
     // Validate model
     if (provider && model) {
       const providerModels = provider.models ?? [];
-      if (providerModels.length > 0 && !providerModels.includes(model)) {
+      const enhancedModels = ENHANCED_MODEL_MAP[provider.type ?? ""] ?? [];
+      const modelKnown = providerModels.includes(model) || enhancedModels.includes(model);
+      if (providerModels.length > 0 && !modelKnown) {
         const targetType = getProviderTypeForModel(model);
         if (targetType && targetType !== provider.type) {
           const betterProvider = ctx.providerStore.listFull().find((p) => p.type === targetType);
@@ -131,16 +133,20 @@ export async function spawnPaneInternal(
             provider = betterProvider;
             providerId = betterProvider.id;
           } else {
-            log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}". Available: ${providerModels.join(", ")}. Falling back to first model.`);
-            model = providerModels[0];
+            const fallback = enhancedModels[0] || providerModels[0];
+            log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}". Available: ${providerModels.join(", ")}. Falling back to: ${fallback}`);
+            model = fallback;
           }
         } else {
-          log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}". Available: ${providerModels.join(", ")}. Falling back to first model.`);
-          model = providerModels[0];
+          const fallback = enhancedModels[0] || providerModels[0];
+          log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}". Available: ${providerModels.join(", ")}. Falling back to: ${fallback}`);
+          model = fallback;
         }
       }
-    } else if (provider && !model && provider.models?.length > 0) {
-      model = provider.models[0];
+    } else if (provider && !model) {
+      // Use enhanced model list when available (avoids stale stored names like "gemini-3.1-pro")
+      const enhanced = ENHANCED_MODEL_MAP[provider.type ?? ""];
+      model = (enhanced && enhanced.length > 0 ? enhanced : provider.models)?.[0];
     }
 
     // Filter masked values from frontend config.env
@@ -200,7 +206,8 @@ export async function spawnPaneInternal(
       const providersInfo = allProviders
         .filter((p) => p.id !== "claude-oauth")
         .map((p) => {
-          const models = p.models?.join(", ") || "nenhum modelo listado";
+          const enhanced = ENHANCED_MODEL_MAP[p.type ?? ""];
+          const models = (enhanced && enhanced.length > 0 ? enhanced : p.models)?.join(", ") || "nenhum modelo listado";
           return `* ${p.label} (id: "${p.id}", type: "${p.type}"): ${models}`;
         })
         .join("\n");
@@ -259,7 +266,12 @@ export async function spawnPaneInternal(
         }
       } else if (isGeminiCompat) {
         env["CLAUDE_CODE_USE_GEMINI"] = "1";
-        if (model) env["GEMINI_MODEL"] = model;
+        if (model) {
+          env["GEMINI_MODEL"] = model;
+          env["MODEL"] = model;
+          env["CLAUDE_CODE_MODEL_NAME"] = model;
+          if (!args.includes("--model")) args.push("--model", model);
+        }
         if (env["GEMINI_BASE_URL"]) env["CLAUDE_CODE_DISABLE_PROXY"] = "1";
       } else if (isOpenAICompat) {
         if (model) {
