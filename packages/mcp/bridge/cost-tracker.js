@@ -24,6 +24,9 @@ const DEFAULT_MODEL_COSTS = {
   "gemini-3.1-flash-lite": { input: 0.25, output: 1.50 },
   "gemini-3.1-flash-lite-preview": { input: 0.25, output: 1.50 },
 
+  // Gemini 3.5 Flash (estável)
+  "gemini-3.5-flash": { input: 1.50, output: 9.00 },
+
   // Pré-lançamento do Gemini 3.1 Pro (Preços variam por tamanho do comando)
   "gemini-3.1-pro-preview": { input: 2.00, output: 12.00 }, // Comandos <= 200 mil tokens
   "gemini-3.1-pro-preview-high-context": { input: 4.00, output: 18.00 }, // Comandos > 200 mil tokens
