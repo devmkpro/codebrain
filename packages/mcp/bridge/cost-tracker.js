@@ -45,7 +45,7 @@ const DEFAULT_MODEL_COSTS = {
   "gemini-3-flash-preview": { input: 0.50, output: 3.00 },
 
   // Pré-lançamento do Gemini 3 Pro
-  "gemini-3-pro-preview": { input: 1.25, output: 10.00 },
+  "gemini-3-pro-preview": { input: 2.00, output: 12.00 },
 
   // Gemini 2.0 Flash 001 (snapshot)
   "gemini-2.0-flash-001": { input: 0.10, output: 0.40 },
@@ -78,7 +78,7 @@ const DEFAULT_MODEL_COSTS = {
   // Gemini 2.0 Flash (Obsoleto - Desativação em 1º de junho de 2026)
   "gemini-2.0-flash": { input: 0.10, output: 0.40 },
 
-  // Gemini 2.0 Flash-Lite (Obsoleto - Desativação em 1º de junho de 2026)
+  // Gemini 2.0 Flash-Lite
   "gemini-2.0-flash-lite": { input: 0.075, output: 0.30 },
 
   // Embedding do Gemini 2 (Apenas entrada de texto)
@@ -93,8 +93,30 @@ const DEFAULT_MODEL_COSTS = {
   // Pré-lançamento do Gemini 2.5 Computer Use
   "gemini-2.5-computer-use-preview-10-2025": { input: 1.25, output: 10.00 }, // Comandos <= 200 mil tokens
   "gemini-2.5-computer-use-preview-10-2025-high-context": { input: 2.50, output: 15.00 }, // Comandos > 200 mil tokens
-  "mimo-v2.5-pro": { input: 0.50, output: 2.00 },
-  "mimo-v2-flash": { input: 0.10, output: 0.40 }
+  // MIMO (Xiaomi) — Overseas pricing per https://platform.mimo.ai (per 1M tokens)
+  "mimo-v2.5-pro": { input: 1.00, output: 3.00 },
+  "mimo-v2-pro": { input: 1.00, output: 3.00 },
+  "mimo-v2.5": { input: 0.40, output: 2.00 },
+  "mimo-v2-omni": { input: 0.40, output: 2.00 },
+  "mimo-v2-flash": { input: 0.10, output: 0.30 },
+
+  // ==========================================
+  // API MODEL NAME ALIASES
+  // Anthropic API returns different names than our internal cost table.
+  // Map API names → same pricing as internal names.
+  // ==========================================
+  "claude-opus-4-7": { input: 5.0, output: 25.0, cache_read: 0.5 },
+  "claude-opus-4-6": { input: 5.0, output: 25.0, cache_read: 0.5 },
+  "claude-opus-4-5-20251101": { input: 5.0, output: 25.0, cache_read: 0.5 },
+  "claude-opus-4-1-20250805": { input: 5.0, output: 25.0, cache_read: 0.5 },
+  "claude-opus-4-20250514": { input: 5.0, output: 25.0, cache_read: 0.5 },
+  "claude-sonnet-4-6": { input: 3.0, output: 15.0, cache_read: 0.3 },
+  "claude-sonnet-4-5-20250929": { input: 3.0, output: 15.0, cache_read: 0.3 },
+  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0, cache_read: 0.3 },
+  "claude-3-7-sonnet-20250219": { input: 3.0, output: 15.0, cache_read: 0.3 },
+  "claude-3-5-sonnet-20241022": { input: 3.0, output: 15.0, cache_read: 0.3 },
+  "claude-haiku-4-5-20251001": { input: 1.0, output: 5.0, cache_read: 0.1 },
+  "claude-3-5-haiku-20241022": { input: 1.0, output: 5.0, cache_read: 0.1 },
 };
 
 /**
@@ -141,7 +163,7 @@ class CostTracker {
     workspace,
     taskId,
   }) {
-    if (!model || !inputTokens || !outputTokens) {
+    if (!model || (inputTokens === 0 && outputTokens === 0)) {
       return { ok: false, error: "Missing required parameters." };
     }
     // Auto-generate sessionId from taskId or agentId if not provided
@@ -149,9 +171,24 @@ class CostTracker {
       sessionId = taskId ? `task_${taskId}` : agentId ? `agent_${agentId}` : `session_${Date.now()}`;
     }
 
-    const modelCost = this.modelCosts[model];
+    let modelCost = this.modelCosts[model];
     if (!modelCost) {
-      return { ok: false, error: `Model not found: ${model}` };
+      // Try case-insensitive lookup (API might return "MiMo-V2.5-Pro" vs "mimo-v2.5-pro")
+      const modelLower = model.toLowerCase();
+      for (const [key, cost] of Object.entries(this.modelCosts)) {
+        if (key.toLowerCase() === modelLower) {
+          modelCost = cost;
+          this.modelCosts[model] = modelCost; // Cache for future lookups
+          break;
+        }
+      }
+    }
+    if (!modelCost) {
+      // Fallback: use generic pricing for unknown models so usage is still tracked.
+      // This ensures token data is never silently lost.
+      console.warn(`[CostTracker] Unknown model "${model}" — using generic pricing`);
+      modelCost = { input: 3.0, output: 15.0 }; // ~Claude Sonnet tier
+      this.modelCosts[model] = modelCost;
     }
 
     const cost =
@@ -423,9 +460,10 @@ class CostTracker {
    * @returns {{ok: boolean, data?: {cost: number}, error?: string}}
    */
   estimateCost({ model, inputTokens, outputTokens }) {
-    const modelCost = this.modelCosts[model];
+    let modelCost = this.modelCosts[model];
     if (!modelCost) {
-      return { ok: false, error: `Model not found: ${model}` };
+      // Fallback for unknown models
+      modelCost = { input: 3.0, output: 15.0 };
     }
     const cost =
       (inputTokens * modelCost.input + outputTokens * modelCost.output) /

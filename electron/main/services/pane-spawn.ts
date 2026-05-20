@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import log from "electron-log/main.js";
 import type { AppContext } from "../context";
@@ -213,7 +214,12 @@ export async function spawnPaneInternal(
         .join("\n");
       sysPrompt += `\n\n## Providers e Modelos Disponíveis\n\n${providersInfo}`;
 
-      args.push("--system-prompt", sysPrompt);
+      // Write prompt to temp file to avoid Windows error 206 (command line too long)
+      const tmpDir = path.join(ctx.currentWorkspacePath || os.homedir(), ".codebrain", "tmp");
+      try { fs.mkdirSync(tmpDir, { recursive: true }); } catch {}
+      const promptFile = path.join(tmpDir, `sysprompt-${paneId}.txt`);
+      fs.writeFileSync(promptFile, sysPrompt, "utf-8");
+      args.push("--system-prompt-file", promptFile);
     }
 
     // Provider-specific env vars
@@ -272,6 +278,14 @@ export async function spawnPaneInternal(
           env["CLAUDE_CODE_MODEL_NAME"] = model;
           if (!args.includes("--model")) args.push("--model", model);
         }
+        // Set all possible Gemini API key env var names
+        // (CLI may read GOOGLE_API_KEY or ANTHROPIC_API_KEY instead of GEMINI_API_KEY)
+        const geminiKey = env["GEMINI_API_KEY"] || env["GOOGLE_API_KEY"] || "";
+        if (geminiKey) {
+          env["GEMINI_API_KEY"] = geminiKey;
+          env["GOOGLE_API_KEY"] = geminiKey;
+          env["ANTHROPIC_API_KEY"] = geminiKey;
+        }
         if (env["GEMINI_BASE_URL"]) env["CLAUDE_CODE_DISABLE_PROXY"] = "1";
       } else if (isOpenAICompat) {
         if (model) {
@@ -290,6 +304,29 @@ export async function spawnPaneInternal(
           env["MODEL"] = model;
           env["ANTHROPIC_MODEL"] = model;
         }
+      }
+    }
+
+    // ── API Proxy: redirect API calls through local proxy for token tracking ──
+    // The proxy intercepts responses and extracts token usage data.
+    // ALL providers redirect through the proxy (Anthropic, MIMO, Gemini, OpenAI).
+    // For Gemini, the proxy also handles /v1/models health check (OpenAI-compatible)
+    // that OpenClaude's Gemini adapter requires during initialization.
+    if (ctx.apiProxyUrl) {
+      if (isMimo || isAnthropicCompat) {
+        const realBaseUrl = (env["ANTHROPIC_BASE_URL"] as string) || provider?.baseUrl || "https://api.anthropic.com";
+        ctx.apiProxy?.setTargetUrl(realBaseUrl);
+        env["ANTHROPIC_BASE_URL"] = ctx.apiProxyUrl;
+        log.info(`[spawnPaneInternal] API Proxy redirect (Anthropic): ${realBaseUrl} → ${ctx.apiProxyUrl}`);
+      }
+      if (isGeminiCompat) {
+        const realGeminiUrl = env["GEMINI_BASE_URL"] || provider?.baseUrl || "https://generativelanguage.googleapis.com";
+        ctx.apiProxy?.setGeminiTargetUrl(realGeminiUrl);
+        env["GEMINI_BASE_URL"] = ctx.apiProxyUrl;
+        // Also set OPENAI_BASE_URL — OpenClaude's Gemini adapter validates via OpenAI-compatible /v1/models
+        env["OPENAI_BASE_URL"] = ctx.apiProxyUrl;
+        env["CLAUDE_CODE_DISABLE_PROXY"] = "1";
+        log.info(`[spawnPaneInternal] API Proxy redirect (Gemini): ${realGeminiUrl} → ${ctx.apiProxyUrl}`);
       }
     }
 
@@ -312,6 +349,14 @@ export async function spawnPaneInternal(
       log.info("[spawnPaneInternal] MIMO ANTHROPIC_BASE_URL:", env["ANTHROPIC_BASE_URL"] ?? "MISSING");
       log.info("[spawnPaneInternal] MIMO OPENAI_BASE_URL:", env["OPENAI_BASE_URL"] ?? "MISSING");
       log.info("[spawnPaneInternal] MIMO ANTHROPIC_MODEL:", env["ANTHROPIC_MODEL"] ?? "MISSING");
+    }
+    if (isGeminiCompat) {
+      log.info("[spawnPaneInternal] Gemini GEMINI_API_KEY:", env["GEMINI_API_KEY"] ? "SET" : "MISSING");
+      log.info("[spawnPaneInternal] Gemini GEMINI_BASE_URL:", env["GEMINI_BASE_URL"] ?? "MISSING");
+      log.info("[spawnPaneInternal] Gemini GOOGLE_API_KEY:", env["GOOGLE_API_KEY"] ? "SET" : "MISSING");
+      log.info("[spawnPaneInternal] Gemini GEMINI_MODEL:", env["GEMINI_MODEL"] ?? "MISSING");
+      log.info("[spawnPaneInternal] Gemini MODEL:", env["MODEL"] ?? "MISSING");
+      log.info("[spawnPaneInternal] Gemini CLAUDE_CODE_USE_GEMINI:", env["CLAUDE_CODE_USE_GEMINI"] ?? "MISSING");
     }
 
     const spawnedPaneId = await ctx.ptyManager.spawn({

@@ -19,7 +19,7 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "fix",
-        "text": "fix gemini model spawn using stale provider store names instead of enhanced model list"
+        "text": "use enhanced model list for gemini spawn to avoid stale provider store names"
       }
     ]
   },
@@ -47,7 +47,7 @@ export const RELEASES: Release[] = [
       },
       {
         "kind": "fix",
-        "text": "replace gemini-3.1-pro-preview with correct API model names"
+        "text": "replace gemini-3.1-pro with correct API model names"
       }
     ]
   },

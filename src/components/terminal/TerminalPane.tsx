@@ -90,7 +90,7 @@ export function TerminalPane({
 
   const sendQuickCommand = React.useCallback((cmd: string) => {
     if (cmd === "/btw") {
-      window.codeBrainApp?.pty.write(pane.id, "Dúvida/Pergunta: ");
+      window.codeBrainApp?.pty.write(pane.id, "/btw ");
     }
   }, [pane.id]);
 

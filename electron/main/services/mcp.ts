@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { ipcMain } from "electron";
 import type { AppContext, McpServerInfo } from "../context";
-import { safeSend } from "../context";
+import { safeSend, ApiProxy } from "../context";
 import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
 
@@ -82,6 +82,52 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
     ctx.costTracker.onUsageRecorded = (info: { sessionId: string; model: string; inputTokens: number; outputTokens: number; cost: number }) => {
       safeSend(ctx, "tokens:updated", info);
     };
+  }
+
+  // Start API proxy for token usage tracking
+  // The proxy intercepts Anthropic-compatible API calls from agent CLIs,
+  // extracts token usage from responses, and reports to CostTracker.
+  try {
+    const proxy = new ApiProxy({
+      onTokenUsage: (usage: { paneId: string; model: string; inputTokens: number; outputTokens: number }) => {
+        // Diagnostic: log exact model name from proxy for debugging pricing
+        console.log(`[CostTracker] onTokenUsage: model="${usage.model}" input=${usage.inputTokens} output=${usage.outputTokens}`);
+
+        // Resolve pane attribution: proxy doesn't know which pane made the request,
+        // so we try to match by model name from paneConfigs.
+        let resolvedPaneId = usage.paneId;
+        let paneCfg = ctx.paneConfigs.get(resolvedPaneId);
+        if (!paneCfg && usage.model) {
+          // Find pane by model name
+          for (const [pid, cfg] of ctx.paneConfigs) {
+            if (cfg.model === usage.model) {
+              resolvedPaneId = pid;
+              paneCfg = cfg;
+              break;
+            }
+          }
+        }
+        const workspace = ctx.currentWorkspacePath || process.cwd();
+        const result = ctx.costTracker.recordUsage({
+          model: usage.model || paneCfg?.model || "unknown",
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          agentId: paneCfg?.agent || resolvedPaneId,
+          workspace,
+          taskId: paneCfg?.taskId,
+        });
+        if (!result?.ok) {
+          console.warn(`[API Proxy] recordUsage failed: ${result?.error} (model=${usage.model})`);
+        }
+      },
+    });
+    const { port } = await proxy.start();
+    ctx.apiProxyUrl = `http://127.0.0.1:${port}`;
+    ctx.apiProxy = proxy;
+    console.log(`[API Proxy] Token tracking proxy started on ${ctx.apiProxyUrl}`);
+  } catch (err) {
+    console.error("[API Proxy] Failed to start proxy:", err);
+    // Non-fatal — agents will still work, just without token tracking
   }
 
   const tryStart = async () => {

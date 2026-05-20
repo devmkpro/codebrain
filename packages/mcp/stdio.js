@@ -57,17 +57,23 @@ async function main() {
   };
 
   // ── Stub ptyManager (EventEmitter for pane-handlers idle listener) ───
+  // IMPORTANT: list(), read(), etc. MUST be synchronous (not async) because
+  // callers like pane-handlers.js do ptyManager.list().map(...) — an async
+  // function returns a Promise which has no .map method.
   const ptyManager = new EventEmitter();
-  ptyManager.write = async () => { throw new Error("PTY not available in CLI mode"); };
-  ptyManager.read = async () => [];
-  ptyManager.readRaw = async () => new Uint8Array();
-  ptyManager.readRawText = async () => "";
-  ptyManager.kill = async () => {};
-  ptyManager.list = async () => [];
-  ptyManager.resize = async () => {};
-  ptyManager.spawn = async () => ({ ok: false, error: "PTY not available in CLI mode" });
+  ptyManager.write = () => { throw new Error("PTY not available in CLI mode"); };
+  ptyManager.writeSilent = () => {};
+  ptyManager.read = () => [];
+  ptyManager.readRaw = () => new Uint8Array();
+  ptyManager.readRawText = () => "";
+  ptyManager.kill = () => {};
+  ptyManager.hasPane = () => false;
+  ptyManager.list = () => [];
+  ptyManager.resize = () => {};
+  ptyManager.spawn = () => ({ ok: false, error: "PTY not available in CLI mode" });
   ptyManager.onOutput = () => () => {};
   ptyManager.onExit = () => () => {};
+  ptyManager.injectOutput = () => {};
 
   // ── Create MCP server ────────────────────────────────────────────────
   const bridge = createMCPBridge(ptyManager, opts);

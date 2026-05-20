@@ -334,6 +334,88 @@ function FilesNavBar({ workspacePath }: { workspacePath: string }) {
   );
 }
 
+// ─── Model pricing (per 1M tokens, IN/OUT USD) ─────────────────────────────
+const MODEL_PRICING: Record<string, [number, number]> = {
+  'mimo-v2.5-pro': [1.00, 3.00],
+  'mimo-v2-pro': [1.00, 3.00],
+  'mimo-v2.5': [0.40, 2.00],
+  'mimo-v2-omni': [0.40, 2.00],
+  'mimo-v2-flash': [0.10, 0.30],
+  'gemini-3.1-pro-preview': [2.00, 12.00],
+  'gemini-3.1-pro-preview-customtools': [2.00, 12.00],
+  'gemini-3-pro-preview': [2.00, 12.00],
+  'gemini-3.5-flash': [1.50, 9.00],
+  'gemini-3-flash-preview': [0.50, 3.00],
+  'gemini-2.5-pro': [1.25, 10.00],
+  'gemini-2.5-flash': [0.30, 2.50],
+  'gemini-2.5-flash-lite': [0.10, 0.40],
+  'gemini-2.0-flash': [0.10, 0.40],
+  'gemini-2.0-flash-lite': [0.075, 0.30],
+  'claude-opus-4-6': [5.00, 25.00],
+  'claude-sonnet-4-6': [3.00, 15.00],
+  'claude-sonnet-4-5-20250929': [3.00, 15.00],
+  'claude-haiku-4-5-20251001': [1.00, 5.00],
+  'claude-3-5-haiku-20241022': [1.00, 5.00],
+};
+
+function modelPricingLabel(model: string): string | null {
+  const key = model.toLowerCase();
+  for (const [k, v] of Object.entries(MODEL_PRICING)) {
+    if (k.toLowerCase() === key) {
+      return `IN $${v[0].toFixed(2)} / OUT $${v[1].toFixed(2)}`;
+    }
+  }
+  return null;
+}
+
+// ─── Model pricing map (per 1M tokens, USD) ──────────────────────────────────
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  // Anthropic
+  'claude-opus-4-7': { input: 5.0, output: 25.0 },
+  'claude-opus-4-6': { input: 5.0, output: 25.0 },
+  'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
+  'claude-sonnet-4-5-20250929': { input: 3.0, output: 15.0 },
+  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
+  'claude-3-7-sonnet-20250219': { input: 3.0, output: 15.0 },
+  'claude-3-5-sonnet-20241022': { input: 3.0, output: 15.0 },
+  'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0 },
+  'claude-3-5-haiku-20241022': { input: 1.0, output: 5.0 },
+  // Gemini 3.x
+  'gemini-3.1-pro-preview': { input: 2.0, output: 12.0 },
+  'gemini-3.1-pro-preview-customtools': { input: 2.0, output: 12.0 },
+  'gemini-3.1-flash-lite': { input: 0.25, output: 1.50 },
+  'gemini-3.1-flash-lite-preview': { input: 0.25, output: 1.50 },
+  'gemini-3.1-flash-tts-preview': { input: 1.0, output: 20.0 },
+  'gemini-3.5-flash': { input: 1.50, output: 9.0 },
+  'gemini-3-flash-preview': { input: 0.50, output: 3.0 },
+  'gemini-3-pro-preview': { input: 2.0, output: 12.0 },
+  // Gemini 2.x
+  'gemini-2.5-pro': { input: 1.25, output: 10.0 },
+  'gemini-2.5-flash': { input: 0.30, output: 2.50 },
+  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
+  'gemini-2.5-flash-preview-tts': { input: 0.50, output: 10.0 },
+  'gemini-2.5-pro-preview-tts': { input: 1.0, output: 20.0 },
+  'gemini-2.5-computer-use-preview-10-2025': { input: 1.25, output: 10.0 },
+  'gemini-2.0-flash': { input: 0.10, output: 0.40 },
+  'gemini-2.0-flash-lite': { input: 0.075, output: 0.30 },
+  'gemini-2.0-flash-001': { input: 0.10, output: 0.40 },
+  'gemini-2.0-flash-lite-001': { input: 0.075, output: 0.30 },
+  // MIMO (Xiaomi)
+  'mimo-v2.5-pro': { input: 1.0, output: 3.0 },
+  'mimo-v2-pro': { input: 1.0, output: 3.0 },
+  'mimo-v2.5': { input: 0.40, output: 2.0 },
+  'mimo-v2-omni': { input: 0.40, output: 2.0 },
+  'mimo-v2-flash': { input: 0.10, output: 0.30 },
+};
+
+function getModelPricing(model: string): { input: number; output: number } | null {
+  const lower = model.toLowerCase();
+  for (const [key, cost] of Object.entries(MODEL_PRICING)) {
+    if (key.toLowerCase() === lower) return cost;
+  }
+  return null;
+}
+
 // ─── + PANE Dropdown ─────────────────────────────────────────────────────────
 function PaneMenu({
   onClose, activeWorkspace, permissionMode, setPermissionMode,
@@ -435,7 +517,12 @@ function PaneMenu({
               {models.length === 0
                 ? <button onClick={() => handleAddPane(pid)} className="w-full text-left px-3 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">+ default</button>
                 : models.map((model: string) => (
-                  <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all truncate cursor-pointer">+ {model}</button>
+                  <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">
+                    <div className="truncate">+ {model}</div>
+                    {modelPricingLabel(model) && (
+                      <div className="font-mono text-[8px] text-emerald-500/60 mt-0.5">{modelPricingLabel(model)}</div>
+                    )}
+                  </button>
                 ))
               }
             </div>

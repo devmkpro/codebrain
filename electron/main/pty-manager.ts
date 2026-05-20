@@ -294,9 +294,33 @@ export class PtyManager extends EventEmitter {
     const cols = config.cols ?? DEFAULT_COLS;
     const rows = config.rows ?? DEFAULT_ROWS;
 
-    // Build environment with provider settings if needed
+    // Build environment with provider settings if needed.
+    // On Windows, process.env can be very large (long PATH, Electron vars).
+    // Passing the full env to CreateProcess causes error 206 (command line too long).
+    // Filter to only essential variables + our provider config.
+    const essentialVars = [
+      "PATH", "Path", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+      "TEMP", "TMP", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT",
+      "NODE", "NODE_PATH", "NVM_DIR", "FNM_DIR", "SHELL",
+      "LANG", "LC_ALL", "LC_CTYPE",
+      "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "OPENAI_API_KEY",
+      "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY",
+      "MIMO_API_KEY", "XAI_API_KEY", "DEEPSEEK_API_KEY",
+      "CODEBRAIN_WORKSPACE", "CODEBRAIN_MCP_URL", "CODEBRAIN_MCP_SSE_URL", "CODEBRAIN_MCP_PORT",
+      "CLAUDE_CODE_USE_GEMINI", "CLAUDE_CODE_MODEL_NAME", "CLAUDE_CODE_PROVIDER_NAME",
+      "CLAUDE_CODE_PROVIDER_PROFILE_ENV_APPLIED", "CLAUDE_CODE_DISABLE_PROXY",
+      "GEMINI_BASE_URL", "ANTHROPIC_BASE_URL", "ANTHROPIC_REAL_BASE_URL",
+      "OPENAI_BASE_URL",
+      "MODEL", "ANTHROPIC_MODEL", "GEMINI_MODEL", "OPENAI_MODEL",
+    ];
+    const filteredEnv: Record<string, string> = {};
+    for (const key of essentialVars) {
+      if (process.env[key] !== undefined) {
+        filteredEnv[key] = process.env[key] as string;
+      }
+    }
     const env: Record<string, string> = {
-      ...process.env as Record<string, string>,
+      ...filteredEnv,
       TERM: "xterm-256color",
       ...config.env,
     };
