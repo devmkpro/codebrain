@@ -69,6 +69,9 @@ function createCodebrainMCPServer(bridge) {
     { capabilities: { tools: {} } }
   );
 
+  // Debounce map for message notifications: paneId → lastNotifyTimestamp
+  let msgNotifyDebounce = null; // lazy-initialized to avoid polluting scope
+
   // ── mcp__codebrain__pane_spawn ─────────────────────────────────────────────
   server.tool(
     "mcp__codebrain__pane_spawn",
@@ -226,7 +229,7 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__pane_send_message ──────────────────────────────────────
   server.tool(
     "mcp__codebrain__pane_send_message",
-    "Send a message to another agent pane. Use this for inter-agent coordination: notify a worker about API changes, send a task result to the orchestrator, or ask a question to another worker.",
+    "Send a message to another agent pane. Use this for ALL inter-agent coordination: notify a worker about API changes, send a task result to the orchestrator, or ask a question to another worker. The recipient sees a yellow notification in their terminal and MUST respond.",
     {
       from:    z.string().describe("Your pane ID (sender)."),
       to:      z.string().describe("Target pane ID (recipient)."),
@@ -259,7 +262,23 @@ function createCodebrainMCPServer(bridge) {
           fs.closeSync(fd);
         } catch {}
 
-        // Keep the message silent in the terminal; the recipient reads it from inbox.
+        // Inject a compact one-line notification into the recipient's terminal.
+        // Debounced: if multiple messages arrive within 3s, only one ping.
+        try {
+          if (bridge.notifyPane) {
+            const now = Date.now();
+            if (!msgNotifyDebounce) msgNotifyDebounce = new Map();
+            const last = msgNotifyDebounce.get(args.to) || 0;
+            if (now - last > 3000) {
+              msgNotifyDebounce.set(args.to, now);
+              const shortFrom = args.from.slice(0, 8);
+              bridge.notifyPane(
+                args.to,
+                `\x1b[33m⚡ MSG [${msgType}] from ${shortFrom} — read: pane_read_messages(${args.to})\x1b[0m`
+              );
+            }
+          }
+        } catch {}
 
         return { content: [{ type: "text", text: JSON.stringify({ ok: true, messageId: id }) }] };
       } catch (err) {

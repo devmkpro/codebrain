@@ -102,12 +102,15 @@ For UI features, add the IPC chain:
 ```
 Orchestrator
   ├── pane_spawn → creates worker terminals (visible in grid)
-  ├── pane_write → sends detailed task prompts
+  ├── pane_write → sends detailed TASK PROMPTS ONLY (never messages)
   ├── pane_wait_idle → waits for worker completion
   ├── pane_read → reads worker output
-  └── pane_send_message → inter-agent messaging
+  └── pane_send_message → ALL inter-agent messages (yellow terminal notification)
        ├── worker reads with pane_read_messages
        └── worker responds with pane_send_message
+
+⚠️ RULE: pane_write = task execution only. pane_send_message = all inter-agent communication.
+   pane_send_message injects a yellow notification into the recipient's terminal.
 
 Shared Memory (SQLite)
   ├── memory_write → all agents write changes immediately

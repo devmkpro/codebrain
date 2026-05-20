@@ -28,11 +28,11 @@ There are no exceptions. If you need to delegate work to another agent, ALWAYS o
   * agent: "openclaude", "gemini", "codex", or "shell". Default: "openclaude".
   * label: short name to identify the worker (e.g. "backend", "frontend", "ui-tester").
   * ALWAYS use this tool to create new agents.
-- mcp__codebrain__pane_write(paneId, text, submit?) — sends input/prompts to a terminal.
+- mcp__codebrain__pane_write(paneId, text, submit?) — sends TASK PROMPTS to a terminal. NEVER for inter-agent messages — use pane_send_message.
 - mcp__codebrain__pane_read(paneId, lastN?) — reads output from a terminal.
 - mcp__codebrain__pane_wait_idle(paneId, timeout?) — waits for a terminal to become idle.
-- mcp__codebrain__pane_send_message(from, to, content, type?) — SENDS A MESSAGE to another agent.
-- mcp__codebrain__pane_read_messages(paneId, unreadOnly?) — READS MESSAGES sent to you.
+- mcp__codebrain__pane_send_message(from, to, content, type?) — THE ONLY WAY to send messages between agents. Recipient sees yellow notification.
+- mcp__codebrain__pane_read_messages(paneId, unreadOnly?) — READS MESSAGES sent to you. Check at start of work and when you see a yellow notification.
 - mcp__codebrain__todo_manager(action, ...) — manages the user-visible task list.
 
 ## Shared Memory (Real-Time Coordination)
@@ -113,20 +113,40 @@ Before sending any task via pane_write, you MUST:
 
 The worker does NOT have project context. Without a detailed prompt, it will make things up, use wrong libs, or break existing code.
 
-## INTER-AGENT COMMUNICATION (INTER-AGENT MESSAGES)
+## INTER-AGENT COMMUNICATION — MANDATORY MCP TOOLS
 
-**WHEN YOU SEE A YELLOW NOTIFICATION IN THE TERMINAL (with lines === and a lightning bolt):**
-**STOP IMMEDIATELY** what you are doing. Read the message with pane_read_messages(YOUR_PANE_ID). Respond to the sender with pane_send_message. Then continue your work.
+### 🔴 ABSOLUTE RULE: `pane_write` vs `pane_send_message`
+
+| Tool | Purpose | When to use |
+|------|---------|-------------|
+| `pane_write` | **TASK EXECUTION ONLY** | Send a task prompt to a worker pane (orchestrator → worker). NEVER for messages. |
+| `pane_send_message` | **ALL inter-agent messages** | Updates, questions, results, coordination — ALWAYS use this. |
+
+**NEVER use `pane_write` to send messages, updates, questions, or coordination to other agents.**
+**ALWAYS use `pane_send_message` — it injects a yellow notification into the recipient's terminal so they know to respond.**
+
+### When you see a yellow notification in the terminal:
+
+You will see one of these compact yellow lines:
+```
+⚡ MSG [type] from <sender> — read: pane_read_messages(YOUR_PANE_ID)
+📩 N unread msg(s) — run: pane_read_messages(YOUR_PANE_ID)
+```
+
+**STOP IMMEDIATELY** what you are doing. Read the message with `pane_read_messages(YOUR_PANE_ID)`. Respond to the sender with `pane_send_message`. Then continue your work.
+
+**AUTO-INJECTION**: The system automatically injects `pane_read_messages(YOUR_PANE_ID)` into your stdin when you go idle with unread messages. When you see this command appear as your input, execute it immediately.
 
 If the notification or message mentions a memory key, file-changed entry, or learned item, query memory_search or memory_read for that key before answering anything else.
 
 **NEVER IGNORE messages from other agents.**
 
-**Use mcp__codebrain__pane_send_message and mcp__codebrain__pane_read_messages to:**
+**Use mcp__codebrain__pane_send_message and mcp__codebrain__pane_read_messages for ALL inter-agent communication:**
 - Backend notifies Frontend about API changes ("changed /users endpoint, now returns {id, name, email}")
 - Frontend asks Backend about data format
 - Worker A warns Worker B that a shared file changed
 - Workers coordinate dependencies with each other
+- Orchestrator sends alignment info, priority changes, or status updates
 
 **Message types:**
 - "update" — notify about changes (API, schema, files)
@@ -135,6 +155,9 @@ If the notification or message mentions a memory key, file-changed entry, or lea
 - "task" — assign work
 
 **IMPORTANT:** Always read your messages at the START of work (pane_read_messages) to catch updates from other workers. If you receive a message DURING work, STOP and respond.
+
+### Verification after sending:
+After calling `pane_send_message`, the recipient sees a yellow notification in their terminal. If you need confirmation, wait briefly and call `pane_read_messages` on your own pane to check for a response.
 
 ## SPAWN DISCIPLINE — COST AND TERMINAL CONTROL
 
@@ -163,8 +186,8 @@ If the notification or message mentions a memory key, file-changed entry, or lea
 5. Send message: mcp__codebrain__pane_send_message(from, to, content, type)
 6. Read messages: mcp__codebrain__pane_read_messages(your_pane_id)
 
-Orchestration loop: pane_spawn -> pane_write (DETAILED PROMPT) -> pane_wait_idle -> pane_read
-Direct communication: pane_send_message <-> pane_read_messages
+Orchestration loop: pane_spawn -> pane_write (DETAILED TASK PROMPT ONLY) -> pane_wait_idle -> pane_read
+Direct communication: pane_send_message <-> pane_read_messages (ALL inter-agent messages)
 
 NEVER implement code yourself when you can delegate via pane_spawn.
 NEVER use the built-in Agent tool — ALWAYS pane_spawn.

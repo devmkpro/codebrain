@@ -63,7 +63,8 @@ function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType,
       if (!fs.existsSync(inbox)) fs.mkdirSync(inbox, { recursive: true });
       fs.writeFileSync(path.join(inbox, `${id}.json`), JSON.stringify(msg, null, 2), "utf-8");
     } catch {}
-    // Keep notifications silent in the terminal; agents read them from the inbox.
+    // Auto-notifications stay file-based; agents discover them via memory_search protocol.
+    // Explicit pane_send_message calls get PTY injection via index.js.
   }
 }
 
@@ -178,6 +179,42 @@ function createMCPBridge(ptyManager, opts = {}) {
         state.warnedAt = Date.now();
       }
       paneMemoryState.set(paneId, state);
+    } catch {}
+  });
+
+  // ── Auto-check for unread messages on idle ──────────────────────────────
+  // When a pane goes idle, check if it has unread messages in the file inbox.
+  // If so, inject the pane_read_messages command into the agent's STDIN so it
+  // processes it as its next input. This is the only reliable way to make
+  // agents discover messages — output injection alone doesn't trigger action.
+  // Debounced to once per 20s per pane to avoid loops.
+  const msgIdleDebounce = new Map();
+  ptyManager.on("idle", ({ paneId }) => {
+    try {
+      const now = Date.now();
+      const last = msgIdleDebounce.get(paneId) || 0;
+      if (now - last < 20000) return; // debounce 20s
+      const inbox = path.join(MESSAGES_DIR, paneId);
+      if (!fs.existsSync(inbox)) return;
+      const files = fs.readdirSync(inbox).filter(f => f.endsWith(".json"));
+      let unreadCount = 0;
+      for (const file of files) {
+        try {
+          const raw = fs.readFileSync(path.join(inbox, file), "utf-8");
+          const msg = JSON.parse(raw);
+          if (!msg.read) unreadCount++;
+        } catch {}
+      }
+      if (unreadCount > 0) {
+        msgIdleDebounce.set(paneId, now);
+        // Write a short command to the agent's stdin so it processes it as
+        // its next input. writeSilent suppresses echo. Submit after a delay.
+        const cmd = `pane_read_messages(${paneId})`;
+        ptyManager.writeSilent(paneId, cmd);
+        setTimeout(() => {
+          try { ptyManager.write(paneId, "\r"); } catch {}
+        }, 200);
+      }
     } catch {}
   });
 

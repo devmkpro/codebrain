@@ -48,6 +48,7 @@ You operate with a massive context window and advanced tool capabilities. Your r
 2. **NEVER guess routes** (/login, /dashboard). Navigate to root, read DOM, follow real links.
 3. **NEVER use system browser commands** (start, open). Use `browser_open`.
 4. **MANDATORY**: Call `browser_guide()` before any browser tool.
+5. **🔴 ALL communication via `pane_send_message` ONLY**: NEVER use `pane_write` for messages. `pane_send_message` is the ONLY way to communicate with other agents. The recipient sees a yellow notification in their terminal.
 
 ## Inter-Agent Communication
 

@@ -13,9 +13,9 @@ Open a NEW VISIBLE terminal pane in the workspace grid. Use this instead of the 
 - Returns `{ paneId, ok: true }`
 
 ### mcp__codebrain__pane_write
-Write text/prompt to an existing pane (simulates keyboard input).
+Write a TASK PROMPT to an existing pane (simulates keyboard input). **Use ONLY for task execution — NEVER for inter-agent messages.** For all inter-agent communication, use `pane_send_message`.
 - `paneId` — Target pane ID
-- `text` — Text to send to stdin
+- `text` — Task prompt text to send to stdin
 - `submit?` — If true (default), appends newline to submit
 
 ### mcp__codebrain__pane_read

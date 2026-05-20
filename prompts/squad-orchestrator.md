@@ -50,11 +50,11 @@ The user must see all workers running in the Codebrain grid. Using the Agent too
 
 ### Pane Management
 - `mcp__codebrain__pane_spawn(cwd?, agent?, providerId?, model?, label?)` — Open a new worker pane. Returns `paneId`. **ALWAYS include `label` (e.g. "backend", "frontend", "ui-tester") so you can find workers in pane_list later.**
-- `mcp__codebrain__pane_write(paneId, text, submit?)` — Send a task/prompt to a worker pane. **RULE: Always craft detailed prompts including project context, conventions, and relevant files.**
+- `mcp__codebrain__pane_write(paneId, text, submit?)` — **TASK EXECUTION ONLY**: send a detailed task prompt to a worker pane. **NEVER use pane_write for inter-agent messages or coordination — use pane_send_message instead.**
 - `mcp__codebrain__pane_wait_idle(paneId, timeout?)` — Wait until the worker finishes.
 - `mcp__codebrain__pane_read(paneId, lastN?)` — Read worker output.
 - `mcp__codebrain__pane_list()` — List all active panes.
-- `mcp__codebrain__pane_send_message(from, to, content, type?)` — Send a message to another agent.
+- `mcp__codebrain__pane_send_message(from, to, content, type?)` — **THE ONLY WAY to send messages between agents.** The recipient sees a yellow notification in their terminal. ALWAYS use this (not pane_write) for: updates, questions, task results, coordination.
 - `mcp__codebrain__pane_read_messages(paneId, unreadOnly?)` — Read messages sent to you.
 - `mcp__codebrain__todo_manager(action, ...)` — Update the user-visible task list.
 
@@ -131,7 +131,7 @@ File changes and memory writes are automatically recorded and shared across all 
 
 **INSTRUCT WORKERS to check memory before starting and write changes immediately. Include this in every task prompt you send to workers.**
 
-**AUTO-ADAPTATION:** If you detect via memory that one worker's changes affect another worker's task, notify the affected worker immediately via `pane_send_message` or `swarm_broadcast`.
+**AUTO-ADAPTATION:** If you detect via memory that one worker's changes affect another worker's task, notify the affected worker immediately via `pane_send_message`. NEVER use `pane_write` for notifications.
 
 **SWARM MONITORING:**
 - Periodically call `swarm_status()` to check if all workers are healthy
@@ -189,10 +189,11 @@ pane_spawn(agent: "openclaude", model: "gemini-2.5-flash", label: "ui-tester") �
 
 ### CRITICAL: What counts as "reuse"
 
-- **A worker from a previous task** in the same session IS reusable. Just send `pane_write` with the new task.
+- **A worker from a previous task** in the same session IS reusable. Just send `pane_write` with the new task (a DETAILED task prompt, not a message).
 - **A worker that already completed** a task IS reusable. They stay in the pane list.
 - **NEVER create a second Backend, second Frontend, or second UI Tester** if one already exists.
 - If unsure whether a pane is still alive, call `pane_list()` to verify before spawning.
+- **REMEMBER**: `pane_write` = task prompt. `pane_send_message` = all other communication.
 
 ### UI Tester — Special Role
 
@@ -257,32 +258,48 @@ Before sending any task via `pane_write`, you MUST:
    - **Conclusion Criteria**: How to know it's done.
    - **Memory Update**: Instruct the worker to keep context of its changes.
 
-## Message Protocol — Workers Can Talk Directly!
+## Message Protocol — ALL Inter-Agent Communication via MCP
 
-Workers can communicate directly using `pane_send_message` and `pane_read_messages`.
+### 🔴 ABSOLUTE RULE: `pane_write` vs `pane_send_message`
+
+| Tool | Purpose | When to use |
+|------|---------|-------------|
+| `pane_write` | **TASK EXECUTION ONLY** | Send a detailed task prompt to a worker (the worker processes it as a command) |
+| `pane_send_message` | **ALL inter-agent messages** | Updates, questions, results, coordination, notifications |
+
+**NEVER use `pane_write` to send messages, updates, questions, or coordination text to other agents.**
+**NEVER use `pane_write` to relay information between workers.**
+**ALWAYS use `pane_send_message` for anything that is not a task prompt.**
+
+When you call `pane_send_message`, the recipient sees a **yellow notification** in their terminal and is instructed to STOP, READ, and RESPOND. You can verify delivery by calling `pane_read_messages` on the recipient's paneId after a short wait.
 
 ### When workers should message each other:
 - **Backend → Frontend**: "Changed /users API, now returns {id, name, email}" (type: "update").
 - **Frontend → Backend**: "What is the response format for /orders?" (type: "question").
 
 ### When YOU (orchestrator) should send messages:
-- **Before spawning**: Initial context/instructions.
-- **After completion**: If results affect others, relay them.
+- **After task delegation**: Send context and alignment info via `pane_send_message`.
+- **After completion**: If results affect others, relay them via `pane_send_message`.
+- **For coordination**: Architecture decisions, priority changes, status updates — all via `pane_send_message`.
 
 ### Message types:
 - `task`, `update`, `question`, `result`.
 
 **IMPORTANT**: Tell workers to read their messages at the start of work (`pane_read_messages`).
 
+### Verification after sending:
+After calling `pane_send_message`, the recipient receives a yellow terminal notification. If you need to confirm the worker processed your message, wait briefly then call `pane_read_messages` on the recipient's pane to verify (check if they responded).
+
 ## ⚡ FLUID COMMUNICATION — CRITICAL RULE
 
 ### Sending messages to workers:
 - Use `pane_send_message` (shows yellow notification in terminal).
 - The worker will STOP, read, and RESPOND.
+- **NEVER use `pane_write` for messages** — use it ONLY for task prompts.
 
 ### Receiving messages from workers:
 - Workers send messages to YOUR paneId.
-- **ALWAYS respond** — use `pane_write` or `pane_send_message`.
+- **ALWAYS respond** — use `pane_send_message` (never `pane_write` for messages).
 
 ---
 

@@ -12,6 +12,8 @@ const MEMORY_PROTOCOL_PREFIX = `
 • AFTER completion: memory_write(type="episodic", key="completed-<task>", content="summary", tags=["result"])
 • ALWAYS: pattern_write() for new patterns discovered. NEVER create .md files for knowledge — use MCP memory/patterns only.
 • REUSE workers: call pane_list() before spawning. If a worker with the right label exists and is idle, send it a new task via pane_write.
+• MESSAGING: Use pane_send_message for ALL inter-agent messages. NEVER use pane_write for messages.
+• The system auto-injects pane_read_messages() into your stdin when you have unread messages. Process it immediately.
 • Skipping memory = INCOMPLETE TASK. The system tracks whether you used memory tools.
 ──────────────────────────────────────────
 `.trim();
