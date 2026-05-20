@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.4.10",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "remove duplicate MODEL_PRICING declaration in AppHeader + bump to v1.4.10"
+      }
+    ]
+  },
+  {
     "version": "1.4.9",
     "date": "maio 2026",
     "highlights": [
