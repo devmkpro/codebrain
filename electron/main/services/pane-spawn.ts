@@ -8,10 +8,16 @@ import { CODEBRAIN_SYSTEM_PROMPT, WORKER_PROMPT, ORCHESTRATOR_PROMPT, UI_TESTER_
 // Hardcoded model-to-provider-type mapping (mirrors getEnhancedProviders)
 const ENHANCED_MODEL_MAP: Record<string, string[]> = {
   "gemini-compat": [
-    "gemini-3.1-pro", "gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools",
-    "gemini-3.1-flash-lite-preview", "gemini-3-flash-preview", "gemini-3-flash",
-    "gemini-3.1-flash-lite", "gemini-3.1-flash-live-preview",
-    "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools",
+    "gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite",
+    "gemini-3-flash-preview", "gemini-3-pro-preview",
+    "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
+    "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash-001", "gemini-2.0-flash-lite-001",
+    "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest",
+    "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts",
+    "gemini-2.5-computer-use-preview-10-2025",
+    "gemini-3.1-flash-tts-preview"
   ],
   "mimo-compat": [
     "mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"

@@ -32,7 +32,14 @@ export const BUILTIN_TEMPLATES = [
         baseUrl: "https://generativelanguage.googleapis.com/v1beta",
         tokenEnvVar: "GEMINI_API_KEY",
         label: "OpenClaude via Gemini API",
-        models: ["gemini-3.1-pro", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"]
+        models: [
+          "gemini-3.5-flash",
+          "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools",
+          "gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite",
+          "gemini-3-flash-preview", "gemini-3-pro-preview",
+          "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
+          "gemini-2.0-flash", "gemini-2.0-flash-lite"
+        ]
       }
     ]
   },
