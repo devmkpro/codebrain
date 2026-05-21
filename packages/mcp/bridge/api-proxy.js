@@ -46,16 +46,19 @@ class ApiProxy {
    */
   constructor(opts = {}) {
     this.onTokenUsage = opts.onTokenUsage || (() => {});
-    this.anthropicTargetUrl = opts.anthropicTargetUrl || "https://api.anthropic.com";
-    this.geminiTargetUrl = opts.geminiTargetUrl || null; // Set via setGeminiTargetUrl()
+    // Default fallback target (used when no token-specific route is registered)
+    this._defaultAnthropicTarget = opts.anthropicTargetUrl || "https://api.anthropic.com";
+    this.geminiTargetUrl = opts.geminiTargetUrl || null;
     this.requestedPort = opts.port || 0;
     this.server = null;
     this.port = null;
     this.url = null;
+    // Per-token routing: Map<tokenPrefix(20 chars), targetUrl>
+    // Eliminates the shared-state race condition when multiple panes use different providers.
+    this._tokenTargetMap = new Map();
+    // Fallback for OAuth users (no stable token key)
+    this._oauthTarget = null;
     // Stores thoughtSignature from Gemini response parts, keyed by tool call ID.
-    // Gemini 3 thoughtSignature is at the PART level (part.thoughtSignature),
-    // NOT inside the functionCall object.
-    // Only the FIRST functionCall in parallel calls has a signature.
     this._thoughtSignatures = new Map();
   }
 
@@ -100,15 +103,62 @@ class ApiProxy {
   }
 
   /**
-   * Update the Anthropic target URL.
-   * @param {string} url
+   * Register a per-token Anthropic target URL.
+   * Replaces the shared setTargetUrl() to avoid race conditions when multiple
+   * panes use different Anthropic-compatible providers simultaneously.
+   *
+   * @param {string|null} tokenOrKey - API key or auth token (null = OAuth user)
+   * @param {string} targetUrl - Real API base URL for this token
    */
-  setTargetUrl(url) {
-    if (url && url !== this.anthropicTargetUrl) {
-      console.log(`${LOG_PREFIX} Anthropic target: ${this.anthropicTargetUrl} → ${url}`);
-      this.anthropicTargetUrl = url;
+  registerAnthropicTarget(tokenOrKey, targetUrl) {
+    if (!targetUrl) return;
+    if (tokenOrKey) {
+      const prefix = String(tokenOrKey).slice(0, 20);
+      const prev = this._tokenTargetMap.get(prefix);
+      if (prev !== targetUrl) {
+        console.log(`${LOG_PREFIX} Registered Anthropic route: [${prefix}...] → ${targetUrl}`);
+        this._tokenTargetMap.set(prefix, targetUrl);
+      }
+    } else {
+      // OAuth users: no stable token, use a shared OAuth slot
+      if (this._oauthTarget !== targetUrl) {
+        console.log(`${LOG_PREFIX} Registered Anthropic OAuth route → ${targetUrl}`);
+        this._oauthTarget = targetUrl;
+      }
     }
   }
+
+  /**
+   * Resolve the Anthropic target URL for an incoming request.
+   * Looks up by auth header prefix, falling back to OAuth slot or default.
+   * @param {http.IncomingMessage} req
+   * @returns {string}
+   */
+  _resolveAnthropicTarget(req) {
+    const auth = req.headers["x-api-key"] || req.headers["authorization"] || "";
+    const token = auth.replace(/^Bearer /i, "").trim();
+    if (token) {
+      const prefix = token.slice(0, 20);
+      if (this._tokenTargetMap.has(prefix)) return this._tokenTargetMap.get(prefix);
+    }
+    // OAuth or unknown token: use OAuth slot or default
+    return this._oauthTarget || this._defaultAnthropicTarget;
+  }
+
+  /**
+   * @deprecated Use registerAnthropicTarget() instead.
+   * Kept for backward compatibility — sets the default fallback target only.
+   */
+  setTargetUrl(url) {
+    if (url) {
+      console.log(`${LOG_PREFIX} setTargetUrl (deprecated, sets default): ${url}`);
+      this._defaultAnthropicTarget = url;
+    }
+  }
+
+  /** @deprecated Use constructor opts instead. */
+  get anthropicTargetUrl() { return this._defaultAnthropicTarget; }
+  set anthropicTargetUrl(v) { this._defaultAnthropicTarget = v; }
 
   /**
    * Update the Gemini target URL.
@@ -727,16 +777,12 @@ class ApiProxy {
       return;
     }
 
-    // Choose the correct target URL
+    // Choose the correct target URL — per-token routing for Anthropic to avoid race conditions
     let targetBaseUrl;
     if (isGemini) {
-      targetBaseUrl = this.geminiTargetUrl;
-      if (!targetBaseUrl) {
-        // Gemini target not configured — forward to default Google endpoint
-        targetBaseUrl = "https://generativelanguage.googleapis.com";
-      }
+      targetBaseUrl = this.geminiTargetUrl || "https://generativelanguage.googleapis.com";
     } else {
-      targetBaseUrl = this.anthropicTargetUrl;
+      targetBaseUrl = this._resolveAnthropicTarget(req);
     }
 
     const target = new URL(targetBaseUrl);
