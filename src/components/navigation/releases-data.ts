@@ -14,6 +14,26 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.5.1",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "show Claude Code CLI detection in Settings > Skill & CLI"
+      }
+    ]
+  },
+  {
+    "version": "1.5.0",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "Claude Plan MCP fix + model cleanup + .mcp.json auto-create for v1.5.0"
+      }
+    ]
+  },
+  {
     "version": "1.4.10",
     "date": "maio 2026",
     "highlights": [
