@@ -18,6 +18,10 @@ export const RELEASES: Release[] = [
     "date": "em desenvolvimento",
     "highlights": [
       {
+        "kind": "fix",
+        "text": "webview readiness detection - handle missing dom-ready event"
+      },
+      {
         "kind": "feat",
         "text": "add persistent browser pane ID tracking to MCP"
       }

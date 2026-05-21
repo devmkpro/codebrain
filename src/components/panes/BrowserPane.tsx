@@ -141,6 +141,31 @@ export function BrowserPane({
       const { requestId, paneId, type, ...payload } = event.detail;
       if (paneId !== pane.id) return;
 
+      // Check if webview ref exists immediately
+      let wv = webviewRef.current;
+      if (!wv) {
+        // Webview not mounted yet — wait up to 5s for it to mount
+        const mountStart = Date.now();
+        while (!webviewRef.current && Date.now() - mountStart < 5000) {
+          await new Promise(r => setTimeout(r, 100));
+        }
+        wv = webviewRef.current;
+        if (!wv) {
+          window.dispatchEvent(new CustomEvent("codebrain:browser:result", {
+            detail: { requestId, ok: false, error: "webview not mounted" }
+          }));
+          return;
+        }
+      }
+
+      // Check if executeJavaScript is available
+      if (typeof wv.executeJavaScript !== "function") {
+        window.dispatchEvent(new CustomEvent("codebrain:browser:result", {
+          detail: { requestId, ok: false, error: "webview executeJavaScript not available" }
+        }));
+        return;
+      }
+
       // Wait for webview to be ready (max 15s)
       if (!webviewReadyRef.current) {
         try {
@@ -154,20 +179,6 @@ export function BrowserPane({
           }));
           return;
         }
-      }
-
-      const wv = webviewRef.current;
-      if (!wv) {
-        window.dispatchEvent(new CustomEvent("codebrain:browser:result", {
-          detail: { requestId, ok: false, error: "no webview" }
-        }));
-        return;
-      }
-      if (typeof wv.executeJavaScript !== "function") {
-        window.dispatchEvent(new CustomEvent("codebrain:browser:result", {
-          detail: { requestId, ok: false, error: "webview executeJavaScript not available" }
-        }));
-        return;
       }
 
       try {
