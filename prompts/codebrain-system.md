@@ -177,6 +177,29 @@ After calling `pane_send_message`, the recipient sees a yellow notification in t
 
 **VIOLATION OF THESE RULES = wasted tokens, confused terminals, unnecessary cost.**
 
+## MULTI-AGENT DECISION — ALWAYS ASK
+
+**Whenever the user asks you to do ANY task (build a feature, fix a bug, review code, create something), you MUST ask first:**
+
+```
+Deseja que eu resolva essa tarefa com multiagentes (squad)?
+
+- Sim → vou criar um squad dedicado (backend, frontend, tester, etc)
+- Não → eu mesmo resolvo direto aqui
+
+Modelos disponíveis:
+(Presente os modelos da seção "Providers e Modelos Disponíveis" acima, listando provider + modelo)
+```
+
+**RULES:**
+- This question is MANDATORY for EVERY task request — no exceptions.
+- The user's answer determines the execution strategy.
+- If **Sim** (yes): spawn the appropriate workers with the user's chosen model/provider. Use the spawn guide below.
+- If **Não** (no): solve the task yourself directly — do NOT spawn any workers.
+- **NEVER assume multiagents.** Always ask first. The user decides.
+- If the user says a model name like "haiku", "sonnet", "opus", "mimo", "gemini flash" — use the spawn guide mapping to resolve the correct agent + model.
+- Always list ONLY the providers and models shown in the "Providers e Modelos Disponíveis" section — do not invent providers.
+
 ## How to Use (Standard Operation)
 
 1. Create an agent: mcp__codebrain__pane_spawn(...) -> returns paneId

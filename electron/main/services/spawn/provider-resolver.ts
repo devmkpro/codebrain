@@ -1,6 +1,7 @@
 import log from "electron-log/main.js";
 import type { AppContext } from "../../context";
 import { MODEL_MAP_BY_TYPE, PROVIDER_REGISTRY, getProviderTypeForModel } from "../constants";
+import { getEnhancedProviders } from "../providers";
 
 const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
@@ -32,6 +33,11 @@ export function resolveProvider(
   let model = config.model;
   let provider: any = null;
 
+  // ── Early exit: shell agent needs no provider ──────────────────────────────
+  if (agent === "shell") {
+    return { agent, provider: null, providerId: null, model: undefined };
+  }
+
   // ── Step 0: claude-oauth virtual provider ───────────────────────────────────
   if (providerId === "claude-oauth") {
     agent = "claude";
@@ -53,13 +59,32 @@ export function resolveProvider(
   // ── Step 1: Explicit providerId ─────────────────────────────────────────────
   if (!provider && providerId && providerId !== "claude-oauth") {
     provider = ctx.providerStore.listFull().find((p: any) => p.id === providerId) ?? null;
+    if (!provider) {
+      return {
+        agent,
+        provider: null,
+        providerId: null,
+        model,
+        error: `Provider "${providerId}" not found in store. Available: ${ctx.providerStore.listFull().map((p: any) => p.id).join(", ") || "none"}`,
+      };
+    }
   }
 
   // ── Step 2: Model-based lookup ──────────────────────────────────────────────
+  // Search enhanced providers (includes virtual claude-oauth) + file-backed store
   if (!provider && model) {
     const targetType = getProviderTypeForModel(model);
     if (targetType) {
-      provider = ctx.providerStore.listFull().find((p: any) => p.type === targetType) ?? null;
+      const allProviders = getEnhancedProviders(ctx);
+
+      // For claude models + claude agent, prefer claude-oauth (OAuth, no API key needed)
+      if (targetType === "anthropic-compat" && agent === "claude") {
+        provider = allProviders.find((p: any) => p.id === "claude-oauth") ?? null;
+      }
+      // Fall back to first provider of matching type
+      if (!provider) {
+        provider = allProviders.find((p: any) => p.type === targetType) ?? null;
+      }
       if (provider) {
         providerId = provider.id;
         log.info(`[resolveProvider] Model "${model}" → type "${targetType}" → provider "${provider.id}"`);
@@ -87,15 +112,22 @@ export function resolveProvider(
   }
 
   // ── Step 4: Fallback to first available provider ────────────────────────────
+  // Search both the file-backed store AND enhanced providers (which includes virtual claude-oauth)
   if (!provider && !model) {
-    if (agent === "gemini") {
-      provider = ctx.providerStore.listFull().find((p: any) => p.host === "gemini" || p.id?.toLowerCase().includes("gemini")) ?? null;
+    const allProviders = getEnhancedProviders(ctx);
+
+    // When agent is "claude", prefer claude-oauth (auto-detected CLI) first
+    if (agent === "claude") {
+      provider = allProviders.find((p: any) => p.id === "claude-oauth") ?? null;
     }
-    if (!provider) provider = ctx.providerStore.listFull().find((p: any) => p.type === "mimo-compat") ?? null;
-    if (!provider) provider = ctx.providerStore.listFull().find((p: any) => p.type === "anthropic-compat") ?? null;
-    if (!provider) provider = ctx.providerStore.listFull().find((p: any) => p.type === "gemini-compat") ?? null;
-    if (!provider) provider = ctx.providerStore.listFull().find((p: any) => p.host === "claude") ?? null;
-    if (!provider) provider = ctx.providerStore.listFull().find((p: any) => p.host === "openclaude") ?? null;
+    if (!provider && agent === "gemini") {
+      provider = allProviders.find((p: any) => p.host === "gemini" || p.id?.toLowerCase().includes("gemini")) ?? null;
+    }
+    if (!provider) provider = allProviders.find((p: any) => p.type === "mimo-compat") ?? null;
+    if (!provider) provider = allProviders.find((p: any) => p.type === "anthropic-compat") ?? null;
+    if (!provider) provider = allProviders.find((p: any) => p.type === "gemini-compat") ?? null;
+    if (!provider) provider = allProviders.find((p: any) => p.host === "claude") ?? null;
+    if (!provider) provider = allProviders.find((p: any) => p.host === "openclaude") ?? null;
     if (provider) providerId = provider.id;
   }
 

@@ -108,7 +108,7 @@ export async function spawnPaneInternal(
     const isMimo = providerType === "mimo-compat";
     const isOpenAICompat = providerType === "openai-compat";
     const isGeminiCompat = providerType === "gemini-compat";
-    const isAnthropicCompat = providerType === "anthropic-compat";
+    const isAnthropicCompat = providerType === "anthropic-compat" || providerType === "oauth";
 
     if (isClaudeCompatible) {
       if (provider?.label) env["CLAUDE_CODE_PROVIDER_NAME"] = provider.label;

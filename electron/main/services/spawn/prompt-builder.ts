@@ -71,15 +71,15 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
   if (rolePrompt) sysPrompt += `\n\n---\n\n${rolePrompt}`;
   if (sessionContext) sysPrompt += `\n\n---\n\n${sessionContext}`;
 
-  // Providers section
+  // Providers section — clean format for user-facing questions
   const providersInfo = configuredProviders
     .map((p: any) => {
       const enhanced = ENHANCED_MODEL_MAP[p.type ?? ""];
       const models = (enhanced?.length > 0 ? enhanced : p.models)?.join(", ") || "nenhum modelo listado";
-      return `* ${p.label} (id: "${p.id}", type: "${p.type}"): ${models}`;
+      return `* **${p.label}** (${p.type}): ${models}`;
     })
     .join("\n") || "nenhum provider configurado";
-  sysPrompt += `\n\n## Providers e Modelos Disponíveis\n\n${providersInfo}`;
+  sysPrompt += `\n\n## Providers e Modelos Disponíveis\n\n${providersInfo}\n\nQuando perguntar ao usuário qual modelo usar, apresente esta lista acima de forma clara (sem ids técnicos). O usuário escolhe por nome legível (ex: "haiku", "opus", "mimo v2.5 pro").`;
 
   // Spawn guide with real provider data
   const spawnModels = configuredProviders
@@ -92,7 +92,7 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
     .filter(Boolean)
     .join("\n");
 
-  sysPrompt += `\n\n## Spawning Novos Panes (Agentes)\n\nQuando o usuário pedir para spawnar, abrir, ou criar um novo agente/terminal/pane, use:\n\n\`\`\`javascript\nmcp__codebrain__pane_spawn({\n  agent: "<agent>",      // "openclaude" | "claude" | "gemini" | "shell"\n  providerId: "<id>",    // id do provider (veja abaixo)\n  model: "<model>",      // modelo específico (veja abaixo)\n  label: "<nome>",       // label opcional para identificar\n  cwd: "<workspace>"     // workspace atual\n})\n\`\`\`\n\n**⚠️ PRIORIDADE ao escolher agente:**\n1. **Padrão (sem especificar)** → \`openclaude\` com o primeiro provider disponível (MIMO > Gemini > outro). NUNCA use \`shell\` quando o usuário pede um agente de IA.\n2. **"claude plano" / "claude direto" / "plano"** → \`agent: "claude"\` (Claude Code CLI oficial, OAuth nativo, SEM openclaude)\n3. **Nome de modelo como "claude-sonnet", "opus"** → use \`openclaude\` com o provider Anthropic. O nome do modelo NÃO troca o agente.\n\n**Agentes disponíveis:**\n- \`openclaude\` — OpenClaude CLI (usa providers configurados: MIMO, Gemini, Anthropic, OpenAI, etc). **USE ESTE POR PADRÃO.**\n- \`claude\` — Claude Code CLI oficial — SOMENTE quando usuário diz "plano" ou "claude direto"\n- \`gemini\` — Google Gemini CLI\n- \`shell\` — Terminal shell puro (bash/cmd). **SOMENTE para comandos de sistema, NUNCA para agentes de IA.**\n\n**Modelos → Parâmetros de spawn:**\n\n${spawnModels}\n\n**Exemplos:**\n- MIMO 2.5 Pro (padrão): \`pane_spawn({ agent: "openclaude", providerId: "mimo", model: "mimo-v2.5-pro" })\`\n- Claude Sonnet via API: \`pane_spawn({ agent: "openclaude", providerId: "anthropic", model: "claude-sonnet-4-6" })\`\n- Claude direto do plano: \`pane_spawn({ agent: "claude", model: "claude-sonnet-4-6" })\`\n- Gemini Flash: \`pane_spawn({ agent: "openclaude", providerId: "gemini", model: "gemini-2.5-flash" })\`\n- Shell puro: \`pane_spawn({ agent: "shell" })\``;
+  sysPrompt += `\n\n## Spawning Novos Panes (Agentes)\n\nQuando o usuário pedir para spawnar, abrir, ou criar um novo agente/terminal/pane, use:\n\n\`\`\`javascript\nmcp__codebrain__pane_spawn({\n  agent: "<agent>",      // "openclaude" | "claude" | "gemini" | "shell"\n  model: "<model>",      // modelo específico (veja abaixo)\n  label: "<nome>",       // label opcional para identificar\n  cwd: "<workspace>"     // workspace atual\n})\n\`\`\`\n\n**⚠️ PRIORIDADE ao escolher agente:**\n1. **Modelos Claude (haiku, sonnet, opus)** → \`agent: "claude"\` (Claude Code CLI oficial com OAuth do plano. O sistema detecta o CLI automaticamente.)\n2. **Modelos MIMO** → \`agent: "openclaude"\` com provider MIMO\n3. **Modelos Gemini** → \`agent: "openclaude"\` com provider Gemini\n4. **Padrão (sem especificar)** → \`openclaude\` com o primeiro provider disponível\n5. **NUNCA use \`shell\`** para agentes de IA\n\n**Agentes disponíveis:**\n- \`claude\` — Claude Code CLI oficial (OAuth plano, auto-detectado). Para modelos Claude (haiku/sonnet/opus).\n- \`openclaude\` — OpenClaude CLI (MIMO, Gemini, Anthropic API, etc). Para MIMO e Gemini.\n- \`gemini\` — Google Gemini CLI\n- \`shell\` — Terminal shell puro. SOMENTE para comandos de sistema.\n\n**Modelos → Parâmetros de spawn:**\n\n${spawnModels}\n\n**Exemplos:**\n- Claude Haiku (plano): \`pane_spawn({ agent: "claude", model: "claude-haiku-4-5-20251001" })\`\n- Claude Opus (plano): \`pane_spawn({ agent: "claude", model: "claude-opus-4-7" })\`\n- MIMO 2.5 Pro: \`pane_spawn({ agent: "openclaude", model: "mimo-v2.5-pro" })\`\n- Gemini Flash: \`pane_spawn({ agent: "openclaude", model: "gemini-2.5-flash" })\`\n- Shell puro: \`pane_spawn({ agent: "shell" })\``;
 
   // Runtime metadata injected so the skill banner shows real values
   const providerLabels = configuredProviders.map((p: any) => `${p.host || "openclaude"} (${p.type})`).join(", ") || "none";

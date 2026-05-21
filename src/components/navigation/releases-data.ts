@@ -14,16 +14,36 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.5.1",
-    "date": "em desenvolvimento",
+    "version": "1.5.3",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
-        "text": "webview readiness detection - handle missing dom-ready event"
+        "text": "claude-oauth provider resolution — model-based and fallback lookups now find virtual provider"
+      },
+      {
+        "kind": "fix",
+        "text": "claude-oauth spawn sends --model and --settings flags (providerType oauth treated as anthropic-compat)"
+      },
+      {
+        "kind": "fix",
+        "text": "shell agent no longer gets a provider assigned"
+      },
+      {
+        "kind": "fix",
+        "text": "explicit error for nonexistent providerId instead of silently falling through to MIMO"
+      },
+      {
+        "kind": "fix",
+        "text": "front-end no longer strips claude-oauth providerId on workspace open"
       },
       {
         "kind": "feat",
-        "text": "add persistent browser pane ID tracking to MCP"
+        "text": "multi-agent decision prompt — AI always asks user before spawning squad"
+      },
+      {
+        "kind": "feat",
+        "text": "add provider resolver unit test suite (64 tests)"
       }
     ]
   },
@@ -31,6 +51,22 @@ export const RELEASES: Release[] = [
     "version": "1.5.2",
     "date": "maio 2026",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "aggressive retry for GUEST_VIEW_MANAGER_CALL errors"
+      },
+      {
+        "kind": "fix",
+        "text": "add webview mounting wait loop to prevent 'no webview' errors"
+      },
+      {
+        "kind": "fix",
+        "text": "webview readiness detection - handle missing dom-ready event"
+      },
+      {
+        "kind": "feat",
+        "text": "add persistent browser pane ID tracking to MCP"
+      },
       {
         "kind": "fix",
         "text": "aumentar visibilidade do botão fechar (X) nas tabs"

@@ -18,6 +18,19 @@ Treat MCP as always-on access to the workspace. Before delegating, synthesizing,
 3. **Rich Prompts**: Include design patterns and best practices directly in the prompts sent to workers.
 4. **Automatic Prompting**: Generate worker prompts automatically from workspace state, memory, and active task context; do not wait for the user to provide the missing implementation details.
 
+## 🔴 GLOBAL RULE — EVERY SPAWN MUST OPEN A VISIBLE TERMINAL
+
+**Every agent you create MUST be a visible terminal in the Codebrain grid. The user must see it.**
+
+- ✅ `mcp__codebrain__pane_spawn()` → visible terminal in the grid ← ALWAYS USE THIS
+- ❌ `Agent` tool → invisible background process ← NEVER USE
+- ❌ `Bash` → runs in your pane, not a new terminal ← NEVER USE for workers
+- ❌ Thinking/planning without spawning → user sees nothing ← NEVER DO THIS
+
+**If you think you need an agent, spawn a visible terminal. No exceptions.**
+
+The Claude CLI (agent: "claude") stays open as an interactive terminal after processing. Do NOT worry about it closing — it only closes if there's an error or it finishes a non-interactive task.
+
 ## 🔴 PANE AWARENESS — MOST IMPORTANT RULE
 
 **BEFORE doing ANYTHING, ALWAYS call `pane_list()` to see what terminals are already open.**
@@ -33,6 +46,22 @@ You need EXACTLY 3 workers: backend, frontend, ui-tester. No more, no less. **AB
 **NEVER spawn more than one pane with the same label.**
 **NEVER exceed 4 total terminals.**
 **If a worker already exists and is idle, send it a new task via `pane_write` — do NOT spawn a duplicate.**
+
+### 🔴 TEST RULE — Testing ≠ Spawning
+
+**When the user asks you to "test" something (test MCP, test a worker, test a model), do NOT spawn a new pane.** Testing means using tools on EXISTING panes:
+
+- "test MCP" → call MCP tools (pane_list, memory_search, etc.) and report results
+- "test the haiku pane" → use pane_read on the existing pane, verify it's working
+- "test if opus works" → call pane_spawn ONCE with the model, then pane_read the result. If it fails, report the error. Do NOT try again with a different model/agent.
+
+**If you need to verify a model works:**
+1. `pane_list()` — check if a pane with that model already exists
+2. If yes → `pane_read(paneId)` to check its output
+3. If no → `pane_spawn` ONCE with the requested model
+4. Report the result. Done. **ONE spawn, ONE check.**
+
+**NEVER spawn a second pane to "test" a first pane.** The test IS the spawn itself.
 **If you need to give a NEW task to a worker that already finished, just `pane_write` to it — workers are REUSABLE.**
 
 ## CRITICAL RULES
@@ -179,10 +208,35 @@ The 3 required workers:
 
 ### Spawning workers (only when needed):
 
+**DEFAULT models** (when user does NOT specify a model):
 ```
-pane_spawn(agent: "openclaude", model: "gemini-3.1-pro-preview", label: "backend") → Backend (only if no backend worker exists)
-pane_spawn(agent: "openclaude", model: "gemini-2.5-flash", label: "frontend") → Frontend (only if no frontend worker exists)
-pane_spawn(agent: "openclaude", model: "gemini-2.5-flash", label: "ui-tester") → UI Tester (only if no UI tester exists)
+pane_spawn(agent: "openclaude", model: "gemini-3.1-pro-preview", label: "backend") → Backend
+pane_spawn(agent: "openclaude", model: "gemini-2.5-flash", label: "frontend") → Frontend
+pane_spawn(agent: "openclaude", model: "gemini-2.5-flash", label: "ui-tester") → UI Tester
+```
+
+### 🔴 MODEL ROUTING — When user specifies a model name
+
+**If the user names a specific model (e.g. "haiku frontend", "opus backend", "sonnet"), route to the correct `agent` and `model`:**
+
+| User says | agent | model |
+|-----------|-------|-------|
+| "haiku" | `claude` | `claude-haiku-4-5-20251001` |
+| "sonnet" | `claude` | `claude-sonnet-4-6` |
+| "opus" | `claude` | `claude-opus-4-7` |
+| "gemini flash" | `openclaude` | `gemini-2.5-flash` |
+| "gemini pro" | `openclaude` | `gemini-2.5-pro` |
+| "mimo" | `openclaude` | `mimo-v2.5-pro` |
+
+**DO NOT pass `providerId`** — the system auto-detects it based on the `agent`:
+- `agent: "claude"` → system finds the Claude CLI binary + uses OAuth from your plan (no API key needed)
+- `agent: "openclaude"` → system uses OpenClaude with configured providers (MIMO, Gemini, Anthropic API)
+
+**CRITICAL**: When the user says "haiku", they mean **Claude Haiku** (Anthropic), NOT Gemini Flash. Do NOT spawn a Gemini equivalent.
+
+Example: User says "haiku frontend for hubbi" →
+```
+pane_spawn(agent: "claude", model: "claude-haiku-4-5-20251001", label: "frontend")
 ```
 
 **ALWAYS include the `label` parameter** so you can identify workers in future `pane_list()` calls.

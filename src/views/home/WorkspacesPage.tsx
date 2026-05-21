@@ -140,8 +140,8 @@ export function WorkspacesPage() {
     const prov = providers[0];
     try {
       await (window as any).codeBrainApp?.pty?.spawn?.({
-        agent: prov?.host ?? 'openclaude', cwd: selected,
-        providerId: prov?.id === 'claude-oauth' ? undefined : prov?.id,
+        agent: prov?.id === 'claude-oauth' ? 'claude' : (prov?.host ?? 'openclaude'), cwd: selected,
+        providerId: prov?.id,
       });
     } catch {}
     setLaunching(false);
