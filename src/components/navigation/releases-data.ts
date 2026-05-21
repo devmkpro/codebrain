@@ -15,7 +15,7 @@ export interface Release {
 export const RELEASES: Release[] = [
   {
     "version": "1.5.1",
-    "date": "em desenvolvimento",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "feat",

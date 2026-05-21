@@ -62,7 +62,7 @@ function IconBtn({
       className={`relative flex items-center gap-1.5 px-2 h-full text-[11px] font-mono font-bold uppercase tracking-widest transition-all focus:outline-none cursor-pointer
         ${disabled ? 'opacity-40 cursor-not-allowed' : ''}
         ${active
-          ? 'text-indigo-400 bg-indigo-500/10'
+          ? 'text-[#00d9ff] bg-[#00d9ff]/10'
           : danger
             ? 'text-slate-600 hover:text-red-400 hover:bg-red-500/5'
             : 'text-slate-600 hover:text-slate-300 hover:bg-white/[0.04]'}`}
@@ -124,7 +124,7 @@ function HomeHeader() {
           <Link href="/" className="flex items-center gap-2.5 group">
             <Logo size={22} />
             <span className="text-[14px] font-bold tracking-tight text-white">
-              Codebrain <span className="text-[#4F46E5]">OS</span>
+              Codebrain <span className="text-[#9d4edd]">OS</span>
             </span>
           </Link>
         </div>
@@ -133,11 +133,11 @@ function HomeHeader() {
         <nav className="hidden lg:flex items-center gap-5" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           {NAV.map(item => (
             <Link key={item.href} href={item.href}
-              className={`text-[13px] font-medium transition-colors ${route === item.href ? 'text-[#4F46E5]' : 'text-slate-400 hover:text-white'}`}
+              className={`text-[13px] font-medium transition-colors ${route === item.href ? 'text-[#9d4edd]' : 'text-slate-400 hover:text-white'}`}
             >{item.label}</Link>
           ))}
           <Link href="/settings"
-            className={`px-2.5 py-1 border rounded text-[10px] font-mono tracking-widest transition-colors ${route === '/settings' ? 'bg-[#4F46E5]/20 border-[#4F46E5]/40 text-[#4F46E5]' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
+            className={`px-2.5 py-1 border rounded text-[10px] font-mono tracking-widest transition-colors ${route === '/settings' ? 'bg-[#9d4edd]/20 border-[#9d4edd]/40 text-[#9d4edd]' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
           >SETTINGS</Link>
         </nav>
 
@@ -157,7 +157,7 @@ function HomeHeader() {
           {tabs.length > 0 && (
             <button
               onClick={() => useNavStore.getState().setActiveTab(useNavStore.getState().activeTabIndex)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4F46E5]/10 border border-[#4F46E5]/20 text-indigo-400 text-[10px] font-bold uppercase tracking-widest hover:bg-[#4F46E5]/20 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#9d4edd]/10 border border-[#9d4edd]/20 text-violet-400 text-[10px] font-bold uppercase tracking-widest hover:bg-[#9d4edd]/20 transition-all cursor-pointer"
             ><Activity size={11} /> Workspace</button>
           )}
 
@@ -771,18 +771,18 @@ function WorkspaceHeader() {
         {/* Brand / Home */}
         <button
           onClick={goHome}
-          className={`shrink-0 px-4 flex items-center gap-2.5 border-r border-white/[0.06] focus:outline-none group transition-all cursor-pointer ${onHome ? 'bg-indigo-500/5' : 'hover:bg-white/[0.02]'}`}
-          style={{ WebkitAppRegion: 'no-drag', minWidth: 120 } as React.CSSProperties}
+          className={`shrink-0 px-5 flex items-center gap-3 border-r border-white/[0.08] focus:outline-none group transition-all cursor-pointer ${onHome ? 'bg-violet-500/8' : 'hover:bg-white/[0.04]'}`}
+          style={{ WebkitAppRegion: 'no-drag', minWidth: 140 } as React.CSSProperties}
           title="Home"
         >
           <Logo size={16} />
-          <span className={`font-mono text-[9px] font-bold tracking-[0.2em] transition-colors ${onHome ? 'text-indigo-400' : 'text-slate-700 group-hover:text-indigo-300'}`}>
+          <span className={`font-mono text-[9px] font-bold tracking-[0.2em] transition-colors ${onHome ? 'text-violet-400' : 'text-slate-700 group-hover:text-violet-300'}`}>
             CODEBRAIN
           </span>
         </button>
 
         {/* Workspace Tabs */}
-        <div className="flex items-stretch min-w-0 overflow-x-auto" style={{ WebkitAppRegion: 'no-drag', scrollbarWidth: 'none' } as React.CSSProperties}>
+        <div className="flex items-stretch min-w-0 overflow-x-auto gap-0.5 px-2" style={{ WebkitAppRegion: 'no-drag', scrollbarWidth: 'none' } as React.CSSProperties}>
           {tabs.map((tab: any, i: number) => {
             const isActive = !onHome && i === activeTabIndex;
             const label = tabLabel(tab);
@@ -800,11 +800,11 @@ function WorkspaceHeader() {
                 onDragEnd={() => { setDragIndex(null); setDropIndex(null); }}
                 onClick={() => setActiveTab(i)}
                 title={tab.workspacePath}
-                className={`group relative flex items-center gap-1.5 px-4 cursor-pointer shrink-0 min-w-0 max-w-[160px] border-r border-white/[0.06] select-none transition-all
-                  ${isActive ? 'bg-indigo-500/[0.06] text-slate-100 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-gradient-to-r after:from-indigo-500 after:to-violet-500' : isMissing ? 'text-slate-700' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.02]'}
+                className={`group relative flex items-center gap-2 px-5 cursor-pointer shrink-0 min-w-0 max-w-[180px] rounded-md select-none transition-all
+                  ${isActive ? 'bg-violet-500/12 text-slate-50 border border-violet-500/30 after:absolute after:bottom-1.5 after:left-2 after:right-2 after:h-1 after:bg-gradient-to-r after:from-[#9d4edd] after:to-[#00d9ff] after:rounded' : isMissing ? 'text-slate-700' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] border border-transparent'}
                   ${isDragging ? 'opacity-40' : ''}
-                  ${isTarget ? 'bg-indigo-500/10' : ''}`}
-                style={{ height: 48 }}
+                  ${isTarget ? 'bg-[#9d4edd]/15 border border-[#9d4edd]/30' : ''} border`}
+                style={{ height: 44 }}
               >
                 <span className="font-mono text-[10px] font-medium truncate">{isMissing ? `${label} ×` : label}</span>
                 <button
@@ -821,7 +821,7 @@ function WorkspaceHeader() {
         <div className="flex-1" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
 
         {/* ── Right toolbar ──────────────────────────────────────── */}
-        <div className="flex items-stretch shrink-0" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <div className="flex items-stretch shrink-0 gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
 
           {/* Tasks */}
           <IconBtn icon={<ListTodo size={15} strokeWidth={1.5} />} label="Tasks" onClick={toggleTasks} active={tasksVisible} badge={tasksCount} />
@@ -867,10 +867,10 @@ function WorkspaceHeader() {
               <VDiv />
               <button
                 onClick={() => setShowPaneMenu(v => !v)}
-                className={`px-3 flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest focus:outline-none transition-all border-l border-white/[0.06] cursor-pointer ${showPaneMenu ? 'text-indigo-300 bg-indigo-500/10' : 'text-indigo-400/70 hover:text-indigo-300 hover:bg-indigo-500/[0.06]'}`}
+                className={`px-3 flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest focus:outline-none transition-all border-l border-white/[0.06] cursor-pointer ${showPaneMenu ? 'text-[#00d9ff] bg-[#00d9ff]/10' : 'text-violet-400/70 hover:text-[#00d9ff] hover:bg-[#00d9ff]/[0.06]'}`}
                 title="Novo terminal / Restaurar sessão"
               >
-                <Plus size={12} strokeWidth={2.5} /> TERMINAL
+                <Plus size={12} strokeWidth={2.5} /> SHELL
               </button>
               {showPaneMenu && (
                 <PaneMenu
