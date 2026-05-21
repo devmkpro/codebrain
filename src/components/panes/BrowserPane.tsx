@@ -100,10 +100,12 @@ export function BrowserPane({
   React.useEffect(() => {
     const wv = webviewRef.current;
     if (!wv) return;
+
     const onDomReady = () => {
       webviewReadyRef.current = true;
       webviewReadyPromiseRef.current?._resolve?.();
     };
+
     const onStartLoading = () => {
       // Reset readiness when navigating — new page context is not ready yet
       webviewReadyRef.current = false;
@@ -112,11 +114,24 @@ export function BrowserPane({
       webviewReadyPromiseRef.current = new Promise(r => { resolve = r; });
       webviewReadyPromiseRef.current._resolve = resolve;
     };
+
+    const onStopLoading = () => {
+      // Alternative readiness trigger: when loading stops, assume DOM is ready
+      // This handles cases where dom-ready never fires (some pages)
+      if (!webviewReadyRef.current) {
+        webviewReadyRef.current = true;
+        webviewReadyPromiseRef.current?._resolve?.();
+      }
+    };
+
     wv.addEventListener("dom-ready", onDomReady);
     wv.addEventListener("did-start-loading", onStartLoading);
+    wv.addEventListener("did-stop-loading", onStopLoading);
+
     return () => {
       wv.removeEventListener("dom-ready", onDomReady);
       wv.removeEventListener("did-start-loading", onStartLoading);
+      wv.removeEventListener("did-stop-loading", onStopLoading);
     };
   }, []);
 

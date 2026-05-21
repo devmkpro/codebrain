@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.5.1",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add persistent browser pane ID tracking to MCP"
+      }
+    ]
+  },
+  {
     "version": "1.5.2",
     "date": "maio 2026",
     "highlights": [
