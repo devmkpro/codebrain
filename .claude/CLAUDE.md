@@ -1,7 +1,7 @@
 # Codebrain — Project Instructions for Claude Code
 
 > Multi-agent IDE built with Electron + React + TypeScript
-> 91 MCP tools | Squad orchestration | Shared memory | Pattern learning
+> 97 MCP tools | Squad orchestration | Shared memory | Pattern learning
 
 ---
 
@@ -11,7 +11,7 @@ Codebrain is an Electron desktop application that provides a multi-agent IDE exp
 
 **Key Features:**
 - Multi-agent squad orchestration (orchestrator + specialized workers)
-- 91 MCP tools for pane management, browser automation, memory, patterns, swarm, trajectories, hooks, skills
+- 97 MCP tools for pane management, browser automation, memory, patterns, swarm, trajectories, hooks, skills
 - Shared memory (SQLite-backed) across all agents in a workspace
 - Pattern learning (auto-learns successful approaches)
 - Browser automation (30 tools for UI testing)

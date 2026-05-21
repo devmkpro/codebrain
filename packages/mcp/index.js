@@ -1290,6 +1290,46 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
+    "mcp__codebrain__browser_get_pane_id",
+    "Get the current active browser pane ID. Use this to recover from pane ID loss.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.getBrowserPaneId()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_record_pane",
+    "Record/update the active browser pane ID. Call this after opening a browser to maintain persistence.",
+    { pane_id: z.string().describe("The browser pane ID to record as active") },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.recordBrowserPane(args.pane_id)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_list_panes",
+    "List all active browser panes and show which one is currently active.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.listBrowserPanes()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_clear_pane_cache",
+    "Clear the browser pane cache. Use if you need to reset the active pane state.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.clearBrowserPaneCache()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
     "mcp__codebrain__browser_back",
     "Go back in browser history.",
     { pane_id: z.string().optional() },

@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.5.2",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "aumentar visibilidade do botão fechar (X) nas tabs"
+      }
+    ]
+  },
+  {
     "version": "1.5.1",
     "date": "maio 2026",
     "highlights": [

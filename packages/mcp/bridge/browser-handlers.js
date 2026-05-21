@@ -1,9 +1,12 @@
 "use strict";
 
 /**
- * Browser control bridge handlers.
+ * Browser control bridge handlers with paneId persistence.
  */
 function createBrowserHandlers(opts) {
+  // Persistent storage for active browser pane
+  let activeBrowserPaneId = null;
+
   async function browserCmd(type, payload = {}) {
     if (!opts.sendBrowserCmd) throw new Error("browser control not available");
     const paneId = opts.resolveBrowserPaneId ? opts.resolveBrowserPaneId(payload.paneId) : payload.paneId;
@@ -12,11 +15,31 @@ function createBrowserHandlers(opts) {
     return opts.sendBrowserCmd(paneId, { type, ...cmdPayload });
   }
 
+  function setActiveBrowserPane(paneId) {
+    if (paneId) {
+      activeBrowserPaneId = paneId;
+      console.log(`[Browser] Active pane: ${paneId}`);
+    }
+  }
+
+  function getActiveBrowserPane() {
+    return activeBrowserPaneId;
+  }
+
   return {
+    // Get the current active browser pane ID
+    async getBrowserPaneId() {
+      return { ok: true, paneId: activeBrowserPaneId };
+    },
+
     async browserNavigate(url, paneId) { return browserCmd("navigate", { url, paneId }); },
     async browserOpen(url) {
       if (!opts.createBrowserPane) throw new Error("browser pane creation not available");
-      return opts.createBrowserPane(url);
+      const result = await opts.createBrowserPane(url);
+      if (result?.ok && result?.paneId) {
+        setActiveBrowserPane(result.paneId);
+      }
+      return result;
     },
     async browserBack(paneId) { return browserCmd("back", { paneId }); },
     async browserForward(paneId) { return browserCmd("forward", { paneId }); },
@@ -92,6 +115,26 @@ function createBrowserHandlers(opts) {
     async browserClearNetwork() {
       if (opts.clearBrowserLogs) opts.clearBrowserLogs();
       return { ok: true };
+    },
+
+    // Persistence and recovery functions
+    async recordBrowserPane(paneId) {
+      if (paneId) {
+        setActiveBrowserPane(paneId);
+        return { ok: true, paneId, message: "Browser pane recorded" };
+      }
+      return { ok: false, error: "Invalid paneId" };
+    },
+
+    async listBrowserPanes() {
+      if (!opts.getAllBrowserPanes) return { ok: true, panes: [] };
+      const panes = opts.getAllBrowserPanes();
+      return { ok: true, panes, activePaneId: activeBrowserPaneId };
+    },
+
+    async clearBrowserPaneCache() {
+      activeBrowserPaneId = null;
+      return { ok: true, message: "Browser pane cache cleared" };
     },
   };
 }
