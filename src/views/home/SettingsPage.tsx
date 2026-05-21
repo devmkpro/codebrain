@@ -94,7 +94,8 @@ export function SettingsPage() {
   const [shells,    setShells] = useState<string[]>([]);
   const [skillStatus, setSkillStatus] = useState<{ installed: boolean } | null>(null);
   const [installedSkills, setInstalledSkills] = useState<string[]>([]);
-  const [cliStatus,   setCliStatus]   = useState<{ found: boolean; path?: string } | null>(null);
+  const [cliStatus,        setCliStatus]        = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [claudeCliStatus,  setClaudeCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
 
@@ -134,9 +135,12 @@ export function SettingsPage() {
     (window as any).codeBrainApp?.skill?.list?.()
       .then((skills: string[]) => setInstalledSkills(skills))
       .catch(() => {});
-    // Load CLI status — detect returns AllCliInfo { openclaude, shell }
+    // Load CLI status — detect returns AllCliInfo { openclaude, claude, shell }
     (window as any).codeBrainApp?.cli?.detect?.()
-      .then((s: any) => setCliStatus(s?.openclaude ?? s))
+      .then((s: any) => {
+        setCliStatus(s?.openclaude ?? null);
+        setClaudeCliStatus(s?.claude ?? null);
+      })
       .catch(() => {});
     loadProviders().catch(() => {});
   }, []);
@@ -171,9 +175,16 @@ export function SettingsPage() {
     setCliBusy(true);
     try {
       const res = await (window as any).codeBrainApp?.cli?.redetect?.();
-      // redetect returns array [{name,found,path}], detect returns {openclaude:{...}}
-      const info = Array.isArray(res) ? res[0] : res?.openclaude ?? res;
-      setCliStatus(info);
+      // redetect returns [{name,found,path,version}, ...]
+      if (Array.isArray(res)) {
+        const oc = res.find((r: any) => r.name === 'openclaude');
+        const cl = res.find((r: any) => r.name === 'claude');
+        if (oc) setCliStatus(oc);
+        if (cl) setClaudeCliStatus(cl);
+      } else {
+        setCliStatus(res?.openclaude ?? res);
+        setClaudeCliStatus(res?.claude ?? null);
+      }
     } catch {} finally { setCliBusy(false); }
   };
 
@@ -391,7 +402,7 @@ export function SettingsPage() {
 
             <Divider />
 
-            {/* CLI */}
+            {/* OpenClaude CLI */}
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-medium text-slate-300">OpenClaude CLI</p>
@@ -402,6 +413,36 @@ export function SettingsPage() {
                       {cliStatus.found ? `✓ ${cliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
                     </p>
                     {cliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{cliStatus.version}</p>}
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleRedetectCli}
+                disabled={cliBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+              >
+                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
+              </button>
+            </div>
+
+            <Divider />
+
+            {/* Claude CLI (official) */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-medium text-slate-300">Claude Code CLI</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">
+                  Claude original da Anthropic — usado pelo provider <span className="font-mono">Claude (Plano)</span>.
+                  {!claudeCliStatus?.found && (
+                    <> Instale com <span className="font-mono">npm install -g @anthropic-ai/claude-code</span>.</>
+                  )}
+                </p>
+                {claudeCliStatus && (
+                  <>
+                    <p className={`text-[9px] font-mono mt-1 ${claudeCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {claudeCliStatus.found ? `✓ ${claudeCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
+                    </p>
+                    {claudeCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{claudeCliStatus.version}</p>}
                   </>
                 )}
               </div>
