@@ -13,6 +13,7 @@ export interface CliInfo {
 
 export interface AllCliInfo {
   openclaude: CliInfo;
+  claude: CliInfo;
   shell: { path: string };
 }
 
@@ -129,6 +130,7 @@ export class CliDetector {
     const shell = IS_WIN ? (process.env["COMSPEC"] ?? "cmd.exe") : (process.env["SHELL"] ?? "/bin/bash");
     return {
       openclaude: detectCli("openclaude"),
+      claude: detectCli("claude"),
       shell: { path: shell },
     };
   }

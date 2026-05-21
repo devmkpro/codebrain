@@ -40,10 +40,42 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
   const handleAddPane = (providerId?: string, model?: string) => {
     if (!activeWorkspace) return;
     const explicit = providerId !== undefined || model !== undefined;
-    const nextProviderId = explicit ? providerId : favoritePane?.providerId;
+    let nextProviderId = explicit ? providerId : favoritePane?.providerId;
     const nextModel = explicit ? model : favoritePane?.model;
+
+    // If model is given but provider is not, resolve provider from the model name.
+    // This prevents falling back to MIMO when the user picks a Claude/Gemini model
+    // but the providerId is undefined (e.g. claude-oauth virtual provider).
+    if (nextModel && !nextProviderId) {
+      const lowerModel = nextModel.toLowerCase();
+      for (const p of providers) {
+        if (p.models?.includes(nextModel)) {
+          nextProviderId = p.id;
+          break;
+        }
+      }
+      // Fallback by model prefix if not found in any provider's model list
+      if (!nextProviderId) {
+        if (lowerModel.startsWith("claude-") || lowerModel.startsWith("opus-") || lowerModel.startsWith("sonnet-") || lowerModel.startsWith("haiku-")) {
+          const anthropic = providers.find(p => p.type === "anthropic-compat" || p.type === "oauth");
+          if (anthropic) nextProviderId = anthropic.id;
+        } else if (lowerModel.startsWith("gemini-")) {
+          const gemini = providers.find(p => p.type === "gemini-compat");
+          if (gemini) nextProviderId = gemini.id;
+        } else if (lowerModel.startsWith("mimo-")) {
+          const mimo = providers.find(p => p.type === "mimo-compat");
+          if (mimo) nextProviderId = mimo.id;
+        } else if (lowerModel.startsWith("gpt-") || lowerModel.startsWith("o")) {
+          const openai = providers.find(p => p.type === "openai-compat");
+          if (openai) nextProviderId = openai.id;
+        }
+      }
+    }
+
     const provider = nextProviderId ? providers.find(p => p.id === nextProviderId) : null;
-    const agent = explicit ? provider?.host ?? "openclaude" : favoritePane?.agent ?? provider?.host ?? "openclaude";
+    const agent = explicit
+      ? provider?.host ?? (provider?.type === "oauth" ? "claude" : "openclaude")
+      : favoritePane?.agent ?? provider?.host ?? "openclaude";
     const spawnEnv: Record<string, string> = {
       ...(nextModel ? { ANTHROPIC_MODEL: nextModel, MODEL: nextModel } : {}),
     };

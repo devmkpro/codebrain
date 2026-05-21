@@ -842,6 +842,16 @@ class ApiProxy {
       try {
         const json = JSON.parse(body.toString());
         this._extractAnthropicUsage(json, model);
+        // Log helpful message when MIMO returns "Not supported model"
+        if (proxyRes.statusCode === 400) {
+          const errMsg = json?.error?.message || json?.message || "";
+          if (/not supported model/i.test(errMsg)) {
+            console.warn(
+              `${LOG_PREFIX} ⚠ Model "${model}" not supported by this MIMO region. ` +
+              `Try switching to SGP or CN region in Settings → Providers → MIMO.`
+            );
+          }
+        }
       } catch {}
     });
   }

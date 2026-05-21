@@ -336,16 +336,11 @@ function FilesNavBar({ workspacePath }: { workspacePath: string }) {
 
 // ─── Model pricing map (per 1M tokens, USD) ──────────────────────────────────
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  // Anthropic
+  // Anthropic (current models only)
   'claude-opus-4-7': { input: 5.0, output: 25.0 },
   'claude-opus-4-6': { input: 5.0, output: 25.0 },
   'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
-  'claude-sonnet-4-5-20250929': { input: 3.0, output: 15.0 },
-  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
-  'claude-3-7-sonnet-20250219': { input: 3.0, output: 15.0 },
-  'claude-3-5-sonnet-20241022': { input: 3.0, output: 15.0 },
   'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0 },
-  'claude-3-5-haiku-20241022': { input: 1.0, output: 5.0 },
   // Gemini 3.x
   'gemini-3.1-pro-preview': { input: 2.0, output: 12.0 },
   'gemini-3.1-pro-preview-customtools': { input: 2.0, output: 12.0 },
@@ -417,10 +412,26 @@ function PaneMenu({
     onClose();
     navigateInActiveTab({ kind: 'workspace' });
     const explicit = providerId !== undefined || model !== undefined;
-    const nextPid = explicit ? providerId : favoritePane.current?.providerId;
+    let nextPid = explicit ? providerId : favoritePane.current?.providerId;
     const nextMod = explicit ? model : favoritePane.current?.model;
+
+    // If model is given but provider is not, resolve provider from the model name.
+    if (nextMod && !nextPid) {
+      for (const p of providers) {
+        if (p.models?.includes(nextMod)) { nextPid = p.id; break; }
+      }
+      if (!nextPid) {
+        const lower = nextMod.toLowerCase();
+        if (lower.startsWith("claude-")) { const ap = providers.find(p => p.type === "anthropic-compat" || p.type === "oauth"); if (ap) nextPid = ap.id; }
+        else if (lower.startsWith("gemini-")) { const gp = providers.find(p => p.type === "gemini-compat"); if (gp) nextPid = gp.id; }
+        else if (lower.startsWith("mimo-")) { const mp = providers.find(p => p.type === "mimo-compat"); if (mp) nextPid = mp.id; }
+      }
+    }
+
     const prov = nextPid ? providers.find(p => p.id === nextPid) : null;
-    const agent = explicit ? prov?.host ?? 'openclaude' : favoritePane.current?.agent ?? prov?.host ?? 'openclaude';
+    const agent = explicit
+      ? prov?.host ?? (prov?.type === 'oauth' ? 'claude' : 'openclaude')
+      : favoritePane.current?.agent ?? prov?.host ?? 'openclaude';
     const env: Record<string, string> = { ...(prov?.env ?? {}), ...(nextMod ? { ANTHROPIC_MODEL: nextMod, MODEL: nextMod } : {}) };
     (window as any).codeBrainApp?.pty.spawn({ agent, cwd: activeWorkspace, providerId: nextPid, model: nextMod, permissionMode, ...(Object.keys(env).length ? { env } : {}) })
       .then((r: any) => { if (r?.ok && r.paneId) addPane({ id: r.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: nextPid, model: nextMod, permissionMode, externallySpawned: true }); })
@@ -482,7 +493,10 @@ function PaneMenu({
           <p className="px-3 py-2 font-mono text-[10px] text-slate-700">Nenhum provider configurado</p>
         )}
         {providers.map(p => {
-          const pid = p.id === 'claude-oauth' ? undefined : p.id;
+          // Always pass the actual provider ID — backend needs it to resolve the correct provider.
+          // For claude-oauth (Claude CLI), backend will use agent: "claude" with native OAuth.
+          // For anthropic (API key), backend will use agent: "openclaude" with Anthropic provider.
+          const pid = p.id;
           const models = p.models ?? [];
           return (
             <div key={p.id} className="border-b border-white/5">

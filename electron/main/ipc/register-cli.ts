@@ -8,6 +8,7 @@ export function registerCliHandlers(ctx: AppContext): void {
     const info = ctx.cliDetector.redetect();
     return [
       { name: "openclaude", found: info.openclaude.found, path: info.openclaude.path, version: info.openclaude.version },
+      { name: "claude", found: info.claude.found, path: info.claude.path, version: info.claude.version },
     ];
   });
 

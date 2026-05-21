@@ -5,7 +5,62 @@ import * as os from "node:os";
 import type { AppContext } from "../context";
 import { readRecentWorkspaces, saveRecentWorkspaces, touchWorkspace } from "../services/workspace";
 
+/** Directories that indicate a project root */
+const PROJECT_MARKERS = [
+  "package.json", ".git", "pyproject.toml", "Cargo.toml",
+  "go.mod", "pom.xml", "build.gradle", "Makefile",
+  ".codebrain", "tsconfig.json", "composer.json",
+];
+
+/**
+ * Walk up from `dir` looking for a project marker.
+ * Returns the project root path, or null if none found.
+ */
+function detectProjectRoot(dir: string): string | null {
+  let current = dir;
+  const root = path.parse(current).root;
+  while (current !== root) {
+    for (const marker of PROJECT_MARKERS) {
+      if (fs.existsSync(path.join(current, marker))) {
+        return current;
+      }
+    }
+    current = path.dirname(current);
+  }
+  return null;
+}
+
 export function registerWorkspaceHandlers(ctx: AppContext): void {
+  /**
+   * Detect and auto-register a workspace at the given path (or cwd).
+   * Walks up looking for project markers, auto-registers the most recent
+   * workspace if none found, or falls back to cwd.
+   */
+  ipcMain.handle("workspace:detect", async (_event, dir?: string) => {
+    const targetDir = dir ?? process.cwd();
+
+    // 1. Try to find a project root by walking up from targetDir
+    const projectRoot = detectProjectRoot(targetDir);
+    if (projectRoot) {
+      ctx.currentWorkspacePath = projectRoot;
+      touchWorkspace(ctx, projectRoot);
+      return { path: projectRoot, autoDetected: true };
+    }
+
+    // 2. If no project markers found, check recent workspaces
+    const recents = readRecentWorkspaces(ctx);
+    if (recents.length > 0 && fs.existsSync(recents[0])) {
+      ctx.currentWorkspacePath = recents[0];
+      touchWorkspace(ctx, recents[0]);
+      return { path: recents[0], autoDetected: false, fromRecent: true };
+    }
+
+    // 3. Fall back to cwd itself
+    ctx.currentWorkspacePath = targetDir;
+    touchWorkspace(ctx, targetDir);
+    return { path: targetDir, autoDetected: false, fallback: true };
+  });
+
   ipcMain.handle("workspace:open", async () => {
     if (!ctx.mainWindow) return null;
     const result = await dialog.showOpenDialog(ctx.mainWindow, {

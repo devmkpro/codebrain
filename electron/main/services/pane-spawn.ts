@@ -5,42 +5,13 @@ import log from "electron-log/main.js";
 import type { AppContext } from "../context";
 import { safeSend } from "../context";
 import { CODEBRAIN_SYSTEM_PROMPT, WORKER_PROMPT, ORCHESTRATOR_PROMPT, UI_TESTER_PROMPT, GEMINI_WORKER_PROMPT } from "./prompts";
+import { resolveCommand } from "../pty-manager";
 
-// Hardcoded model-to-provider-type mapping (mirrors getEnhancedProviders)
-const ENHANCED_MODEL_MAP: Record<string, string[]> = {
-  "gemini-compat": [
-    "gemini-3.5-flash",
-    "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools",
-    "gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite",
-    "gemini-3-flash-preview", "gemini-3-pro-preview",
-    "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
-    "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash-001", "gemini-2.0-flash-lite-001",
-    "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest",
-    "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts",
-    "gemini-2.5-computer-use-preview-10-2025",
-    "gemini-3.1-flash-tts-preview"
-  ],
-  "mimo-compat": [
-    "mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"
-  ],
-  "anthropic-compat": [
-    "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5-20251101",
-    "claude-opus-4-1-20250805", "claude-opus-4-20250514",
-    "claude-sonnet-4-6", "claude-sonnet-4-5-20250929", "claude-sonnet-4-20250514",
-    "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022",
-    "claude-haiku-4-5-20251001", "claude-3-5-haiku-20241022"
-  ],
-};
+// Use centralized model registry from constants.ts — single source of truth
+import { MODEL_MAP_BY_TYPE, getProviderTypeForModel, PROVIDER_REGISTRY } from "./constants";
 
-function getProviderTypeForModel(m: string): string | null {
-  for (const [type, models] of Object.entries(ENHANCED_MODEL_MAP)) {
-    if (models.includes(m)) return type;
-  }
-  if (m.startsWith("gemini-")) return "gemini-compat";
-  if (m.startsWith("mimo-")) return "mimo-compat";
-  if (m.startsWith("claude-")) return "anthropic-compat";
-  return null;
-}
+// Legacy alias for backward compatibility
+const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
 export interface SpawnPaneConfig {
   agent?: string;
@@ -69,9 +40,63 @@ export async function spawnPaneInternal(
     let agent = config.agent;
     let providerId = config.providerId;
     let model = config.model;
+    let provider: any = null;
 
-    // Provider inheritance from last spawned pane
-    if (!agent || !providerId || !model) {
+    // ── Provider resolution strategy ──────────────────────────────────────
+    // Priority: 0) claude-oauth fast path → 1) Explicit providerId → 2) Model-based → 3) Inheritance → 4) Fallback
+    //
+    // claude-oauth is a VIRTUAL provider created by the frontend when the Claude CLI
+    // is detected. It is NOT in listFull(). We handle it first with a synthetic provider
+    // so the rest of the resolution + validation logic works correctly.
+
+    if (!agent) agent = "openclaude";
+
+    // ── Step 0: claude-oauth fast path (virtual provider, not in store) ───
+    // When providerId is "claude-oauth", create a synthetic provider that uses
+    // the official "claude" agent (native CLI with OAuth). The model list comes
+    // from the registry so validation can proceed normally.
+    if (providerId === "claude-oauth") {
+      agent = "claude";
+      const registryTemplate = PROVIDER_REGISTRY.find(t => t.id === "claude-oauth");
+      const registryModels = registryTemplate?.models ?? [];
+      // If a specific model was requested, include it even if not in the registry
+      const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
+      // Also include models from the anthropic-compat registry entry
+      const anthropicTemplate = PROVIDER_REGISTRY.find(t => t.id === "anthropic");
+      const anthropicModels = anthropicTemplate?.models ?? [];
+      const mergedModels = [...new Set([...allModels, ...anthropicModels])];
+      provider = {
+        id: "claude-oauth",
+        type: "anthropic-compat",
+        host: "claude",
+        models: mergedModels,
+        env: {},
+      } as any;
+      providerId = "claude-oauth";
+      log.info(`[spawnPaneInternal] claude-oauth virtual provider → agent="claude", ${mergedModels.length} models available`);
+    }
+
+    // Step 1: If providerId is given, look it up in store
+    if (!provider && providerId && providerId !== "claude-oauth") {
+      provider = ctx.providerStore.listFull().find((p) => p.id === providerId) ?? null;
+    }
+
+    // Step 2: If model is given, resolve provider from model (BEFORE inheritance)
+    if (!provider && model) {
+      const targetType = getProviderTypeForModel(model);
+      if (targetType) {
+        provider = ctx.providerStore.listFull().find((p) => p.type === targetType) ?? null;
+        if (provider) {
+          providerId = provider.id;
+          log.info(`[spawnPaneInternal] Model "${model}" → provider type "${targetType}" → provider "${provider.id}"`);
+        }
+      }
+    }
+
+    // Step 3: Provider inheritance from last spawned pane (only if NO model/provider given)
+    // IMPORTANT: If a model IS given but no provider was found, DO NOT inherit —
+    // the inherited provider might not support the requested model (e.g. MIMO for Claude models).
+    if (!providerId && !model) {
       let latest = 0;
       let callerCfg: any = null;
       for (const [pid, pcfg] of ctx.paneConfigs) {
@@ -83,42 +108,31 @@ export async function spawnPaneInternal(
       }
       if (callerCfg) {
         if (!agent) agent = callerCfg.agent;
-        if (!providerId && (!agent || agent === callerCfg.agent)) providerId = callerCfg.providerId;
-        if (!model && (!agent || agent === callerCfg.agent)) model = callerCfg.model;
+        providerId = callerCfg.providerId;
+        model = callerCfg.model;
+        provider = providerId ? ctx.providerStore.listFull().find((p) => p.id === providerId) ?? null : null;
       }
     }
 
-    if (!agent) agent = "openclaude";
-
-    // Provider auto-detection
-    let provider = providerId ? ctx.providerStore.listFull().find((p) => p.id === providerId) ?? null : null;
-
-    if (!provider && agent) {
-      const allProviders = ctx.providerStore.listFull();
+    // Step 4: Final fallback — only when NO provider found AND no specific model requested.
+    // When a model IS requested but no provider supports it, we keep provider=null
+    // so the model validation below can produce a clear error instead of silently
+    // overriding to MIMO.
+    if (!provider && !model) {
       if (agent === "gemini") {
-        provider = allProviders.find((p) => p.host === "gemini" || p.id?.toLowerCase().includes("gemini")) ?? null;
-      } else if (agent === "openclaude" || agent === "claude") {
-        if (model) {
-          provider = allProviders.find((p) => p.models?.includes(model) || (ENHANCED_MODEL_MAP[p.type ?? ""] ?? []).includes(model)) ?? null;
-          if (!provider) {
-            const targetType = getProviderTypeForModel(model);
-            if (targetType) {
-              provider = allProviders.find((p) => p.type === targetType) ?? null;
-              if (provider) {
-                log.info(`[spawnPaneInternal] Model "${model}" matched to provider type "${targetType}" via enhanced map → provider "${provider.id}"`);
-              }
-            }
-          }
-        }
-        if (!provider && !model) {
-          provider = allProviders.find((p) => p.type === "mimo-compat") ?? null;
-          if (!provider) provider = allProviders.find((p) => p.type === "anthropic-compat") ?? null;
-          if (!provider) provider = allProviders.find((p) => p.type === "gemini-compat") ?? null;
-          if (!provider) provider = allProviders.find((p) => p.host === "openclaude") ?? null;
-        }
+        provider = ctx.providerStore.listFull().find((p) => p.host === "gemini" || p.id?.toLowerCase().includes("gemini")) ?? null;
       }
+      if (!provider) {
+        provider = ctx.providerStore.listFull().find((p) => p.type === "mimo-compat") ?? null;
+      }
+      if (!provider) provider = ctx.providerStore.listFull().find((p) => p.type === "anthropic-compat") ?? null;
+      if (!provider) provider = ctx.providerStore.listFull().find((p) => p.type === "gemini-compat") ?? null;
+      if (!provider) provider = ctx.providerStore.listFull().find((p) => p.host === "claude") ?? null;
+      if (!provider) provider = ctx.providerStore.listFull().find((p) => p.host === "openclaude") ?? null;
       if (provider) providerId = provider.id;
     }
+
+    // (old provider auto-detection removed — now handled by the strategy above)
 
     // Validate model
     if (provider && model) {
@@ -134,20 +148,67 @@ export async function spawnPaneInternal(
             provider = betterProvider;
             providerId = betterProvider.id;
           } else {
-            const fallback = enhancedModels[0] || providerModels[0];
-            log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}". Available: ${providerModels.join(", ")}. Falling back to: ${fallback}`);
-            model = fallback;
+            // No provider in the store supports this model type.
+            // Check if ANY provider in the store has this specific model.
+            const anyProvider = ctx.providerStore.listFull().find((p) => {
+              const pModels = p.models ?? [];
+              const eModels = ENHANCED_MODEL_MAP[p.type ?? ""] ?? [];
+              return pModels.includes(model) || eModels.includes(model);
+            });
+            if (anyProvider) {
+              log.info(`[spawnPaneInternal] Model "${model}" found in provider "${anyProvider.id}", switching from "${provider.id}"`);
+              provider = anyProvider;
+              providerId = anyProvider.id;
+            } else {
+              // Model not supported by any configured provider — return error
+              const allSupported = ctx.providerStore.listFull().flatMap(p => (p.models ?? []).map(m => `${p.id}:${m}`));
+              return {
+                ok: false,
+                error: `Model "${model}" is not supported by any configured provider. Configured: ${allSupported.join(", ") || "none"}`,
+              };
+            }
           }
         } else {
-          const fallback = enhancedModels[0] || providerModels[0];
-          log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}". Available: ${providerModels.join(", ")}. Falling back to: ${fallback}`);
-          model = fallback;
+          // Same provider type but model not in provider's list
+          // Check if ANY provider has this specific model
+          const anyProvider = ctx.providerStore.listFull().find((p) => {
+            const pModels = p.models ?? [];
+            const eModels = ENHANCED_MODEL_MAP[p.type ?? ""] ?? [];
+            return pModels.includes(model) || eModels.includes(model);
+          });
+          if (anyProvider) {
+            log.info(`[spawnPaneInternal] Model "${model}" found in provider "${anyProvider.id}", switching from "${provider.id}"`);
+            provider = anyProvider;
+            providerId = anyProvider.id;
+          } else {
+            const fallback = enhancedModels[0] || providerModels[0];
+            log.warn(`[spawnPaneInternal] Model "${model}" not found in provider "${provider.id}" or any other provider. Falling back to: ${fallback}`);
+            model = fallback;
+          }
         }
       }
+    } else if (!provider && model) {
+      // Model was specified but no provider found — error
+      return {
+        ok: false,
+        error: `No provider configured for model "${model}". Model type: ${getProviderTypeForModel(model) ?? "unknown"}. Please add a provider in Settings.`,
+      };
     } else if (provider && !model) {
       // Use enhanced model list when available (avoids stale stored names like "gemini-3.1-pro")
       const enhanced = ENHANCED_MODEL_MAP[provider.type ?? ""];
       model = (enhanced && enhanced.length > 0 ? enhanced : provider.models)?.[0];
+    }
+
+    // Safety: only override agent for provider types that have NO official CLI.
+    // MIMO has no CLI → force openclaude.
+    // Anthropic-compat may be claude-oauth (official Claude CLI) → DON'T override.
+    // If the user chose agent: "claude" with anthropic-compat, they want the official CLI.
+    if (provider && agent === "claude") {
+      const ptype = provider.type ?? "";
+      if (ptype === "mimo-compat") {
+        log.info(`[spawnPaneInternal] Overriding agent "claude" → "openclaude" for provider type "${ptype}" (no official CLI exists)`);
+        agent = "openclaude";
+      }
     }
 
     // Filter masked values from frontend config.env
@@ -167,22 +228,28 @@ export async function spawnPaneInternal(
       args.push("--resume", config.claudeSessionId);
     }
 
-    // MCP config
+    const { nanoid } = await import("nanoid");
+    const paneId = config.paneId ?? nanoid();
+
+    // MCP config — write .mcp.json to the project CWD so Claude auto-discovers it.
+    // Claude Code v2.1 discovers .mcp.json by scanning cwd and parent dirs.
+    // We do NOT pass --mcp-config because that flag overrides auto-discovery and
+    // only works when the file is in a location Claude specifically trusts.
     if (isClaudeCompatible && !ctx.mcpServerInfo && ctx.mcpServerReady) {
       try { await ctx.mcpServerReady; } catch {}
     }
     if (isClaudeCompatible && ctx.mcpServerInfo && !args.includes("--mcp-config")) {
       const mcpConfigPath = path.join(cwd, ".mcp.json");
+      const mcpContent = JSON.stringify({
+        mcpServers: { codebrain: { type: "sse", url: ctx.mcpServerInfo.sseUrl } },
+      }, null, 2);
       try {
-        fs.writeFileSync(mcpConfigPath, JSON.stringify({
-          mcpServers: { codebrain: { type: "sse", url: ctx.mcpServerInfo.sseUrl } },
-        }, null, 2), "utf-8");
-      } catch {}
-      args.push("--mcp-config", mcpConfigPath);
+        fs.writeFileSync(mcpConfigPath, mcpContent, "utf-8");
+        log.info(`[spawnPaneInternal] Wrote .mcp.json to ${mcpConfigPath}`);
+      } catch (e) {
+        log.warn("[spawnPaneInternal] Failed to write .mcp.json to cwd, skipping MCP config:", e);
+      }
     }
-
-    const { nanoid } = await import("nanoid");
-    const paneId = config.paneId ?? nanoid();
 
     // System prompt injection
     if (isClaudeCompatible && !args.includes("--system-prompt")) {
@@ -214,6 +281,19 @@ export async function spawnPaneInternal(
         .join("\n");
       sysPrompt += `\n\n## Providers e Modelos Disponíveis\n\n${providersInfo}`;
 
+      // Add spawn guide with actual provider data
+      const spawnModels = allProviders
+        .filter((p) => p.id !== "claude-oauth")
+        .map((p) => {
+          const enhanced = ENHANCED_MODEL_MAP[p.type ?? ""];
+          const models = (enhanced && enhanced.length > 0 ? enhanced : p.models) ?? [];
+          const agent = p.host || "openclaude";
+          return models.map((m: string) => `  - **${m}** → providerId: "${p.id}", agent: "${agent}"`).join("\n");
+        })
+        .filter(Boolean)
+        .join("\n");
+      sysPrompt += `\n\n## Spawning Novos Panes (Agentes)\n\nQuando o usuário pedir para spawnar, abrir, ou criar um novo agente/terminal/pane, use:\n\n\`\`\`javascript\nmcp__codebrain__pane_spawn({\n  agent: "<agent>",      // "openclaude" | "claude" | "gemini" | "shell"\n  providerId: "<id>",    // id do provider (veja abaixo)\n  model: "<model>",      // modelo específico (veja abaixo)\n  label: "<nome>",       // label opcional para identificar\n  cwd: "<workspace>"     // workspace atual\n})\n\`\`\`\n\n**⚠️ PRIORIDADE ao escolher agente:**\n1. **Padrão (sem especificar)** → \`openclaude\` com o primeiro provider disponível (MIMO > Gemini > outro). NUNCA use \`shell\` quando o usuário pede um agente de IA.\n2. **"claude plano" / "claude direto" / "plano"** → \`agent: "claude"\` (Claude Code CLI oficial, OAuth nativo, SEM openclaude)\n3. **Nome de modelo como "claude-sonnet", "opus"** → use \`openclaude\` com o provider Anthropic. O nome do modelo NÃO troca o agente.\n\n**Agentes disponíveis:**\n- \`openclaude\` — OpenClaude CLI (usa providers configurados: MIMO, Gemini, Anthropic, OpenAI, etc). **USE ESTE POR PADRÃO.**\n- \`claude\` — Claude Code CLI oficial — SOMENTE quando usuário diz "plano" ou "claude direto"\n- \`gemini\` — Google Gemini CLI\n- \`shell\` — Terminal shell puro (bash/cmd). **SOMENTE para comandos de sistema, NUNCA para agentes de IA.**\n\n**Modelos → Parâmetros de spawn:**\n\n${spawnModels}\n\n**Exemplos:**\n- MIMO 2.5 Pro (padrão): \`pane_spawn({ agent: "openclaude", providerId: "mimo", model: "mimo-v2.5-pro" })\`\n- Claude Sonnet via API: \`pane_spawn({ agent: "openclaude", providerId: "anthropic", model: "claude-sonnet-4-6" })\`\n- Claude direto do plano: \`pane_spawn({ agent: "claude", model: "claude-sonnet-4-6" })\`\n- Gemini Flash: \`pane_spawn({ agent: "openclaude", providerId: "gemini", model: "gemini-2.5-flash" })\`\n- Shell puro: \`pane_spawn({ agent: "shell" })\``;
+
       // Write prompt to temp file to avoid Windows error 206 (command line too long)
       const tmpDir = path.join(ctx.currentWorkspacePath || os.homedir(), ".codebrain", "tmp");
       try { fs.mkdirSync(tmpDir, { recursive: true }); } catch {}
@@ -234,7 +314,12 @@ export async function spawnPaneInternal(
       if (model) env["CLAUDE_CODE_MODEL_NAME"] = model;
       if (provider) env["CLAUDE_CODE_PROVIDER_PROFILE_ENV_APPLIED"] = "1";
 
-      if (provider?.type && !args.includes("--provider")) {
+      // --provider flag is ONLY valid for the official Claude CLI (agent === "claude").
+      // OpenClaude handles provider routing via env vars, not CLI flags.
+      // Skip --provider for Anthropic-compat and MIMO providers — the env vars
+      // (ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY) already handle routing, and
+      // many Claude CLI builds don't recognize the --provider flag.
+      if (agent === "claude" && provider?.type && !args.includes("--provider")) {
         let providerArg = "";
         switch (provider.type as string) {
           case "openai-compat": providerArg = "openai"; break;
@@ -245,7 +330,8 @@ export async function spawnPaneInternal(
           case "anthropic-compat":
           case "mimo-compat":
           case "anthropic":
-            providerArg = "anthropic"; break;
+            // Skip --provider — env vars handle routing
+            break;
           default: break;
         }
         if (providerArg) args.push("--provider", providerArg);
@@ -300,9 +386,23 @@ export async function spawnPaneInternal(
           if (base.includes("deepseek")) env["DEEPSEEK_API_KEY"] = openaiKey;
         }
       } else if (isAnthropicCompat) {
+        const anthropicKey = env["ANTHROPIC_API_KEY"] || env["ANTHROPIC_AUTH_TOKEN"] || "";
         if (model) {
           env["MODEL"] = model;
           env["ANTHROPIC_MODEL"] = model;
+          if (!args.includes("--model")) args.push("--model", model);
+        }
+        // API key users: set base URL and key for proxy redirect below
+        if (anthropicKey) {
+          env["ANTHROPIC_API_KEY"] = anthropicKey;
+          env["ANTHROPIC_AUTH_TOKEN"] = anthropicKey;
+          if (provider?.baseUrl) {
+            env["ANTHROPIC_BASE_URL"] = provider.baseUrl;
+          }
+        } else {
+          // OAuth users (Claude Pro/Team plan): don't override ANTHROPIC_BASE_URL
+          // so the Claude CLI uses its native OAuth login flow
+          log.info("[spawnPaneInternal] AnthropicCompat: no API key — using Claude CLI native OAuth");
         }
       }
     }
@@ -313,7 +413,7 @@ export async function spawnPaneInternal(
     // For Gemini, the proxy also handles /v1/models health check (OpenAI-compatible)
     // that OpenClaude's Gemini adapter requires during initialization.
     if (ctx.apiProxyUrl) {
-      if (isMimo || isAnthropicCompat) {
+      if (isMimo || (isAnthropicCompat && (env["ANTHROPIC_API_KEY"] || env["ANTHROPIC_AUTH_TOKEN"]))) {
         const realBaseUrl = (env["ANTHROPIC_BASE_URL"] as string) || provider?.baseUrl || "https://api.anthropic.com";
         ctx.apiProxy?.setTargetUrl(realBaseUrl);
         env["ANTHROPIC_BASE_URL"] = ctx.apiProxyUrl;
@@ -343,6 +443,18 @@ export async function spawnPaneInternal(
     }
 
     log.info("[spawnPaneInternal]", { agent, providerId, model, providerType, cwd });
+
+    // Check if Claude CLI binary is missing (would silently fallback to openclaude)
+    const cmdCheck = resolveCommand(agent as any, args);
+    if (cmdCheck.fellBackToOpenClaude) {
+      log.error("═══════════════════════════════════════════════════════════════");
+      log.error("[spawnPaneInternal] ⚠️  CLAUDE CLI NÃO INSTALADO!");
+      log.error(`[spawnPaneInternal] O binário "claude" não foi encontrado no PATH.`);
+      log.error(`[spawnPaneInternal] CAINDO PARA OPENCLAUDE — não é o Claude Code CLI original!`);
+      log.error(`[spawnPaneInternal] Para instalar: npm install -g @anthropic-ai/claude-code`);
+      log.error("═══════════════════════════════════════════════════════════════");
+    }
+
     if (isMimo) {
       log.info("[spawnPaneInternal] MIMO ANTHROPIC_AUTH_TOKEN:", env["ANTHROPIC_AUTH_TOKEN"] ? "SET" : "MISSING");
       log.info("[spawnPaneInternal] MIMO MIMO_API_KEY:", env["MIMO_API_KEY"] ? "SET" : "MISSING");

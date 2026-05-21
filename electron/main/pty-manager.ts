@@ -64,7 +64,7 @@ const pathCache = new Map<string, string | null>();
 
 const AGENT_DEFAULTS: Record<string, { binary: string; args: string[] }> = {
   openclaude: { binary: "openclaude", args: [] },
-  claude: { binary: "openclaude", args: [] },
+  claude: { binary: "claude", args: [] },
   gemini: { binary: "openclaude", args: [] },
   codex: { binary: "codex", args: [] },
   shell: { binary: defaultShell(), args: [] },
@@ -188,20 +188,42 @@ function which(binary: string): string | null {
   return null;
 }
 
-export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { binary: string; args: string[] } {
+export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { binary: string; args: string[]; fellBackToOpenClaude: boolean } {
   const defaults = AGENT_DEFAULTS[agent] ?? { binary: agent, args: [] };
   const binary = defaults.binary;
-  
+
   if (agent === "shell") {
     const resolvedShell = which(binary) ?? binary;
-    return { binary: resolvedShell, args: [...defaults.args, ...extraArgs] };
+    return { binary: resolvedShell, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
   }
 
-  const resolved = which(binary);
+  let resolved = which(binary);
+  let fellBackToOpenClaude = false;
+  if (!resolved && agent === "claude") {
+    // Claude CLI not installed — fall back to OpenClaude
+    resolved = which("openclaude");
+    if (resolved) {
+      fellBackToOpenClaude = true;
+      log.warn(`[pty] "claude" binary not found, falling back to "openclaude": ${resolved}`);
+    }
+  }
+  // Strip claude-specific CLI flags when falling back to openclaude
+  // OpenClaude handles provider routing via env vars, not CLI flags
+  if (fellBackToOpenClaude && extraArgs.length > 0) {
+    const filtered: string[] = [];
+    for (let i = 0; i < extraArgs.length; i++) {
+      if (extraArgs[i] === "--provider" || extraArgs[i] === "--model" || extraArgs[i] === "--permission-mode") {
+        i++; // skip the flag value
+        continue;
+      }
+      filtered.push(extraArgs[i]);
+    }
+    extraArgs = filtered;
+  }
   if (!resolved) {
     const fallback = defaultShell();
     log.warn(`[pty] binary "${binary}" not found in PATH. Falling back to shell: ${fallback}`);
-    return { binary: fallback, args: [] };
+    return { binary: fallback, args: [], fellBackToOpenClaude: false };
   }
 
   if (IS_WIN && (/\.(cmd|bat)$/i.test(resolved))) {
@@ -209,7 +231,7 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
     const exePath = resolved.replace(/\.(cmd|bat)$/i, ".exe");
     try {
       if (nodefs.existsSync(exePath)) {
-        return { binary: exePath, args: [...defaults.args, ...extraArgs] };
+        return { binary: exePath, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
       }
     } catch {}
 
@@ -229,6 +251,7 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
         return {
           binary: nodeBinary,
           args: [directScript, ...defaults.args, ...extraArgs],
+          fellBackToOpenClaude: false,
         };
       }
     } catch (e) {
@@ -237,10 +260,10 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
 
     // Fallback to cmd.exe via defaultShell()
     const comspec = defaultShell();
-    return { binary: comspec, args: ["/d", "/c", resolved, ...defaults.args, ...extraArgs] };
+    return { binary: comspec, args: ["/d", "/c", resolved, ...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
   }
 
-  return { binary: resolved, args: [...defaults.args, ...extraArgs] };
+  return { binary: resolved, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude };
 }
 
 export function isTerminalAgent(agent: string): boolean {
@@ -289,7 +312,7 @@ export class PtyManager extends EventEmitter {
     const pty = await import("@lydell/node-pty");
     const { nanoid } = await import("nanoid");
     const paneId = config.paneId ?? nanoid();
-    const { binary, args } = resolveCommand(config.agent, config.args ?? []);
+    const { binary, args, fellBackToOpenClaude } = resolveCommand(config.agent, config.args ?? []);
     const cwd = config.cwd ?? nodeos.homedir();
     const cols = config.cols ?? DEFAULT_COLS;
     const rows = config.rows ?? DEFAULT_ROWS;
@@ -325,7 +348,8 @@ export class PtyManager extends EventEmitter {
       ...config.env,
     };
 
-    log.info(`[pty:spawn] binary="${binary}" args=[${args.join(", ")}] cwd="${cwd}"`);
+    const fallbackNote = fellBackToOpenClaude ? " ⚠️ CLAUDE→OPENCLAUDE FALLBACK (claude CLI não instalado)" : "";
+    log.info(`[pty:spawn] binary="${binary}" args=[${args.join(", ")}] cwd="${cwd}"${fallbackNote}`);
     const ptyProcess = pty.spawn(binary, args, { name: "xterm-256color", cols, rows, cwd, env });
     const buffer = new OutputBuffer();
 

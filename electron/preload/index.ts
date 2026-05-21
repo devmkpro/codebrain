@@ -141,6 +141,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     set: (dir: string) => ipcRenderer.invoke("workspace:set", dir),
     save: (config: unknown) => ipcRenderer.invoke("workspace:save", config),
     scan: (path: string) => ipcRenderer.invoke("workspace:scan", path),
+    detect: (dir?: string) => ipcRenderer.invoke("workspace:detect", dir),
   },
 
   tokens: {

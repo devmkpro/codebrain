@@ -314,6 +314,7 @@ export interface CodebrainApp {
     set: (dir: string) => Promise<void>;
     save: (config: WorkspaceConfig) => Promise<void>;
     scan: (path: string) => Promise<FileEntry[]>;
+    detect: (dir?: string) => Promise<{ path: string; autoDetected: boolean; fromRecent?: boolean; fallback?: boolean } | null>;
   };
   tokens: {
     byTask: (taskId: string) => Promise<TokenPayload>;

@@ -1,6 +1,3 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 import { ipcMain } from "electron";
 import type { AppContext, McpServerInfo } from "../context";
 import { safeSend, ApiProxy } from "../context";
@@ -8,23 +5,9 @@ import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
 
 export function writeMcpConfig(ctx: AppContext, info: McpServerInfo): void {
-  // Use stdio transport so Claude Code CLI can connect without the app running.
-  // The SSE endpoint is still available at info.sseUrl for direct connections.
-  const stdioConfig = JSON.stringify({
-    mcpServers: {
-      codebrain: {
-        command: "node",
-        args: ["packages/mcp/stdio.js"],
-        env: { CODEBRAIN_WORKSPACE: "." }
-      }
-    },
-  }, null, 2);
-  // Write to project .mcp.json only (not ~/.mcp.json) to avoid overriding user config
-  try {
-    if (ctx.currentWorkspacePath && ctx.currentWorkspacePath !== os.homedir()) {
-      fs.writeFileSync(path.join(ctx.currentWorkspacePath, ".mcp.json"), stdioConfig, "utf-8");
-    }
-  } catch {}
+  // Home ~/.mcp.json (stdio transport) is already written by setup-claude.ts.
+  // Workspace .mcp.json (SSE transport) is written by spawnPaneInternal to cwd
+  // so Claude Code auto-discovers it. We do not use --mcp-config (it overrides discovery).
 }
 
 function buildMcpBridge(ctx: AppContext) {

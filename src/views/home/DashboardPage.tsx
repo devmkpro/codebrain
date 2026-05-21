@@ -185,13 +185,30 @@ export function DashboardPage() {
     const prov = providers[0];
     try {
       await (window as any).codeBrainApp?.pty?.spawn?.({
-        agent: prov?.host ?? 'claude',
+        agent: prov?.host ?? 'openclaude',
         cwd: selected,
         providerId: prov?.id === 'claude-oauth' ? undefined : prov?.id,
       });
     } catch {}
     setLaunching(false);
   }, [launching, openWorkspace, setWorkspacePath, providers]);
+
+  // Auto-detect and open workspace on first load (after handleOpen is defined)
+  const hasAutoOpenedRef = React.useRef(false);
+  useEffect(() => {
+    if (hasAutoOpenedRef.current) return;
+    hasAutoOpenedRef.current = true;
+    const timer = setTimeout(() => {
+      (window as any).codeBrainApp?.workspace?.detect?.()
+        .then((result: { path: string; autoDetected: boolean } | null) => {
+          if (result?.path) {
+            handleOpen(result.path);
+          }
+        })
+        .catch(() => {});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [handleOpen]);
 
   const tabs         = useNavStore(s => s.tabs) as any[];
   const setActiveTab = useNavStore(s => s.setActiveTab);

@@ -165,7 +165,7 @@ export function WorkspaceTabs() {
           </button>
           <p className="px-3 pt-1.5 pb-0.5 font-mono text-[9px] text-gray-600 uppercase tracking-widest">Novo pane</p>
           {providers.map(p => {
-            const pid = p.id === "claude-oauth" ? undefined : p.id;
+            const pid = p.id;
             const models = p.models ?? [];
             const hostLabel = "OpenClaude";
             const mix = p.id === "claude-oauth" ? hostLabel : `${hostLabel} ← ${p.label}`;

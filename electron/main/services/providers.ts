@@ -1,29 +1,55 @@
 import type { AppContext } from "../context";
-
-const GEMINI_MODELS = [
-  "gemini-3.5-flash",
-  "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools",
-  "gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite",
-  "gemini-3-flash-preview", "gemini-3-pro-preview",
-  "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
-  "gemini-2.0-flash", "gemini-2.0-flash-lite"
-];
-
-const MIMO_MODELS = [
-  "mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"
-];
+import { PROVIDER_REGISTRY } from "./constants";
 
 export function getEnhancedProviders(ctx: AppContext) {
   const list = ctx.providerStore.listPublic();
-  return list
+  const claudeDetected = ctx.cliDetector?.getAll()?.claude?.found ?? false;
+
+  // Virtual Claude OAuth provider — appears when Claude CLI is installed
+  const claudeOAuthTemplate = PROVIDER_REGISTRY.find(t => t.id === "claude-oauth");
+  const claudeOAuthProvider = claudeDetected && claudeOAuthTemplate ? [{
+    id: claudeOAuthTemplate.id,
+    label: claudeOAuthTemplate.label,
+    type: claudeOAuthTemplate.type as "oauth",
+    host: claudeOAuthTemplate.host,
+    models: [...claudeOAuthTemplate.models],
+    env: {},
+  }] : [];
+
+  // Filter out the virtual claude-oauth and Gemini CLI label to avoid duplicates
+  const filtered = list
     .filter(p => p.id !== "claude-oauth" && !p.label?.includes("Gemini CLI"))
     .map(p => {
-      const label = p.label?.toLowerCase() || "";
-      const isMimo = label.includes("mimo") || p.id?.includes("mimo") || p.type === "mimo-compat";
-      const isGemini = !isMimo && (p.type === "gemini-compat" || (p.env && p.env["GEMINI_API_KEY"]) || label.includes("gemini"));
+      // Look up the canonical template by id
+      const template = PROVIDER_REGISTRY.find(t => t.id === p.id);
+      if (template) {
+        return {
+          ...p,
+          host: template.host,
+          type: template.type as any,
+          models: [...template.models],
+        };
+      }
 
-      if (isMimo) return { ...p, host: "openclaude", models: [...MIMO_MODELS] };
-      if (isGemini) return { ...p, host: "openclaude", models: [...GEMINI_MODELS] };
+      // Fallback: detect by label/id keywords (for custom providers)
+      const label = p.label?.toLowerCase() || "";
+      const id = (p.id || "").toLowerCase();
+      for (const tpl of PROVIDER_REGISTRY) {
+        const labelMatch = tpl.labelIncludes?.some(k => label.includes(k.toLowerCase()));
+        const idMatch = tpl.idIncludes?.some(k => id.includes(k.toLowerCase()));
+        if (labelMatch || idMatch) {
+          return {
+            ...p,
+            host: tpl.host,
+            type: tpl.type as any,
+            models: [...tpl.models],
+          };
+        }
+      }
+
+      // Unknown provider — default to openclaude
       return { ...p, host: p.host || "openclaude" };
     });
+
+  return [...claudeOAuthProvider, ...filtered];
 }
