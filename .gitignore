@@ -4,6 +4,9 @@ node_modules/
 # ── MCP (local runtime config, port changes per session) ─────────────────────
 .mcp.json
 
+# ── Claude Code local settings (personal permissions, not shared) ─────────────
+.claude/settings.local.json
+
 # ── GitLab Runner ────────────────────────────────────────────────────────────
 config.toml
 .runner_system_id
