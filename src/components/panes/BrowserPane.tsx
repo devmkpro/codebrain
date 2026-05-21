@@ -306,41 +306,57 @@ export function BrowserPane({
         } else {
           // All other commands use injection scripts
           const script = buildScript(type, payload);
-          // Retry executeJavaScript — webview may be in a transitional state
-          // GUEST_VIEW_MANAGER_CALL errors happen when the webview guest process
-          // is loading, navigating, or has crashed. We retry with increasing delays.
+
+          // Aggressive retry logic for GUEST_VIEW_MANAGER_CALL errors
+          // These are transient and should be retried aggressively
           let lastErr;
-          const maxAttempts = 4;
+          const maxAttempts = 8; // Increased from 4
+          let successOnAttempt = -1;
+
           for (let attempt = 0; attempt < maxAttempts; attempt++) {
             try {
-              // Pre-flight: check if webview is still alive
+              // Before each attempt, ensure webview is accessible
               if (attempt > 0) {
+                // Wait with exponential backoff: 50ms, 100ms, 200ms, 400ms, etc.
+                const waitMs = 50 * Math.pow(2, Math.min(attempt - 1, 3));
+                await new Promise(r => setTimeout(r, waitMs));
+
+                // Verify webview is still responsive
                 try {
-                  await wv.executeJavaScript("1+1");
-                } catch (preCheckErr) {
-                  // Webview guest is unresponsive — wait longer before retry
-                  const waitMs = 300 * (attempt + 1);
-                  await new Promise(r => setTimeout(r, waitMs));
+                  await wv.executeJavaScript("void 0");
+                } catch (healthCheck) {
+                  // Still unhealthy, continue to next attempt
                   continue;
                 }
               }
+
+              // Attempt to execute the script
               result = await wv.executeJavaScript(script);
               lastErr = null;
+              successOnAttempt = attempt;
               break;
+
             } catch (e) {
               lastErr = e;
               const errMsg = String(e?.message || e);
-              // GUEST_VIEW_MANAGER_CALL = guest process transitional state
-              if (errMsg.includes("GUEST_VIEW_MANAGER") || errMsg.includes("Script failed to execute")) {
-                const waitMs = 300 * (attempt + 1);
-                await new Promise(r => setTimeout(r, waitMs));
-              } else {
-                // Non-transient error — don't retry
+              const isTransient = errMsg.includes("GUEST_VIEW_MANAGER") ||
+                                 errMsg.includes("Script failed to execute") ||
+                                 errMsg.includes("The render process has crashed") ||
+                                 errMsg.includes("webview not ready");
+
+              if (!isTransient) {
+                // Non-transient error — fail immediately
                 break;
               }
+              // Otherwise, loop continues and retries
             }
           }
-          if (lastErr) throw lastErr;
+
+          if (lastErr) {
+            // Log attempt info for debugging
+            const errMsg = String(lastErr?.message || lastErr);
+            throw new Error(`${errMsg} (failed after ${maxAttempts} attempts)`);
+          }
         }
 
         window.dispatchEvent(new CustomEvent("codebrain:browser:result", {
