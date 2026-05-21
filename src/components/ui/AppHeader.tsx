@@ -809,7 +809,7 @@ function WorkspaceHeader() {
                 <span className="font-mono text-[10px] font-medium truncate">{isMissing ? `${label} ×` : label}</span>
                 <button
                   onClick={e => { e.stopPropagation(); closeTab(i); }}
-                  className="shrink-0 w-3.5 h-3.5 rounded flex items-center justify-center opacity-0 group-hover:opacity-40 hover:!opacity-100 hover:bg-white/10 text-slate-600 hover:text-slate-200 transition-all focus:outline-none"
+                  className="shrink-0 w-4 h-4 rounded flex items-center justify-center opacity-50 group-hover:opacity-100 hover:!opacity-100 hover:bg-white/15 text-slate-400 hover:text-white transition-all focus:outline-none"
                 >
                   <X size={9} strokeWidth={1.8} />
                 </button>
