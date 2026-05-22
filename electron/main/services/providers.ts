@@ -2,7 +2,7 @@ import type { AppContext } from "../context";
 import { PROVIDER_REGISTRY } from "./constants";
 
 export function getEnhancedProviders(ctx: AppContext) {
-  const list = ctx.providerStore.listPublic();
+  const list = ctx.providerStore.listFull();
   const claudeDetected = ctx.cliDetector?.getAll()?.claude?.found ?? false;
 
   // Virtual Claude OAuth provider — appears when Claude CLI is installed
