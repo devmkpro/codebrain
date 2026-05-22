@@ -14,36 +14,22 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.5.4",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "use listFull() in getEnhancedProviders to preserve API keys"
+      }
+    ]
+  },
+  {
     "version": "1.5.3",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
-        "text": "claude-oauth provider resolution — model-based and fallback lookups now find virtual provider"
-      },
-      {
-        "kind": "fix",
-        "text": "claude-oauth spawn sends --model and --settings flags (providerType oauth treated as anthropic-compat)"
-      },
-      {
-        "kind": "fix",
-        "text": "shell agent no longer gets a provider assigned"
-      },
-      {
-        "kind": "fix",
-        "text": "explicit error for nonexistent providerId instead of silently falling through to MIMO"
-      },
-      {
-        "kind": "fix",
-        "text": "front-end no longer strips claude-oauth providerId on workspace open"
-      },
-      {
-        "kind": "feat",
-        "text": "multi-agent decision prompt — AI always asks user before spawning squad"
-      },
-      {
-        "kind": "feat",
-        "text": "add provider resolver unit test suite (64 tests)"
+        "text": "claude-oauth provider resolution and spawn flags"
       }
     ]
   },
