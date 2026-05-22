@@ -47,12 +47,14 @@ async function startMCPServer(ptyManager, opts = {}) {
         if (sessionId && transports[sessionId]) {
           transport = transports[sessionId];
           if (!(transport instanceof StreamableHTTPServerTransport)) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({
-              jsonrpc: "2.0",
-              error: { code: -32000, message: "Session uses different transport" },
-              id: null,
-            }));
+            if (!res.headersSent) {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({
+                jsonrpc: "2.0",
+                error: { code: -32000, message: "Session uses different transport" },
+                id: null,
+              }));
+            }
             return;
           }
         } else if (!sessionId && req.method === "POST" && parsedBody && isInitializeRequest(parsedBody)) {
@@ -70,16 +72,20 @@ async function startMCPServer(ptyManager, opts = {}) {
           registerBrowserTools(sessionServer, bridge);
           await sessionServer.connect(transport);
         } else {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({
-            jsonrpc: "2.0",
-            error: { code: -32000, message: "Bad Request" },
-            id: null,
-          }));
+          if (!res.headersSent) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              jsonrpc: "2.0",
+              error: { code: -32000, message: "Bad Request" },
+              id: null,
+            }));
+          }
           return;
         }
 
-        await transport.handleRequest(req, res, parsedBody);
+        if (!res.headersSent) {
+          await transport.handleRequest(req, res, parsedBody);
+        }
       } catch (err) {
         console.error("[MCP] Error handling /mcp:", err);
         if (!res.headersSent) {
@@ -101,9 +107,16 @@ async function startMCPServer(ptyManager, opts = {}) {
       res.on("close", () => {
         delete transports[transport.sessionId];
       });
+      res.on("error", (err) => {
+        console.warn("[MCP] SSE response error (client disconnected):", err.code || err.message);
+      });
       const sessionServer = createCodebrainMCPServer(bridge);
       registerBrowserTools(sessionServer, bridge);
-      await sessionServer.connect(transport);
+      try {
+        await sessionServer.connect(transport);
+      } catch (err) {
+        console.warn("[MCP] SSE connect error:", err.message);
+      }
       return;
     }
 
@@ -112,10 +125,15 @@ async function startMCPServer(ptyManager, opts = {}) {
       const sessionId = url.searchParams.get("sessionId");
       const transport = transports[sessionId];
       if (transport instanceof SSEServerTransport) {
-        const body = JSON.parse(await readBody(req));
-        await transport.handlePostMessage(req, res, body);
+        try {
+          const body = JSON.parse(await readBody(req));
+          await transport.handlePostMessage(req, res, body);
+        } catch (err) {
+          console.warn("[MCP] SSE message error:", err.message);
+          if (!res.headersSent) res.writeHead(500).end("Internal error");
+        }
       } else {
-        res.writeHead(400).end("No SSE transport for sessionId");
+        if (!res.headersSent) res.writeHead(400).end("No SSE transport for sessionId");
       }
       return;
     }
@@ -133,7 +151,9 @@ async function startMCPServer(ptyManager, opts = {}) {
   const port = opts.port || 0;
 
   return new Promise((resolve, reject) => {
+    let started = false;
     server.listen(port, "127.0.0.1", () => {
+      started = true;
       const actualPort = server.address().port;
       const info = {
         port: actualPort,
@@ -153,7 +173,16 @@ async function startMCPServer(ptyManager, opts = {}) {
       console.log(`[MCP]   Streamable HTTP: ${info.streamableHttpUrl}`);
       resolve(info);
     });
-    server.on("error", reject);
+    server.on("error", (err) => {
+      // Non-fatal socket errors (client disconnect, headers already sent) — just log
+      if (err.code === "ECONNRESET" || err.code === "ERR_HTTP_HEADERS_SENT" || err.code === "EPIPE") {
+        console.warn("[MCP] Non-fatal server error (client disconnect):", err.code);
+        return;
+      }
+      // Fatal only during startup
+      if (!started) reject(err);
+      else console.error("[MCP] Server error:", err);
+    });
   });
 }
 
