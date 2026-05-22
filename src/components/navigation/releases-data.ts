@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.5.7",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "prevent ERR_HTTP_HEADERS_SENT crash in API proxy"
+      }
+    ]
+  },
+  {
     "version": "1.5.5",
     "date": "maio 2026",
     "highlights": [
