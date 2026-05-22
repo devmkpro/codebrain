@@ -68,14 +68,39 @@ class ApiProxy {
    */
   start() {
     return new Promise((resolve, reject) => {
-      this.server = http.createServer((req, res) => this._handleRequest(req, res));
+      this.server = http.createServer((req, res) => {
+        try {
+          this._handleRequest(req, res);
+        } catch (err) {
+          console.error(`${LOG_PREFIX} Unhandled handler error:`, err.message);
+          if (!res.headersSent) {
+            try {
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: { type: "proxy_error", message: err.message } }));
+            } catch {}
+          } else {
+            try { res.end(); } catch {}
+          }
+        }
+      });
 
+      let started = false;
       this.server.on("error", (err) => {
+        // Non-fatal: client-disconnect errors raised at the server level
+        if (err.code === "ECONNRESET" || err.code === "EPIPE" || err.code === "ERR_HTTP_HEADERS_SENT") {
+          console.warn(`${LOG_PREFIX} Non-fatal server error:`, err.code);
+          return;
+        }
         console.error(`${LOG_PREFIX} Server error:`, err.message);
-        reject(err);
+        if (!started) reject(err);
+      });
+      this.server.on("clientError", (err, socket) => {
+        console.warn(`${LOG_PREFIX} Client socket error:`, err.code || err.message);
+        try { socket.destroy(); } catch {}
       });
 
       this.server.listen(this.requestedPort, "127.0.0.1", () => {
+        started = true;
         const addr = this.server.address();
         this.port = addr.port;
         this.url = `http://127.0.0.1:${this.port}`;
@@ -256,8 +281,16 @@ class ApiProxy {
             const errBody = Buffer.concat(errChunks).toString();
             console.error(`${LOG_PREFIX}   ⚠ Gemini error ${proxyRes.statusCode}: ${errBody.slice(0, 1000)}`);
             // Forward error to client
-            res.writeHead(proxyRes.statusCode, { "Content-Type": proxyRes.headers["content-type"] || "application/json" });
-            res.end(errBody);
+            if (!res.headersSent) {
+              try {
+                res.writeHead(proxyRes.statusCode, { "Content-Type": proxyRes.headers["content-type"] || "application/json" });
+                res.end(errBody);
+              } catch (e) {
+                console.warn(`${LOG_PREFIX} Failed to forward Gemini error:`, e.code || e.message);
+              }
+            } else {
+              try { res.end(); } catch {}
+            }
           });
           return;
         }
@@ -270,8 +303,16 @@ class ApiProxy {
 
       proxyReq.on("error", (err) => {
         console.error(`${LOG_PREFIX} OpenAI→Gemini error:`, err.message);
-        res.writeHead(502, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: { type: "proxy_error", message: err.message } }));
+        if (!res.headersSent) {
+          try {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: { type: "proxy_error", message: err.message } }));
+          } catch (e) {
+            console.warn(`${LOG_PREFIX} Failed to write error response:`, e.code || e.message);
+          }
+        } else {
+          try { res.end(); } catch {}
+        }
       });
 
       proxyReq.write(geminiBodyStr);
@@ -457,13 +498,29 @@ class ApiProxy {
           this._report(model, openaiResp.usage.prompt_tokens || 0, openaiResp.usage.completion_tokens || 0);
         }
 
-        res.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(openaiBody) });
-        res.end(openaiBody);
+        if (!res.headersSent) {
+          try {
+            res.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(openaiBody) });
+            res.end(openaiBody);
+          } catch (e) {
+            console.warn(`${LOG_PREFIX} Failed to write OpenAI JSON response:`, e.code || e.message);
+          }
+        } else {
+          try { res.end(); } catch {}
+        }
       } catch (err) {
         // Forward raw response on parse error
         console.error(`${LOG_PREFIX} Gemini→OpenAI parse error:`, err.message);
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        res.end(body);
+        if (!res.headersSent) {
+          try {
+            res.writeHead(proxyRes.statusCode, proxyRes.headers);
+            res.end(body);
+          } catch (e) {
+            console.warn(`${LOG_PREFIX} Failed to forward raw Gemini response:`, e.code || e.message);
+          }
+        } else {
+          try { res.end(); } catch {}
+        }
       }
     });
   }
@@ -473,11 +530,23 @@ class ApiProxy {
    * Supports text content and function call (tool_calls) streaming.
    */
   _handleGeminiToOpenAIStream(proxyRes, res, model) {
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-    });
+    if (!res.headersSent) {
+      try {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        });
+      } catch (e) {
+        console.warn(`${LOG_PREFIX} Failed to writeHead (OpenAI→Gemini stream):`, e.code || e.message);
+      }
+    }
+    // Helper to safely write to the (possibly disconnected) client
+    const safeWrite = (s) => {
+      try { res.write(s); } catch (e) {
+        console.warn(`${LOG_PREFIX} res.write failed (client gone):`, e.code || e.message);
+      }
+    };
 
     let inputTokens = 0;
     let outputTokens = 0;
@@ -519,7 +588,7 @@ class ApiProxy {
                 model,
                 choices: [{ index: 0, delta: { content: part.text }, finish_reason: null }],
               };
-              res.write(`data: ${JSON.stringify(openaiChunk)}\n\n`);
+              safeWrite(`data: ${JSON.stringify(openaiChunk)}\n\n`);
             }
 
             // Function call — emit as OpenAI tool_calls delta
@@ -569,7 +638,7 @@ class ApiProxy {
                   finish_reason: null,
                 }],
               };
-              res.write(`data: ${JSON.stringify(headerChunk)}\n\n`);
+              safeWrite(`data: ${JSON.stringify(headerChunk)}\n\n`);
 
               // Arguments chunk
               const argsStr = JSON.stringify(part.functionCall.args || {});
@@ -589,7 +658,7 @@ class ApiProxy {
                   finish_reason: null,
                 }],
               };
-              res.write(`data: ${JSON.stringify(argsChunk)}\n\n`);
+              safeWrite(`data: ${JSON.stringify(argsChunk)}\n\n`);
               callIndex++;
             }
           }
@@ -625,7 +694,7 @@ class ApiProxy {
         model,
         choices: [{ index: 0, delta: {}, finish_reason: finalFinishReason }],
       };
-      res.write(`data: ${JSON.stringify(finishChunk)}\n\n`);
+      safeWrite(`data: ${JSON.stringify(finishChunk)}\n\n`);
 
       // Send final usage chunk
       if (inputTokens > 0 || outputTokens > 0) {
@@ -637,11 +706,11 @@ class ApiProxy {
           choices: [],
           usage: { prompt_tokens: inputTokens, completion_tokens: outputTokens, total_tokens: inputTokens + outputTokens },
         };
-        res.write(`data: ${JSON.stringify(usageChunk)}\n\n`);
+        safeWrite(`data: ${JSON.stringify(usageChunk)}\n\n`);
         this._report(model, inputTokens, outputTokens);
       }
-      res.write("data: [DONE]\n\n");
-      res.end();
+      safeWrite("data: [DONE]\n\n");
+      try { res.end(); } catch {}
     });
   }
 
@@ -732,11 +801,17 @@ class ApiProxy {
     ].map(id => ({ id, object: "model", created: Date.now(), owned_by: "google" }));
 
     const body = JSON.stringify({ object: "list", data: models });
-    res.writeHead(200, {
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(body),
-    });
-    res.end(body);
+    if (!res.headersSent) {
+      try {
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+        });
+        res.end(body);
+      } catch (e) {
+        console.warn(`${LOG_PREFIX} Failed to write /v1/models:`, e.code || e.message);
+      }
+    }
     console.log(`${LOG_PREFIX} Served /v1/models health check (${models.length} models)`);
   }
 
@@ -746,6 +821,16 @@ class ApiProxy {
    * @param {http.ServerResponse} res
    */
   _handleRequest(req, res) {
+    // Swallow client-disconnect errors on the response stream so they don't
+    // bubble up as uncaught ERR_HTTP_HEADERS_SENT / EPIPE / ECONNRESET in the
+    // Electron main process.
+    res.on("error", (err) => {
+      console.warn(`${LOG_PREFIX} Response stream error (client disconnect):`, err.code || err.message);
+    });
+    req.on("error", (err) => {
+      console.warn(`${LOG_PREFIX} Request stream error:`, err.code || err.message);
+    });
+
     const isGemini = this._isGeminiRequest(req.url || "");
     const isOpenAI = this._isOpenAIRequest(req.url || "");
 
@@ -859,8 +944,16 @@ class ApiProxy {
 
       proxyReq.on("error", (err) => {
         console.error(`${LOG_PREFIX} Proxy request error:`, err.message);
-        res.writeHead(502, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: { type: "proxy_error", message: err.message } }));
+        if (!res.headersSent) {
+          try {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: { type: "proxy_error", message: err.message } }));
+          } catch (e) {
+            console.warn(`${LOG_PREFIX} Failed to write error response:`, e.code || e.message);
+          }
+        } else {
+          try { res.end(); } catch {}
+        }
       });
 
       if (body.length > 0) {
@@ -882,8 +975,16 @@ class ApiProxy {
     proxyRes.on("data", (chunk) => chunks.push(chunk));
     proxyRes.on("end", () => {
       const body = Buffer.concat(chunks);
-      res.writeHead(proxyRes.statusCode, proxyRes.headers);
-      res.end(body);
+      if (!res.headersSent) {
+        try {
+          res.writeHead(proxyRes.statusCode, proxyRes.headers);
+          res.end(body);
+        } catch (e) {
+          console.warn(`${LOG_PREFIX} Failed to forward Anthropic JSON:`, e.code || e.message);
+        }
+      } else {
+        try { res.end(); } catch {}
+      }
 
       try {
         const json = JSON.parse(body.toString());
@@ -906,12 +1007,18 @@ class ApiProxy {
    * Handle a streaming Anthropic SSE response.
    */
   _handleAnthropicStreamingResponse(proxyRes, res, model) {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    if (!res.headersSent) {
+      try { res.writeHead(proxyRes.statusCode, proxyRes.headers); } catch (e) {
+        console.warn(`${LOG_PREFIX} Failed to writeHead (Anthropic stream):`, e.code || e.message);
+      }
+    }
     let accumulated = { inputTokens: 0, outputTokens: 0, model };
     let sseBuffer = "";
 
     proxyRes.on("data", (chunk) => {
-      res.write(chunk);
+      try { res.write(chunk); } catch (e) {
+        console.warn(`${LOG_PREFIX} res.write failed (client gone):`, e.code || e.message);
+      }
       sseBuffer += chunk.toString();
       const events = this._parseSseEvents(sseBuffer);
       sseBuffer = events.remaining;
@@ -921,7 +1028,7 @@ class ApiProxy {
     });
 
     proxyRes.on("end", () => {
-      res.end();
+      try { res.end(); } catch {}
       // Process remaining buffer
       if (sseBuffer.trim()) {
         const events = this._parseSseEvents(sseBuffer + "\n\n");
@@ -1026,8 +1133,16 @@ class ApiProxy {
     proxyRes.on("data", (chunk) => chunks.push(chunk));
     proxyRes.on("end", () => {
       const body = Buffer.concat(chunks);
-      res.writeHead(proxyRes.statusCode, proxyRes.headers);
-      res.end(body);
+      if (!res.headersSent) {
+        try {
+          res.writeHead(proxyRes.statusCode, proxyRes.headers);
+          res.end(body);
+        } catch (e) {
+          console.warn(`${LOG_PREFIX} Failed to forward Gemini JSON:`, e.code || e.message);
+        }
+      } else {
+        try { res.end(); } catch {}
+      }
 
       try {
         const json = JSON.parse(body.toString());
@@ -1042,14 +1157,20 @@ class ApiProxy {
    * The last chunk contains the usageMetadata.
    */
   _handleGeminiStreamingResponse(proxyRes, res, model) {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    if (!res.headersSent) {
+      try { res.writeHead(proxyRes.statusCode, proxyRes.headers); } catch (e) {
+        console.warn(`${LOG_PREFIX} Failed to writeHead (Gemini stream):`, e.code || e.message);
+      }
+    }
     let inputTokens = 0;
     let outputTokens = 0;
     let detectedModel = model;
     let jsonBuffer = "";
 
     proxyRes.on("data", (chunk) => {
-      res.write(chunk);
+      try { res.write(chunk); } catch (e) {
+        console.warn(`${LOG_PREFIX} res.write failed (client gone):`, e.code || e.message);
+      }
       jsonBuffer += chunk.toString();
 
       // Try to parse complete JSON objects from the buffer
@@ -1081,7 +1202,7 @@ class ApiProxy {
     });
 
     proxyRes.on("end", () => {
-      res.end();
+      try { res.end(); } catch {}
       // Process any remaining buffer
       if (jsonBuffer.trim()) {
         const jsonStr = jsonBuffer.trim().startsWith("data: ")
