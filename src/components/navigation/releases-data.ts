@@ -14,8 +14,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.5.8",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "auto-update .mcp.json on MCP server restart to fix stale port"
+      }
+    ]
+  },
+  {
     "version": "1.5.7",
-    "date": "em desenvolvimento",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
