@@ -133,6 +133,15 @@ export function resolveProvider(
 
   // ── Model validation ────────────────────────────────────────────────────────
   if (provider && model) {
+    // OpenRouter supports any "provider/model" format — skip strict validation
+    // to allow users to add any model ID dynamically (e.g. "meta-llama/llama-3.1-405b-instruct")
+    const isOpenRouter = (provider.id ?? "").startsWith("openrouter") ||
+      (provider.type === "openai-compat" && (provider.baseUrl || "").includes("openrouter"));
+    const isSlashModel = model.includes("/");
+
+    if (isOpenRouter && isSlashModel) {
+      log.info(`[resolveProvider] OpenRouter model "${model}" — skipping strict validation`);
+    } else {
     const providerModels: string[] = provider.models ?? [];
     const enhancedModels: string[] = ENHANCED_MODEL_MAP[provider.type ?? ""] ?? [];
     const modelKnown = providerModels.includes(model) || enhancedModels.includes(model);
@@ -160,6 +169,7 @@ export function resolveProvider(
         model = fallback;
       }
     }
+    } // end else (not OpenRouter slash-model)
   } else if (!provider && model) {
     const allSupported = ctx.providerStore.listFull().flatMap((p: any) => (p.models ?? []).map((m: string) => `${p.id}:${m}`));
     return {

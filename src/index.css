@@ -191,6 +191,19 @@ html, body, #root {
 .light [class*="bg-cyan-500/10"]    { background: #cffafe !important; }
 .light [class*="bg-red-500/"]       { background: rgba(239,68,68,0.09) !important; }
 
+/* 6b. CostPanel — cores de valores monetarios e tabelas */
+.light .text-green-300    { color: #15803d !important; }  /* custo USD */
+.light .text-green-400    { color: #16a34a !important; }  /* DollarSign icon */
+.light .text-cyan-300     { color: #0e7490 !important; }  /* input tokens */
+.light .text-yellow-300   { color: #a16207 !important; }  /* output tokens */
+.light .text-yellow-400   { color: #b45309 !important; }  /* Zap icon */
+.light .text-red-300      { color: #b91c1c !important; }  /* alert exceeded */
+.light .text-orange-300   { color: #c2410c !important; }  /* alert critical */
+/* alert warning (yellow-300 bg-yellow-500/5) */
+.light [class*="border-yellow-500/20"]  { border-color: rgba(161,98,7,0.25) !important; }
+.light [class*="bg-yellow-500/5"]       { background: rgba(234,179,8,0.08) !important; }
+.light [class*="text-yellow-300"][class*="border-yellow"] { color: #854d0e !important; }
+
 /* 7. Recent projects hover: preenchimento sutil em vez de só borda */
 .light [class*="hover:bg-[#4F46E5]/5"]:hover  { background: #eeeffd !important; }
 

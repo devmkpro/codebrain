@@ -347,6 +347,8 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     listModels: () => ipcRenderer.invoke("cost:listModels"),
     estimate: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:estimate", opts),
     reset: (opts?: Record<string, unknown>) => ipcRenderer.invoke("cost:reset", opts ?? {}),
+    setModelCost: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:setModelCost", opts),
+    deleteModelCost: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:deleteModelCost", opts),
   },
 
   log: {

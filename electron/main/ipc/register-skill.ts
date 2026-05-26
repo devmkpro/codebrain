@@ -128,6 +128,18 @@ export function registerSkillHandlers(_ctx: AppContext): void {
 
   // ── New: Skill Repository handlers ──
 
+  // Legacy alias: SettingsModal calls skill:list
+  ipcMain.handle("skill:list", async () => {
+    ensureSkillsDir();
+    try {
+      return fs.readdirSync(SKILLS_DIR, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name);
+    } catch {
+      return [];
+    }
+  });
+
   ipcMain.handle("skill:listInstalled", async (_evt, args?: { type?: string }) => {
     ensureSkillsDir();
     try {

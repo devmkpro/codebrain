@@ -51,6 +51,8 @@ interface CostState {
   loadTaskSummary: () => Promise<void>;
   loadAlerts: () => Promise<void>;
   loadModels: () => Promise<void>;
+  setModelCost: (model: string, inputCost: number, outputCost: number) => Promise<boolean>;
+  deleteModelCost: (model: string) => Promise<boolean>;
   resetUsage: (workspace?: string) => Promise<void>;
   clearMsg: () => void;
 }
@@ -105,6 +107,28 @@ export const useCostStore = create<CostState>((set, get) => ({
       const result = await (window as any).codeBrainApp?.cost?.listModels?.();
       if (result?.ok) set({ models: result.data || {} });
     } catch {}
+  },
+
+  setModelCost: async (model, inputCost, outputCost) => {
+    try {
+      const result = await (window as any).codeBrainApp?.cost?.setModelCost?.({ model, inputCost, outputCost });
+      if (result?.ok) {
+        get().loadModels();
+        return true;
+      }
+    } catch {}
+    return false;
+  },
+
+  deleteModelCost: async (model) => {
+    try {
+      const result = await (window as any).codeBrainApp?.cost?.deleteModelCost?.({ model });
+      if (result?.ok) {
+        get().loadModels();
+        return true;
+      }
+    } catch {}
+    return false;
   },
 
   resetUsage: async (workspace?: string) => {

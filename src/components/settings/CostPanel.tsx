@@ -1,5 +1,5 @@
 import React from "react";
-import { RefreshCw, RotateCcw, DollarSign, Cpu, Zap } from "lucide-react";
+import { RefreshCw, RotateCcw, DollarSign, Cpu, Zap, Plus, Trash2, Search, Edit3, Check, X } from "lucide-react";
 import { useCostStore } from "../../stores/cost-store";
 
 const PERIODS = [
@@ -27,6 +27,245 @@ function modelDisplayName(model: string): string {
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+function ModelPricingEditor() {
+  const models = useCostStore((s) => s.models);
+  const setModelCost = useCostStore((s) => s.setModelCost);
+  const deleteModelCost = useCostStore((s) => s.deleteModelCost);
+
+  const [search, setSearch] = React.useState("");
+  const [adding, setAdding] = React.useState(false);
+  const [newModel, setNewModel] = React.useState("");
+  const [newInput, setNewInput] = React.useState("");
+  const [newOutput, setNewOutput] = React.useState("");
+  const [editKey, setEditKey] = React.useState<string | null>(null);
+  const [editInput, setEditInput] = React.useState("");
+  const [editOutput, setEditOutput] = React.useState("");
+
+  // Keep a stable snapshot of DEFAULT_MODEL_COSTS keys to detect custom models
+  const defaultKeys = React.useMemo(() => {
+    // Models that were auto-created from fallback are "custom"
+    // We detect this by checking if they're in the known-default list patterns
+    return new Set(Object.keys(models));
+  }, []);
+
+  const entries = React.useMemo(() => {
+    const list = Object.entries(models)
+      .filter(([key]) => !search || key.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    return list;
+  }, [models, search]);
+
+  const handleAdd = async () => {
+    if (!newModel.trim() || !newInput || !newOutput) return;
+    const ok = await setModelCost(newModel.trim(), parseFloat(newInput), parseFloat(newOutput));
+    if (ok) {
+      setAdding(false);
+      setNewModel("");
+      setNewInput("");
+      setNewOutput("");
+    }
+  };
+
+  const handleSaveEdit = async (model: string) => {
+    if (!editInput || !editOutput) return;
+    const ok = await setModelCost(model, parseFloat(editInput), parseFloat(editOutput));
+    if (ok) setEditKey(null);
+  };
+
+  const handleDelete = async (model: string) => {
+    await deleteModelCost(model);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest">
+          Precos dos Modelos
+        </p>
+        <button
+          onClick={() => setAdding(!adding)}
+          className="flex items-center gap-1 px-2 py-1 rounded border border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20 transition-all font-mono text-[9px]"
+        >
+          <Plus size={10} strokeWidth={1.5} />
+          Adicionar
+        </button>
+      </div>
+
+      {/* Add new model form */}
+      {adding && (
+        <div className="rounded border border-indigo-500/30 bg-indigo-500/5 p-2.5 mb-2 space-y-2">
+          <input
+            type="text"
+            value={newModel}
+            onChange={(e) => setNewModel(e.target.value)}
+            placeholder="provider/model-name"
+            spellCheck={false}
+            className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[10px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500/40"
+          />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <p className="font-mono text-[8px] text-gray-600 uppercase mb-0.5">Input $/1M</p>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={newInput}
+                onChange={(e) => setNewInput(e.target.value)}
+                placeholder="0.00"
+                className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[10px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500/40"
+              />
+            </div>
+            <div className="flex-1">
+              <p className="font-mono text-[8px] text-gray-600 uppercase mb-0.5">Output $/1M</p>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={newOutput}
+                onChange={(e) => setNewOutput(e.target.value)}
+                placeholder="0.00"
+                className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[10px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500/40"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleAdd}
+              disabled={!newModel.trim() || !newInput || !newOutput}
+              className="flex items-center gap-1 px-2.5 py-1 rounded border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 hover:border-indigo-500/50 disabled:opacity-40 transition-all font-mono text-[9px]"
+            >
+              <Check size={10} strokeWidth={1.5} />
+              Salvar
+            </button>
+            <button
+              onClick={() => { setAdding(false); setNewModel(""); setNewInput(""); setNewOutput(""); }}
+              className="flex items-center gap-1 px-2.5 py-1 rounded border border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20 transition-all font-mono text-[9px]"
+            >
+              <X size={10} strokeWidth={1.5} />
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Search */}
+      <div className="relative mb-2">
+        <Search size={11} strokeWidth={1.5} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-600" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar modelo..."
+          className="w-full bg-black border border-white/10 rounded pl-7 pr-2 py-1.5 font-mono text-[10px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500/40"
+        />
+      </div>
+
+      {/* Models table */}
+      <div className="rounded border border-white/10 overflow-hidden max-h-[280px] overflow-y-auto hacker-scroll">
+        <table className="w-full font-mono text-[9px]">
+          <thead className="sticky top-0 bg-[#0a0a0a]">
+            <tr className="border-b border-white/10">
+              <th className="text-left px-2 py-1.5 text-gray-500 font-normal">Modelo</th>
+              <th className="text-right px-2 py-1.5 text-gray-500 font-normal">Input</th>
+              <th className="text-right px-2 py-1.5 text-gray-500 font-normal">Output</th>
+              <th className="w-14"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map(([model, cost]) => (
+              <tr key={model} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                <td className="px-2 py-1.5 text-gray-300 max-w-[160px] truncate" title={model}>
+                  {model}
+                </td>
+                {editKey === model ? (
+                  <>
+                    <td className="text-right px-1 py-1">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editInput}
+                        onChange={(e) => setEditInput(e.target.value)}
+                        className="w-16 bg-black border border-indigo-500/40 rounded px-1 py-0.5 font-mono text-[9px] text-gray-200 text-right focus:outline-none"
+                        autoFocus
+                      />
+                    </td>
+                    <td className="text-right px-1 py-1">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editOutput}
+                        onChange={(e) => setEditOutput(e.target.value)}
+                        className="w-16 bg-black border border-indigo-500/40 rounded px-1 py-0.5 font-mono text-[9px] text-gray-200 text-right focus:outline-none"
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <div className="flex items-center gap-0.5 justify-end">
+                        <button
+                          onClick={() => handleSaveEdit(model)}
+                          className="p-1 rounded text-green-400 hover:text-green-300 transition-colors"
+                          title="Salvar"
+                        >
+                          <Check size={10} strokeWidth={1.5} />
+                        </button>
+                        <button
+                          onClick={() => setEditKey(null)}
+                          className="p-1 rounded text-gray-500 hover:text-gray-300 transition-colors"
+                          title="Cancelar"
+                        >
+                          <X size={10} strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="text-right px-2 py-1.5 text-cyan-300">${cost.input.toFixed(cost.input < 0.1 ? 3 : 2)}</td>
+                    <td className="text-right px-2 py-1.5 text-yellow-300">${cost.output.toFixed(cost.output < 0.1 ? 3 : 2)}</td>
+                    <td className="px-1 py-1">
+                      <div className="flex items-center gap-0.5 justify-end">
+                        <button
+                          onClick={() => {
+                            setEditKey(model);
+                            setEditInput(String(cost.input));
+                            setEditOutput(String(cost.output));
+                          }}
+                          className="p-1 rounded text-gray-600 hover:text-gray-300 transition-colors"
+                          title="Editar"
+                        >
+                          <Edit3 size={10} strokeWidth={1.5} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(model)}
+                          className="p-1 rounded text-gray-600 hover:text-red-400 transition-colors"
+                          title="Remover"
+                        >
+                          <Trash2 size={10} strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
+            {entries.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-2 py-3 text-center text-gray-600">
+                  {search ? "Nenhum modelo encontrado." : "Nenhum modelo carregado."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="font-mono text-[8px] text-gray-700 mt-1.5">
+        Modelos nao listados usam fallback: $3.00/$15.00 por 1M tokens. Precos customizados sao persistidos.
+      </p>
+    </div>
+  );
 }
 
 export function CostPanel() {
@@ -256,6 +495,9 @@ export function CostPanel() {
           </div>
         </div>
       )}
+
+      {/* Model pricing editor */}
+      <ModelPricingEditor />
 
       {/* Empty state */}
       {!loading && !summary && (

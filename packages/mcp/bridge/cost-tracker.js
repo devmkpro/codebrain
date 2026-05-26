@@ -94,11 +94,48 @@ const DEFAULT_MODEL_COSTS = {
   "gemini-2.5-computer-use-preview-10-2025": { input: 1.25, output: 10.00 }, // Comandos <= 200 mil tokens
   "gemini-2.5-computer-use-preview-10-2025-high-context": { input: 2.50, output: 15.00 }, // Comandos > 200 mil tokens
   // MIMO (Xiaomi) — Overseas pricing per https://platform.mimo.ai (per 1M tokens)
-  "mimo-v2.5-pro": { input: 1.00, output: 3.00 },
+  // Updated 2026-05-27: V2.5 series price reduction (up to 99% off)
+  "mimo-v2.5-pro": { input: 0.435, output: 0.87, cache_read: 0.0036 },
+  "mimo-v2.5": { input: 0.14, output: 0.28, cache_read: 0.0028 },
   "mimo-v2-pro": { input: 1.00, output: 3.00 },
-  "mimo-v2.5": { input: 0.40, output: 2.00 },
   "mimo-v2-omni": { input: 0.40, output: 2.00 },
   "mimo-v2-flash": { input: 0.10, output: 0.30 },
+
+  // ==========================================
+  // OPENROUTER (via provider/model format)
+  // Pricing from openrouter.ai/models — per 1M tokens
+  // ==========================================
+  "anthropic/claude-3.5-sonnet": { input: 3.0, output: 15.0 },
+  "anthropic/claude-3-opus": { input: 15.0, output: 75.0 },
+  "anthropic/claude-3-haiku": { input: 0.25, output: 1.25 },
+  "anthropic/claude-3.5-haiku": { input: 0.80, output: 4.0 },
+  "anthropic/claude-sonnet-4": { input: 3.0, output: 15.0 },
+  "anthropic/claude-opus-4": { input: 15.0, output: 75.0 },
+  "anthropic/claude-opus-4.7-fast": { input: 30.0, output: 150.0 },
+  "google/gemini-2.5-pro": { input: 1.25, output: 10.0 },
+  "google/gemini-2.5-flash": { input: 0.30, output: 2.50 },
+  "google/gemini-2.0-flash": { input: 0.10, output: 0.40 },
+  "google/gemini-3.1-flash-lite": { input: 0.25, output: 1.50 },
+  "openai/gpt-4o": { input: 2.50, output: 10.0 },
+  "openai/gpt-4o-mini": { input: 0.15, output: 0.60 },
+  "openai/gpt-4.1": { input: 2.0, output: 8.0 },
+  "openai/gpt-4.1-mini": { input: 0.40, output: 1.60 },
+  "openai/gpt-4.1-nano": { input: 0.10, output: 0.40 },
+  "openai/o3": { input: 2.00, output: 8.00 },
+  "openai/o4-mini": { input: 1.10, output: 4.40 },
+  "openai/o3-mini": { input: 1.10, output: 4.40 },
+  "deepseek/deepseek-chat": { input: 0.14, output: 0.28 },
+  "deepseek/deepseek-chat-v3-0324": { input: 0.27, output: 1.10 },
+  "deepseek/deepseek-reasoner": { input: 0.55, output: 2.19 },
+  "meta-llama/llama-3.1-405b-instruct": { input: 1.00, output: 1.00 },
+  "meta-llama/llama-3.1-70b-instruct": { input: 0.52, output: 0.75 },
+  "meta-llama/llama-4-maverick": { input: 0.20, output: 0.60 },
+  "mistralai/mistral-large-latest": { input: 2.0, output: 6.0 },
+  "mistralai/mistral-medium-3-5": { input: 1.50, output: 7.50 },
+  "mistralai/mistral-small-latest": { input: 0.10, output: 0.30 },
+  "x-ai/grok-3": { input: 3.0, output: 15.0 },
+  "x-ai/grok-3-mini": { input: 0.30, output: 0.50 },
+  "x-ai/grok-4.3": { input: 1.25, output: 2.50 },
 
   // ==========================================
   // API MODEL NAME ALIASES
@@ -492,6 +529,24 @@ class CostTracker {
       return { ok: false, error: "Missing required parameters." };
     }
     this.modelCosts[model] = { input: inputCost, output: outputCost };
+    this._saveState();
+    return { ok: true };
+  }
+
+  /**
+   * Deletes a custom model cost, reverting to default pricing if available.
+   * @param {object} params
+   * @param {string} params.model
+   * @returns {{ok: boolean, error?: string}}
+   */
+  deleteModelCost({ model }) {
+    if (!model) return { ok: false, error: "Model is required." };
+    if (DEFAULT_MODEL_COSTS[model]) {
+      // Revert to default pricing
+      this.modelCosts[model] = { ...DEFAULT_MODEL_COSTS[model] };
+    } else {
+      delete this.modelCosts[model];
+    }
     this._saveState();
     return { ok: true };
   }

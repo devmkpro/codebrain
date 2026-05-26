@@ -465,6 +465,8 @@ export interface CodebrainApp {
     listModels: () => Promise<{ ok: boolean; data?: Record<string, { input: number; output: number }> }>;
     estimate: (opts: { model: string; inputTokens: number; outputTokens: number }) => Promise<{ ok: boolean; data?: { cost: number }; error?: string }>;
     reset: (opts?: { workspace?: string }) => Promise<{ ok: boolean; cleared?: { sessions: number; alerts: number; budgets: number } }>;
+    setModelCost: (opts: { model: string; inputCost: number; outputCost: number }) => Promise<{ ok: boolean; error?: string }>;
+    deleteModelCost: (opts: { model: string }) => Promise<{ ok: boolean; error?: string }>;
   };
   notify: (title: string, body: string) => void;
   log: {

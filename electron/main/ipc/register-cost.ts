@@ -57,4 +57,16 @@ export function registerCostIpc(ctx: AppContext): void {
       period: (opts?.period as "today" | "week" | "month" | "all") || "all",
     });
   });
+
+  ipcMain.handle("cost:setModelCost", async (_evt, opts: Record<string, unknown>) => {
+    return tracker.setModelCost({
+      model: opts.model as string,
+      inputCost: opts.inputCost as number,
+      outputCost: opts.outputCost as number,
+    });
+  });
+
+  ipcMain.handle("cost:deleteModelCost", async (_evt, opts: Record<string, unknown>) => {
+    return tracker.deleteModelCost({ model: opts.model as string });
+  });
 }

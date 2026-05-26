@@ -115,12 +115,12 @@ export async function spawnPaneInternal(
       if (model) env["CLAUDE_CODE_MODEL_NAME"] = model;
       if (provider) env["CLAUDE_CODE_PROVIDER_PROFILE_ENV_APPLIED"] = "1";
 
-      // --provider flag is ONLY valid for the official Claude CLI (agent === "claude").
-      // OpenClaude handles provider routing via env vars, not CLI flags.
-      // Skip --provider for Anthropic-compat and MIMO providers — the env vars
-      // (ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY) already handle routing, and
-      // many Claude CLI builds don't recognize the --provider flag.
-      if (agent === "claude" && provider?.type && !args.includes("--provider")) {
+      // --provider flag tells the CLI which adapter to use.
+      // For openai-compat (OpenRouter, OpenAI, etc.) and gemini-compat: ALWAYS pass it,
+      // even for OpenClaude — otherwise the CLI auto-detects from the model name prefix
+      // (e.g. "anthropic/claude-opus-4.7-fast" → Anthropic adapter → wrong endpoint).
+      // For anthropic-compat and mimo-compat: skip — env vars handle routing.
+      if (provider?.type && !args.includes("--provider")) {
         let providerArg = "";
         switch (provider.type as string) {
           case "openai-compat": providerArg = "openai"; break;
@@ -186,6 +186,27 @@ export async function spawnPaneInternal(
           if (base.includes("x.ai")) env["XAI_API_KEY"] = openaiKey;
           if (base.includes("deepseek")) env["DEEPSEEK_API_KEY"] = openaiKey;
         }
+
+        // ── OpenRouter cross-provider model fix ──
+        // OpenRouter models like "anthropic/claude-opus-4.7-fast" or "google/gemini-2.5-pro"
+        // use OpenRouter's OpenAI-compatible API, but OpenClaude CLI auto-detects the
+        // model prefix and routes through its Anthropic/Gemini client instead.
+        // We must set the corresponding base URL env vars so OpenClaude sends requests
+        // to OpenRouter, not to the default provider endpoints.
+        const isOpenRouter = (provider?.id ?? "").startsWith("openrouter") || base.includes("openrouter");
+        if (isOpenRouter && openaiKey) {
+          if (model?.startsWith("anthropic/")) {
+            // Force Anthropic client to route through OpenRouter
+            env["ANTHROPIC_BASE_URL"] = provider?.baseUrl || "https://openrouter.ai/api/v1";
+            env["ANTHROPIC_API_KEY"] = openaiKey;
+            env["ANTHROPIC_MODEL"] = model;
+            if (!args.includes("--model")) args.push("--model", model);
+            log.info(`[spawnPaneInternal] OpenRouter Anthropic model: setting ANTHROPIC_BASE_URL → ${env["ANTHROPIC_BASE_URL"]}`);
+          }
+          // Note: google/ models on OpenRouter use OpenAI-compatible format too,
+          // but Gemini adapter uses a different API format. We skip GEMINI_BASE_URL
+          // override to avoid format mismatch. Users should use OpenAI-format models.
+        }
       } else if (isAnthropicCompat) {
         const anthropicKey = env["ANTHROPIC_API_KEY"] || env["ANTHROPIC_AUTH_TOKEN"] || "";
         if (model) {
@@ -231,6 +252,25 @@ export async function spawnPaneInternal(
         env["OPENAI_BASE_URL"] = ctx.apiProxyUrl;
         env["CLAUDE_CODE_DISABLE_PROXY"] = "1";
         log.info(`[spawnPaneInternal] API Proxy redirect (Gemini): ${realGeminiUrl} → ${ctx.apiProxyUrl}`);
+      }
+      if (isOpenAICompat) {
+        const realBaseUrl = env["OPENAI_BASE_URL"] || provider?.baseUrl || "https://api.openai.com/v1";
+        const tokenKey = env["OPENAI_API_KEY"] || null;
+        ctx.apiProxy?.registerOpenAITarget(tokenKey, realBaseUrl);
+        env["OPENAI_BASE_URL"] = ctx.apiProxyUrl;
+        log.info(`[spawnPaneInternal] API Proxy redirect (OpenAI-compat): ${realBaseUrl} → ${ctx.apiProxyUrl}`);
+
+        // ── OpenRouter Anthropic model proxy fix ──
+        // When OpenRouter serves Anthropic models, OpenClaude uses its Anthropic client
+        // (reads ANTHROPIC_BASE_URL). We must also register the Anthropic proxy target
+        // so the proxy intercepts and forwards those requests to OpenRouter.
+        const isOpenRouter = (provider?.id ?? "").startsWith("openrouter") || (provider?.baseUrl || "").toLowerCase().includes("openrouter");
+        if (isOpenRouter && model?.startsWith("anthropic/")) {
+          const orBaseUrl = provider?.baseUrl || "https://openrouter.ai/api/v1";
+          ctx.apiProxy?.registerAnthropicTarget(tokenKey, orBaseUrl);
+          env["ANTHROPIC_BASE_URL"] = ctx.apiProxyUrl;
+          log.info(`[spawnPaneInternal] API Proxy redirect (OpenRouter→Anthropic): ${orBaseUrl} → ${ctx.apiProxyUrl}`);
+        }
       }
     }
 

@@ -93,7 +93,13 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     baseUrl: "https://openrouter.ai/api/v1",
     tokenEnvVar: "OPENAI_API_KEY",
     signupUrl: "https://openrouter.ai/keys",
-    models: ["anthropic/claude-3.5-sonnet", "google/gemini-2.5-pro", "openai/gpt-4o"],
+    models: [
+      "anthropic/claude-opus-4.7-fast", "anthropic/claude-sonnet-4",
+      "google/gemini-2.5-pro", "google/gemini-3.1-flash-lite",
+      "openai/gpt-4o", "openai/gpt-4.1-mini",
+      "x-ai/grok-4.3", "mistralai/mistral-medium-3-5",
+      "deepseek/deepseek-chat-v3-0324", "meta-llama/llama-4-maverick",
+    ],
     labelIncludes: ["openrouter"],
     idIncludes: ["openrouter"],
   },
@@ -182,6 +188,15 @@ for (const tpl of PROVIDER_REGISTRY) {
 /** Get provider type for a model name (exact match or prefix heuristic) */
 export function getProviderTypeForModel(model: string): string | null {
   if (MODEL_TO_TYPE[model]) return MODEL_TO_TYPE[model];
+  // Handle OpenRouter-style "provider/model" format (e.g. "anthropic/claude-3.5-sonnet")
+  if (model.includes("/")) {
+    // Check registered models first
+    for (const tpl of PROVIDER_REGISTRY) {
+      if (tpl.models.includes(model)) return tpl.type;
+    }
+    // Unregistered slash-model: assume openai-compat (OpenRouter convention)
+    return "openai-compat";
+  }
   // Prefix fallback
   if (model.startsWith("gemini-")) return "gemini-compat";
   if (model.startsWith("mimo-")) return "mimo-compat";
@@ -194,6 +209,11 @@ export function getProviderTypeForModel(model: string): string | null {
 export function getProviderIdForModel(model: string): string | null {
   for (const tpl of PROVIDER_REGISTRY) {
     if (tpl.models.includes(model)) return tpl.id;
+  }
+  // Handle "provider/model" format — prefer OpenRouter for slash-models
+  if (model.includes("/")) {
+    const orTpl = PROVIDER_REGISTRY.find(t => t.id === "openrouter");
+    if (orTpl) return orTpl.id;
   }
   const type = getProviderTypeForModel(model);
   if (type) {

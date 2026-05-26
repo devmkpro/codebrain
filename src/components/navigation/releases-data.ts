@@ -14,6 +14,28 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.5.9",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "OpenRouter +Terminal: force --provider openai to prevent auto-detect as Anthropic"
+      },
+      {
+        "kind": "feat",
+        "text": "custom model pricing editor: add/edit/delete pricing for any model from any provider"
+      },
+      {
+        "kind": "fix",
+        "text": "CostPanel light mode: correct contrast for green, yellow, red, cyan text"
+      },
+      {
+        "kind": "fix",
+        "text": "OpenRouter provider detection: dynamic ID prefix match for startsWith('openrouter')"
+      }
+    ]
+  },
+  {
     "version": "1.5.8",
     "date": "maio 2026",
     "highlights": [
