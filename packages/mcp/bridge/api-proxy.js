@@ -58,6 +58,10 @@ class ApiProxy {
     this._tokenTargetMap = new Map();
     // Fallback for OAuth users (no stable token key)
     this._oauthTarget = null;
+    // Per-token routing for OpenAI-compatible providers (OpenRouter, OpenAI, DeepSeek, etc.)
+    // Parallel to _tokenTargetMap but for OpenAI-compat targets instead of Anthropic.
+    this._openaiTokenTargetMap = new Map();
+    this._openaiOauthTarget = null;
     // Stores thoughtSignature from Gemini response parts, keyed by tool call ID.
     this._thoughtSignatures = new Map();
   }
@@ -168,6 +172,56 @@ class ApiProxy {
     }
     // OAuth or unknown token: use OAuth slot or default
     return this._oauthTarget || this._defaultAnthropicTarget;
+  }
+
+  /**
+   * Register a per-token OpenAI-compatible target URL.
+   * Used for OpenRouter, OpenAI, DeepSeek, Mistral, xAI, etc.
+   * Mirrors registerAnthropicTarget() but for OpenAI-compat providers.
+   *
+   * @param {string|null} tokenOrKey - API key (null = no key)
+   * @param {string} targetUrl - Real API base URL for this token
+   */
+  registerOpenAITarget(tokenOrKey, targetUrl) {
+    if (!targetUrl) return;
+    if (tokenOrKey) {
+      const prefix = String(tokenOrKey).slice(0, 20);
+      const prev = this._openaiTokenTargetMap.get(prefix);
+      if (prev !== targetUrl) {
+        console.log(`${LOG_PREFIX} Registered OpenAI-compat route: [${prefix}...] → ${targetUrl}`);
+        this._openaiTokenTargetMap.set(prefix, targetUrl);
+      }
+    } else {
+      if (this._openaiOauthTarget !== targetUrl) {
+        console.log(`${LOG_PREFIX} Registered OpenAI-compat default route → ${targetUrl}`);
+        this._openaiOauthTarget = targetUrl;
+      }
+    }
+  }
+
+  /**
+   * Resolve the OpenAI-compat target URL for an incoming request.
+   * @param {http.IncomingMessage} req
+   * @returns {string|null} Target URL or null if no OpenAI target registered
+   */
+  _resolveOpenAITarget(req) {
+    const auth = req.headers["authorization"] || "";
+    const token = auth.replace(/^Bearer /i, "").trim();
+    if (token) {
+      const prefix = token.slice(0, 20);
+      if (this._openaiTokenTargetMap.has(prefix)) return this._openaiTokenTargetMap.get(prefix);
+    }
+    return this._openaiOauthTarget || null;
+  }
+
+  /**
+   * Check if an OpenAI-compat target is registered for this request.
+   * Used by _handleRequest to decide between Gemini translation and OpenAI passthrough.
+   * @param {http.IncomingMessage} req
+   * @returns {boolean}
+   */
+  _hasOpenAITarget(req) {
+    return this._resolveOpenAITarget(req) !== null;
   }
 
   /**
@@ -844,22 +898,37 @@ class ApiProxy {
     const hasKeyParam = urlObj.searchParams.has("key");
     console.log(`${LOG_PREFIX} → ${req.method} ${req.url} | gemini=${isGemini} | openai=${isOpenAI} | authHeaders=${JSON.stringify(authHeaders)} | keyParam=${hasKeyParam}`);
 
-    // Handle OpenAI-compatible /v1/models health check locally
-    if (isOpenAI && /^\/?(v1\/)?models(\?|$)/.test(req.url || "")) {
-      this._handleOpenAIModelsRequest(req, res);
-      return;
-    }
+    // Handle OpenAI-compatible requests:
+    // - If an OpenAI-compat target is registered (OpenRouter, OpenAI, DeepSeek, etc.),
+    //   forward as-is (passthrough) with usage extraction.
+    // - If NO OpenAI target registered, this is from the Gemini adapter — translate
+    //   OpenAI format → Gemini native format (existing behavior).
+    if (isOpenAI) {
+      const hasOpenAITarget = this._hasOpenAITarget(req);
 
-    // Detect OpenAI chat completion requests (from Gemini adapter)
-    // CLI sends both /v1/chat/completions and /chat/completions
-    const isOpenAIChat = isOpenAI && /^\/?(v1\/)?chat\/completions/.test(req.url || "");
+      // /v1/models endpoint
+      if (/^\/?(v1\/)?models(\?|$)/.test(req.url || "")) {
+        if (hasOpenAITarget) {
+          // True OpenAI-compat provider: forward /v1/models to the real endpoint
+          this._handleOpenAIProxyPassthrough(req, res);
+        } else {
+          // Gemini adapter health check — return hardcoded Gemini model list
+          this._handleOpenAIModelsRequest(req, res);
+        }
+        return;
+      }
 
-    // For OpenAI-compatible chat completions from the Gemini adapter:
-    // Forward to Gemini's OpenAI-compatible endpoint (NOT the native /v1beta path).
-    // Also translate auth: Bearer token → x-goog-api-key header.
-    if (isOpenAIChat) {
-      this._handleOpenAIChatProxy(req, res);
-      return;
+      // /v1/chat/completions endpoint
+      if (/^\/?(v1\/)?chat\/completions/.test(req.url || "")) {
+        if (hasOpenAITarget) {
+          // True OpenAI-compat provider: forward as-is (passthrough with usage extraction)
+          this._handleOpenAIProxyPassthrough(req, res);
+        } else {
+          // Gemini adapter: translate OpenAI → Gemini native format
+          this._handleOpenAIChatProxy(req, res);
+        }
+        return;
+      }
     }
 
     // Choose the correct target URL — per-token routing for Anthropic to avoid race conditions
@@ -961,6 +1030,215 @@ class ApiProxy {
       }
       proxyReq.end();
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OpenAI-compatible passthrough handlers (OpenRouter, OpenAI, DeepSeek, etc.)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Handle OpenAI-compatible request by forwarding as-is to the real endpoint.
+   * Unlike _handleOpenAIChatProxy (which translates to Gemini), this passes through
+   * the request unchanged — used for OpenRouter, OpenAI, DeepSeek, etc.
+   */
+  _handleOpenAIProxyPassthrough(req, res) {
+    const targetUrl = this._resolveOpenAITarget(req);
+    if (!targetUrl) {
+      console.error(`${LOG_PREFIX} _handleOpenAIProxyPassthrough called but no OpenAI target registered`);
+      if (!res.headersSent) {
+        try {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: { type: "proxy_error", message: "No OpenAI-compat target registered" } }));
+        } catch {}
+      }
+      return;
+    }
+
+    const target = new URL(targetUrl);
+    const isHttps = target.protocol === "https:";
+    const transport = isHttps ? https : http;
+
+    // Build full path: preserve base path from targetUrl + request path
+    const basePath = target.pathname.replace(/\/+$/, "");
+    const reqPath = req.url || "/";
+    const fullPath = basePath + reqPath;
+
+    // Forward all headers, strip host
+    const headers = { ...req.headers };
+    delete headers["host"];
+
+    const bodyChunks = [];
+    req.on("data", (chunk) => bodyChunks.push(chunk));
+    req.on("end", () => {
+      const body = Buffer.concat(bodyChunks);
+
+      // Extract model and streaming flag from body
+      let requestModel = "";
+      let isStreaming = false;
+      if (body.length > 0) {
+        try {
+          const parsed = JSON.parse(body.toString());
+          if (parsed.model) requestModel = parsed.model;
+          if (parsed.stream === true) isStreaming = true;
+        } catch {}
+      }
+      if ((req.headers["accept"] || "").includes("text/event-stream")) {
+        isStreaming = true;
+      }
+
+      const options = {
+        hostname: target.hostname,
+        port: target.port || (isHttps ? 443 : 80),
+        path: fullPath,
+        method: req.method,
+        headers,
+      };
+
+      console.log(`${LOG_PREFIX}   OpenAI-compat passthrough → ${isHttps ? "https" : "http"}://${options.hostname}:${options.port}${fullPath} (model=${requestModel}, stream=${isStreaming})`);
+
+      const proxyReq = transport.request(options, (proxyRes) => {
+        console.log(`${LOG_PREFIX}   OpenAI-compat ← ${proxyRes.statusCode} ${proxyRes.statusMessage}`);
+        if (proxyRes.statusCode === 401 || proxyRes.statusCode === 403) {
+          console.warn(`${LOG_PREFIX}   ⚠ Auth error from OpenAI-compat upstream! key=${(headers["authorization"] || "").slice(0, 20)}...`);
+        }
+
+        if (isStreaming) {
+          this._handleOpenAIStreamingPassthrough(proxyRes, res, requestModel);
+        } else {
+          this._handleOpenAIJsonPassthrough(proxyRes, res, requestModel);
+        }
+      });
+
+      proxyReq.on("error", (err) => {
+        console.error(`${LOG_PREFIX} OpenAI-compat passthrough error:`, err.message);
+        if (!res.headersSent) {
+          try {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: { type: "proxy_error", message: err.message } }));
+          } catch (e) {
+            console.warn(`${LOG_PREFIX} Failed to write OpenAI-compat error:`, e.code || e.message);
+          }
+        } else {
+          try { res.end(); } catch {}
+        }
+      });
+
+      if (body.length > 0) proxyReq.write(body);
+      proxyReq.end();
+    });
+  }
+
+  /**
+   * Handle non-streaming OpenAI-compatible response — forward as-is and extract usage.
+   */
+  _handleOpenAIJsonPassthrough(proxyRes, res, model) {
+    const chunks = [];
+    proxyRes.on("data", (chunk) => chunks.push(chunk));
+    proxyRes.on("end", () => {
+      const body = Buffer.concat(chunks);
+
+      // Forward response as-is (headers + body unchanged)
+      if (!res.headersSent) {
+        try {
+          res.writeHead(proxyRes.statusCode, proxyRes.headers);
+          res.end(body);
+        } catch (e) {
+          console.warn(`${LOG_PREFIX} Failed to forward OpenAI-compat JSON:`, e.code || e.message);
+        }
+      } else {
+        try { res.end(); } catch {}
+      }
+
+      // Extract usage from standard OpenAI format: usage.prompt_tokens / usage.completion_tokens
+      try {
+        const json = JSON.parse(body.toString());
+        this._extractOpenAIUsage(json, model);
+      } catch {}
+    });
+  }
+
+  /**
+   * Handle streaming OpenAI-compatible SSE response — forward as-is and extract usage.
+   * OpenRouter/OpenAI streaming uses standard SSE: data: {json}\n\n
+   * Usage may appear in the last chunk's `usage` field (when stream_options.include_usage=true)
+   * or not at all — we extract what's available.
+   */
+  _handleOpenAIStreamingPassthrough(proxyRes, res, model) {
+    if (!res.headersSent) {
+      try { res.writeHead(proxyRes.statusCode, proxyRes.headers); } catch (e) {
+        console.warn(`${LOG_PREFIX} Failed to writeHead (OpenAI-compat stream):`, e.code || e.message);
+      }
+    }
+
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let detectedModel = model;
+    let sseBuffer = "";
+
+    proxyRes.on("data", (chunk) => {
+      // Forward chunk as-is to client
+      try { res.write(chunk); } catch (e) {
+        console.warn(`${LOG_PREFIX} res.write failed (client gone):`, e.code || e.message);
+      }
+
+      // Parse SSE to extract usage from the stream
+      sseBuffer += chunk.toString();
+      const lines = sseBuffer.split("\n");
+      sseBuffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const jsonStr = trimmed.startsWith("data: ") ? trimmed.slice(6) : trimmed;
+        if (jsonStr === "[DONE]") continue;
+
+        try {
+          const json = JSON.parse(jsonStr);
+          // Standard OpenAI streaming usage (sent in last chunk when include_usage=true)
+          if (json.usage) {
+            inputTokens = json.usage.prompt_tokens || inputTokens;
+            outputTokens = json.usage.completion_tokens || outputTokens;
+          }
+          if (json.model) detectedModel = json.model;
+        } catch {}
+      }
+    });
+
+    proxyRes.on("end", () => {
+      // Process remaining buffer
+      if (sseBuffer.trim()) {
+        const jsonStr = sseBuffer.trim().startsWith("data: ") ? sseBuffer.trim().slice(6) : sseBuffer.trim();
+        if (jsonStr !== "[DONE]") {
+          try {
+            const json = JSON.parse(jsonStr);
+            if (json.usage) {
+              inputTokens = json.usage.prompt_tokens || inputTokens;
+              outputTokens = json.usage.completion_tokens || outputTokens;
+            }
+          } catch {}
+        }
+      }
+
+      try { res.end(); } catch {}
+
+      if (inputTokens > 0 || outputTokens > 0) {
+        this._report(detectedModel || model, inputTokens, outputTokens);
+      }
+    });
+  }
+
+  /**
+   * Extract token usage from a non-streaming OpenAI-compatible response.
+   * Standard format: { usage: { prompt_tokens: N, completion_tokens: N } }
+   */
+  _extractOpenAIUsage(json, model) {
+    if (!json.usage) return;
+    const inputTokens = json.usage.prompt_tokens || 0;
+    const outputTokens = json.usage.completion_tokens || 0;
+    const detectedModel = json.model || model;
+    if (inputTokens > 0 || outputTokens > 0) {
+      this._report(detectedModel, inputTokens, outputTokens);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
