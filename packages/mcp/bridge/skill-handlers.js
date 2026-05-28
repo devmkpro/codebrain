@@ -41,14 +41,20 @@ function readManifest(skillDir) {
  * Manages local skill storage and GitLab registry sync.
  */
 function createSkillHandlers(opts) {
+  /** Resolve effective cwd: explicit arg → getCurrentWorkspacePath → process.cwd() */
+  function effectiveCwd(cwd) {
+    return cwd || opts.getCurrentWorkspacePath?.() || process.cwd();
+  }
+
   return {
     async skillList({ type, scope, cwd } = {}) {
+      const resolvedCwd = effectiveCwd(cwd);
       // List from both global and project dirs, deduplicated by id
       const dirs = scope === "project"
-        ? [resolveSkillsDir("project", cwd)]
+        ? [resolveSkillsDir("project", resolvedCwd)]
         : scope === "global"
           ? [GLOBAL_SKILLS_DIR]
-          : [GLOBAL_SKILLS_DIR, resolveSkillsDir("project", cwd || process.cwd())];
+          : [GLOBAL_SKILLS_DIR, resolveSkillsDir("project", resolvedCwd)];
 
       const seen = new Set();
       const entries = [];
@@ -72,12 +78,13 @@ function createSkillHandlers(opts) {
     },
 
     async skillGet({ id, scope, cwd }) {
+      const resolvedCwd = effectiveCwd(cwd);
       // Search project first, then global
       const dirs = scope === "project"
-        ? [resolveSkillsDir("project", cwd)]
+        ? [resolveSkillsDir("project", resolvedCwd)]
         : scope === "global"
           ? [GLOBAL_SKILLS_DIR]
-          : [resolveSkillsDir("project", cwd || process.cwd()), GLOBAL_SKILLS_DIR];
+          : [resolveSkillsDir("project", resolvedCwd), GLOBAL_SKILLS_DIR];
 
       for (const dir of dirs) {
         const skillDir = path.join(dir, id);
@@ -102,7 +109,7 @@ function createSkillHandlers(opts) {
       if (!name) return { ok: false, error: "name is required" };
       if (!prompt) return { ok: false, error: "prompt is required" };
 
-      const skillsDir = resolveSkillsDir(scope ?? "global", cwd);
+      const skillsDir = resolveSkillsDir(scope ?? "global", effectiveCwd(cwd));
       ensureSkillsDir(skillsDir);
       const skillDir = path.join(skillsDir, id);
 
@@ -135,11 +142,12 @@ function createSkillHandlers(opts) {
     },
 
     async skillDelete({ id, scope, cwd }) {
+      const resolvedCwd = effectiveCwd(cwd);
       const dirs = scope === "project"
-        ? [resolveSkillsDir("project", cwd)]
+        ? [resolveSkillsDir("project", resolvedCwd)]
         : scope === "global"
           ? [GLOBAL_SKILLS_DIR]
-          : [resolveSkillsDir("project", cwd || process.cwd()), GLOBAL_SKILLS_DIR];
+          : [resolveSkillsDir("project", resolvedCwd), GLOBAL_SKILLS_DIR];
 
       for (const dir of dirs) {
         const skillDir = path.join(dir, id);

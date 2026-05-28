@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.6.4",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "auto-install bundled skill 'autopart-scraper' on startup"
+      }
+    ]
+  },
+  {
     "version": "1.6.3",
     "date": "maio 2026",
     "highlights": [
