@@ -4,12 +4,28 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const SKILLS_DIR = path.join(os.homedir(), ".codebrain", "skills");
+const GLOBAL_SKILLS_DIR = path.join(os.homedir(), ".codebrain", "skills");
+// Legacy alias kept for backward compat
+const SKILLS_DIR = GLOBAL_SKILLS_DIR;
 const REGISTRY_URL = "https://gitlab.com/maikeofc18/codebrain-skills/-/raw/main/index.json";
 const REGISTRY_BASE = "https://gitlab.com/maikeofc18/codebrain-skills/-/raw/main";
 
-function ensureSkillsDir() {
-  if (!fs.existsSync(SKILLS_DIR)) fs.mkdirSync(SKILLS_DIR, { recursive: true });
+/**
+ * Resolve the skills directory based on scope.
+ * - "global" (default) → ~/.codebrain/skills/
+ * - "project"          → <cwd>/.codebrain/skills/
+ */
+function resolveSkillsDir(scope, cwd) {
+  if (scope === "project") {
+    const projectDir = cwd || process.cwd();
+    return path.join(projectDir, ".codebrain", "skills");
+  }
+  return GLOBAL_SKILLS_DIR;
+}
+
+function ensureSkillsDir(dir) {
+  if (!dir) dir = GLOBAL_SKILLS_DIR;
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
 function readManifest(skillDir) {
@@ -26,47 +42,119 @@ function readManifest(skillDir) {
  */
 function createSkillHandlers(opts) {
   return {
-    async skillList({ type } = {}) {
-      ensureSkillsDir();
-      try {
-        const entries = fs.readdirSync(SKILLS_DIR, { withFileTypes: true })
-          .filter(d => d.isDirectory())
-          .map(d => {
-            const skillDir = path.join(SKILLS_DIR, d.name);
-            const manifest = readManifest(skillDir);
-            return manifest ? { id: manifest.id, name: manifest.name, type: manifest.type, version: manifest.version, description: manifest.description, tags: manifest.tags || [] } : null;
-          })
-          .filter(Boolean);
+    async skillList({ type, scope, cwd } = {}) {
+      // List from both global and project dirs, deduplicated by id
+      const dirs = scope === "project"
+        ? [resolveSkillsDir("project", cwd)]
+        : scope === "global"
+          ? [GLOBAL_SKILLS_DIR]
+          : [GLOBAL_SKILLS_DIR, resolveSkillsDir("project", cwd || process.cwd())];
 
-        if (type) return entries.filter(e => e.type === type);
-        return entries;
-      } catch {
-        return [];
+      const seen = new Set();
+      const entries = [];
+      for (const dir of dirs) {
+        if (!fs.existsSync(dir)) continue;
+        try {
+          for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!d.isDirectory()) continue;
+            const skillDir = path.join(dir, d.name);
+            const manifest = readManifest(skillDir);
+            if (!manifest || seen.has(manifest.id)) continue;
+            seen.add(manifest.id);
+            const isProject = dir !== GLOBAL_SKILLS_DIR;
+            entries.push({ id: manifest.id, name: manifest.name, type: manifest.type, version: manifest.version, description: manifest.description, tags: manifest.tags || [], scope: isProject ? "project" : "global" });
+          }
+        } catch {}
       }
+
+      if (type) return entries.filter(e => e.type === type);
+      return entries;
     },
 
-    async skillGet({ id }) {
-      const skillDir = path.join(SKILLS_DIR, id);
-      if (!fs.existsSync(skillDir)) return { ok: false, error: `Skill '${id}' not found` };
-      const manifest = readManifest(skillDir);
-      if (!manifest) return { ok: false, error: `Invalid skill: missing skill.json` };
+    async skillGet({ id, scope, cwd }) {
+      // Search project first, then global
+      const dirs = scope === "project"
+        ? [resolveSkillsDir("project", cwd)]
+        : scope === "global"
+          ? [GLOBAL_SKILLS_DIR]
+          : [resolveSkillsDir("project", cwd || process.cwd()), GLOBAL_SKILLS_DIR];
 
-      const content = {};
-      try {
-        for (const f of fs.readdirSync(skillDir)) {
-          if (f.endsWith(".md") || f.endsWith(".json")) {
-            content[f] = fs.readFileSync(path.join(skillDir, f), "utf-8");
+      for (const dir of dirs) {
+        const skillDir = path.join(dir, id);
+        if (!fs.existsSync(skillDir)) continue;
+        const manifest = readManifest(skillDir);
+        if (!manifest) continue;
+        const content = {};
+        try {
+          for (const f of fs.readdirSync(skillDir)) {
+            if (f.endsWith(".md") || f.endsWith(".json")) {
+              content[f] = fs.readFileSync(path.join(skillDir, f), "utf-8");
+            }
           }
-        }
-      } catch {}
+        } catch {}
+        return { ok: true, manifest, content, scope: dir === GLOBAL_SKILLS_DIR ? "global" : "project" };
+      }
+      return { ok: false, error: `Skill '${id}' not found` };
+    },
 
-      return { ok: true, manifest, content };
+    async skillCreate({ id, name, type, description, prompt, version, tags, scope, cwd }) {
+      if (!id) return { ok: false, error: "id is required" };
+      if (!name) return { ok: false, error: "name is required" };
+      if (!prompt) return { ok: false, error: "prompt is required" };
+
+      const skillsDir = resolveSkillsDir(scope ?? "global", cwd);
+      ensureSkillsDir(skillsDir);
+      const skillDir = path.join(skillsDir, id);
+
+      if (fs.existsSync(skillDir)) {
+        return { ok: false, error: `Skill '${id}' already exists in ${scope ?? "global"} scope. Use skillDelete first or choose a different id.` };
+      }
+
+      fs.mkdirSync(skillDir, { recursive: true });
+
+      const manifest = {
+        id,
+        name,
+        type: type ?? "prompt",
+        version: version ?? "1.0.0",
+        description: description ?? "",
+        tags: tags ?? [],
+        entrypoint: "prompt.md",
+      };
+
+      fs.writeFileSync(path.join(skillDir, "skill.json"), JSON.stringify(manifest, null, 2), "utf-8");
+      fs.writeFileSync(path.join(skillDir, "prompt.md"), prompt, "utf-8");
+
+      return {
+        ok: true,
+        id,
+        scope: scope ?? "global",
+        path: skillDir,
+        message: `Skill '${id}' created in ${scope ?? "global"} scope at ${skillDir}`,
+      };
+    },
+
+    async skillDelete({ id, scope, cwd }) {
+      const dirs = scope === "project"
+        ? [resolveSkillsDir("project", cwd)]
+        : scope === "global"
+          ? [GLOBAL_SKILLS_DIR]
+          : [resolveSkillsDir("project", cwd || process.cwd()), GLOBAL_SKILLS_DIR];
+
+      for (const dir of dirs) {
+        const skillDir = path.join(dir, id);
+        if (fs.existsSync(skillDir)) {
+          fs.rmSync(skillDir, { recursive: true, force: true });
+          return { ok: true, id, scope: dir === GLOBAL_SKILLS_DIR ? "global" : "project", path: skillDir };
+        }
+      }
+      return { ok: false, error: `Skill '${id}' not found` };
     },
 
     async skillInstall({ id }) {
       try {
-        ensureSkillsDir();
-        const skillDir = path.join(SKILLS_DIR, id);
+        ensureSkillsDir(GLOBAL_SKILLS_DIR);
+        const skillDir = path.join(GLOBAL_SKILLS_DIR, id);
 
         const res = await fetch(`${REGISTRY_BASE}/skills/${id}/skill.json`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -93,7 +181,7 @@ function createSkillHandlers(opts) {
     },
 
     async skillUninstall({ id }) {
-      const skillDir = path.join(SKILLS_DIR, id);
+      const skillDir = path.join(GLOBAL_SKILLS_DIR, id);
       try {
         if (fs.existsSync(skillDir)) fs.rmSync(skillDir, { recursive: true, force: true });
         return { ok: true };

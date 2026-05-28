@@ -996,10 +996,14 @@ function createCodebrainMCPServer(bridge) {
   server.tool(
     "mcp__codebrain__skill_list",
     "List installed skills (prompt templates and squad templates). Returns skill manifests.",
-    { type: z.enum(["prompt", "squad"]).optional().describe("Filter by skill type") },
+    {
+      type: z.enum(["prompt", "squad"]).optional().describe("Filter by skill type"),
+      scope: z.enum(["global", "project"]).optional().describe("'global' = ~/.codebrain/skills, 'project' = <cwd>/.codebrain/skills. Omit to list both."),
+      cwd: z.string().optional().describe("Project directory for project-scoped skills (defaults to current workspace)"),
+    },
     async (args) => {
       try {
-        const result = await bridge.skillList({ type: args.type });
+        const result = await bridge.skillList({ type: args.type, scope: args.scope, cwd: args.cwd });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
@@ -1011,10 +1015,58 @@ function createCodebrainMCPServer(bridge) {
   server.tool(
     "mcp__codebrain__skill_get",
     "Get full skill content: manifest + all files (prompt.md, squad.json, README.md).",
-    { id: z.string().describe("Skill ID (folder name in ~/.codebrain/skills/)") },
+    {
+      id: z.string().describe("Skill ID (folder name in skills directory)"),
+      scope: z.enum(["global", "project"]).optional().describe("Search scope. Omit to search project first, then global."),
+      cwd: z.string().optional().describe("Project directory for project-scoped skills"),
+    },
     async (args) => {
       try {
-        const result = await bridge.skillGet({ id: args.id });
+        const result = await bridge.skillGet({ id: args.id, scope: args.scope, cwd: args.cwd });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__skill_create ─────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__skill_create",
+    "Create a new skill locally. Use scope='project' to save in <cwd>/.codebrain/skills/ (project-specific), or scope='global' (default) to save in ~/.codebrain/skills/ (available everywhere).",
+    {
+      id: z.string().describe("Unique skill ID (used as folder name, e.g. 'my-skill')"),
+      name: z.string().describe("Human-readable skill name"),
+      prompt: z.string().describe("The prompt template content (written to prompt.md)"),
+      description: z.string().optional().describe("Short description of what this skill does"),
+      type: z.enum(["prompt", "squad"]).optional().describe("Skill type (default: 'prompt')"),
+      version: z.string().optional().describe("Version string (default: '1.0.0')"),
+      tags: z.array(z.string()).optional().describe("Tags for categorization"),
+      scope: z.enum(["global", "project"]).optional().describe("'global' = ~/.codebrain/skills (default, available to all projects), 'project' = <cwd>/.codebrain/skills (only this project)"),
+      cwd: z.string().optional().describe("Project directory when scope='project'. Defaults to current workspace."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.skillCreate(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__skill_delete ─────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__skill_delete",
+    "Delete a locally created skill by ID. Removes the skill directory.",
+    {
+      id: z.string().describe("Skill ID to delete"),
+      scope: z.enum(["global", "project"]).optional().describe("Where to look. Omit to search project first, then global."),
+      cwd: z.string().optional().describe("Project directory for project-scoped skills"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.skillDelete({ id: args.id, scope: args.scope, cwd: args.cwd });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
