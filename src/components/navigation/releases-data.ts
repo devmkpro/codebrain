@@ -60,6 +60,20 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "settings page migration + session restore + v1.6.0"
+      }
+    ]
+  },
+  {
+    "version": "1.6.6-gitlab-pipeline",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add gitlab settings UI (token/URL) to gitlab-review-pipeline branch"
+      },
+      {
+        "kind": "feat",
+        "text": "gitlab review pipeline — MR auto-review via webhook"
       },
       {
         "kind": "fix",
