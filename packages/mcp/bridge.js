@@ -24,6 +24,9 @@ const { createConsensusHandlers } = require("./bridge/consensus-handlers.js");
 const { CostTracker } = require("./bridge/cost-tracker.js");
 const { createExpandedHooksHandlers } = require("./bridge/hooks-expand-handlers.js");
 const { parseTokenUsage } = require("./bridge/token-parser.js");
+const { createGitHandlers } = require("./bridge/git-handlers.js");
+const { createReviewConfigHandlers } = require("./bridge/review-config.js");
+const { createReviewRunHandlers } = require("./bridge/review-run.js");
 
 // ── Auto-notify helpers ─────────────────────────────────────────────────────
 // When agents make changes (file writes, memory writes), other agents are
@@ -108,6 +111,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     messageBus,
     getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
     dataDir: opts.dataDir || path.join(os.homedir(), ".codebrain"),
+    reviewRun: null, // injected after bridge construction
   });
 
   const costTracker = opts.costTracker || new CostTracker({
@@ -235,6 +239,15 @@ function createMCPBridge(ptyManager, opts = {}) {
   const bgWorkerHandlers = createBackgroundWorkerHandlers({ workerManager });
   const consensusHandlers = createConsensusHandlers({ ...sharedOpts, workerManager });
   const expandedHooksHandlers = createExpandedHooksHandlers({ ...opts, paneLabels, roleMap });
+  const gitHandlers = createGitHandlers({ ...opts, paneLabels, roleMap });
+  const reviewConfigHandlers = createReviewConfigHandlers({ ...opts, paneLabels, roleMap });
+  // Review-run needs git + pane methods — pass a proxy bridge
+  // NOTE: ptyManager is needed for pane cleanup (kill after review completes)
+  const reviewRunHandlers = createReviewRunHandlers({
+    ...opts,
+    ptyManager,
+    bridge: { ...gitHandlers, ...paneHandlers, roleMap },
+  });
 
   // ── Wrap fileWrite: auto-record in shared memory + notify agents ────────
   const originalFileWrite = fileHandlers.fileWrite.bind(fileHandlers);
@@ -307,6 +320,9 @@ function createMCPBridge(ptyManager, opts = {}) {
     return result;
   };
 
+  // Wire reviewRun into WorkerManager for auto-triggering from polling
+  workerManager.opts.reviewRun = reviewRunHandlers.reviewRun;
+
   return {
     ...paneHandlers,
     ...browserHandlers,
@@ -321,6 +337,9 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...bgWorkerHandlers,
     ...consensusHandlers,
     ...expandedHooksHandlers,
+    ...gitHandlers,
+    ...reviewConfigHandlers,
+    ...reviewRunHandlers,
     // Expose foundational instances
     messageBus,
     agentScorer,

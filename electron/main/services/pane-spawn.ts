@@ -26,6 +26,10 @@ export interface SpawnPaneConfig {
   env?: Record<string, string>;
   taskId?: string;
   activityId?: string;
+  /** Custom system prompt file path — bypasses codebrain-system.md injection. */
+  systemPromptFile?: string;
+  /** If true, pane is hidden from pane_list output (e.g. review agents). */
+  hidden?: boolean;
 }
 
 export async function spawnPaneInternal(
@@ -55,7 +59,12 @@ export async function spawnPaneInternal(
     const configEnv = Object.fromEntries(
       Object.entries(config.env ?? {}).filter(([, v]) => !/^\*+$/.test(v))
     );
-    const env: Record<string, string> = { ...(provider?.env ?? {}), ...configEnv };
+    // Merge globalEnv from ConfigStore (persistent user-defined env vars for all agents)
+    const globalEnv = (ctx.configStore?.get?.()?.globalEnv ?? {}) as Record<string, string>;
+    const env: Record<string, string> = { ...(provider?.env ?? {}), ...configEnv, ...globalEnv };
+    if (Object.keys(globalEnv).length > 0) {
+      log.info("[spawnPaneInternal] globalEnv:", Object.keys(globalEnv).length, "vars merged");
+    }
 
     const args = [...(config.args ?? [])];
     const isClaudeCompatible = agent === "openclaude" || agent === "claude" || agent === "gemini";
@@ -92,8 +101,9 @@ export async function spawnPaneInternal(
     }
 
     // System prompt injection (delegated to prompt-builder module)
+    // Skip if a custom systemPromptFile is provided (e.g. for review agents)
     if (isClaudeCompatible && !args.includes("--system-prompt")) {
-      const promptFile = buildSystemPrompt(ctx, {
+      const promptFile = config.systemPromptFile || buildSystemPrompt(ctx, {
         paneId,
         cwd,
         model,
@@ -154,6 +164,7 @@ export async function spawnPaneInternal(
         const mimoKey = env["ANTHROPIC_AUTH_TOKEN"] || env["MIMO_API_KEY"] || "";
         if (mimoKey) {
           env["ANTHROPIC_AUTH_TOKEN"] = mimoKey;
+          env["ANTHROPIC_API_KEY"] = mimoKey;  // CLI may read this instead of AUTH_TOKEN
           env["MIMO_API_KEY"] = mimoKey;
           env["OPENAI_API_KEY"] = mimoKey;
         }
@@ -301,6 +312,7 @@ export async function spawnPaneInternal(
 
     if (isMimo) {
       log.info("[spawnPaneInternal] MIMO ANTHROPIC_AUTH_TOKEN:", env["ANTHROPIC_AUTH_TOKEN"] ? "SET" : "MISSING");
+      log.info("[spawnPaneInternal] MIMO ANTHROPIC_API_KEY:", env["ANTHROPIC_API_KEY"] ? "SET" : "MISSING");
       log.info("[spawnPaneInternal] MIMO MIMO_API_KEY:", env["MIMO_API_KEY"] ? "SET" : "MISSING");
       log.info("[spawnPaneInternal] MIMO ANTHROPIC_BASE_URL:", env["ANTHROPIC_BASE_URL"] ?? "MISSING");
       log.info("[spawnPaneInternal] MIMO OPENAI_BASE_URL:", env["OPENAI_BASE_URL"] ?? "MISSING");
@@ -324,6 +336,7 @@ export async function spawnPaneInternal(
       permissionMode: config.permissionMode,
       claudeSessionId: config.claudeSessionId,
       role: config.role,
+      hidden: config.hidden,
     });
 
     ctx.paneConfigs.set(paneId, {

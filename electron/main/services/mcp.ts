@@ -54,7 +54,7 @@ export function writeMcpConfig(ctx: AppContext, info: McpServerInfo): void {
 
 function buildMcpBridge(ctx: AppContext) {
   return {
-    spawnPaneFn: (req: { agent?: string; providerId?: string; model?: string; cwd?: string }) =>
+    spawnPaneFn: (req: { agent?: string; providerId?: string; model?: string; cwd?: string; systemPromptFile?: string; hidden?: boolean }) =>
       spawnPaneInternal(ctx, req),
     onPaneCreated: (info: { paneId: string; agent: string; cwd?: string; providerId?: string; model?: string }) => {
       safeSend(ctx, "pane:added", info);

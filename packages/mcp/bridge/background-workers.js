@@ -31,6 +31,7 @@ const WORKER_DEFINITIONS = [
   { name: "cache",     intervalMs: 60 * 60 * 1000,   description: "Clean expired messages and stale cache entries", priority: "background" },
   { name: "swarm",     intervalMs: 1 * 60 * 1000,    description: "Monitor swarm health and detect stalled workers", priority: "high" },
   { name: "heartbeat", intervalMs: CACHE_HEARTBEAT_INTERVAL, description: "Cache-aware heartbeat for prompt cache optimization (270s)", priority: "background" },
+  { name: "gitlab-reviewer", intervalMs: 2 * 60 * 1000, description: "Poll GitLab for new/updated MRs to review", priority: "high" },
 ];
 
 // ─── On-Demand Trigger Definitions (12 triggers) ───
@@ -570,6 +571,7 @@ class WorkerManager {
         case "cache": result = this._cleanCache(); break;
         case "swarm": result = this._swarmMonitor(); break;
         case "heartbeat": result = this._cacheHeartbeat(); break;
+        case "gitlab-reviewer": result = this._gitlabReviewer(); break;
         default: result = { message: "no implementation" };
       }
 
@@ -1012,6 +1014,148 @@ class WorkerManager {
       intervalMs: CACHE_HEARTBEAT_INTERVAL,
       cacheHits,
       cacheMisses,
+    };
+  }
+
+  /**
+   * GitLab reviewer polling worker.
+   * Loads review-config.json, lists open MRs for each configured repo,
+   * and checks if they've been reviewed already (cached in worker state).
+   * New MRs are stored in memory as episodic events for the review pipeline.
+   */
+  _gitlabReviewer() {
+    const { createReviewConfigHandlers } = require("./review-config.js");
+    const configHandler = createReviewConfigHandlers(this.opts);
+    const config = configHandler.loadConfig();
+
+    if (!config.repos || config.repos.length === 0) {
+      return { summary: "no repos configured", reposConfigured: 0 };
+    }
+
+    // Initialize review cache in worker state
+    if (!this._reviewCache) {
+      this._reviewCache = new Map();
+      // Restore from persisted state
+      const persisted = this.workers.get("gitlab-reviewer")?.state?.reviewCache || {};
+      for (const [k, v] of Object.entries(persisted)) {
+        this._reviewCache.set(k, v);
+      }
+    }
+
+    // We need the git handlers to list MRs. Access via opts or lazy-init.
+    const { createGitHandlers } = require("./git-handlers.js");
+    const gitHandlers = createGitHandlers(this.opts);
+
+    const results = [];
+    const newMRs = [];
+
+    for (const repo of config.repos) {
+      try {
+        // We use a sync-like pattern but gitlabListMrs is async.
+        // Since _runWorker is sync, we need to handle this carefully.
+        // The worker will queue the async work and store results on next tick.
+        // For now, we fire-and-forget and let the results accumulate.
+        gitHandlers.gitlabListMrs({
+          projectId: repo.projectId,
+          state: "opened",
+        }).then((result) => {
+          if (!result.ok) {
+            this._addAlert("warning", `GitLab poll failed for ${repo.name}: ${result.error}`, "gitlab-reviewer");
+            return;
+          }
+
+          const mrs = result.data || [];
+          for (const mr of mrs) {
+            const cacheKey = `${repo.projectId}:${mr.id}`;
+            const cached = this._reviewCache.get(cacheKey);
+
+            // Skip if already reviewed and not updated since
+            if (cached && cached.updatedAt === mr.updatedAt) continue;
+
+            // Skip drafts if configured
+            if (repo.skipDraft && mr.draft) continue;
+
+            // New or updated MR
+            newMRs.push({
+              projectId: repo.projectId,
+              repoName: repo.name,
+              mrId: mr.id,
+              title: mr.title,
+              author: mr.author,
+              sourceBranch: mr.sourceBranch,
+              targetBranch: mr.targetBranch,
+              updatedAt: mr.updatedAt,
+              webUrl: mr.webUrl,
+            });
+
+            // Update cache
+            this._reviewCache.set(cacheKey, {
+              updatedAt: mr.updatedAt,
+              detectedAt: Date.now(),
+              reviewed: false,
+            });
+          }
+
+          // Store new MR events in memory
+          const store = this.opts.memoryStore;
+          if (store && newMRs.length > 0) {
+            for (const mr of newMRs) {
+              try {
+                store.write({
+                  type: "episodic",
+                  key: `mr-detected-${mr.projectId}-${mr.mrId}`,
+                  content: JSON.stringify(mr),
+                  tags: ["mr-detected", "polling", mr.repoName],
+                  agent_id: "gitlab-reviewer",
+                  workspace: this.opts.getCurrentWorkspacePath?.() || process.cwd(),
+                });
+              } catch {}
+            }
+
+            // Fire hook for review pipeline
+            if (this.opts.hooksManager) {
+              try { this.opts.hooksManager.fire("mr_detected", { count: newMRs.length, mrs: newMRs }); } catch {}
+            }
+
+            // Trigger review for each new MR (fire-and-forget)
+            if (this.opts.reviewRun) {
+              for (const mr of newMRs) {
+                this.opts.reviewRun({ projectId: mr.projectId, mrId: mr.mrId, timeout: 600000 })
+                  .then((result) => {
+                    const d = result.data;
+                    console.log(`[GitLab-Reviewer] Review MR !${mr.mrId}: ${result.ok ? `completed (fallback=${d?.fallbackPosted ? "yes" : "no"})` : result.error}`);
+                    if (result.ok) {
+                      const entry = this._reviewCache.get(`${mr.projectId}-${mr.mrId}`);
+                      if (entry) entry.reviewed = true;
+                    }
+                  })
+                  .catch((err) => console.error(`[GitLab-Reviewer] Review MR !${mr.mrId} failed:`, err.message));
+              }
+            }
+          }
+
+          // Persist cache to worker state
+          const cacheObj = {};
+          for (const [k, v] of this._reviewCache) cacheObj[k] = v;
+          const worker = this.workers.get("gitlab-reviewer");
+          if (worker) {
+            worker.state = { ...(worker.state || {}), reviewCache: cacheObj };
+          }
+        }).catch((err) => {
+          this._addAlert("warning", `GitLab poll error for ${repo.name}: ${err.message}`, "gitlab-reviewer");
+        });
+
+        results.push({ repo: repo.name, projectId: repo.projectId, status: "polling" });
+      } catch (err) {
+        results.push({ repo: repo.name, projectId: repo.projectId, status: "error", error: err.message });
+      }
+    }
+
+    return {
+      summary: `polling ${config.repos.length} repos`,
+      reposConfigured: config.repos.length,
+      results,
+      pendingReviews: this._reviewCache ? Array.from(this._reviewCache.values()).filter(v => !v.reviewed).length : 0,
     };
   }
 

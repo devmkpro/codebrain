@@ -32,6 +32,9 @@ export interface SpawnConfig {
   role?: string;
   taskId?: string;
   activityId?: string;
+  hidden?: boolean;
+  /** Custom system prompt file path — bypasses codebrain-system.md injection. */
+  systemPromptFile?: string;
 }
 
 export interface PaneInfo {
@@ -44,6 +47,7 @@ export interface PaneInfo {
   claudeSessionId?: string;
   providerId?: string;
   model?: string;
+  hidden?: boolean;
 }
 
 function defaultShell(): string {
@@ -486,6 +490,14 @@ export class PtyManager extends EventEmitter {
     try { (state.pty as any).resize(cols, rows); } catch {}
   }
 
+  /**
+   * Set a custom idle timeout for a specific pane.
+   * Default is 3000ms. Review agents need 15000ms+ for LLM processing between API calls.
+   */
+  setIdleTimeout(paneId: string, ms: number): void {
+    this.idleDetector.setIdleTimeout(paneId, ms);
+  }
+
   list(): PaneInfo[] {
     return Array.from(this.panes.values()).map((s) => ({
       paneId: s.paneId,
@@ -497,6 +509,7 @@ export class PtyManager extends EventEmitter {
       claudeSessionId: s.config.claudeSessionId,
       providerId: s.config.providerId,
       model: s.config.model,
+      hidden: s.config.hidden,
     }));
   }
 

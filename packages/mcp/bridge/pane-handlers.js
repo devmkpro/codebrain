@@ -24,6 +24,7 @@ const MEMORY_PROTOCOL_PREFIX = `
 function createPaneHandlers(ptyManager, opts) {
   const roleMap = opts.roleMap || new Map();
   const idleWaiters = new Map();
+  const lastWriteAt = new Map(); // tracks when writePane was last called per pane
 
   ptyManager.on("idle", ({ paneId, idle }) => {
     const waiter = idleWaiters.get(paneId);
@@ -37,7 +38,7 @@ function createPaneHandlers(ptyManager, opts) {
   return {
     roleMap,
 
-    async spawnPane({ agent, cwd, providerId, model, label }) {
+    async spawnPane({ agent, cwd, providerId, model, label, hidden, systemPromptFile }) {
       try {
         // ── Duplicate guard: if a pane with this label already exists and is alive, reuse it ──
         if (label && opts.paneLabels) {
@@ -62,17 +63,30 @@ function createPaneHandlers(ptyManager, opts) {
         }
 
         if (opts.spawnPaneFn) {
-          const result = await opts.spawnPaneFn({ agent, cwd, providerId, model });
+          const result = await opts.spawnPaneFn({ agent, cwd, providerId, model, hidden, systemPromptFile });
           if (result.ok && result.paneId) {
             roleMap.set(result.paneId, "worker");
             if (label && opts.paneLabels) opts.paneLabels.set(result.paneId, label);
+            // Mark panes with custom system prompt to skip memory protocol
+            if (systemPromptFile && opts.paneMemoryState) {
+              opts.paneMemoryState.set(result.paneId, {
+                protocolInjected: true, // prevents MEMORY_PROTOCOL_PREFIX injection
+                skipMemoryProtocol: true,
+              });
+            }
           }
           return result;
         }
-        const config = { agent: agent || "openclaude", cwd: cwd || undefined, providerId: providerId || undefined, model: model || undefined };
+        const config = { agent: agent || "openclaude", cwd: cwd || undefined, providerId: providerId || undefined, model: model || undefined, hidden: hidden || false, systemPromptFile: systemPromptFile || undefined };
         const paneId = await ptyManager.spawn(config);
         roleMap.set(paneId, "worker");
         if (label && opts.paneLabels) opts.paneLabels.set(paneId, label);
+        if (systemPromptFile && opts.paneMemoryState) {
+          opts.paneMemoryState.set(paneId, {
+            protocolInjected: true,
+            skipMemoryProtocol: true,
+          });
+        }
         if (opts.onPaneCreated) opts.onPaneCreated({ paneId, agent: config.agent, cwd: config.cwd, providerId, model });
         return { paneId };
       } catch (err) {
@@ -91,7 +105,8 @@ function createPaneHandlers(ptyManager, opts) {
         const existing = opts.paneMemoryState.get(paneId);
         const isFirstWrite = !existing;
         const isAfterIdle = existing?.wentIdleSinceLastWrite === true;
-        if (isFirstWrite || isAfterIdle) {
+        const skipMemory = existing?.skipMemoryProtocol === true;
+        if ((isFirstWrite || isAfterIdle) && !skipMemory) {
           finalText = MEMORY_PROTOCOL_PREFIX + "\n\n" + text;
         }
         // Track pane state
@@ -107,6 +122,7 @@ function createPaneHandlers(ptyManager, opts) {
       const sanitized = finalText.replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/\r/g, "");
       ptyManager.writeSilent(paneId, sanitized);
       if (submit) {
+        lastWriteAt.set(paneId, Date.now());
         // Send Enter as a separate write after a delay so readline can finish
         // processing pasted text before receiving the submit signal.
         // Sending sanitized+"\r" as one chunk causes readline to buffer the \r
@@ -125,28 +141,52 @@ function createPaneHandlers(ptyManager, opts) {
     },
 
     async waitPaneIdle(paneId, timeout = 300000) {
-      return new Promise((resolve) => {
-        const existing = idleWaiters.get(paneId);
-        if (existing) clearTimeout(existing.timer);
+      const MIN_IDLE_MS = 10000; // ignore idle events within 10s of writePane
+      const startedAt = Date.now();
+      const writeTime = lastWriteAt.get(paneId) || 0;
+
+      const waitForNextIdle = () => new Promise((resolve) => {
+        const remaining = timeout - (Date.now() - startedAt);
+        if (remaining <= 0) { resolve({ idle: true, timedOut: true }); return; }
         const timer = setTimeout(() => {
           idleWaiters.delete(paneId);
           resolve({ idle: true, timedOut: true });
-        }, timeout);
+        }, remaining);
         idleWaiters.set(paneId, { resolve, timer });
       });
+
+      // Wait for first idle
+      const result = await waitForNextIdle();
+      // If idle fired too soon after write (startup idle), wait for next one
+      if (Date.now() - writeTime < MIN_IDLE_MS && !result.timedOut) {
+        return waitForNextIdle();
+      }
+      lastWriteAt.delete(paneId);
+      return result;
     },
 
     async listPanes(paneLabels) {
-      return ptyManager.list().map((p) => ({
-        ...p,
-        role: roleMap.get(p.paneId) || "worker",
-        label: paneLabels.get(p.paneId) || p.agent,
-      }));
+      return ptyManager.list()
+        .filter((p) => !p.hidden)
+        .map((p) => ({
+          ...p,
+          role: roleMap.get(p.paneId) || "worker",
+          label: paneLabels.get(p.paneId) || p.agent,
+        }));
     },
 
     async setRole(paneId, role) {
       roleMap.set(paneId, role);
       return { ok: true, paneId, role };
+    },
+
+    async setIdleTimeout(paneId, ms) {
+      try {
+        ptyManager.setIdleTimeout(paneId, ms);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
     },
 
     async notifyPane(paneId, message) {

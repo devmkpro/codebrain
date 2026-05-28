@@ -1156,6 +1156,141 @@ function createCodebrainMCPServer(bridge) {
   // ── Memory Scope Tool ──────────────────────────────────────────────────────
   server.tool("mcp__codebrain__memory_transfer", "Transfer a memory to a different scope (project/local/user).", { id: z.string(), target_scope: z.string() }, async ({ id, target_scope }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryTransfer({ id, targetScope: target_scope }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
 
+  // ── GitLab MR Tools ───────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__gitlab_list_mrs", "List MRs from a GitLab project. Filter by state (opened, closed, merged, all) and labels.", {
+    projectId: z.string().optional().describe("GitLab project ID (default: GITLAB_PROJECT_ID env var)"),
+    state: z.string().optional().describe("Filter by state: opened, closed, merged, all (default: opened)"),
+    labels: z.array(z.string()).optional().describe("Filter by labels"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitlabListMrs(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__gitlab_get_mr", "Get MR details with parsed diff (files, hunks, line changes). Use for code review.", {
+    projectId: z.string().optional().describe("GitLab project ID"),
+    mrId: z.number().describe("MR IID (not global ID)"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitlabGetMr(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__gitlab_comment_mr", "Post a comment on a GitLab MR. Use position for inline comments (file + line).", {
+    projectId: z.string().optional().describe("GitLab project ID"),
+    mrId: z.number().describe("MR IID"),
+    body: z.string().describe("Comment body (markdown supported)"),
+    position: z.object({
+      new_path: z.string().describe("File path in the diff"),
+      new_line: z.number().describe("Line number in the new version"),
+    }).optional().describe("For inline comments: file path + line number"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitlabCommentMr(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__gitlab_create_mr", "Create a new MR on GitLab.", {
+    projectId: z.string().optional().describe("GitLab project ID"),
+    title: z.string().describe("MR title"),
+    sourceBranch: z.string().describe("Source branch name"),
+    targetBranch: z.string().optional().describe("Target branch (default: main)"),
+    description: z.string().optional().describe("MR description"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitlabCreateMr(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__gitlab_update_mr", "Merge or close an MR on GitLab.", {
+    projectId: z.string().optional().describe("GitLab project ID"),
+    mrId: z.number().describe("MR IID"),
+    state: z.enum(["merge", "close", "reopen"]).describe("Action: merge, close, reopen"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitlabUpdateMr(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__gitlab_create_issue", "Create a new issue on GitLab.", {
+    projectId: z.string().optional().describe("GitLab project ID"),
+    title: z.string().describe("Issue title"),
+    description: z.string().optional().describe("Issue description"),
+    labels: z.array(z.string()).optional().describe("Labels to apply"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitlabCreateIssue(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__gitlab_get_file", "Read a file from a GitLab repo via API (no local clone needed).", {
+    projectId: z.string().optional().describe("GitLab project ID"),
+    filePath: z.string().describe("File path in the repo"),
+    ref: z.string().optional().describe("Branch, tag, or commit SHA (default: main)"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitlabGetFile(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__gitlab_list_repos", "List GitLab repos accessible by the configured token.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitlabListRepos(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__git_detect_project", "Auto-detect the GitLab project for the current workspace by inspecting git remotes and matching against accessible repos.", {
+    path: z.string().optional().describe("Workspace path (defaults to current workspace)"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitDetectProject(args || {}), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Local Git Tools ──────────────────────────────────────────────────────
+  server.tool("mcp__codebrain__git_clone", "Clone a git repo to a local path.", {
+    url: z.string().describe("Git repo URL"),
+    path: z.string().describe("Local directory to clone into"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitClone(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__git_branch", "Create a local git branch.", {
+    path: z.string().describe("Local repo path"),
+    name: z.string().describe("Branch name"),
+    base: z.string().optional().describe("Base branch (default: current HEAD)"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitBranch(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__git_commit_push", "Stage, commit, and push files.", {
+    path: z.string().describe("Local repo path"),
+    message: z.string().describe("Commit message"),
+    files: z.array(z.string()).optional().describe("Files to stage (default: all)"),
+    branch: z.string().optional().describe("Branch to push (default: current)"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitCommitPush(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  server.tool("mcp__codebrain__git_diff", "Get diff between refs in a local repo.", {
+    path: z.string().describe("Local repo path"),
+    base: z.string().optional().describe("Base ref (default: HEAD)"),
+    head: z.string().optional().describe("Head ref (default: working tree)"),
+  }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gitDiff(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
+
+  // ── Review Config Tools ──────────────────────────────────────────────────
+  server.tool("mcp__codebrain__review_config_get", "Get the current MR review configuration (repos, polling, webhook, policies).", {}, async () => {
+    try { return { content: [{ type: "text", text: JSON.stringify(await bridge.reviewConfigGet(), null, 2) }] }; }
+    catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+  });
+
+  server.tool("mcp__codebrain__review_config_set", "Update MR review configuration. Use addRepo/removeRepo for granular changes, or pass full objects for bulk replace.", {
+    repos: z.array(z.object({
+      projectId: z.string(),
+      name: z.string().optional(),
+      branches: z.array(z.string()).optional(),
+      skipDraft: z.boolean().optional(),
+      autoFix: z.boolean().optional(),
+      autoFixSeverity: z.enum(["critical", "high", "medium", "low"]).optional(),
+    })).optional().describe("Full repos list (replaces existing)"),
+    addRepo: z.object({
+      projectId: z.string(),
+      name: z.string().optional(),
+      branches: z.array(z.string()).optional(),
+      skipDraft: z.boolean().optional(),
+      autoFix: z.boolean().optional(),
+      autoFixSeverity: z.enum(["critical", "high", "medium", "low"]).optional(),
+    }).optional().describe("Add or update a single repo"),
+    removeRepo: z.string().optional().describe("Remove a repo by projectId"),
+    polling: z.object({
+      enabled: z.boolean().optional(),
+      intervalMs: z.number().optional(),
+    }).optional().describe("Polling settings"),
+    webhook: z.object({
+      enabled: z.boolean().optional(),
+      secret: z.string().optional(),
+    }).optional().describe("Webhook settings"),
+    maxComments: z.number().optional().describe("Max review comments per MR"),
+    maxCostPerReview: z.number().optional().describe("Max cost (USD) per review"),
+  }, async (args) => {
+    try { return { content: [{ type: "text", text: JSON.stringify(await bridge.reviewConfigSet(args), null, 2) }] }; }
+    catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+  });
+
+  server.tool("mcp__codebrain__review_status", "Get MR review system status: configured repos, polling state, webhook state, recent reviews.", {}, async () => {
+    try { return { content: [{ type: "text", text: JSON.stringify(await bridge.reviewStatus(), null, 2) }] }; }
+    catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+  });
+
+  server.tool("mcp__codebrain__review_run", "Run an AI review on a GitLab MR. Spawns a review agent, analyzes the diff, and posts inline comments. NEVER merges or closes the MR.", {
+    projectId: z.string().describe("GitLab project ID"),
+    mrId: z.string().describe("Merge request IID"),
+    model: z.string().optional().describe("Model to use for review agent (default: gemini-2.5-flash)"),
+    maxComments: z.number().optional().describe("Max findings to post (default: 15)"),
+    timeout: z.number().optional().describe("Agent timeout in ms (default: 600000)"),
+  }, async (args) => {
+    try { return { content: [{ type: "text", text: JSON.stringify(await bridge.reviewRun(args), null, 2) }] }; }
+    catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+  });
+
   return server;
 }
 

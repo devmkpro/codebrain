@@ -138,6 +138,114 @@ async function startMCPServer(ptyManager, opts = {}) {
       return;
     }
 
+    // ── GitLab Webhook: POST /api/webhooks/gitlab ──
+    if (url.pathname === "/api/webhooks/gitlab" && req.method === "POST") {
+      try {
+        const rawBody = await readBody(req);
+        const payload = JSON.parse(rawBody);
+
+        // Validate webhook secret if configured
+        const config = bridge.loadConfig?.() || {};
+        if (config.webhook?.secret) {
+          const token = req.headers["x-gitlab-token"];
+          if (token !== config.webhook.secret) {
+            res.writeHead(403, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid webhook token" }));
+            return;
+          }
+        }
+
+        // Only process merge_request events
+        const eventType = req.headers["x-gitlab-event"];
+        if (eventType !== "Merge Request Hook") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, skipped: true, reason: `Ignored event type: ${eventType}` }));
+          return;
+        }
+
+        const attrs = payload.object_attributes || {};
+        const mrId = attrs.iid;
+        const projectId = String(payload.project?.id || "");
+        const action = attrs.action; // open, update, reopen, close, merge
+        const title = attrs.title || "";
+        const isDraft = attrs.work_in_progress || title.toLowerCase().startsWith("draft:") || title.toLowerCase().startsWith("wip:");
+
+        // Skip if not an actionable event
+        const actionable = ["open", "reopen", "update"].includes(action);
+        if (!actionable) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, skipped: true, reason: `Non-actionable action: ${action}` }));
+          return;
+        }
+
+        // Skip drafts if any repo config says to
+        const repoConfig = (config.repos || []).find((r) => String(r.projectId) === projectId);
+        if (isDraft && repoConfig?.skipDraft) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, skipped: true, reason: "Draft MR skipped" }));
+          return;
+        }
+
+        // Log the incoming MR event
+        const event = {
+          source: "webhook",
+          projectId,
+          mrId,
+          action,
+          title,
+          author: payload.user?.name || payload.user?.username || "unknown",
+          sourceBranch: attrs.source_branch,
+          targetBranch: attrs.target_branch,
+          isDraft,
+          webUrl: attrs.url || "",
+          timestamp: Date.now(),
+        };
+
+        console.log(`[MCP] Webhook: MR !${mrId} "${title}" (${action}) from ${event.author}`);
+
+        // Store in memory for the review pipeline
+        try {
+          const store = opts.memoryStore;
+          if (store) {
+            store.write({
+              type: "episodic",
+              key: `mr-event-${projectId}-${mrId}-${Date.now()}`,
+              content: JSON.stringify(event),
+              tags: ["mr-event", "webhook", action],
+              agent_id: "webhook",
+              workspace: opts.getCurrentWorkspacePath?.() || process.cwd(),
+            });
+          }
+        } catch {}
+
+        // Fire hook for review pipeline
+        try { opts.hooksManager?.fire?.("mr_webhook", event); } catch {}
+
+        // Trigger review pipeline (fire-and-forget — doesn't block HTTP response)
+        if (bridge.reviewRun) {
+          bridge.reviewRun({ projectId, mrId, timeout: 600000 })
+            .then((result) => {
+              const d = result.data;
+              const status = result.ok
+                ? `completed (output=${d?.outputLength || 0} chars, fallback=${d?.fallbackPosted ? "yes" : "no"})`
+                : result.error;
+              console.log(`[MCP] Review MR !${mrId}: ${status}`);
+            })
+            .catch((err) => console.error(`[MCP] Review MR !${mrId} failed:`, err.message));
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, event }));
+      } catch (err) {
+        console.error("[MCP] Webhook error:", err.message);
+        if (!res.headersSent) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      }
+      return;
+    }
+
     // ── Health check ──
     if (url.pathname === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
