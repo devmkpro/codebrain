@@ -14,24 +14,46 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.6.3",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "skill_create + skill_delete + scope (project/global) para MCP"
+      }
+    ]
+  },
+  {
+    "version": "1.6.2",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "default spawn model per provider/workspace + claude-opus-4-8"
+      }
+    ]
+  },
+  {
+    "version": "1.6.0",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "settings page migration + session restore + v1.6.0"
+      },
+      {
+        "kind": "fix",
+        "text": "session-restore type safety and logic bugs"
+      }
+    ]
+  },
+  {
     "version": "1.5.9",
     "date": "maio 2026",
     "highlights": [
       {
-        "kind": "fix",
-        "text": "OpenRouter +Terminal: force --provider openai to prevent auto-detect as Anthropic"
-      },
-      {
         "kind": "feat",
-        "text": "custom model pricing editor: add/edit/delete pricing for any model from any provider"
-      },
-      {
-        "kind": "fix",
-        "text": "CostPanel light mode: correct contrast for green, yellow, red, cyan text"
-      },
-      {
-        "kind": "fix",
-        "text": "OpenRouter provider detection: dynamic ID prefix match for startsWith('openrouter')"
+        "text": "api-proxy OpenAI-compat routing + custom model input for OpenRouter"
       }
     ]
   },
