@@ -14,7 +14,7 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 - **Live task sidebar** — agents update a shared todo list
 - **Session map** — visual graph of all agent sessions
 - **File editor** — browse and edit without leaving the app
-- **Browser automation** — 42 browser MCP tools for web testing
+- **Browser automation** — 46 browser MCP tools for web testing
 - **Shared memory** — agents share context in real-time via SQLite
 - **Swarm coordination** — programmatic worker management and health monitoring
 - **Pattern learning** — agents automatically build and reuse project patterns
@@ -26,7 +26,7 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 - **Background workers** — 7 persistent maintenance daemons (health, patterns, security, git, learning, cache, swarm)
 - **Consensus** — majority/unanimous/weighted voting + automatic leader election
 - **Priority MessageBus** — in-memory messaging with 4 priority levels, ack/retry, TTL, metrics
-- **116 MCP tools** — pane, browser, memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus, skills
+- **156 MCP tools** — pane, browser, memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus, skills
 - **Skills system** — create, list, install and manage prompt templates scoped to project or globally (`~/.codebrain/skills/`)
 - **Voice input** — push-to-talk with Groq Whisper transcription
 
@@ -151,7 +151,7 @@ Agents get these tools automatically:
 | `pane_set_role` | Assign worker/orchestrator role |
 | `todo_manager` | Manage the task sidebar |
 
-### Browser automation (42 tools)
+### Browser automation (46 tools)
 
 | Tool | What it does |
 |------|-------------|
@@ -341,7 +341,7 @@ Agents get these tools automatically:
 | `skill_install` | Install a skill from the GitLab registry to `~/.codebrain/skills/` |
 | `skill_uninstall` | Remove an installed skill |
 
-**Total: 116 MCP tools**
+**Total: 156 MCP tools**
 
 ---
 
@@ -355,7 +355,7 @@ codebrain/
 │   └── styles/             Tailwind + design tokens
 ├── electron/main/          Electron main process
 ├── packages/
-│   ├── mcp/                MCP server (116 agent tools)
+│   ├── mcp/                MCP server (156 agent tools)
 │   │   ├── bridge/         Handler modules (13 files)
 │   │   │   ├── message-bus.js        Priority in-memory messaging
 │   │   │   ├── agent-scorer.js       Multi-factor agent scoring
