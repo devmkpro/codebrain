@@ -65,7 +65,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     tokenEnvVar: "ANTHROPIC_API_KEY",
     signupUrl: "https://console.anthropic.com/settings/keys",
     models: [
-      "claude-opus-4-7", "claude-opus-4-6",
+      "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6",
       "claude-sonnet-4-6",
       "claude-haiku-4-5-20251001",
     ],
@@ -78,7 +78,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     host: "claude",
     signupUrl: "https://claude.ai",
     models: [
-      "claude-opus-4-7", "claude-opus-4-6",
+      "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6",
       "claude-sonnet-4-6",
       "claude-haiku-4-5-20251001",
     ],
@@ -94,7 +94,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     tokenEnvVar: "OPENAI_API_KEY",
     signupUrl: "https://openrouter.ai/keys",
     models: [
-      "anthropic/claude-opus-4.7-fast", "anthropic/claude-sonnet-4",
+      "anthropic/claude-opus-4-8", "anthropic/claude-opus-4.7-fast", "anthropic/claude-sonnet-4",
       "google/gemini-2.5-pro", "google/gemini-3.1-flash-lite",
       "openai/gpt-4o", "openai/gpt-4.1-mini",
       "x-ai/grok-4.3", "mistralai/mistral-medium-3-5",

@@ -41,7 +41,12 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
     if (!activeWorkspace) return;
     const explicit = providerId !== undefined || model !== undefined;
     let nextProviderId = explicit ? providerId : favoritePane?.providerId;
-    const nextModel = explicit ? model : favoritePane?.model;
+    // If no favoritePane model, use per-provider default from localStorage
+    const providerDefaultModels: Record<string, string> = (() => {
+      try { return JSON.parse(localStorage.getItem('codebrain.providerDefaultModels') ?? '{}'); } catch { return {}; }
+    })();
+    const rawModel = explicit ? model : (favoritePane?.model ?? (nextProviderId ? providerDefaultModels[nextProviderId] : undefined));
+    const nextModel = rawModel;
 
     // If model is given but provider is not, resolve provider from the model name.
     // This prevents falling back to MIMO when the user picks a Claude/Gemini model

@@ -15,7 +15,7 @@ import {
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'envvars' | 'skill' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -141,6 +141,13 @@ export function SettingsPage() {
   const [globalEnv, setGlobalEnv] = useState<Record<string, string>>({});
   const [envMsg, setEnvMsg] = useState<string | null>(null);
 
+  // Default spawn config (per workspace + per provider)
+  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
+  const [defaultProviderId, setDefaultProviderId] = useState('');
+  const [defaultModel, setDefaultModel] = useState('');
+  const [spawnMsg, setSpawnMsg] = useState<string | null>(null);
+  const [providerDefaultModels, setProviderDefaultModels] = useState<Record<string, string>>({});
+
   // Terminal settings
   const fontSize         = useTerminalSettings(s => s.fontSize);
   const fontFamily       = useTerminalSettings(s => s.fontFamily);
@@ -185,6 +192,24 @@ export function SettingsPage() {
       })
       .catch(() => {});
     loadProviders().catch(() => {});
+    // Load active workspace + default spawn config
+    (async () => {
+      const recentWs = await (window as any).codeBrainApp?.workspaces?.recent?.().catch(() => []) ?? [];
+      const ws = recentWs[0] ?? null;
+      setActiveWorkspace(ws);
+      if (ws) {
+        const cfg = await (window as any).codeBrainApp?.workspaceConfig?.get?.(ws).catch(() => null);
+        if (cfg?.favoritePane) {
+          setDefaultProviderId(cfg.favoritePane.providerId ?? '');
+          setDefaultModel(cfg.favoritePane.model ?? '');
+        }
+      }
+      // Load per-provider default models from localStorage
+      try {
+        const saved = JSON.parse(localStorage.getItem('codebrain.providerDefaultModels') ?? '{}');
+        setProviderDefaultModels(saved);
+      } catch {}
+    })();
     // Load appConfig (globalEnv)
     (window as any).codeBrainApp?.appConfig?.get?.()
       .then((cfg: any) => {
@@ -245,6 +270,7 @@ export function SettingsPage() {
           { id: 'terminal'  as Section, icon: <Type size={12} />,     label: 'Terminal'  },
           { id: 'shell'     as Section, icon: <Terminal size={12} />, label: 'Shell'     },
           { id: 'providers' as Section, icon: <Zap size={12} />,      label: 'Providers' },
+          { id: 'spawn'     as Section, icon: <Monitor size={12} />,  label: 'Spawn Padrão' },
           { id: 'envvars'   as Section, icon: <Variable size={12} />, label: 'Env Vars' },
           { id: 'skill'     as Section, icon: <Download size={12} />, label: 'Skill & CLI' },
           { id: 'advanced'  as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
@@ -395,6 +421,106 @@ export function SettingsPage() {
             <button onClick={() => loadProviders()}
               className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 transition-all"
             ><RefreshCw size={11} /> Recarregar Providers</button>
+          </SectionCard>
+
+          {/* ── Spawn Padrão ─────────────────────────────────────────── */}
+          <SectionCard id="spawn" icon={<Monitor size={13} />} title="Spawn Padrão" badge="Por Workspace" active={open.includes('spawn')} onToggle={toggleSection}>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              Modelo aberto ao clicar em <span className="text-slate-300 font-mono">+Pane</span> ou ao abrir um workspace.
+              {activeWorkspace && <span className="ml-1 font-mono text-indigo-400 text-[9px]">{activeWorkspace.split(/[\\/]/).pop()}</span>}
+            </p>
+            <div className="space-y-3 mt-2">
+              <div>
+                <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">Provider padrão</label>
+                <select
+                  value={defaultProviderId}
+                  onChange={e => {
+                    setDefaultProviderId(e.target.value);
+                    const p = providers.find((p: any) => p.id === e.target.value);
+                    setDefaultModel(providerDefaultModels[e.target.value] ?? p?.models?.[0] ?? '');
+                  }}
+                  className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer"
+                >
+                  <option value="">— Sem preferência —</option>
+                  {providers.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.label ?? p.id}</option>
+                  ))}
+                </select>
+              </div>
+              {defaultProviderId && (() => {
+                const p = providers.find((p: any) => p.id === defaultProviderId);
+                const models: string[] = p?.models ?? [];
+                return models.length > 0 ? (
+                  <div>
+                    <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">Modelo padrão</label>
+                    <select
+                      value={defaultModel}
+                      onChange={e => setDefaultModel(e.target.value)}
+                      className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer"
+                    >
+                      {models.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                ) : null;
+              })()}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      const agent = providers.find((p: any) => p.id === defaultProviderId)?.host ?? 'openclaude';
+                      if (activeWorkspace) {
+                        const existing = await (window as any).codeBrainApp?.workspaceConfig?.get?.(activeWorkspace).catch(() => ({})) ?? {};
+                        await (window as any).codeBrainApp?.workspaceConfig?.set?.(activeWorkspace, {
+                          ...existing,
+                          favoritePane: defaultProviderId ? { providerId: defaultProviderId, model: defaultModel || undefined, agent } : undefined,
+                        });
+                      }
+                      // Also persist per-provider default
+                      if (defaultProviderId && defaultModel) {
+                        const next = { ...providerDefaultModels, [defaultProviderId]: defaultModel };
+                        setProviderDefaultModels(next);
+                        localStorage.setItem('codebrain.providerDefaultModels', JSON.stringify(next));
+                      }
+                      setSpawnMsg('Salvo!');
+                      setTimeout(() => setSpawnMsg(null), 2500);
+                    } catch {
+                      setSpawnMsg('Erro ao salvar');
+                      setTimeout(() => setSpawnMsg(null), 2500);
+                    }
+                  }}
+                  className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#4F46E5] text-white rounded-lg hover:bg-[#4338CA] transition-colors"
+                >Salvar Padrão</button>
+                {spawnMsg && <span className={`font-mono text-[10px] ${spawnMsg.startsWith('Erro') ? 'text-red-400' : 'text-emerald-400'}`}>{spawnMsg}</span>}
+              </div>
+            </div>
+            {providers.length > 0 && (
+              <>
+                <Divider />
+                <p className="font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-2">Padrão por provider</p>
+                <div className="space-y-2">
+                  {providers.map((p: any) => {
+                    const models: string[] = p.models ?? [];
+                    if (models.length === 0) return null;
+                    return (
+                      <div key={p.id} className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 w-28 truncate shrink-0">{p.label ?? p.id}</span>
+                        <select
+                          value={providerDefaultModels[p.id] ?? models[0]}
+                          onChange={e => {
+                            const next = { ...providerDefaultModels, [p.id]: e.target.value };
+                            setProviderDefaultModels(next);
+                            localStorage.setItem('codebrain.providerDefaultModels', JSON.stringify(next));
+                          }}
+                          className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer"
+                        >
+                          {models.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </SectionCard>
 
           {/* ── Custom Env Vars ───────────────────────────────────────── */}
