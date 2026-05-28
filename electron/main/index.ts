@@ -6,6 +6,8 @@
  */
 import { app, session } from "electron";
 import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import log from "electron-log/main.js";
 
 import { platform } from "./platform";
@@ -21,6 +23,58 @@ import { setupClaudeIntegration } from "./services/setup-claude";
 
 log.initialize();
 
+/**
+ * Auto-install bundled skills from resources/  into ~/.codebrain/skills/.
+ * Each sub-directory in resources/ that contains a skill.json is treated as a bundled skill.
+ * Installs only if the skill is not already present (never overwrites user edits).
+ */
+function autoInstallBundledSkills(): void {
+  try {
+    const isPackaged = app.isPackaged;
+    const resourcesDir = isPackaged
+      ? process.resourcesPath
+      : path.join(__dirname, "..", "..", "resources");
+
+    if (!fs.existsSync(resourcesDir)) return;
+
+    const globalSkillsDir = path.join(os.homedir(), ".codebrain", "skills");
+    fs.mkdirSync(globalSkillsDir, { recursive: true });
+
+    for (const entry of fs.readdirSync(resourcesDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const bundledDir = path.join(resourcesDir, entry.name);
+      const manifestPath = path.join(bundledDir, "skill.json");
+      if (!fs.existsSync(manifestPath)) continue; // not a skill directory
+
+      const targetDir = path.join(globalSkillsDir, entry.name);
+      if (fs.existsSync(targetDir)) continue; // already installed — don't overwrite
+
+      try {
+        fs.mkdirSync(targetDir, { recursive: true });
+        copyDirRecursive(bundledDir, targetDir);
+        log.info(`[Skills] Auto-installed bundled skill: ${entry.name}`);
+      } catch (err) {
+        log.warn(`[Skills] Failed to install bundled skill '${entry.name}':`, err);
+      }
+    }
+  } catch (err) {
+    log.warn("[Skills] autoInstallBundledSkills error:", err);
+  }
+}
+
+function copyDirRecursive(src: string, dest: string): void {
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      fs.mkdirSync(destPath, { recursive: true });
+      copyDirRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 const ctx = createAppContext();
 
 app.whenReady().then(async () => {
@@ -33,6 +87,9 @@ app.whenReady().then(async () => {
 
   // Auto-install Claude Code integration (statusline, .mcp.json, helpers)
   setupClaudeIntegration();
+
+  // Auto-install bundled skills (~/.codebrain/skills/<id>)
+  autoInstallBundledSkills();
 
   ctx.mainWindow = createWindow();
   registerAllIpcHandlers(ctx);

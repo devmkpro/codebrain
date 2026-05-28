@@ -1,0 +1,10 @@
+{
+  "id": "autopart-scraper",
+  "name": "Autopart Scraper",
+  "description": "Dado um URL de site de autopeças, inspeciona o site via browser, infere um ExtractionPlan JSON e gera um script Python standalone que usa o motor whitelabel_scrapper para executar o scraping completo.",
+  "type": "prompt",
+  "version": "0.2.0",
+  "tags": ["scraping", "autopart", "white-label", "motor", "selenium", "hardened"],
+  "model_hint": "claude-sonnet | mimo-v2.5-pro",
+  "trigger_command": "/autopart-scraper"
+}
