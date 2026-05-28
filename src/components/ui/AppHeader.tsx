@@ -330,55 +330,17 @@ function FilesNavBar({ workspacePath }: { workspacePath: string }) {
   );
 }
 
-// ─── Model pricing map (per 1M tokens, USD) ──────────────────────────────────
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  // Anthropic (current models only)
-  'claude-opus-4-7': { input: 5.0, output: 25.0 },
-  'claude-opus-4-6': { input: 5.0, output: 25.0 },
-  'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
-  'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0 },
-  // Gemini 3.x
-  'gemini-3.1-pro-preview': { input: 2.0, output: 12.0 },
-  'gemini-3.1-pro-preview-customtools': { input: 2.0, output: 12.0 },
-  'gemini-3.1-flash-lite': { input: 0.25, output: 1.50 },
-  'gemini-3.1-flash-lite-preview': { input: 0.25, output: 1.50 },
-  'gemini-3.1-flash-tts-preview': { input: 1.0, output: 20.0 },
-  'gemini-3.5-flash': { input: 1.50, output: 9.0 },
-  'gemini-3-flash-preview': { input: 0.50, output: 3.0 },
-  'gemini-3-pro-preview': { input: 2.0, output: 12.0 },
-  // Gemini 2.x
-  'gemini-2.5-pro': { input: 1.25, output: 10.0 },
-  'gemini-2.5-flash': { input: 0.30, output: 2.50 },
-  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
-  'gemini-2.5-flash-preview-tts': { input: 0.50, output: 10.0 },
-  'gemini-2.5-pro-preview-tts': { input: 1.0, output: 20.0 },
-  'gemini-2.5-computer-use-preview-10-2025': { input: 1.25, output: 10.0 },
-  'gemini-2.0-flash': { input: 0.10, output: 0.40 },
-  'gemini-2.0-flash-lite': { input: 0.075, output: 0.30 },
-  'gemini-2.0-flash-001': { input: 0.10, output: 0.40 },
-  'gemini-2.0-flash-lite-001': { input: 0.075, output: 0.30 },
-  // MIMO (Xiaomi)
-  'mimo-v2.5-pro': { input: 1.0, output: 3.0 },
-  'mimo-v2-pro': { input: 1.0, output: 3.0 },
-  'mimo-v2.5': { input: 0.40, output: 2.0 },
-  'mimo-v2-omni': { input: 0.40, output: 2.0 },
-  'mimo-v2-flash': { input: 0.10, output: 0.30 },
-};
-
-function modelPricingLabel(model: string): string | null {
-  const key = model.toLowerCase();
-  for (const [k, v] of Object.entries(MODEL_PRICING)) {
-    if (k.toLowerCase() === key) {
+// ─── Model pricing helpers (source of truth: cost-tracker.js via IPC) ────────
+// Do NOT add hardcoded prices here. Edit packages/mcp/bridge/cost-tracker.js instead.
+function modelPricingLabelFromMap(
+  model: string,
+  models: Record<string, { input: number; output: number; cache_read?: number }>
+): string | null {
+  const lower = model.toLowerCase();
+  for (const [k, v] of Object.entries(models)) {
+    if (k.toLowerCase() === lower) {
       return `IN $${v.input.toFixed(2)} / OUT $${v.output.toFixed(2)}`;
     }
-  }
-  return null;
-}
-
-function getModelPricing(model: string): { input: number; output: number } | null {
-  const lower = model.toLowerCase();
-  for (const [key, cost] of Object.entries(MODEL_PRICING)) {
-    if (key.toLowerCase() === lower) return cost;
   }
   return null;
 }
@@ -395,6 +357,11 @@ function PaneMenu({
   const navigateInActiveTab = useNavStore(s => s.navigateInActiveTab);
   const favoritePane = React.useRef<any>(null);
   const [favLoaded, setFavLoaded] = React.useState(false);
+
+  // Pricing from cost-tracker (single source of truth — packages/mcp/bridge/cost-tracker.js)
+  const costModels = useCostStore(s => s.models);
+  const loadCostModels = useCostStore(s => s.loadModels);
+  React.useEffect(() => { if (Object.keys(costModels).length === 0) loadCostModels(); }, []);
 
   React.useEffect(() => {
     if (!activeWorkspace) return;
@@ -505,8 +472,8 @@ function PaneMenu({
                 : models.map((model: string) => (
                   <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">
                     <div className="truncate">+ {model}</div>
-                    {modelPricingLabel(model) && (
-                      <div className="font-mono text-[8px] text-emerald-500/60 mt-0.5">{modelPricingLabel(model)}</div>
+                    {modelPricingLabelFromMap(model, costModels) && (
+                      <div className="font-mono text-[8px] text-emerald-500/60 mt-0.5">{modelPricingLabelFromMap(model, costModels)}</div>
                     )}
                   </button>
                 ))

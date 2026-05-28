@@ -1,6 +1,29 @@
 import { ipcMain, Notification, shell } from "electron";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { AppContext } from "../context";
 import { getEnhancedProviders } from "../services/providers";
+
+/** Read MCP tool names dynamically — single source of truth is packages/mcp/index.js */
+function getMcpToolNames(): string[] {
+  try {
+    const src = fs.readFileSync(
+      path.join(__dirname, "../../../packages/mcp/index.js"),
+      "utf-8"
+    );
+    const matches = src.match(/server\.tool\(\s*["']([^"']+)["']/g) ?? [];
+    return matches.map(m => {
+      const r = m.match(/["']([^"']+)["']\s*$/);
+      return r ? r[1] : "";
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function getMcpToolCount(): number {
+  return getMcpToolNames().length;
+}
 
 export function registerMiscHandlers(ctx: AppContext): void {
   ipcMain.on("notify", (_event, title: string, body: string) => {
@@ -26,28 +49,9 @@ export function registerMiscHandlers(ctx: AppContext): void {
       port: ctx.mcpServerInfo?.port ?? null,
       sseUrl: ctx.mcpServerInfo?.sseUrl ?? null,
       streamableHttpUrl: ctx.mcpServerInfo?.streamableHttpUrl ?? null,
-      tools: ctx.mcpServerInfo ? [
-        "mcp__codebrain__pane_spawn", "mcp__codebrain__pane_write", "mcp__codebrain__pane_read",
-        "mcp__codebrain__pane_wait_idle", "mcp__codebrain__pane_list", "mcp__codebrain__pane_set_role",
-        "mcp__codebrain__pane_send_message", "mcp__codebrain__pane_read_messages", "mcp__codebrain__todo_manager",
-        "mcp__codebrain__browser_navigate", "mcp__codebrain__browser_open", "mcp__codebrain__browser_back",
-        "mcp__codebrain__browser_forward", "mcp__codebrain__browser_reload", "mcp__codebrain__browser_get_html",
-        "mcp__codebrain__browser_get_text", "mcp__codebrain__browser_get_accessibility_tree",
-        "mcp__codebrain__browser_find_by_text", "mcp__codebrain__browser_get_element_info",
-        "mcp__codebrain__browser_get_url", "mcp__codebrain__browser_click", "mcp__codebrain__browser_fill",
-        "mcp__codebrain__browser_select", "mcp__codebrain__browser_check", "mcp__codebrain__browser_clear",
-        "mcp__codebrain__browser_focus", "mcp__codebrain__browser_hover", "mcp__codebrain__browser_click_at",
-        "mcp__codebrain__browser_hover_at", "mcp__codebrain__browser_drag", "mcp__codebrain__browser_scroll",
-        "mcp__codebrain__browser_type", "mcp__codebrain__browser_key", "mcp__codebrain__browser_shortcut",
-        "mcp__codebrain__browser_wait_for", "mcp__codebrain__browser_wait_for_text",
-        "mcp__codebrain__browser_wait_for_url", "mcp__codebrain__browser_wait_for_load",
-        "mcp__codebrain__browser_screenshot", "mcp__codebrain__browser_screenshot_element",
-        "mcp__codebrain__browser_annotate", "mcp__codebrain__browser_console_log",
-        "mcp__codebrain__browser_clear_console", "mcp__codebrain__browser_network_log",
-        "mcp__codebrain__browser_network_wait", "mcp__codebrain__browser_clear_network",
-        "mcp__codebrain__browser_eval",
-      ] : [],
-      toolCount: ctx.mcpServerInfo ? 47 : 0,
+      // Tool list is read dynamically from packages/mcp/index.js — never hardcode here.
+      tools: ctx.mcpServerInfo ? getMcpToolNames() : [],
+      toolCount: ctx.mcpServerInfo ? getMcpToolCount() : 0,
     },
   }));
 

@@ -8,6 +8,7 @@ const DEFAULT_MODEL_COSTS = {
   // ==========================================
   // ANTHROPIC - CLAUDE 4.x & 4.5/4.6/4.7 (Geração Atual)
   // ==========================================
+  "claude-4.8-opus": { input: 5.0, output: 25.0, cache_read: 0.5 },
   "claude-4.7-opus": { input: 5.0, output: 25.0, cache_read: 0.5 },
   "claude-4.6-opus": { input: 5.0, output: 25.0, cache_read: 0.5 },
   "claude-4.6-sonnet": { input: 3.0, output: 15.0, cache_read: 0.3 },
@@ -142,6 +143,7 @@ const DEFAULT_MODEL_COSTS = {
   // Anthropic API returns different names than our internal cost table.
   // Map API names → same pricing as internal names.
   // ==========================================
+  "claude-opus-4-8": { input: 5.0, output: 25.0, cache_read: 0.5 },
   "claude-opus-4-7": { input: 5.0, output: 25.0, cache_read: 0.5 },
   "claude-opus-4-6": { input: 5.0, output: 25.0, cache_read: 0.5 },
   "claude-opus-4-5-20251101": { input: 5.0, output: 25.0, cache_read: 0.5 },
@@ -580,7 +582,9 @@ class CostTracker {
         this.sessions = new Map(state.sessions);
         this.budgets = new Map(state.budgets);
         this.alerts = state.alerts || [];
-        this.modelCosts = state.modelCosts || { ...DEFAULT_MODEL_COSTS };
+        // Merge: DEFAULT_MODEL_COSTS provides new models added in code updates,
+        // state.modelCosts preserves user-customized prices (user overrides win).
+        this.modelCosts = { ...DEFAULT_MODEL_COSTS, ...(state.modelCosts || {}) };
       }
     } catch (error) {
       console.error("Failed to load cost tracker state:", error);
