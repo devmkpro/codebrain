@@ -4,6 +4,10 @@ import { app } from "electron";
 
 export interface AppConfig {
   theme?: "dark" | "light";
+  gitlabToken?: string;
+  gitlabUrl?: string;
+  /** Custom env vars applied to ALL spawned agents. */
+  globalEnv?: Record<string, string>;
   [key: string]: unknown;
 }
 
