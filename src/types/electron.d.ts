@@ -124,8 +124,6 @@ export interface WorkspaceConfig {
 export interface AppConfig {
   theme?: "dark" | "light";
   autoRestore?: boolean;
-  gitlabToken?: string;
-  gitlabUrl?: string;
   [key: string]: unknown;
 }
 

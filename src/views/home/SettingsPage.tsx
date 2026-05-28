@@ -4,7 +4,7 @@ import {
   Terminal, Zap, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, Info, Save,
   RotateCcw, Download, Trash2, RefreshCw, Shield,
-  Type, Monitor, GitBranch, Plus, X, Variable,
+  Type, Monitor, Plus, X, Variable,
 } from 'lucide-react';
 import {
   useTerminalSettings,
@@ -15,7 +15,7 @@ import {
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'envvars' | 'skill' | 'gitlab' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'envvars' | 'skill' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -137,10 +137,6 @@ export function SettingsPage() {
   const [claudeCliStatus,  setClaudeCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
-  const [gitlabToken, setGitlabToken] = useState('');
-  const [gitlabUrl,   setGitlabUrl]   = useState('');
-  const [gitlabMsg,   setGitlabMsg]   = useState<string | null>(null);
-
   // Global env vars
   const [globalEnv, setGlobalEnv] = useState<Record<string, string>>({});
   const [envMsg, setEnvMsg] = useState<string | null>(null);
@@ -189,11 +185,9 @@ export function SettingsPage() {
       })
       .catch(() => {});
     loadProviders().catch(() => {});
-    // Load appConfig (GitLab token + URL)
+    // Load appConfig (globalEnv)
     (window as any).codeBrainApp?.appConfig?.get?.()
       .then((cfg: any) => {
-        if (cfg && typeof cfg.gitlabToken === 'string') setGitlabToken(cfg.gitlabToken);
-        if (cfg && typeof cfg.gitlabUrl === 'string') setGitlabUrl(cfg.gitlabUrl);
         if (cfg && typeof cfg.globalEnv === 'object' && cfg.globalEnv) setGlobalEnv(cfg.globalEnv as Record<string, string>);
       })
       .catch(() => {});
@@ -253,7 +247,6 @@ export function SettingsPage() {
           { id: 'providers' as Section, icon: <Zap size={12} />,      label: 'Providers' },
           { id: 'envvars'   as Section, icon: <Variable size={12} />, label: 'Env Vars' },
           { id: 'skill'     as Section, icon: <Download size={12} />, label: 'Skill & CLI' },
-          { id: 'gitlab'    as Section, icon: <GitBranch size={12} />, label: 'GitLab'    },
           { id: 'advanced'  as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
         ] as const).map(({ id, icon, label }) => (
           <button key={id} onClick={() => toggleSection(id)}
@@ -575,58 +568,6 @@ export function SettingsPage() {
               >
                 <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
               </button>
-            </div>
-          </SectionCard>
-
-          {/* ── GitLab ─────────────────────────────────────────────── */}
-          <SectionCard id="gitlab" icon={<GitBranch size={13} />} title="GitLab" badge="Token" active={open.includes('gitlab')} onToggle={toggleSection}>
-            <div className="space-y-3">
-              <div>
-                <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">Personal Access Token</label>
-                <input
-                  type="password"
-                  value={gitlabToken}
-                  onChange={e => setGitlabToken(e.target.value)}
-                  placeholder="glpat-xxxx"
-                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors font-mono"
-                />
-              </div>
-              <div>
-                <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">GitLab URL</label>
-                <input
-                  type="text"
-                  value={gitlabUrl}
-                  onChange={e => setGitlabUrl(e.target.value)}
-                  placeholder="https://gitlab.com"
-                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors font-mono"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={async () => {
-                    try {
-                      await (window as any).codeBrainApp?.appConfig?.set?.({
-                        gitlabToken: gitlabToken || undefined,
-                        gitlabUrl: gitlabUrl || undefined,
-                      });
-                      setGitlabMsg('Salvo!');
-                      setTimeout(() => setGitlabMsg(null), 2500);
-                    } catch {
-                      setGitlabMsg('Erro ao salvar');
-                      setTimeout(() => setGitlabMsg(null), 2500);
-                    }
-                  }}
-                  className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#4F46E5] text-white rounded-lg hover:bg-[#4338CA] transition-colors"
-                >
-                  Salvar Token
-                </button>
-                {gitlabMsg && (
-                  <span className={`font-mono text-[10px] ${gitlabMsg.startsWith('Erro') ? 'text-red-400' : 'text-emerald-400'}`}>
-                    {gitlabMsg}
-                  </span>
-                )}
-              </div>
-              <p className="text-[9px] text-slate-600 font-mono">Token sincronizado automaticamente para MCP bridge (~/.codebrain/gitlab-token)</p>
             </div>
           </SectionCard>
 

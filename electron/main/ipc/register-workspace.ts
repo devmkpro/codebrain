@@ -136,13 +136,5 @@ export function registerWorkspaceHandlers(ctx: AppContext): void {
   ipcMain.handle("appConfig:get", () => ctx.configStore.get());
   ipcMain.handle("appConfig:set", (_event, patch: Record<string, unknown>) => {
     ctx.configStore.set(patch);
-    // Sync GitLab token to file for MCP bridge fallback
-    if (patch.gitlabToken !== undefined) {
-      try {
-        const tokenPath = path.join(os.homedir(), ".codebrain", "gitlab-token");
-        if (!fs.existsSync(path.dirname(tokenPath))) fs.mkdirSync(path.dirname(tokenPath), { recursive: true });
-        fs.writeFileSync(tokenPath, String(patch.gitlabToken || ""), "utf-8");
-      } catch {}
-    }
   });
 }
