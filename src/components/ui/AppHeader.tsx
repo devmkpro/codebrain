@@ -25,7 +25,6 @@ import { useBrowserStore } from '../../stores/browser-store';
 import { useTerminalSettings } from '../../stores/terminal-settings-store';
 import { ProvidersModal } from '../providers/ProvidersModal';
 import { SquadModal } from '../squads/SquadModal';
-import { SettingsModal } from '../settings/SettingsModal';
 import { DiagnosticsModal } from '../diagnostics/DiagnosticsModal';
 
 // ─── Shared modal-state hook ──────────────────────────────────────────────────
@@ -33,7 +32,6 @@ function useModals() {
   const [showProviders, setShowProviders] = React.useState(false);
   const [providersStep, setProvidersStep] = React.useState('list');
   const [showSquad, setShowSquad] = React.useState(false);
-  const [showSettings, setShowSettings] = React.useState(false);
   const [showDiag, setShowDiag] = React.useState(false);
 
   const openProviders = (step = 'list') => { setProvidersStep(step); setShowProviders(true); };
@@ -42,7 +40,6 @@ function useModals() {
   return {
     showProviders, openProviders, closeProviders, providersStep,
     showSquad, setShowSquad,
-    showSettings, setShowSettings,
     showDiag, setShowDiag,
   };
 }
@@ -232,7 +229,6 @@ function Modals({ modals: m, activeWorkspace }: { modals: ReturnType<typeof useM
     <>
       <ProvidersModal open={m.showProviders} initialStep={m.providersStep} onClose={m.closeProviders} />
       <SquadModal open={m.showSquad} onClose={() => m.setShowSquad(false)} onSpawn={handleSpawnSquad} />
-      <SettingsModal open={m.showSettings} onClose={() => m.setShowSettings(false)} />
       <DiagnosticsModal open={m.showDiag} activeWorkspace={activeWorkspace} onClose={() => m.setShowDiag(false)} />
     </>
   );
@@ -672,7 +668,6 @@ function WorkspaceHeader() {
     api.getConfig().then((c: any) => setAudioConfig(c)).catch(() => setAudioConfig(null));
   }, []);
   React.useEffect(() => { refreshAudio(); }, [refreshAudio]);
-  React.useEffect(() => { if (!m.showSettings) refreshAudio(); }, [m.showSettings, refreshAudio]);
 
   React.useEffect(() => {
     if (!showAccount) return;
@@ -729,8 +724,15 @@ function WorkspaceHeader() {
     try {
       const r = await (window as any).codeBrainApp?.session?.loadSnapshot(activeWorkspace);
       if (!r?.ok || !r.snapshot) return;
-      const orch = await (window as any).codeBrainApp?.pty?.spawn({ agent: 'openclaude', cwd: activeWorkspace, role: 'orchestrator', permissionMode: permMode, sessionContext: r.snapshot.orchestratorPrompt });
-      if (orch?.ok && orch.paneId) addPane({ id: orch.paneId, agent: 'openclaude', cwd: activeWorkspace, workspacePath: activeWorkspace, externallySpawned: true });
+      const { deterministicRestore } = await import("../../lib/session-restore");
+      const result = await deterministicRestore(r.snapshot, addPane, permMode);
+      if (result.restored > 0) {
+        (window as any).codeBrainApp?.notify?.(
+          "Sessão restaurada",
+          `${result.restored} pane(s) restaurado(s).` +
+            (result.skipped > 0 ? ` ${result.skipped} pulado(s).` : "")
+        );
+      }
     } finally { setSnapshotBusy(false); }
   };
 

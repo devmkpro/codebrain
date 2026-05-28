@@ -1,7 +1,7 @@
 import React from "react";
 import { outputModeForInteractionMode, normalizedVoiceMode } from "../stores/tasks-store";
 
-export function useAudioConfig(showSettingsModal: boolean) {
+export function useAudioConfig() {
   const [audioConfig, setAudioConfig] = React.useState<any>(null);
   const [audioModeBusy, setAudioModeBusy] = React.useState(false);
 
@@ -12,7 +12,6 @@ export function useAudioConfig(showSettingsModal: boolean) {
   }, []);
 
   React.useEffect(() => { refreshAudioConfig(); }, [refreshAudioConfig]);
-  React.useEffect(() => { if (!showSettingsModal) refreshAudioConfig(); }, [showSettingsModal, refreshAudioConfig]);
 
   const saveAudioPatch = async (patch: Record<string, unknown>) => {
     if (!audioConfig || audioModeBusy) return;

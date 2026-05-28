@@ -4,7 +4,7 @@ import {
   Terminal, Zap, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, Info, Save,
   RotateCcw, Download, Trash2, RefreshCw, Shield,
-  Type, Monitor,
+  Type, Monitor, GitBranch, Plus, X, Variable,
 } from 'lucide-react';
 import {
   useTerminalSettings,
@@ -15,7 +15,7 @@ import {
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'skill' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'envvars' | 'skill' | 'gitlab' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -87,6 +87,45 @@ function Divider() {
   return <div className="border-t border-white/5" />;
 }
 
+// ─── Add Env Var Row ─────────────────────────────────────────────────────────
+function AddEnvVarRow({ onAdd }: { onAdd: (key: string, value: string) => void }) {
+  const [key, setKey] = useState('');
+  const [value, setValue] = useState('');
+  const handleAdd = () => {
+    if (!key.trim()) return;
+    onAdd(key.trim(), value);
+    setKey('');
+    setValue('');
+  };
+  return (
+    <div className="flex items-center gap-2 mt-2">
+      <input
+        type="text"
+        value={key}
+        onChange={e => setKey(e.target.value)}
+        placeholder="KEY"
+        className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors"
+        onKeyDown={e => e.key === 'Enter' && handleAdd()}
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        placeholder="value"
+        className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors"
+        onKeyDown={e => e.key === 'Enter' && handleAdd()}
+      />
+      <button
+        onClick={handleAdd}
+        disabled={!key.trim()}
+        className="w-7 h-7 flex items-center justify-center rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-30 transition-all"
+      >
+        <Plus size={11} />
+      </button>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export function SettingsPage() {
   const [open,      setOpen]   = useState<Section[]>(['terminal']);
@@ -98,6 +137,13 @@ export function SettingsPage() {
   const [claudeCliStatus,  setClaudeCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
+  const [gitlabToken, setGitlabToken] = useState('');
+  const [gitlabUrl,   setGitlabUrl]   = useState('');
+  const [gitlabMsg,   setGitlabMsg]   = useState<string | null>(null);
+
+  // Global env vars
+  const [globalEnv, setGlobalEnv] = useState<Record<string, string>>({});
+  const [envMsg, setEnvMsg] = useState<string | null>(null);
 
   // Terminal settings
   const fontSize         = useTerminalSettings(s => s.fontSize);
@@ -143,6 +189,14 @@ export function SettingsPage() {
       })
       .catch(() => {});
     loadProviders().catch(() => {});
+    // Load appConfig (GitLab token + URL)
+    (window as any).codeBrainApp?.appConfig?.get?.()
+      .then((cfg: any) => {
+        if (cfg && typeof cfg.gitlabToken === 'string') setGitlabToken(cfg.gitlabToken);
+        if (cfg && typeof cfg.gitlabUrl === 'string') setGitlabUrl(cfg.gitlabUrl);
+        if (cfg && typeof cfg.globalEnv === 'object' && cfg.globalEnv) setGlobalEnv(cfg.globalEnv as Record<string, string>);
+      })
+      .catch(() => {});
   }, []);
 
   const toggleSection = (s: Section) => setOpen(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
@@ -197,7 +251,9 @@ export function SettingsPage() {
           { id: 'terminal'  as Section, icon: <Type size={12} />,     label: 'Terminal'  },
           { id: 'shell'     as Section, icon: <Terminal size={12} />, label: 'Shell'     },
           { id: 'providers' as Section, icon: <Zap size={12} />,      label: 'Providers' },
+          { id: 'envvars'   as Section, icon: <Variable size={12} />, label: 'Env Vars' },
           { id: 'skill'     as Section, icon: <Download size={12} />, label: 'Skill & CLI' },
+          { id: 'gitlab'    as Section, icon: <GitBranch size={12} />, label: 'GitLab'    },
           { id: 'advanced'  as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
         ] as const).map(({ id, icon, label }) => (
           <button key={id} onClick={() => toggleSection(id)}
@@ -348,6 +404,72 @@ export function SettingsPage() {
             ><RefreshCw size={11} /> Recarregar Providers</button>
           </SectionCard>
 
+          {/* ── Custom Env Vars ───────────────────────────────────────── */}
+          <SectionCard id="envvars" icon={<Variable size={13} />} title="Custom Env Vars" badge="Global" active={open.includes('envvars')} onToggle={toggleSection}>
+            <p className="text-[10px] text-slate-500 leading-relaxed mb-3">
+              Variáveis de ambiente aplicadas a <span className="text-slate-300 font-medium">todos</span> os agentes spawnados.
+              Útil para API keys, base URLs, e flags que precisam estar disponíveis em qualquer terminal.
+            </p>
+            <div className="space-y-2">
+              {Object.entries(globalEnv).map(([key, value]) => (
+                <div key={key} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={key}
+                    readOnly
+                    className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-400 placeholder-slate-700 focus:outline-none"
+                  />
+                  <input
+                    type="password"
+                    value={value}
+                    onChange={e => {
+                      const next = { ...globalEnv, [key]: e.target.value };
+                      setGlobalEnv(next);
+                    }}
+                    className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors"
+                  />
+                  <button
+                    onClick={() => {
+                      const next = { ...globalEnv };
+                      delete next[key];
+                      setGlobalEnv(next);
+                    }}
+                    className="w-7 h-7 flex items-center justify-center rounded bg-white/5 border border-white/10 text-slate-500 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/5 transition-all"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+              {Object.keys(globalEnv).length === 0 && (
+                <p className="text-[10px] text-slate-600 font-mono py-2 text-center">Nenhuma variável configurada</p>
+              )}
+            </div>
+            <AddEnvVarRow onAdd={(k, v) => setGlobalEnv(prev => ({ ...prev, [k]: v }))} />
+            <div className="flex items-center gap-3 mt-3">
+              <button
+                onClick={async () => {
+                  try {
+                    await (window as any).codeBrainApp?.appConfig?.set?.({ globalEnv });
+                    setEnvMsg('Salvo!');
+                    setTimeout(() => setEnvMsg(null), 2500);
+                  } catch {
+                    setEnvMsg('Erro ao salvar');
+                    setTimeout(() => setEnvMsg(null), 2500);
+                  }
+                }}
+                className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#4F46E5] text-white rounded-lg hover:bg-[#4338CA] transition-colors"
+              >
+                Salvar Env Vars
+              </button>
+              {envMsg && (
+                <span className={`font-mono text-[10px] ${envMsg.startsWith('Erro') ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {envMsg}
+                </span>
+              )}
+            </div>
+            <p className="text-[9px] text-slate-600 font-mono mt-2">Aplicado em todos os spawns. Para session-only, use export no terminal.</p>
+          </SectionCard>
+
           {/* ── Skill & CLI ──────────────────────────────────────────── */}
           <SectionCard id="skill" icon={<Download size={13} />} title="Skill & CLI" active={open.includes('skill')} onToggle={toggleSection}>
             {/* Outras skills */}
@@ -456,6 +578,58 @@ export function SettingsPage() {
             </div>
           </SectionCard>
 
+          {/* ── GitLab ─────────────────────────────────────────────── */}
+          <SectionCard id="gitlab" icon={<GitBranch size={13} />} title="GitLab" badge="Token" active={open.includes('gitlab')} onToggle={toggleSection}>
+            <div className="space-y-3">
+              <div>
+                <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">Personal Access Token</label>
+                <input
+                  type="password"
+                  value={gitlabToken}
+                  onChange={e => setGitlabToken(e.target.value)}
+                  placeholder="glpat-xxxx"
+                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors font-mono"
+                />
+              </div>
+              <div>
+                <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">GitLab URL</label>
+                <input
+                  type="text"
+                  value={gitlabUrl}
+                  onChange={e => setGitlabUrl(e.target.value)}
+                  placeholder="https://gitlab.com"
+                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors font-mono"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      await (window as any).codeBrainApp?.appConfig?.set?.({
+                        gitlabToken: gitlabToken || undefined,
+                        gitlabUrl: gitlabUrl || undefined,
+                      });
+                      setGitlabMsg('Salvo!');
+                      setTimeout(() => setGitlabMsg(null), 2500);
+                    } catch {
+                      setGitlabMsg('Erro ao salvar');
+                      setTimeout(() => setGitlabMsg(null), 2500);
+                    }
+                  }}
+                  className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#4F46E5] text-white rounded-lg hover:bg-[#4338CA] transition-colors"
+                >
+                  Salvar Token
+                </button>
+                {gitlabMsg && (
+                  <span className={`font-mono text-[10px] ${gitlabMsg.startsWith('Erro') ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {gitlabMsg}
+                  </span>
+                )}
+              </div>
+              <p className="text-[9px] text-slate-600 font-mono">Token sincronizado automaticamente para MCP bridge (~/.codebrain/gitlab-token)</p>
+            </div>
+          </SectionCard>
+
           {/* ── Avançado ─────────────────────────────────────────────── */}
           <SectionCard id="advanced" icon={<Shield size={13} />} title="Avançado" badge="Cuidado" active={open.includes('advanced')} onToggle={toggleSection}>
             <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/15 flex items-start gap-2.5">
@@ -504,6 +678,7 @@ export function SettingsPage() {
             { label: 'Tema',      value: theme === 'light' ? 'Claro' : 'Escuro' },
             { label: 'Shell',     value: defaultShellPath ? defaultShellPath.split('/').pop() ?? defaultShellPath : 'Sistema padrão' },
             { label: 'Providers', value: `${providers.length} configurado${providers.length !== 1 ? 's' : ''}` },
+            { label: 'Env Vars',  value: `${Object.keys(globalEnv).length} variáve${Object.keys(globalEnv).length !== 1 ? 'is' : 'l'}` },
             { label: 'Skill',     value: skillStatus === null ? '—' : skillStatus.installed ? 'Instalada' : 'Não instalada' },
             { label: 'CLI',       value: cliStatus === null ? '—' : cliStatus.found ? 'Encontrada' : 'Não encontrada' },
           ].map(({ label, value }) => (

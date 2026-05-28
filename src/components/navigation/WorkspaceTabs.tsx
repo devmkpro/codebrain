@@ -9,7 +9,7 @@ import { useTasksStore, tabLabel, normalizedVoiceMode } from "../../stores/tasks
 import { useVoiceStore } from "../../stores/voice-store";
 import { ProvidersModal } from "../providers/ProvidersModal";
 import { SquadModal } from "../squads/SquadModal";
-import { SettingsModal } from "../settings/SettingsModal";
+import { useRouter } from "../../lib/router";
 import { DiagnosticsModal } from "../diagnostics/DiagnosticsModal";
 
 import { useSpawnPane } from "../../hooks/useSpawnPane";
@@ -46,9 +46,9 @@ export function WorkspaceTabs() {
   const [showProvidersModal, setShowProvidersModal] = React.useState(false);
   const [providersInitialStep, setProvidersInitialStep] = React.useState("list");
   const [showSquadModal, setShowSquadModal] = React.useState(false);
-  const [showSettingsModal, setShowSettingsModal] = React.useState(false);
   const [showDiagnosticsModal, setShowDiagnosticsModal] = React.useState(false);
 
+  const { navigate } = useRouter();
   const activeTab = !onHome ? tabs[activeTabIndex] : undefined;
   const activeWorkspace = activeTab?.workspacePath;
   const isMapView = activeTab?.view.kind === "map";
@@ -58,7 +58,7 @@ export function WorkspaceTabs() {
   // Hooks
   const { permissionMode, setPermissionMode, handleAddPane, handleAddTerminal, handleAddBrowser, handleSpawnSquad, detectedUrl } = useSpawnPane(activeWorkspace);
   const { snapshotBusy, savedPanes, loadSavedPanes, handleSaveSnapshot, handleRestoreSnapshot, handleRestorePane } = useSessionActions(activeWorkspace, permissionMode, addPane);
-  const { audioConfig, audioModeBusy, toggleVoiceInteractionMode } = useAudioConfig(showSettingsModal);
+  const { audioConfig, audioModeBusy, toggleVoiceInteractionMode } = useAudioConfig();
 
   useClickOutside(accountRef, showAccount, () => setShowAccount(false));
   useClickOutside(paneMenuRef, showPaneMenu, () => setShowPaneMenu(false));
@@ -231,7 +231,7 @@ export function WorkspaceTabs() {
           <button className="w-full text-left px-3 py-2.5 font-mono text-[11px] text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all border-b border-white/5" onClick={() => { setShowAccount(false); window.codeBrainApp?.auth?.openBilling?.(); }}>Gerenciar assinatura →</button>
           {activeWorkspace && <button className="w-full text-left px-3 py-2.5 font-mono text-[11px] text-gray-400 hover:text-indigo-400 hover:bg-indigo-500/5 transition-all border-b border-white/5 flex items-center gap-2" onClick={() => { setShowAccount(false); setShowSquadModal(true); }}><span className="text-indigo-500/70">+</span> Squad</button>}
           <button className="w-full text-left px-3 py-2.5 font-mono text-[11px] text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all border-b border-white/5 flex items-center gap-2" onClick={() => { setShowAccount(false); setProvidersInitialStep("pickTemplate"); setShowProvidersModal(true); }}><Settings size={12} strokeWidth={1.5} /> Providers</button>
-          <button className="w-full text-left px-3 py-2.5 font-mono text-[11px] text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all border-b border-white/5 flex items-center gap-2" onClick={() => { setShowAccount(false); setShowSettingsModal(true); }}><Settings size={12} strokeWidth={1.5} /> Configurações</button>
+          <button className="w-full text-left px-3 py-2.5 font-mono text-[11px] text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all border-b border-white/5 flex items-center gap-2" onClick={() => { setShowAccount(false); goHome(); navigate('/settings'); }}><Settings size={12} strokeWidth={1.5} /> Configurações</button>
           <button className="w-full text-left px-3 py-2.5 font-mono text-[11px] text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all border-b border-white/5 flex items-center gap-2" onClick={() => { setShowAccount(false); setShowDiagnosticsModal(true); }}><Activity size={12} strokeWidth={1.5} /> Diagnostico</button>
           <button className="w-full text-left px-3 py-2.5 font-mono text-[11px] text-gray-500 hover:text-rose-400 hover:bg-rose-500/5 transition-all" onClick={() => { setShowAccount(false); window.codeBrainApp?.auth?.logout?.(); }}>Sair</button>
         </div>}
@@ -240,7 +240,6 @@ export function WorkspaceTabs() {
 
     <ProvidersModal open={showProvidersModal} initialStep={providersInitialStep} onClose={() => { setShowProvidersModal(false); setProvidersInitialStep("list"); }} />
     <SquadModal open={showSquadModal} onClose={() => setShowSquadModal(false)} onSpawn={handleSpawnSquad} />
-    <SettingsModal open={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
     <DiagnosticsModal open={showDiagnosticsModal} activeWorkspace={activeWorkspace} onClose={() => setShowDiagnosticsModal(false)} />
   </div>;
 }

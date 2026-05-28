@@ -3,7 +3,7 @@ import { X$1 } from "../../stores/providers-store";
 import { usePushToTalk, spawnedPaneIds, openWebLink } from "../../stores/voice-store";
 import { xtermExports, addonFitExports, L } from "../../lib/xterm-exports";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { Copy, Clipboard, Square, MessageSquare, Terminal as TerminalIcon } from "lucide-react";
+import { Copy, Clipboard, Square, MessageSquare, Terminal as TerminalIcon, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 // TerminalPane
@@ -34,6 +34,9 @@ export function TerminalPane({
   const fontStack = (FONT_OPTIONS.find(f => f.id === fontFamilyId) ?? FONT_OPTIONS[0]).stack;
   const [dropHover, setDropHover] = React.useState(false);
   const [showSavedContext, setShowSavedContext] = React.useState(true);
+  const [envPopup, setEnvPopup] = React.useState(false);
+  const [envKey, setEnvKey] = React.useState('');
+  const [envValue, setEnvValue] = React.useState('');
   const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
   const savedSelectionRef = React.useRef('');
   const termElementRef = React.useRef<HTMLElement | null>(null);
@@ -93,6 +96,30 @@ export function TerminalPane({
       window.codeBrainApp?.pty.write(pane.id, "/btw ");
     }
   }, [pane.id]);
+
+  const handleSaveEnvVar = React.useCallback(async () => {
+    const k = envKey.trim();
+    if (!k) return;
+    // Persist to config store
+    try {
+      const cfg = await (window as any).codeBrainApp?.appConfig?.get?.();
+      const prev = (cfg?.globalEnv ?? {}) as Record<string, string>;
+      await (window as any).codeBrainApp?.appConfig?.set?.({ globalEnv: { ...prev, [k]: envValue } });
+    } catch {}
+    // Also write to current terminal session for immediate use
+    window.codeBrainApp?.pty.write(pane.id, `export ${k}=${envValue}\r`);
+    setEnvKey('');
+    setEnvValue('');
+    setEnvPopup(false);
+  }, [envKey, envValue, pane.id]);
+
+  // Close env popup on outside click
+  React.useEffect(() => {
+    if (!envPopup) return;
+    const close = () => setEnvPopup(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [envPopup]);
 
   const pushToTalk = usePushToTalk({
     paneId: pane.id,
@@ -475,6 +502,61 @@ export function TerminalPane({
                 <MessageSquare size={10} className="group-hover/btn:scale-110 transition-transform" />
                 <span className="text-[9px] font-bold uppercase tracking-tighter">/btw</span>
               </button>
+
+              {/* /env quick action */}
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setEnvPopup(!envPopup); }}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/btn"
+                  title="Set env var (persiste + aplica no terminal)"
+                >
+                  <Settings size={10} className="group-hover/btn:scale-110 transition-transform" />
+                  <span className="text-[9px] font-bold uppercase tracking-tighter">/env</span>
+                </button>
+                {envPopup && (
+                  <div
+                    className="absolute bottom-full right-0 mb-2 p-2.5 rounded-lg bg-[#1A1A22] border border-white/10 shadow-xl z-50 w-64"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <p className="text-[9px] text-slate-500 font-mono uppercase tracking-widest mb-2">Set Environment Variable</p>
+                    <div className="flex flex-col gap-1.5">
+                      <input
+                        type="text"
+                        value={envKey}
+                        onChange={e => setEnvKey(e.target.value)}
+                        placeholder="KEY"
+                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40"
+                        onKeyDown={e => e.key === 'Enter' && handleSaveEnvVar()}
+                        autoFocus
+                      />
+                      <input
+                        type="text"
+                        value={envValue}
+                        onChange={e => setEnvValue(e.target.value)}
+                        placeholder="value"
+                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40"
+                        onKeyDown={e => e.key === 'Enter' && handleSaveEnvVar()}
+                      />
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={handleSaveEnvVar}
+                          disabled={!envKey.trim()}
+                          className="flex-1 px-2 py-1 rounded bg-[#4F46E5] text-white text-[9px] font-bold uppercase tracking-widest hover:bg-[#4338CA] disabled:opacity-30 transition-colors"
+                        >
+                          Salvar + Export
+                        </button>
+                        <button
+                          onClick={() => { setEnvPopup(false); setEnvKey(''); setEnvValue(''); }}
+                          className="px-2 py-1 rounded bg-white/5 text-slate-500 text-[9px] font-bold hover:text-slate-300 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[8px] text-slate-600 mt-1.5">Persiste no config + exporta no terminal atual</p>
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={(e) => { e.stopPropagation(); stopTerminal(); }}

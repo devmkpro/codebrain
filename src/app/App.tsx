@@ -10,6 +10,7 @@ import { subscribeTaskUpdates } from "../stores/tasks-store";
 import { subscribeProviderUpdates } from "../stores/providers-store";
 import { useBrowserStore } from "../stores/browser-store";
 import { useTerminalSettings } from "../stores/terminal-settings-store";
+import { useSessionRestore } from "../hooks/useSessionRestore";
 import { UpdateNotificationBanner } from "../components/navigation/UpdateNotificationBanner";
 import { AuthGate } from "../components/auth/AuthGate";
 // WorkspaceTabs moved into AppShell/AppHeader
@@ -119,6 +120,7 @@ export function App() {
     }, ms));
     return () => timers.forEach(window.clearTimeout);
   }, [reconcileLivePanes]);
+  useSessionRestore(workspace, addPane);
   React.useEffect(() => {
     const off = window.codeBrainApp?.pty.onPaneAdded?.(info => {
       const extra = info;
