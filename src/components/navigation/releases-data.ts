@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.6.5",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "skill_list/get/create/delete usam getCurrentWorkspacePath como cwd padrão"
+      }
+    ]
+  },
+  {
     "version": "1.6.4",
     "date": "maio 2026",
     "highlights": [

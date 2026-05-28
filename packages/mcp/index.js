@@ -1104,21 +1104,6 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
-  // ── mcp__codebrain__skill_sync ───────────────────────────────────────────
-  server.tool(
-    "mcp__codebrain__skill_sync",
-    "Sync skills with the GitLab registry. Pull downloads latest skills, push uploads local changes.",
-    { direction: z.enum(["pull", "push"]).describe("Sync direction: 'pull' (GitLab→local) or 'push' (local→GitLab)") },
-    async (args) => {
-      try {
-        const result = await bridge.skillSync({ direction: args.direction });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (err) {
-        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
-      }
-    }
-  );
-
   // ── Consensus Tools ────────────────────────────────────────────────────────
 
   server.tool("mcp__codebrain__swarm_vote", "Start a vote among agents. Modes: majority, unanimous, weighted.", { question: z.string(), options: z.array(z.string()).min(2), mode: z.enum(["majority","unanimous","weighted"]).optional(), timeoutMs: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmVote(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
