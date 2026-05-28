@@ -239,6 +239,28 @@ function createCodebrainMCPServer(bridge) {
     },
     async (args) => {
       try {
+        // ── Workspace isolation: sender and recipient must be in the same workspace ──
+        if (bridge.getPaneWorkspacePath) {
+          const senderWorkspace = bridge.getPaneWorkspacePath(args.from);
+          const recipientWorkspace = bridge.getPaneWorkspacePath(args.to);
+          if (senderWorkspace && recipientWorkspace) {
+            const resolvedSender = path.resolve(senderWorkspace);
+            const resolvedRecipient = path.resolve(recipientWorkspace);
+            if (resolvedSender !== resolvedRecipient) {
+              return {
+                content: [{
+                  type: "text",
+                  text: JSON.stringify({
+                    ok: false,
+                    error: `Cannot send message: sender pane "${args.from}" is in workspace "${senderWorkspace}" but recipient pane "${args.to}" is in workspace "${recipientWorkspace}". Cross-workspace messaging is not allowed.`
+                  })
+                }],
+                isError: true,
+              };
+            }
+          }
+        }
+
         ensureMessagesDir();
         const inbox = ensureInbox(args.to);
         const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -307,6 +329,14 @@ function createCodebrainMCPServer(bridge) {
             return { content: [{ type: "text", text: JSON.stringify({ messages: [], count: 0 }) }] };
           }
         }
+
+        // ── Workspace isolation: resolve recipient pane's workspace ──
+        let recipientWorkspace = null;
+        if (bridge.getPaneWorkspacePath) {
+          recipientWorkspace = bridge.getPaneWorkspacePath(args.paneId);
+          if (recipientWorkspace) recipientWorkspace = path.resolve(recipientWorkspace);
+        }
+
         const files = fs.readdirSync(inbox).filter(f => f.endsWith(".json")).sort();
         const messages = [];
         for (const file of files) {
@@ -316,6 +346,15 @@ function createCodebrainMCPServer(bridge) {
             const msg = JSON.parse(raw);
             const wantUnreadOnly = args.unreadOnly !== false;
             if (wantUnreadOnly && msg.read) continue;
+
+            // ── Workspace isolation: skip messages from panes in different workspaces ──
+            if (recipientWorkspace && msg.from) {
+              const senderWorkspace = bridge.getPaneWorkspacePath(msg.from);
+              if (senderWorkspace && path.resolve(senderWorkspace) !== recipientWorkspace) {
+                continue; // Cross-workspace message — skip silently
+              }
+            }
+
             messages.push(msg);
             // Mark as read
             msg.read = true;

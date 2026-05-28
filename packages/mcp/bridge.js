@@ -330,6 +330,13 @@ function createMCPBridge(ptyManager, opts = {}) {
     async listPanes() {
       return paneHandlers.listPanes(paneLabels);
     },
+    // Expose ptyManager for workspace validation in message handlers
+    getPaneWorkspacePath(paneId) {
+      if (!ptyManager) return null;
+      const panes = ptyManager.list();
+      const pane = panes.find(p => p.paneId === paneId);
+      return pane ? (pane.workspacePath || pane.cwd || null) : null;
+    },
   };
 }
 
