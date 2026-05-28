@@ -26,7 +26,8 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 - **Background workers** — 7 persistent maintenance daemons (health, patterns, security, git, learning, cache, swarm)
 - **Consensus** — majority/unanimous/weighted voting + automatic leader election
 - **Priority MessageBus** — in-memory messaging with 4 priority levels, ack/retry, TTL, metrics
-- **110 MCP tools** — pane, browser, memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus
+- **116 MCP tools** — pane, browser, memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus, skills
+- **Skills system** — create, list, install and manage prompt templates scoped to project or globally (`~/.codebrain/skills/`)
 - **Voice input** — push-to-talk with Groq Whisper transcription
 
 ---
@@ -329,7 +330,18 @@ Agents get these tools automatically:
 | `worker_dispatch` | Spawn background worker for detected trigger |
 | `worker_list_bg` | List active background workers |
 
-**Total: 110 MCP tools**
+### Skills (6 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `skill_list` | List installed skills — global (`~/.codebrain/skills/`) and/or project (`.codebrain/skills/`) |
+| `skill_get` | Get full skill content: manifest + prompt.md |
+| `skill_create` | Create a new skill locally with prompt content, scope and tags |
+| `skill_delete` | Delete a skill by id and scope |
+| `skill_install` | Install a skill from the GitLab registry to `~/.codebrain/skills/` |
+| `skill_uninstall` | Remove an installed skill |
+
+**Total: 116 MCP tools**
 
 ---
 
@@ -343,7 +355,7 @@ codebrain/
 │   └── styles/             Tailwind + design tokens
 ├── electron/main/          Electron main process
 ├── packages/
-│   ├── mcp/                MCP server (110 agent tools)
+│   ├── mcp/                MCP server (116 agent tools)
 │   │   ├── bridge/         Handler modules (13 files)
 │   │   │   ├── message-bus.js        Priority in-memory messaging
 │   │   │   ├── agent-scorer.js       Multi-factor agent scoring
@@ -359,7 +371,7 @@ codebrain/
 │       └── knowledge-graph.js  Nodes, edges, PageRank, communities
 ├── prompts/                Squad system prompts
 ├── scripts/                Build + release scripts
-├── resources/              Icons + bundled skill
+├── resources/              Icons + bundled skills (auto-installed on startup)
 └── local/                  Dev scripts (.bat, gitignored)
 ```
 
