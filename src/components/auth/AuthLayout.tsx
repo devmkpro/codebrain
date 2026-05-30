@@ -18,12 +18,10 @@ export function AuthLayout({
         </div>
         <div className="text-center">
           <h1 className="text-[2rem] font-bold leading-tight tracking-tight">
-            <span className="text-white">Welcome to</span>
-            <br />
-            <span style={{ color: "#818cf8" }}>CodeBrain.</span>
+            <span style={{ color: "#818cf8" }}>CodeBrain</span>
           </h1>
           <p className="font-mono text-xs text-gray-500 mt-3 tracking-wide">
-            Multi-agent AI · One workspace
+            Multi-agent AI ADE
           </p>
         </div>
         <div className="flex flex-col gap-3 w-full">{children}</div>

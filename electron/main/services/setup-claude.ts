@@ -63,6 +63,41 @@ function getStdioPath(): string {
 }
 
 /**
+ * Lightweight version sync — only updates codebrain.version and env.CODEBRAIN_VERSION
+ * in ~/.claude/settings.json from package.json. Safe to call on every provider change.
+ */
+export function syncClaudeSettingsVersion(): void {
+  try {
+    const userClaudeDir = path.join(os.homedir(), ".claude");
+    const settingsDest = path.join(userClaudeDir, "settings.json");
+    if (!fs.existsSync(settingsDest)) return;
+
+    const userSettings: Record<string, unknown> = JSON.parse(fs.readFileSync(settingsDest, "utf-8"));
+    const pkgPath = app.isPackaged
+      ? path.join(process.resourcesPath, "app.asar", "package.json")
+      : path.resolve(__dirname, "..", "..", "..", "package.json");
+    const pkgVersion = JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version;
+    if (!pkgVersion) return;
+
+    let changed = false;
+    if (userSettings.codebrain && (userSettings.codebrain as any).version !== pkgVersion) {
+      (userSettings.codebrain as any).version = pkgVersion;
+      changed = true;
+    }
+    if (userSettings.env && (userSettings.env as any).CODEBRAIN_VERSION !== pkgVersion) {
+      (userSettings.env as any).CODEBRAIN_VERSION = pkgVersion;
+      changed = true;
+    }
+    if (changed) {
+      fs.writeFileSync(settingsDest, JSON.stringify(userSettings, null, 2), "utf-8");
+      log.info(`[setup-claude] Synced version ${pkgVersion} to ~/.claude/settings.json`);
+    }
+  } catch (err) {
+    log.warn("[setup-claude] Version sync failed (non-fatal):", err);
+  }
+}
+
+/**
  * Auto-install Claude Code config to user home.
  * Safe to call on every startup — only updates what's missing or outdated.
  */
@@ -125,10 +160,42 @@ export function setupClaudeIntegration(): void {
         changed = true;
       }
 
-      // Add codebrain section if not present
-      if (!userSettings.codebrain && bundledSettings.codebrain) {
-        userSettings.codebrain = bundledSettings.codebrain;
-        changed = true;
+      // Always sync codebrain section version from package.json
+      if (bundledSettings.codebrain) {
+        const pkgVersion = (() => {
+          try {
+            const pkgPath = isPackaged
+              ? path.join(process.resourcesPath, "app.asar", "package.json")
+              : path.resolve(__dirname, "..", "..", "..", "package.json");
+            return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version ?? bundledSettings.codebrain.version;
+          } catch { return bundledSettings.codebrain.version; }
+        })();
+
+        if (!userSettings.codebrain) {
+          userSettings.codebrain = { ...bundledSettings.codebrain, version: pkgVersion };
+          changed = true;
+        } else if ((userSettings.codebrain as any).version !== pkgVersion) {
+          (userSettings.codebrain as any).version = pkgVersion;
+          changed = true;
+        }
+      }
+
+      // Always sync CODEBRAIN_VERSION env var from package.json
+      if (bundledSettings.env) {
+        const pkgVersion = (() => {
+          try {
+            const pkgPath = isPackaged
+              ? path.join(process.resourcesPath, "app.asar", "package.json")
+              : path.resolve(__dirname, "..", "..", "..", "package.json");
+            return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version ?? bundledSettings.env.CODEBRAIN_VERSION;
+          } catch { return bundledSettings.env.CODEBRAIN_VERSION; }
+        })();
+
+        if (!userSettings.env) userSettings.env = {};
+        if ((userSettings.env as any).CODEBRAIN_VERSION !== pkgVersion) {
+          (userSettings.env as any).CODEBRAIN_VERSION = pkgVersion;
+          changed = true;
+        }
       }
 
       if (changed) {

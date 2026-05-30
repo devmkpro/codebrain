@@ -41,46 +41,6 @@ export function WhatsNewModal({
           </button>
         </div>
         <div className="overflow-y-auto p-4 space-y-5">
-          <section className="border border-indigo-500/20 bg-indigo-500/[0.04] rounded-lg overflow-hidden">
-            <div className="p-4 border-b border-indigo-500/10">
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span className="font-mono text-[9px] uppercase tracking-widest text-gray-500">
-                  Nova camada de voz
-                </span>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-lg border border-indigo-500/25 bg-indigo-500/10 flex items-center justify-center shrink-0">
-                  <Mic size={18} strokeWidth={1.6} className="text-indigo-300" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-[22px] font-bold text-white tracking-tight leading-tight">
-                    BrainVoice
-                  </h3>
-                  <p className="mt-2 font-mono text-[12px] leading-relaxed text-gray-300">
-                    Fale naturalmente em português. O CodeBrain transforma sua fala em inglês
-                    técnico e limpo para o agente executar melhor, com menos retrabalho e menos
-                    desperdício de tokens, mantendo a resposta final em português do Brasil.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="grid sm:grid-cols-2 gap-px bg-indigo-500/10">
-              {[["Aperte Espaço para falar", "Segure Espaço ou use Toggle nas configurações para iniciar e parar."], ["Modos CODE e CHAT", "CODE prepara execução técnica; CHAT mantém conversa e planejamento naturais."], ["Local ou Groq", "Use whisper.cpp local ou Groq para transcrição rápida na nuvem."], ["Medidor VOL + PPM", "Veja volume, ritmo de fala e cancele chunks pendentes com X."]].map(([title, text]) => <div key={title} className="bg-[#0a0a0a] p-3">
-                  <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-white">
-                    {title}
-                  </p>
-                  <p className="font-mono text-[10px] leading-relaxed text-gray-500 mt-1">{text}</p>
-                </div>)}
-            </div>
-            <div className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <p className="font-mono text-[10px] leading-relaxed text-gray-500">
-                BrainVoice está disponível nesta versão.
-              </p>
-              <div className="inline-flex items-center justify-center px-3 py-2 rounded border border-green-500/35 bg-green-500/10 text-green-200 font-mono text-[10px] font-bold uppercase tracking-widest">
-                BrainVoice liberado
-              </div>
-            </div>
-          </section>
           <section>
             <div className="flex items-baseline gap-2 mb-2 pb-1 border-b border-white/5">
               <span className="font-mono text-[11px] font-bold text-white uppercase tracking-widest">

@@ -115,8 +115,8 @@ function HomeHeader() {
     <>
 
       <header
-        className="h-14 border-b border-white/[0.04] flex items-center px-6 justify-between shrink-0 z-50 relative"
-        style={{ WebkitAppRegion: 'drag', background: 'linear-gradient(90deg, #0F0F13 0%, #111118 50%, #0F0F13 100%)' } as React.CSSProperties}
+        className="h-14 border-b border-white/[0.04] flex items-center px-6 justify-between shrink-0 z-50 relative cb-header"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         {/* Brand */}
         <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
@@ -811,8 +811,8 @@ function WorkspaceHeader() {
 
       {/* ── Main header row ───────────────────────────────────────── */}
       <div
-        className="h-12 border-b border-white/[0.04] flex items-stretch shrink-0 overflow-x-auto relative"
-        style={{ WebkitAppRegion: 'drag', scrollbarWidth: 'none', background: 'linear-gradient(90deg, #0F0F13 0%, #111118 50%, #0F0F13 100%)' } as React.CSSProperties}
+        className="h-12 border-b border-white/[0.04] flex items-stretch shrink-0 overflow-x-auto relative cb-header"
+        style={{ WebkitAppRegion: 'drag', scrollbarWidth: 'none' } as React.CSSProperties}
       >
         {/* Brand / Home */}
         <button

@@ -257,7 +257,7 @@ export function WorkspaceView({
   const showPicker = sessions !== null && workspacePanes.length === 0 && view?.kind !== "map" && view?.kind !== "files" && !autoSpawning;
   const showSessionLoading = sessionsLoading && workspacePanes.length === 0 && view?.kind !== "map" && view?.kind !== "files" && !autoSpawning;
 
-  return <div ref={rootRef} className="flex flex-col h-full" style={{ background: 'linear-gradient(180deg, #0D0D14 0%, #0B0B0E 100%)' }} onDragOver={e => {
+  return <div ref={rootRef} className="flex flex-col h-full cb-surface" onDragOver={e => {
     if (!e.dataTransfer.types.includes(CODEBRAIN_FILE_DRAG_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";

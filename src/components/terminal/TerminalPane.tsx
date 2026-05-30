@@ -11,8 +11,6 @@ const MK_THINKING_PHRASES = [
   "Codebrain ativado 🧠",
   "café do MK esquentando ☕",
   "MK mode: ON 🔥",
-  "MK aprovaria isso? 🤔",
-  "construído com obsessão pelo MK",
   "powered by MK ⚡",
   "isso aqui é Codebrain baby 💜",
   "Codebrain pensando forte... 🤯",

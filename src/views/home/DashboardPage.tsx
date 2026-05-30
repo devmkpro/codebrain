@@ -224,7 +224,7 @@ export function DashboardPage() {
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* ── Left sidebar ─────────────────────────────────────────── */}
-      <aside className="w-72 border-r border-white/[0.04] hidden md:flex flex-col overflow-hidden" style={{ background: 'linear-gradient(180deg, #0F0F13 0%, #0D0D14 100%)' }}>
+      <aside className="w-72 border-r border-white/[0.04] hidden md:flex flex-col overflow-hidden cb-sidebar">
         {/* CTA */}
         <div className="p-5 border-b border-white/[0.04]">
           <button
@@ -359,7 +359,7 @@ export function DashboardPage() {
       </section>
 
       {/* ── Right sidebar — Recent workspaces ────────────────────── */}
-      <aside className="w-80 border-l border-white/[0.04] hidden xl:flex flex-col overflow-hidden" style={{ background: 'linear-gradient(180deg, #0F0F13 0%, #0D0D14 100%)' }}>
+      <aside className="w-80 border-l border-white/[0.04] hidden xl:flex flex-col overflow-hidden cb-sidebar">
         <div className="p-5 border-b border-white/[0.04] flex items-center justify-between">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Recentes</h3>
           <span className="text-[9px] font-mono text-slate-700 bg-white/5 px-1.5 py-0.5 rounded">{recents.length}</span>

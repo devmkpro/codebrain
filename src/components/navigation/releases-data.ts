@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.7.5",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.7.5 — fix CLI spawn routing (gemini-cli, codex, all CLIs get MCP)"
+      }
+    ]
+  },
+  {
     "version": "1.7.4",
     "date": "maio 2026",
     "highlights": [

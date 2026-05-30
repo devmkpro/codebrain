@@ -36,135 +36,160 @@ html, body, #root {
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 
-/* ── Light theme — CodeBrain ──────────────────────────────────── */
-.light {
-  background: #f0f0f8;   /* off-white with subtle indigo tint */
-  color: #18182c;
-}
+/* ══════════════════════════════════════════════════════════════════
+   LIGHT MODE — CodeBrain v3 (complete rewrite)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Base ────────────────────────────────────────────────────────── */
+.light,
 .light body,
 .light #root {
-  background: #f0f0f8;
-  color: #18182c;
+  background: #f4f4fb !important;
+  color: #1a1a2e !important;
 }
 
-/* ── Surface overrides (CodeBrain light palette) ──────────────── */
-/* Dark bg hex classes → light surfaces with indigo tint */
-.light .bg-black               { background: #f0f0f8 !important; }
-.light [class*="bg-[#0"]       { background: #f8f8ff !important; }  /* ghostwhite */
-.light [class*="bg-[#1"]       { background: #eaeaf5 !important; }
+/* ══ SURFACES — every dark hex used in components ════════════════ */
+/* Navbar top bar */
+.light [class*="bg-[#040408]"]  { background: #ffffff !important; }
+/* Main content areas */
+.light [class*="bg-[#050505]"]  { background: #ffffff !important; }
+.light [class*="bg-[#070707]"]  { background: #ffffff !important; }
+.light [class*="bg-[#080808]"]  { background: #f8f8ff !important; }
+/* Modals, dropdowns, popovers */
+.light [class*="bg-[#0a0a0a]"]  { background: #ffffff !important; }
+.light [class*="bg-[#0A0A0B]"]  { background: #ffffff !important; }
+.light [class*="bg-[#0b0b0e]"]  { background: #f8f8ff !important; }
+.light [class*="bg-[#0B0B0E]"]  { background: #f8f8ff !important; }
+.light [class*="bg-[#0c0c14]"]  { background: #ffffff !important; }
+.light [class*="bg-[#0d0d0d]"]  { background: #ffffff !important; }
+.light [class*="bg-[#0F0F13]"]  { background: #f0f0f8 !important; }
+/* Sidebars, inputs, elevated cards */
+.light [class*="bg-[#1A1A22]"]  { background: #f0f0f8 !important; }
+/* Fallback: any remaining bg-[#0...] or bg-[#1...] */
+.light .bg-black                { background: #f4f4fb !important; }
+
+/* ══ TEXT — dark-on-light inversion ══════════════════════════════ */
+.light .text-white              { color: #1a1a2e !important; }
+.light .text-gray-100           { color: #1a1a30 !important; }
+.light .text-gray-200           { color: #24243c !important; }
+.light .text-gray-300           { color: #38385a !important; }
+.light .text-gray-400           { color: #505070 !important; }
+.light .text-gray-500           { color: #6b6b8a !important; }
+.light .text-gray-600           { color: #8888a4 !important; }
+.light .text-gray-700           { color: #a0a0ba !important; }
+.light .text-gray-800           { color: #c0c0d4 !important; }
+
+.light .text-slate-100          { color: #1a1a2e !important; }
+.light .text-slate-200          { color: #1e1e36 !important; }
+.light .text-slate-300          { color: #2a2a4a !important; }
+.light .text-slate-400          { color: #44446a !important; }
+.light .text-slate-500          { color: #5c5c80 !important; }
+.light .text-slate-600          { color: #44446a !important; }
+.light .text-slate-700          { color: #8888a8 !important; }
+.light .text-slate-800          { color: #b8b8d0 !important; }
+
+/* ══ bg-white/* and bg-black/* opacity variants ═════════════════ */
+.light [class*="bg-white/5"]    { background: rgba(30,30,70,0.05) !important; }
+.light [class*="bg-white/10"]   { background: rgba(30,30,70,0.08) !important; }
+.light [class*="bg-white/15"]   { background: rgba(30,30,70,0.12) !important; }
+.light [class*="bg-white/["]    { background: rgba(30,30,70,0.04) !important; }
 .light [class*="bg-black/3"],
-.light [class*="bg-black/6"]   { background: rgba(245,245,255,0.90) !important; }
+.light [class*="bg-black/6"]    { background: rgba(240,240,255,0.90) !important; }
 .light [class*="bg-black/7"],
 .light [class*="bg-black/8"],
-.light [class*="bg-black/9"]   { background: rgba(30,30,60,0.12) !important; }
-.light [class*="bg-white/["]   { background: rgba(30,30,70,0.04) !important; }
+.light [class*="bg-black/9"]    { background: rgba(30,30,60,0.10) !important; }
 
-/* ── Text overrides ───────────────────────────────────────────── */
-.light .text-white             { color: #18182c !important; }
-.light .text-gray-200          { color: #28283e !important; }
-.light .text-gray-300          { color: #3c3c58 !important; }
-.light .text-gray-400          { color: #545475 !important; }
-.light .text-gray-500          { color: #727290 !important; }
-.light .text-gray-600          { color: #9494aa !important; }
-.light .text-gray-700          { color: #b8b8cc !important; }
-.light .text-gray-800          { color: #d8d8e8 !important; }
+/* ══ BORDERS ════════════════════════════════════════════════════ */
+.light .border-white\/5,
+.light [class*="border-white/5"]         { border-color: rgba(30,30,70,0.08) !important; }
+.light .border-white\/10,
+.light [class*="border-white/10"]        { border-color: rgba(30,30,70,0.12) !important; }
+.light .border-white\/20,
+.light [class*="border-white/20"]        { border-color: rgba(30,30,70,0.18) !important; }
+.light .border-white\/30,
+.light [class*="border-white/30"]        { border-color: rgba(30,30,70,0.25) !important; }
+.light [class*="border-white/[0.04]"]    { border-color: rgba(30,30,70,0.06) !important; }
+.light [class*="border-white/[0.06]"]    { border-color: rgba(30,30,70,0.08) !important; }
+.light [class*="border-white/[0.08]"]    { border-color: rgba(30,30,70,0.10) !important; }
+.light [class*="border-gray-900"]        { border-color: rgba(30,30,70,0.10) !important; }
 
-/* ── Slate text overrides (Settings/Dashboard use slate-* classes) */
-.light .text-slate-100         { color: #18182c !important; }
-.light .text-slate-200         { color: #1e1e38 !important; }
-.light .text-slate-300         { color: #2e2e4e !important; }
-.light .text-slate-400         { color: #484868 !important; }
-.light .text-slate-500         { color: #606080 !important; }
-.light .text-slate-600         { color: #484868 !important; }
-.light .text-slate-700         { color: #9090b0 !important; }
-.light .text-slate-800         { color: #c0c0d8 !important; }
-.light .hover\:text-slate-300:hover { color: #1e1e38 !important; }
-.light .hover\:text-slate-400:hover { color: #2e2e4e !important; }
+/* ══ HOVER states ═══════════════════════════════════════════════ */
+.light .hover\:text-white:hover          { color: #1a1a2e !important; }
+.light .hover\:text-gray-200:hover       { color: #24243c !important; }
+.light .hover\:text-gray-300:hover       { color: #38385a !important; }
+.light .hover\:text-slate-300:hover      { color: #1e1e38 !important; }
+.light .hover\:text-slate-400:hover      { color: #2e2e4e !important; }
+.light .hover\:border-white\/20:hover    { border-color: rgba(30,30,70,0.18) !important; }
+.light .hover\:border-white\/30:hover    { border-color: rgba(30,30,70,0.25) !important; }
+.light .hover\:border-white\/60:hover    { border-color: rgba(30,30,70,0.45) !important; }
+.light [class*="hover:bg-white/[0.02]"]:hover,
+.light [class*="hover:bg-white/[0.04]"]:hover,
+.light [class*="hover:bg-white/[0.05]"]:hover { background: rgba(30,30,70,0.06) !important; }
+.light [class*="hover:bg-white/5"]:hover  { background: rgba(30,30,70,0.08) !important; }
+.light [class*="hover:bg-white/10"]:hover { background: rgba(30,30,70,0.10) !important; }
+.light [class*="hover:bg-white/15"]:hover { background: rgba(30,30,70,0.14) !important; }
+.light [class*="hover:border-white/10"]:hover  { border-color: rgba(30,30,70,0.15) !important; }
+.light [class*="hover:border-white/20"]:hover  { border-color: rgba(30,30,70,0.20) !important; }
+.light [class*="hover:bg-[#0"]:hover     { background: #f0f0f8 !important; }
+.light [class*="hover:bg-[#4F46E5]/5"]:hover  { background: #eeeffd !important; }
 
-/* ── Border overrides ─────────────────────────────────────────── */
-.light .border-white\/5        { border-color: rgba(30,30,70,0.08) !important; }
-.light .border-white\/10       { border-color: rgba(30,30,70,0.12) !important; }
-.light .border-white\/20       { border-color: rgba(30,30,70,0.18) !important; }
-.light .border-white\/30       { border-color: rgba(30,30,70,0.25) !important; }
-.light [class*="border-white\/\[0\.06\]"] { border-color: rgba(30,30,70,0.10) !important; }
-.light [class*="border-gray-900"] { border-color: rgba(30,30,70,0.10) !important; }
-
-/* ── Hover overrides ──────────────────────────────────────────── */
-.light .hover\:text-white:hover        { color: #18182c !important; }
-.light .hover\:text-gray-200:hover     { color: #28283e !important; }
-.light .hover\:text-gray-300:hover     { color: #3c3c58 !important; }
-.light .hover\:border-white\/20:hover  { border-color: rgba(30,30,70,0.18) !important; }
-.light .hover\:border-white\/30:hover  { border-color: rgba(30,30,70,0.25) !important; }
-.light .hover\:border-white\/60:hover  { border-color: rgba(30,30,70,0.45) !important; }
-.light .hover\:bg-white\/\[0\.02\]:hover,
-.light .hover\:bg-white\/\[0\.05\]:hover { background: rgba(30,30,70,0.06) !important; }
-
-/* ── Divide overrides ─────────────────────────────────────────── */
-.light .divide-white\/5 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(30,30,70,0.08) !important; }
+/* ══ DIVIDES ════════════════════════════════════════════════════ */
+.light .divide-white\/5 > :not([hidden]) ~ :not([hidden])  { border-color: rgba(30,30,70,0.08) !important; }
 .light .divide-white\/10 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(30,30,70,0.12) !important; }
 
-/* ── Scrollbar ────────────────────────────────────────────────── */
-.light ::-webkit-scrollbar-thumb { background: rgba(30,30,80,0.15); }
-.light ::-webkit-scrollbar-thumb:hover { background: rgba(30,30,80,0.25); }
+/* ══ SCROLLBAR ══════════════════════════════════════════════════ */
+.light ::-webkit-scrollbar-thumb        { background: rgba(30,30,80,0.15); }
+.light ::-webkit-scrollbar-thumb:hover  { background: rgba(30,30,80,0.25); }
 
-/* ── Form fields ──────────────────────────────────────────────── */
+/* ══ FORM FIELDS ════════════════════════════════════════════════ */
 .light input,
 .light select {
   background: #ffffff !important;
-  color: #18182c !important;
-  border-color: rgba(30,30,70,0.20) !important;
+  color: #1a1a2e !important;
+  border-color: rgba(30,30,70,0.18) !important;
 }
-.light input::placeholder { color: #9494aa !important; }
-.light select option { background: #ffffff; color: #18182c; }
+.light input::placeholder  { color: #9494aa !important; }
+.light select option        { background: #ffffff; color: #1a1a2e; }
 
-/* ── Modal overlays stay semi-opaque even in light mode ──────── */
-.light .bg-black\/70 { background: rgba(0,0,0,0.55) !important; }
+/* ══ MODAL OVERLAY ══════════════════════════════════════════════ */
+.light .bg-black\/70 { background: rgba(0,0,0,0.45) !important; }
 
-/* ── CodeBrain accent: indigo darker in light mode for contrast ─ */
-.light .text-indigo-300      { color: #4f46e5 !important; }
-.light .text-indigo-400      { color: #4338ca !important; }
-.light .text-indigo-500      { color: #3730a3 !important; }
-.light .hover\:text-indigo-400:hover { color: #4338ca !important; }
+/* ══ INDIGO ACCENT ══════════════════════════════════════════════ */
+.light .text-indigo-300       { color: #4f46e5 !important; }
+.light .text-indigo-400       { color: #4338ca !important; }
+.light .text-indigo-500       { color: #3730a3 !important; }
 .light .hover\:text-indigo-300:hover { color: #4f46e5 !important; }
+.light .hover\:text-indigo-400:hover { color: #4338ca !important; }
 
-/* ── Active tab text: stays very dark on light navbar ────────── */
-.light .text-gray-100        { color: #1a1a30 !important; }
-
-/* ══════════════════════════════════════════════════════════════════
-   LIGHT MODE — refinamentos v2
-   ══════════════════════════════════════════════════════════════════ */
-
-/* 1. Botões primários: indigo levemente mais suave, texto BRANCO forçado */
-.light [class*="bg-[#4F46E5]"][class*="text-white"] {
-  background: #6366f1 !important;
-  color: #ffffff !important;
-}
-.light [class*="bg-[#4338CA]"][class*="text-white"] {
-  background: #4f46e5 !important;
+/* ══ PRIMARY BUTTONS — keep white text on indigo bg ═════════════ */
+.light [class*="bg-[#4F46E5]"] { background: #6366f1 !important; }
+.light [class*="bg-[#4338CA]"] { background: #4f46e5 !important; }
+.light [class*="bg-[#4F46E5]"] .text-white,
+.light [class*="bg-[#4F46E5]"][class*="text-white"],
+.light [class*="bg-[#4338CA]"][class*="text-white"],
+.light [class*="bg-indigo-500"][class*="text-white"] {
   color: #ffffff !important;
 }
 .light [class*="hover:bg-[#4338CA]"]:hover { background: #4f46e5 !important; }
 .light [class*="hover:bg-[#4F46E5]"]:hover { background: #6366f1 !important; }
 
-/* 2. Hierarquia de superfícies: cards brancos puros, sidebars off-white */
-.light [class*="bg-[#0A0A0B]"] { background: #ffffff !important; }
-.light [class*="bg-[#0F0F13]"] { background: #f5f5fc !important; }
-.light [class*="bg-[#0B0B0E]"] { background: #f5f5fc !important; }
-.light [class*="bg-[#1A1A22]"] { background: #ffffff !important; }
+/* ══ VIOLET/PURPLE accent (squad, settings badge) ═══════════════ */
+.light [class*="bg-[#9d4edd]"]  { background: rgba(157,78,221,0.15) !important; }
+.light [class*="border-[#9d4edd]"] { border-color: rgba(157,78,221,0.35) !important; }
+.light [class*="text-[#9d4edd]"]   { color: #7c3aed !important; }
 
-/* 3. bg-white/N sem colchetes (Toggle, Stepper buttons, sub-nav) */
-.light [class~="bg-white/5"]           { background: rgba(30,30,70,0.06) !important; }
-.light [class~="bg-white/10"]          { background: rgba(30,30,70,0.09) !important; }
-.light [class~="bg-white/15"]          { background: rgba(30,30,70,0.13) !important; }
-.light [class~="hover:bg-white/5"]:hover  { background: rgba(30,30,70,0.09) !important; }
-.light [class~="hover:bg-white/15"]:hover { background: rgba(30,30,70,0.14) !important; }
+/* ══ CYAN accent (active tabs, +Terminal) ═══════════════════════ */
+.light [class*="text-[#00d9ff]"]   { color: #0891b2 !important; }
+.light [class*="bg-[#00d9ff]/10"]  { background: rgba(8,145,178,0.10) !important; }
+.light [class*="bg-[#00d9ff]/[0.06]"] { background: rgba(8,145,178,0.06) !important; }
 
-/* 4. Profundidade: sombra suave em cards rounded-xl */
+/* ══ CARD SHADOWS ═══════════════════════════════════════════════ */
 .light .rounded-xl.border {
-  box-shadow: 0 1px 4px rgba(30,30,80,0.09), 0 0 0 1px rgba(30,30,80,0.04);
+  box-shadow: 0 1px 4px rgba(30,30,80,0.08), 0 0 0 1px rgba(30,30,80,0.04);
 }
+.light .shadow-2xl { box-shadow: 0 4px 24px rgba(30,30,80,0.12), 0 0 0 1px rgba(30,30,80,0.06) !important; }
 
-/* 5. Sliders: trilho mais espesso e thumb com sombra 3D */
+/* ══ SLIDERS ════════════════════════════════════════════════════ */
 .light input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   background: rgba(99,102,241,0.28);
@@ -172,40 +197,70 @@ html, body, #root {
 }
 .light input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #6366f1;
-  margin-top: -6px;
-  cursor: pointer;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #6366f1; margin-top: -6px; cursor: pointer;
   box-shadow: 0 1px 4px rgba(0,0,0,0.20), 0 0 0 2px rgba(99,102,241,0.22);
 }
 
-/* 6. Cores de status mais escuras para legibilidade no fundo claro */
-.light .text-emerald-400  { color: #047857 !important; }
-.light .text-amber-400    { color: #b45309 !important; }
-.light .text-cyan-400     { color: #0e7490 !important; }
-.light .text-red-400      { color: #b91c1c !important; }
+/* ══ STATUS COLORS — darker for light bg ════════════════════════ */
+.light .text-emerald-400    { color: #047857 !important; }
+.light .text-emerald-300    { color: #059669 !important; }
+.light .text-amber-400      { color: #b45309 !important; }
+.light .text-cyan-400       { color: #0e7490 !important; }
+.light .text-cyan-300       { color: #0e7490 !important; }
+.light .text-red-400        { color: #b91c1c !important; }
+.light .text-red-300        { color: #dc2626 !important; }
+.light .text-green-300      { color: #15803d !important; }
+.light .text-green-400      { color: #16a34a !important; }
+.light .text-yellow-300     { color: #a16207 !important; }
+.light .text-yellow-400     { color: #b45309 !important; }
+.light .text-orange-300     { color: #c2410c !important; }
+.light .text-violet-400     { color: #7c3aed !important; }
+.light [class*="text-violet-400/70"] { color: rgba(124,58,237,0.75) !important; }
+
 .light [class*="bg-emerald-500/10"] { background: #d1fae5 !important; }
 .light [class*="bg-amber-500/10"]   { background: #fef3c7 !important; }
 .light [class*="bg-cyan-500/10"]    { background: #cffafe !important; }
-.light [class*="bg-red-500/"]       { background: rgba(239,68,68,0.09) !important; }
+.light [class*="bg-red-500/"]       { background: rgba(239,68,68,0.08) !important; }
+.light [class*="bg-violet-500/5"]   { background: rgba(139,92,246,0.08) !important; }
+.light [class*="bg-violet-500/[0.04]"] { background: rgba(139,92,246,0.06) !important; }
+.light [class*="bg-indigo-500/[0.05]"] { background: rgba(99,102,241,0.08) !important; }
 
-/* 6b. CostPanel — cores de valores monetarios e tabelas */
-.light .text-green-300    { color: #15803d !important; }  /* custo USD */
-.light .text-green-400    { color: #16a34a !important; }  /* DollarSign icon */
-.light .text-cyan-300     { color: #0e7490 !important; }  /* input tokens */
-.light .text-yellow-300   { color: #a16207 !important; }  /* output tokens */
-.light .text-yellow-400   { color: #b45309 !important; }  /* Zap icon */
-.light .text-red-300      { color: #b91c1c !important; }  /* alert exceeded */
-.light .text-orange-300   { color: #c2410c !important; }  /* alert critical */
-/* alert warning (yellow-300 bg-yellow-500/5) */
+/* CostPanel / alert borders */
 .light [class*="border-yellow-500/20"]  { border-color: rgba(161,98,7,0.25) !important; }
 .light [class*="bg-yellow-500/5"]       { background: rgba(234,179,8,0.08) !important; }
 .light [class*="text-yellow-300"][class*="border-yellow"] { color: #854d0e !important; }
 
-/* 7. Recent projects hover: preenchimento sutil em vez de só borda */
-.light [class*="hover:bg-[#4F46E5]/5"]:hover  { background: #eeeffd !important; }
+/* ══ HOVER on violet / indigo borders ═══════════════════════════ */
+.light [class*="hover:border-violet-500"]:hover  { border-color: rgba(139,92,246,0.35) !important; }
+.light [class*="hover:bg-violet-500/5"]:hover    { background: rgba(139,92,246,0.08) !important; }
+.light [class*="hover:border-[#4F46E5]"]:hover   { border-color: rgba(99,102,241,0.35) !important; }
+.light [class*="hover:bg-[#4F46E5]/5"]:hover     { background: rgba(99,102,241,0.08) !important; }
+.light [class*="hover:text-[#00d9ff]"]:hover     { color: #0891b2 !important; }
+.light [class*="hover:bg-[#00d9ff]"]:hover       { background: rgba(8,145,178,0.08) !important; }
+.light [class*="hover:text-red-400"]:hover       { color: #b91c1c !important; }
+.light [class*="hover:bg-red-500/5"]:hover       { background: rgba(239,68,68,0.06) !important; }
+.light [class*="hover:text-slate-300"]:hover     { color: #2a2a4a !important; }
+
+/* ══ SEMANTIC SURFACE classes (dark gradients, light overrides) ══ */
+.cb-sidebar  { background: linear-gradient(180deg, #0F0F13 0%, #0D0D14 100%); }
+.cb-header   { background: linear-gradient(90deg, #0F0F13 0%, #111118 50%, #0F0F13 100%); }
+.cb-surface  { background: linear-gradient(180deg, #0D0D14 0%, #0B0B0E 100%); }
+
+.light .cb-sidebar  { background: #f0f0f8 !important; }
+.light .cb-header   { background: #ffffff !important; border-bottom-color: rgba(30,30,70,0.10) !important; }
+.light .cb-surface  { background: #f4f4fb !important; }
+
+/* Gradient buttons — keep text white */
+.light [class*="from-violet-600"][class*="to-indigo-600"] { color: #ffffff !important; }
+.light [class*="from-violet-600"][class*="to-indigo-600"]:hover {
+  --tw-gradient-from: #7c3aed; --tw-gradient-to: #6366f1;
+}
+.light [class*="bg-gradient-to-r"] .text-white,
+.light [class*="bg-gradient-to-r"][class*="text-white"] { color: #ffffff !important; }
+
+/* ══ GRID PATTERN overlay — hide for light ══════════════════════ */
+.light [style*="linear-gradient(#fff"] { opacity: 0 !important; }
 
 /* ── Electron drag regions ────────────────────────────────────── */
 [style*="WebkitAppRegion: drag"]    { -webkit-app-region: drag; }

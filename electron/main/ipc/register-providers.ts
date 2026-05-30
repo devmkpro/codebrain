@@ -3,6 +3,7 @@ import type { AppContext } from "../context";
 import { safeSend } from "../context";
 import { getEnhancedProviders } from "../services/providers";
 import { BUILTIN_TEMPLATES } from "../services/constants";
+import { syncClaudeSettingsVersion } from "../services/setup-claude";
 
 export function registerProviderHandlers(ctx: AppContext): void {
   ipcMain.handle("providers:list", () => getEnhancedProviders(ctx));
@@ -15,5 +16,6 @@ export function registerProviderHandlers(ctx: AppContext): void {
 
   ctx.providerStore.onChange(() => {
     safeSend(ctx, "providers:updated", getEnhancedProviders(ctx));
+    syncClaudeSettingsVersion();
   });
 }

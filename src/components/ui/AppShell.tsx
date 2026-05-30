@@ -40,7 +40,7 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
 
   return (
     <RouterProvider>
-      <div className="flex flex-col bg-[#0B0B0E] text-slate-200 overflow-hidden" style={{ height: '100%', background: 'linear-gradient(180deg, #0F0F13 0%, #0B0B0E 100%)' }}>
+      <div className="flex flex-col bg-[#0B0B0E] text-slate-200 overflow-hidden cb-surface" style={{ height: '100%' }}>
 
         {/*
           ── HEADER ────────────────────────────────────────────────────────────
