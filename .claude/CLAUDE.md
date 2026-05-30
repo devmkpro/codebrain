@@ -5,6 +5,24 @@
 
 ---
 
+## 🔧 Skills — USE SEMPRE AUTOMATICAMENTE
+
+Você tem skills especializadas instaladas. **SEMPRE invoque a skill correta via `Skill()` tool ANTES de responder**, sem esperar o usuário pedir. Detecte pela intenção:
+
+| Skill | Quando usar |
+|---|---|
+| `version-bump` | bump, versão, nova versão, tag, release, commit+tag, nova tag |
+| `debug-pane` | agente travado, não responde, pane parou, debug, agente não faz nada |
+| `cost-model-update` | preço errado, sem preço, modelo sem preço, corrigir custo, novo modelo |
+| `add-ipc-feature` | adicionar IPC, nova feature IPC, novo IPC, implementar IPC |
+| `add-mcp-tool` | novo MCP tool, adicionar MCP, criar tool, novo tool |
+| `reuse-code` | código duplicado, refatorar, remover duplicação, DRY, centralizar |
+| `codebrain-dev-squad` | squad dev, spawna squad, time de desenvolvimento, squad codebrain |
+
+**REGRA:** Se o pedido do usuário bater com qualquer skill acima → invoque imediatamente com `Skill({ skill: "nome-da-skill" })`. Não pergunte, não explique primeiro — só invoque.
+
+---
+
 ## Project Overview
 
 Codebrain is an Electron desktop application that provides a multi-agent IDE experience. It allows users to spawn AI agents (orchestrator, backend worker, frontend worker, UI tester) that communicate in real-time via shared memory and inter-agent messaging.

@@ -42,6 +42,66 @@ export interface PromptBuilderConfig {
   sessionContext?: string;
 }
 
+interface SkillManifest {
+  id: string;
+  name: string;
+  type: string;
+  description?: string;
+  triggers?: string[];
+}
+
+/**
+ * Reads installed skills from project (.codebrain/skills/) and global (~/.codebrain/skills/)
+ * and builds a system prompt section so every agent knows which skills are available
+ * and uses them automatically based on triggers.
+ */
+function buildSkillsSection(cwd: string): string {
+  const skillDirs: string[] = [];
+
+  // Project-local skills
+  const projectSkillsDir = path.join(cwd || "", ".codebrain", "skills");
+  if (fs.existsSync(projectSkillsDir)) skillDirs.push(projectSkillsDir);
+
+  // Global skills (~/.codebrain/skills/)
+  const globalSkillsDir = path.join(os.homedir(), ".codebrain", "skills");
+  if (fs.existsSync(globalSkillsDir)) skillDirs.push(globalSkillsDir);
+
+  const skills: SkillManifest[] = [];
+  for (const dir of skillDirs) {
+    try {
+      for (const entry of fs.readdirSync(dir)) {
+        const manifestPath = path.join(dir, entry, "skill.json");
+        if (!fs.existsSync(manifestPath)) continue;
+        try {
+          const manifest: SkillManifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+          if (manifest.id && !skills.find(s => s.id === manifest.id)) {
+            skills.push(manifest);
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  if (skills.length === 0) return "";
+
+  const rows = skills
+    .map(s => {
+      const triggers = (s.triggers ?? []).join(", ") || "—";
+      return `| \`${s.id}\` | ${s.description ?? s.name} | ${triggers} |`;
+    })
+    .join("\n");
+
+  return `\n\n## Skills Disponíveis — USE AUTOMATICAMENTE
+
+Você tem skills especializadas. **SEMPRE invoque a skill correta via \`Skill()\` tool ANTES de responder**, sem esperar o usuário pedir. Detecte pela intenção do pedido:
+
+| Skill | Descrição | Triggers (palavras-chave) |
+|---|---|---|
+${rows}
+
+**REGRA OBRIGATÓRIA:** Se o pedido do usuário corresponder a qualquer trigger acima → invoque imediatamente com \`Skill({ skill: "id-da-skill" })\`. Não pergunte, não explique — invoque direto.`;
+}
+
 /**
  * Builds the Codebrain system prompt and writes it to a temp file.
  * Returns the path to pass via --system-prompt-file.
@@ -97,6 +157,9 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
   // Runtime metadata injected so the skill banner shows real values
   const providerLabels = configuredProviders.map((p: any) => `${p.host || "openclaude"} (${p.type})`).join(", ") || "none";
   sysPrompt += `\n\n## Codebrain Runtime\n\n- Version: ${_appVersion}\n- MCP Tools: ${MCP_TOOL_COUNT}\n- Providers: ${providerLabels}`;
+
+  // Skills section — inject all installed skills so every agent knows them
+  sysPrompt += buildSkillsSection(cwd);
 
   // Write to temp file (avoids Windows cmd-line length limit)
   const tmpDir = path.join(cwd || os.homedir(), ".codebrain", "tmp");
