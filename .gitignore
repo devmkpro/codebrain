@@ -57,6 +57,10 @@ electron.vite.config.*.mjs
 # ── Codebrain pane system-prompt temp files ──────────────────────────────────
 .codebrain-sys-*.txt
 
+# ── Runtime artifacts (created by hooks/MCP during session) ──────────────────
+"[hooks]"
+500)
+
 # ── Codebrain workspace data ─────────────────────────────────────────────────
 .codebrain/
 
