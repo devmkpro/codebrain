@@ -14,36 +14,26 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.7.4",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.7.4 — Codex/Gemini MCP fix, ESC remove, workspace refresh"
+      }
+    ]
+  },
+  {
     "version": "1.7.3",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "Handoff pattern: handoff_submit + handoff_wait + pane_write_many para coordenação confiável de squads"
+        "text": "v1.7.3 — handoff pattern, agent tables, context files, skills in all agents, MK thinking label"
       },
       {
         "kind": "feat",
-        "text": "Tabelas SQLite dedicadas para agents e agent_messages com tracking automático via hooks"
-      },
-      {
-        "kind": "feat",
-        "text": "Context files por workspace: .claude/codebrain-context.md e .gemini/codebrain-context.md gerados automaticamente"
-      },
-      {
-        "kind": "feat",
-        "text": "Skills injetadas no system prompt de todos os agentes (Claude, OpenClaude, MIMO, Gemini, Codex)"
-      },
-      {
-        "kind": "feat",
-        "text": "MKThinkingLabel: frases divertidas no terminal só quando agente está ativamente processando output"
-      },
-      {
-        "kind": "feat",
-        "text": "Auto-detecção de skills via UserPromptSubmit hook com triggers configuráveis"
-      },
-      {
-        "kind": "fix",
-        "text": "Preços corretos GPT-5.5 ($5/$30), GPT-5.4 ($2.5/$15), GPT-5.4-mini ($0.75/$4.5), Claude Opus 4.7/4.8 OpenRouter"
+        "text": "inject skills into system prompt of ALL agents (claude, openclaude, gemini, codex, mimo)"
       }
     ]
   },
