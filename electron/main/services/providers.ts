@@ -16,9 +16,33 @@ export function getEnhancedProviders(ctx: AppContext) {
     env: {},
   }] : [];
 
+  // Virtual Codex OAuth provider — appears when Codex CLI is installed
+  const codexDetected = ctx.cliDetector?.getAll()?.codex?.found ?? false;
+  const codexOAuthTemplate = PROVIDER_REGISTRY.find(t => t.id === "codex-oauth");
+  const codexOAuthProvider = codexDetected && codexOAuthTemplate ? [{
+    id: codexOAuthTemplate.id,
+    label: codexOAuthTemplate.label,
+    type: codexOAuthTemplate.type as any,
+    host: codexOAuthTemplate.host,
+    models: [...codexOAuthTemplate.models],
+    env: {},
+  }] : [];
+
   // Filter out the virtual claude-oauth and Gemini CLI label to avoid duplicates
+  // Virtual Gemini CLI provider — appears when gemini CLI is installed
+  const geminiCliDetected = ctx.cliDetector?.getAll()?.gemini?.found ?? false;
+  const geminiCliTemplate = PROVIDER_REGISTRY.find(t => t.id === "gemini-cli");
+  const geminiCliProvider = geminiCliDetected && geminiCliTemplate ? [{
+    id: geminiCliTemplate.id,
+    label: geminiCliTemplate.label,
+    type: geminiCliTemplate.type as any,
+    host: geminiCliTemplate.host,
+    models: [...geminiCliTemplate.models],
+    env: {},
+  }] : [];
+
   const filtered = list
-    .filter(p => p.id !== "claude-oauth" && !p.label?.includes("Gemini CLI"))
+    .filter(p => p.id !== "claude-oauth" && p.id !== "codex-oauth" && p.id !== "gemini-cli" && !p.label?.includes("Gemini CLI"))
     .map(p => {
       // Look up the canonical template by id
       const template = PROVIDER_REGISTRY.find(t => t.id === p.id);
@@ -51,5 +75,5 @@ export function getEnhancedProviders(ctx: AppContext) {
       return { ...p, host: p.host || "openclaude" };
     });
 
-  return [...claudeOAuthProvider, ...filtered];
+  return [...claudeOAuthProvider, ...codexOAuthProvider, ...geminiCliProvider, ...filtered];
 }

@@ -58,7 +58,9 @@ export async function spawnPaneInternal(
     const env: Record<string, string> = { ...(provider?.env ?? {}), ...configEnv };
 
     const args = [...(config.args ?? [])];
-    const isClaudeCompatible = agent === "openclaude" || agent === "claude" || agent === "gemini";
+    const isCodex = agent === "codex" || provider?.type === "codex";
+    const isGeminiCli = agent === "gemini-cli" || provider?.type === "gemini-cli";
+    const isClaudeCompatible = !isCodex && !isGeminiCli && (agent === "openclaude" || agent === "claude" || agent === "gemini");
 
     if (isClaudeCompatible && !args.includes("--permission-mode")) {
       args.push("--permission-mode", config.permissionMode ?? "bypassPermissions");
@@ -284,6 +286,162 @@ export async function spawnPaneInternal(
       const settings: Record<string, unknown> = { alwaysThinkingEnabled: false, effortLevel: "low" };
       if (model) settings.model = model;
       args.push("--settings", JSON.stringify(settings));
+    }
+
+    // ── Codex CLI branch (NOT Claude-compatible) ───────────────────────────────
+    // All config via CLI -c flags (short values) + model_instructions_file (path).
+    // NO CODEX_HOME override — uses real ~/.codex/ with user's auth tokens.
+    // Pattern reverse-engineered from Overclock app (2026-05-30).
+    if (isCodex) {
+      const tomlStr = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+
+      // Sandbox + approval (Overclock bypassPermissions pattern)
+      if (!args.includes("--sandbox") && !args.includes("--ask-for-approval")) {
+        args.push("--sandbox", "danger-full-access", "--ask-for-approval", "never");
+      }
+      if (!args.includes("--no-alt-screen")) {
+        args.push("--no-alt-screen");
+      }
+      if (model && !args.includes("-m") && !args.includes("--model")) {
+        args.push("-m", model);
+      }
+
+      // MCP server config via -c flag (short URL, safe for CLI)
+      if (ctx.mcpServerInfo) {
+        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
+          try { await ctx.mcpServerReady; } catch {}
+        }
+        if (!args.some((a: string) => a.includes("mcp_servers.codebrain."))) {
+          args.push("-c", `mcp_servers.codebrain.url=${tomlStr(ctx.mcpServerInfo.streamableHttpUrl)}`);
+          args.push("-c", `mcp_servers.codebrain.default_tools_approval_mode=${tomlStr("approve")}`);
+        }
+      }
+
+      // System prompt → file, then pass file PATH via -c (avoids error 206 = cmd too long)
+      const instructionsFile = buildSystemPrompt(ctx, {
+        paneId, cwd, model, role: config.role, sessionContext: config.sessionContext,
+      });
+      if (!args.some((a: string) => a.includes("model_instructions_file="))) {
+        // Normalize to forward slashes for TOML compatibility
+        const normalizedPath = instructionsFile.replace(/\\/g, "/");
+        args.push("-c", `model_instructions_file=${tomlStr(normalizedPath)}`);
+      }
+
+      // API-key provider: forward the key. OAuth provider: rely on `codex login`.
+      if (provider?.id !== "codex-oauth") {
+        const openaiKey = env["OPENAI_API_KEY"] || "";
+        if (openaiKey) env["OPENAI_API_KEY"] = openaiKey;
+      }
+
+      log.info("[spawnPaneInternal] Codex model:", model ?? "MISSING");
+      log.info("[spawnPaneInternal] Codex auth:", provider?.id === "codex-oauth" ? "ChatGPT OAuth" : (env["OPENAI_API_KEY"] ? "API key" : "MISSING"));
+      log.info("[spawnPaneInternal] Codex args:", args.join(" "));
+    }
+
+    // ── Gemini CLI branch (native gemini binary, NOT OpenClaude) ──────────────
+    // Pattern reverse-engineered from Overclock (2026-05-30).
+    // Key differences from Overclock:
+    //   1. GEMINI_CLI_NO_RELAUNCH=true prevents CLI from restarting on settings.json change
+    //   2. GEMINI_CLI_TRUST_WORKSPACE=true auto-trusts workspace for MCP
+    //   3. Atomic write (tmp + rename) for settings.json
+    if (isGeminiCli) {
+      // CLI flags (short, safe for command line)
+      if (!args.includes("--approval-mode")) {
+        args.push("--approval-mode", "yolo");
+      }
+      if (!args.includes("--skip-trust")) {
+        args.push("--skip-trust");
+      }
+      if (model && !args.includes("-m") && !args.includes("--model")) {
+        args.push("-m", model);
+      }
+
+      // ── CRITICAL env vars (Overclock pattern) ───────────────────────────────
+      // Without GEMINI_CLI_NO_RELAUNCH, Gemini CLI restarts when it detects
+      // settings.json change (our MCP write), losing the config.
+      // Without GEMINI_CLI_TRUST_WORKSPACE, CLI blocks on trust prompt.
+      env["GEMINI_CLI_NO_RELAUNCH"] = "true";
+      env["GEMINI_CLI_TRUST_WORKSPACE"] = "true";
+
+      // MCP config → .gemini/settings.json (Overclock pattern with atomic write)
+      let geminiMcpConfigured = false;
+      if (ctx.mcpServerInfo) {
+        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
+          try { await ctx.mcpServerReady; } catch {}
+        }
+        const geminiDir = path.join(cwd, ".gemini");
+        const settingsPath = path.join(geminiDir, "settings.json");
+        try {
+          let settings: Record<string, any> = {};
+          try {
+            settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+          } catch {}
+          const currentMcp = typeof settings.mcpServers === "object" && settings.mcpServers ? settings.mcpServers : {};
+          settings.mcpServers = {
+            ...currentMcp,
+            codebrain: {
+              url: ctx.mcpServerInfo.streamableHttpUrl,
+              type: "http",
+              trust: true,
+            },
+          };
+          // Atomic write: write to tmp file, then rename (Overclock pattern)
+          fs.mkdirSync(geminiDir, { recursive: true });
+          const tmpPath = `${settingsPath}.${process.pid}.${Date.now()}.tmp`;
+          fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+          fs.renameSync(tmpPath, settingsPath);
+          geminiMcpConfigured = true;
+          log.info(`[spawnPaneInternal] Wrote Gemini MCP config to ${settingsPath}`);
+        } catch (e) {
+          log.warn("[spawnPaneInternal] Failed to write .gemini/settings.json:", e);
+        }
+      }
+
+      // System prompt → .gemini/codebrain-context.md + add to contextFileName
+      const promptFile = buildSystemPrompt(ctx, {
+        paneId, cwd, model, role: config.role, sessionContext: config.sessionContext,
+      });
+      try {
+        const promptContent = fs.readFileSync(promptFile, "utf-8");
+        const contextRelPath = ".gemini/codebrain-context.md";
+        const contextAbsPath = path.join(cwd, contextRelPath);
+        const geminiDir = path.join(cwd, ".gemini");
+        fs.mkdirSync(geminiDir, { recursive: true });
+        fs.writeFileSync(contextAbsPath, promptContent, "utf-8");
+
+        // Add to contextFileName in settings.json
+        const settingsPath = path.join(geminiDir, "settings.json");
+        let settings: Record<string, any> = {};
+        try { settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8")); } catch {}
+        const currentContext = Array.isArray(settings.contextFileName)
+          ? settings.contextFileName.filter((item: any) => typeof item === "string")
+          : typeof settings.contextFileName === "string"
+            ? [settings.contextFileName]
+            : ["GEMINI.md"];
+        settings.contextFileName = Array.from(new Set([...currentContext, contextRelPath]));
+        // Atomic write for context file update too
+        const tmpPath = `${settingsPath}.${process.pid}.${Date.now()}.tmp`;
+        fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+        fs.renameSync(tmpPath, settingsPath);
+        log.info(`[spawnPaneInternal] Gemini context file: ${contextAbsPath}`);
+      } catch (e) {
+        log.warn("[spawnPaneInternal] Failed to write Gemini context file:", e);
+      }
+
+      // Only add --allowed-mcp-server-names AFTER config is confirmed written
+      if (geminiMcpConfigured && !args.includes("--allowed-mcp-server-names")) {
+        args.push("--allowed-mcp-server-names", "codebrain");
+      }
+
+      // Forward GEMINI_API_KEY
+      const geminiKey = env["GEMINI_API_KEY"] || env["GOOGLE_API_KEY"] || "";
+      if (geminiKey) {
+        env["GEMINI_API_KEY"] = geminiKey;
+        env["GOOGLE_API_KEY"] = geminiKey;
+      }
+
+      log.info("[spawnPaneInternal] Gemini CLI model:", model ?? "MISSING");
+      log.info("[spawnPaneInternal] Gemini CLI args:", args.join(" "));
     }
 
     log.info("[spawnPaneInternal]", { agent, providerId, model, providerType, cwd });

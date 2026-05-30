@@ -56,8 +56,42 @@ export function resolveProvider(
     log.info(`[resolveProvider] claude-oauth → agent="claude", ${provider.models.length} models`);
   }
 
+  // ── Step 0b: codex-oauth virtual provider ────────────────────────────────────
+  if (providerId === "codex-oauth") {
+    agent = "codex";
+    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "codex-oauth");
+    const registryModels = registryTemplate?.models ?? [];
+    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
+    const codexTemplate = PROVIDER_REGISTRY.find((t) => t.id === "codex");
+    const codexApiModels = codexTemplate?.models ?? [];
+    provider = {
+      id: "codex-oauth",
+      type: "codex",
+      host: "codex",
+      models: [...new Set([...allModels, ...codexApiModels])],
+      env: {},
+    };
+    log.info(`[resolveProvider] codex-oauth → agent="codex", ${provider.models.length} models`);
+  }
+
+  // ── Step 0c: gemini-cli virtual provider ─────────────────────────────────────
+  if (providerId === "gemini-cli") {
+    agent = "gemini-cli";
+    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "gemini-cli");
+    const registryModels = registryTemplate?.models ?? [];
+    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
+    provider = {
+      id: "gemini-cli",
+      type: "gemini-cli",
+      host: "gemini-cli",
+      models: [...new Set([...allModels])],
+      env: {},
+    };
+    log.info(`[resolveProvider] gemini-cli → agent="gemini-cli", ${provider.models.length} models`);
+  }
+
   // ── Step 1: Explicit providerId ─────────────────────────────────────────────
-  if (!provider && providerId && providerId !== "claude-oauth") {
+  if (!provider && providerId && providerId !== "claude-oauth" && providerId !== "codex-oauth" && providerId !== "gemini-cli") {
     provider = ctx.providerStore.listFull().find((p: any) => p.id === providerId) ?? null;
     if (!provider) {
       return {
@@ -122,6 +156,12 @@ export function resolveProvider(
     }
     if (!provider && agent === "gemini") {
       provider = allProviders.find((p: any) => p.host === "gemini" || p.id?.toLowerCase().includes("gemini")) ?? null;
+    }
+    if (!provider && agent === "codex") {
+      provider = allProviders.find((p: any) => p.id === "codex-oauth") ?? null;
+    }
+    if (!provider && agent === "gemini-cli") {
+      provider = allProviders.find((p: any) => p.id === "gemini-cli") ?? null;
     }
     if (!provider) provider = allProviders.find((p: any) => p.type === "mimo-compat") ?? null;
     if (!provider) provider = allProviders.find((p: any) => p.type === "anthropic-compat") ?? null;

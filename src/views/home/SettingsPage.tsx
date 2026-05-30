@@ -135,6 +135,8 @@ export function SettingsPage() {
   const [installedSkills, setInstalledSkills] = useState<string[]>([]);
   const [cliStatus,        setCliStatus]        = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [claudeCliStatus,  setClaudeCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [codexCliStatus,   setCodexCliStatus]   = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [geminiCliStatus,  setGeminiCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
   // Global env vars
@@ -189,6 +191,8 @@ export function SettingsPage() {
       .then((s: any) => {
         setCliStatus(s?.openclaude ?? null);
         setClaudeCliStatus(s?.claude ?? null);
+        setCodexCliStatus(s?.codex ?? null);
+        setGeminiCliStatus(s?.gemini ?? null);
       })
       .catch(() => {});
     loadProviders().catch(() => {});
@@ -252,11 +256,17 @@ export function SettingsPage() {
       if (Array.isArray(res)) {
         const oc = res.find((r: any) => r.name === 'openclaude');
         const cl = res.find((r: any) => r.name === 'claude');
+        const cx = res.find((r: any) => r.name === 'codex');
+        const gc = res.find((r: any) => r.name === 'gemini');
         if (oc) setCliStatus(oc);
         if (cl) setClaudeCliStatus(cl);
+        if (cx) setCodexCliStatus(cx);
+        if (gc) setGeminiCliStatus(gc);
       } else {
         setCliStatus(res?.openclaude ?? res);
         setClaudeCliStatus(res?.claude ?? null);
+        setCodexCliStatus(res?.codex ?? null);
+        setGeminiCliStatus(res?.gemini ?? null);
       }
     } catch {} finally { setCliBusy(false); }
   };
@@ -684,6 +694,66 @@ export function SettingsPage() {
                       {claudeCliStatus.found ? `✓ ${claudeCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
                     </p>
                     {claudeCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{claudeCliStatus.version}</p>}
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleRedetectCli}
+                disabled={cliBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+              >
+                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
+              </button>
+            </div>
+
+            <Divider />
+
+            {/* Codex CLI (OpenAI) */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-medium text-slate-300">Codex CLI</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">
+                  Codex da OpenAI — usado pelo provider <span className="font-mono">Codex (ChatGPT)</span>.
+                  {!codexCliStatus?.found && (
+                    <> Instale com <span className="font-mono">npm install -g @openai/codex</span>.</>
+                  )}
+                </p>
+                {codexCliStatus && (
+                  <>
+                    <p className={`text-[9px] font-mono mt-1 ${codexCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {codexCliStatus.found ? `✓ ${codexCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
+                    </p>
+                    {codexCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{codexCliStatus.version}</p>}
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleRedetectCli}
+                disabled={cliBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+              >
+                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
+              </button>
+            </div>
+
+            <Divider />
+
+            {/* Gemini CLI (Google) */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-medium text-slate-300">Gemini CLI</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">
+                  Gemini CLI nativo da Google — usado pelo provider <span className="font-mono">Gemini CLI</span>.
+                  {!geminiCliStatus?.found && (
+                    <> Instale com <span className="font-mono">npm install -g @google/gemini-cli</span>.</>
+                  )}
+                </p>
+                {geminiCliStatus && (
+                  <>
+                    <p className={`text-[9px] font-mono mt-1 ${geminiCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {geminiCliStatus.found ? `✓ ${geminiCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
+                    </p>
+                    {geminiCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{geminiCliStatus.version}</p>}
                   </>
                 )}
               </div>

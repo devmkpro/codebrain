@@ -66,6 +66,7 @@ const AGENT_DEFAULTS: Record<string, { binary: string; args: string[] }> = {
   openclaude: { binary: "openclaude", args: [] },
   claude: { binary: "claude", args: [] },
   gemini: { binary: "openclaude", args: [] },
+  "gemini-cli": { binary: "gemini", args: [] },
   codex: { binary: "codex", args: [] },
   shell: { binary: defaultShell(), args: [] },
 };

@@ -9,6 +9,8 @@ export function registerCliHandlers(ctx: AppContext): void {
     return [
       { name: "openclaude", found: info.openclaude.found, path: info.openclaude.path, version: info.openclaude.version },
       { name: "claude", found: info.claude.found, path: info.claude.path, version: info.claude.version },
+      { name: "codex", found: info.codex.found, path: info.codex.path, version: info.codex.version },
+      { name: "gemini", found: info.gemini.found, path: info.gemini.path, version: info.gemini.version },
     ];
   });
 

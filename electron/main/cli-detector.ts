@@ -14,6 +14,8 @@ export interface CliInfo {
 export interface AllCliInfo {
   openclaude: CliInfo;
   claude: CliInfo;
+  codex: CliInfo;
+  gemini: CliInfo;
   shell: { path: string };
 }
 
@@ -131,6 +133,8 @@ export class CliDetector {
     return {
       openclaude: detectCli("openclaude"),
       claude: detectCli("claude"),
+      codex: detectCli("codex"),
+      gemini: detectCli("gemini"),
       shell: { path: shell },
     };
   }

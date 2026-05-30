@@ -85,6 +85,39 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     labelIncludes: ["claude"],
   },
   {
+    id: "codex",
+    label: "OpenAI Codex",
+    icon: "OAI",
+    type: "codex",
+    host: "codex",
+    tokenEnvVar: "OPENAI_API_KEY",
+    signupUrl: "https://platform.openai.com/api-keys",
+    models: ["gpt-5.5", "gpt-5.4-mini", "codex-auto-review"],
+    labelIncludes: ["codex"],
+    idIncludes: ["codex"],
+  },
+  {
+    id: "codex-oauth",
+    label: "Codex (ChatGPT)",
+    icon: "OAI",
+    type: "codex",
+    host: "codex",
+    signupUrl: "https://chatgpt.com/codex",
+    models: ["gpt-5.5", "gpt-5.4-mini", "codex-auto-review"],
+    labelIncludes: ["codex"],
+  },
+  {
+    id: "gemini-cli",
+    label: "Gemini CLI",
+    icon: "G",
+    type: "gemini-cli",
+    host: "gemini-cli",
+    tokenEnvVar: "GEMINI_API_KEY",
+    signupUrl: "https://aistudio.google.com/app/apikey",
+    models: ["gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite"],
+    labelIncludes: ["gemini"],
+  },
+  {
     id: "openrouter",
     label: "OpenRouter",
     icon: "OR",
@@ -179,7 +212,7 @@ export const MODEL_MAP_BY_TYPE: Record<string, string[]> = Object.fromEntries(
 /** Reverse lookup: model name → provider type */
 const MODEL_TO_TYPE: Record<string, string> = {};
 for (const tpl of PROVIDER_REGISTRY) {
-  if (tpl.type === "oauth") continue; // Skip virtual providers — models overlap with anthropic-compat
+  if (tpl.type === "oauth" || tpl.type === "gemini-cli") continue; // Skip virtual providers — models overlap
   for (const m of tpl.models) {
     MODEL_TO_TYPE[m] = tpl.type;
   }
@@ -201,6 +234,7 @@ export function getProviderTypeForModel(model: string): string | null {
   if (model.startsWith("gemini-")) return "gemini-compat";
   if (model.startsWith("mimo-")) return "mimo-compat";
   if (model.startsWith("claude-")) return "anthropic-compat";
+  if (model.endsWith("-codex") || model.includes("-codex")) return "codex";
   if (model.startsWith("gpt-") || model.startsWith("o")) return "openai-compat";
   return null;
 }
@@ -235,7 +269,7 @@ export const CLAUDE_OAUTH_MODELS = PROVIDER_REGISTRY.find(t => t.id === "claude-
 // Derived from PROVIDER_REGISTRY. When adding a new provider, the registry is
 // the single source — this is auto-generated from it for UI compatibility.
 export const BUILTIN_TEMPLATES = PROVIDER_REGISTRY
-  .filter(t => t.id !== "claude-oauth") // claude-oauth is virtual, not a user-configurable template
+  .filter(t => t.id !== "claude-oauth" && t.id !== "codex-oauth" && t.id !== "gemini-cli") // virtual providers, not user-configurable templates
   .map(t => ({
     id: t.id,
     label: t.label,
