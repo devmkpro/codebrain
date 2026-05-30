@@ -1,6 +1,6 @@
 # Codebrain
 
-> Multi-agent AI IDE. Orchestrate Claude, Gemini, and more — side by side, in real time.
+> Multi-agent AI IDE. Orchestrate Claude, Gemini, MIMO and more — side by side, in real time.
 
 ---
 
@@ -27,8 +27,14 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 - **Consensus** — majority/unanimous/weighted voting + automatic leader election
 - **Priority MessageBus** — in-memory messaging with 4 priority levels, ack/retry, TTL, metrics
 - **156 MCP tools** — pane, browser, memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus, skills
-- **Skills system** — create, list, install and manage prompt templates scoped to project or globally (`~/.codebrain/skills/`)
+- **Skills system** — create, list, install and manage prompt templates scoped to project or globally (`~/.codebrain/skills/`); marketplace with featured skills, tag filters, and one-click install all
 - **Voice input** — push-to-talk with Groq Whisper transcription
+- **Discord Rich Presence** — shows Codebrain status in your Discord profile; Client ID configurable via Settings
+- **Desktop notifications** — native OS notifications when agents complete tasks, receive messages, or builds finish; toggleable per event type in Settings
+- **Session export** — export any session as Markdown or JSON with a native save dialog
+- **Session history** — SQLite-backed history panel; auto-saves every terminal session with preview and delete
+- **Token cost tracking** — real-time cost per session/model/agent with budget alerts; supports 140+ models (Claude, Gemini, MIMO, Codex, OpenRouter, DeepSeek, Grok and more)
+- **Auto-update** — background update checks with Windows registry repair
 
 ---
 
@@ -53,8 +59,12 @@ That's it. Hot reload is instant.
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+Shift+I` | Renderer DevTools |
-| `Ctrl+R` | Reload renderer |
+| `F12` | Toggle DevTools (dev mode) |
+| `Ctrl+R` | Blocked in production (prevents accidental reload) |
+| `Ctrl+Q` / `Cmd+Q` | Quit app |
+| `Ctrl+W` / `Cmd+W` | Close window |
+| `Ctrl+M` / `Cmd+M` | Minimize window |
+| `Escape` | Minimize window |
 
 ---
 
@@ -382,10 +392,14 @@ codebrain/
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+T` | New pane |
-| `Ctrl+W` | Close pane |
 | `Ctrl+1-9` | Focus pane by number |
 | `Ctrl+Shift+I` | DevTools |
 | `Space` (hold) | Voice input |
+| `F12` | Toggle DevTools (dev mode) |
+| `Ctrl+Q` / `Cmd+Q` | Quit app |
+| `Ctrl+W` / `Cmd+W` | Close window |
+| `Ctrl+M` / `Cmd+M` | Minimize window |
+| `Escape` | Minimize window |
 
 ---
 
