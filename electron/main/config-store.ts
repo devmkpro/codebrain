@@ -2,11 +2,19 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { app } from "electron";
 
+export interface NotificationSettings {
+  onTaskComplete?: boolean;
+  onMessage?: boolean;
+  onBuildResult?: boolean;
+}
+
 export interface AppConfig {
   theme?: "dark" | "light";
   autoRestore?: boolean;
   /** Custom env vars applied to ALL spawned agents. */
   globalEnv?: Record<string, string>;
+  /** Notification preferences. */
+  notifications?: NotificationSettings;
   [key: string]: unknown;
 }
 

@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, dialog } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import log from "electron-log/main.js";
@@ -119,11 +119,132 @@ ${panesSummary}
     }
   });
 
-  // Stubs for features not yet ported
+  // ── Session Export ──────────────────────────────────────────────────────
+  ipcMain.handle("session:export", async (_event, opts: { paneId?: string; format: "markdown" | "json"; includeAll?: boolean }) => {
+    try {
+      const { paneId, format = "markdown", includeAll = false } = opts;
+      const panes = ctx.ptyManager.list();
+      const targets = includeAll
+        ? panes
+        : paneId
+          ? panes.filter((p) => p.paneId === paneId)
+          : panes;
+
+      if (targets.length === 0) {
+        return { ok: false, error: "Nenhum pane ativo para exportar" };
+      }
+
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10);
+      const timeStr = now.toTimeString().slice(0, 5);
+      const wsName = path.basename(ctx.currentWorkspacePath);
+
+      if (format === "json") {
+        const data = {
+          exportedAt: now.toISOString(),
+          workspace: wsName,
+          workspacePath: ctx.currentWorkspacePath,
+          panes: targets.map((p) => {
+            const cfg = ctx.paneConfigs.get(p.paneId);
+            const registry = ctx.paneRegistry.get(p.paneId);
+            return {
+              paneId: p.paneId,
+              agent: p.agent,
+              model: cfg?.model,
+              providerId: cfg?.providerId,
+              role: cfg?.role,
+              cwd: p.cwd,
+              startedAt: registry?.spawnedAt,
+              output: ctx.ptyManager.read(p.paneId, 500),
+            };
+          }),
+        };
+
+        const defaultName = `codebrain-export-${dateStr}.json`;
+        const win = ctx.mainWindow;
+        const result = win
+          ? await dialog.showSaveDialog(win, {
+              title: "Exportar Sessão (JSON)",
+              defaultPath: defaultName,
+              filters: [{ name: "JSON", extensions: ["json"] }],
+            })
+          : { canceled: false, filePath: path.join(ctx.currentWorkspacePath, defaultName) };
+
+        if (result.canceled || !result.filePath) return { ok: false, error: "cancelado" };
+        fs.writeFileSync(result.filePath, JSON.stringify(data, null, 2), "utf-8");
+        return { ok: true, path: result.filePath };
+      }
+
+      // Markdown format
+      let md = `# Codebrain Session Export\n`;
+      md += `**Data:** ${dateStr} ${timeStr}  \n`;
+      md += `**Workspace:** ${wsName}\n\n`;
+
+      for (const p of targets) {
+        const cfg = ctx.paneConfigs.get(p.paneId);
+        const registry = ctx.paneRegistry.get(p.paneId);
+        const label = cfg?.role || p.agent;
+        const model = cfg?.model || "—";
+        const startTime = registry?.spawnedAt
+          ? new Date(registry.spawnedAt).toTimeString().slice(0, 5)
+          : "—";
+        const lines = ctx.ptyManager.read(p.paneId, 500);
+
+        md += `## Pane: ${label}\n`;
+        md += `**Modelo:** ${model} | **Agente:** ${p.agent} | **Início:** ${startTime}\n\n`;
+        md += "```\n";
+        md += lines.join("\n") || "(sem output)";
+        md += "\n```\n\n";
+      }
+
+      const defaultName = `codebrain-export-${dateStr}.md`;
+      const win = ctx.mainWindow;
+      const result = win
+        ? await dialog.showSaveDialog(win, {
+            title: "Exportar Sessão (Markdown)",
+            defaultPath: defaultName,
+            filters: [{ name: "Markdown", extensions: ["md"] }],
+          })
+        : { canceled: false, filePath: path.join(ctx.currentWorkspacePath, defaultName) };
+
+      if (result.canceled || !result.filePath) return { ok: false, error: "cancelado" };
+      fs.writeFileSync(result.filePath, md, "utf-8");
+      return { ok: true, path: result.filePath };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  // ── Session History (SQLite-backed) ──────────────────────────────────────
+  ipcMain.handle("session:loadAll", async (_event, workspacePath?: string) => {
+    try {
+      const result = ctx.memoryStore.listSessionHistory({ workspace: workspacePath || undefined });
+      return result.sessions || [];
+    } catch (err) {
+      log.error("[session] loadAll error:", err);
+      return [];
+    }
+  });
+
+  ipcMain.handle("session:deleteOne", async (_event, _workspacePath: string, sessionId: string) => {
+    try {
+      ctx.memoryStore.deleteSessionHistory({ id: sessionId });
+      return { ok: true };
+    } catch (err) {
+      log.error("[session] deleteOne error:", err);
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcMain.handle("session:clear", async (_event, workspacePath?: string) => {
+    try {
+      ctx.memoryStore.clearSessionHistory({ workspace: workspacePath || undefined });
+    } catch (err) {
+      log.error("[session] clear error:", err);
+    }
+  });
+
   ipcMain.handle("session:load", async () => []);
-  ipcMain.handle("session:loadAll", async () => []);
-  ipcMain.handle("session:clear", async () => {});
-  ipcMain.handle("session:deleteOne", async () => {});
   ipcMain.handle("claude:sessions", async () => []);
   ipcMain.handle("claude:summary", async () => "");
   ipcMain.handle("log:list", async () => []);

@@ -18,6 +18,7 @@ interface SkillsState {
   getSkill: (id: string) => Promise<{ ok: boolean; manifest?: SkillManifest; content?: Record<string, string>; error?: string }>;
   installFromRegistry: (id: string) => Promise<{ ok: boolean; error?: string }>;
   uninstallSkill: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  installAll: () => Promise<{ installed: number; failed: number }>;
   sync: (direction: "pull" | "push") => Promise<{ ok: boolean; results?: Array<{ id: string; action: string; version?: string }>; error?: string }>;
 }
 
@@ -77,6 +78,25 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     } catch (err: any) {
       return { ok: false, error: err?.message || String(err) };
     }
+  },
+
+  installAll: async () => {
+    const { registrySkills, installed } = get();
+    const installedIds = new Set(installed.map(e => e.manifest.id));
+    const toInstall = registrySkills.filter(s => !installedIds.has(s.id));
+    let installed_count = 0;
+    let failed_count = 0;
+    for (const skill of toInstall) {
+      try {
+        const result = await window.codeBrainApp.skill.installFromRegistry({ id: skill.id });
+        if (result.ok) installed_count++;
+        else failed_count++;
+      } catch {
+        failed_count++;
+      }
+    }
+    await get().loadInstalled();
+    return { installed: installed_count, failed: failed_count };
   },
 
   sync: async (direction: "pull" | "push") => {

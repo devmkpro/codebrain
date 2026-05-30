@@ -109,6 +109,30 @@ app.whenReady().then(async () => {
   });
   ctx.ptyManager.on("exit", (paneId: string, exitCode: number) => {
     safeSend(ctx, "pty:exit", paneId, exitCode);
+
+    // Auto-save to session history BEFORE deleting config/registry
+    try {
+      const cfg = ctx.paneConfigs.get(paneId);
+      const registry = ctx.paneRegistry.get(paneId);
+      const now = Date.now();
+      const output = ctx.ptyManager.read(paneId, 200);
+      ctx.memoryStore.saveSessionHistory({
+        pane_id: paneId,
+        label: cfg?.role || cfg?.agent || "unknown",
+        agent: cfg?.agent,
+        model: cfg?.model,
+        provider_id: cfg?.providerId,
+        workspace: ctx.currentWorkspacePath,
+        started_at: registry?.spawnedAt,
+        ended_at: now,
+        duration_ms: registry?.spawnedAt ? now - registry.spawnedAt : undefined,
+        exit_code: exitCode,
+        output_preview: output.slice(-5).join("\n").slice(0, 500),
+      });
+    } catch (err) {
+      log.error("[session] auto-save history failed:", err);
+    }
+
     ctx.paneConfigs.delete(paneId);
     ctx.paneRegistry.delete(paneId);
   });

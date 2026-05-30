@@ -4,7 +4,7 @@ import {
   Terminal, Zap, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, Info, Save,
   RotateCcw, Download, Trash2, RefreshCw, Shield,
-  Type, Monitor, Plus, X, Variable, Gamepad2,
+  Type, Monitor, Plus, X, Variable, Gamepad2, Bell,
 } from 'lucide-react';
 import {
   useTerminalSettings,
@@ -15,7 +15,7 @@ import {
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'notifications' | 'discord' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -146,6 +146,10 @@ export function SettingsPage() {
   // Global env vars
   const [globalEnv, setGlobalEnv] = useState<Record<string, string>>({});
   const [envMsg, setEnvMsg] = useState<string | null>(null);
+  // Notification settings
+  const [notifOnTaskComplete, setNotifOnTaskComplete] = useState(true);
+  const [notifOnMessage, setNotifOnMessage] = useState(true);
+  const [notifOnBuildResult, setNotifOnBuildResult] = useState(false);
 
   // Default spawn config (per workspace + per provider)
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
@@ -218,11 +222,16 @@ export function SettingsPage() {
         setProviderDefaultModels(saved);
       } catch {}
     })();
-    // Load appConfig (globalEnv, discordClientId)
+    // Load appConfig (globalEnv, discordClientId, notifications)
     (window as any).codeBrainApp?.appConfig?.get?.()
       .then((cfg: any) => {
         if (cfg && typeof cfg.globalEnv === 'object' && cfg.globalEnv) setGlobalEnv(cfg.globalEnv as Record<string, string>);
         if (cfg?.discordClientId) setDiscordClientId(cfg.discordClientId);
+        if (cfg?.notifications) {
+          if (cfg.notifications.onTaskComplete !== undefined) setNotifOnTaskComplete(cfg.notifications.onTaskComplete);
+          if (cfg.notifications.onMessage !== undefined) setNotifOnMessage(cfg.notifications.onMessage);
+          if (cfg.notifications.onBuildResult !== undefined) setNotifOnBuildResult(cfg.notifications.onBuildResult);
+        }
       })
       .catch(() => {});
     // Load Discord status
@@ -294,9 +303,10 @@ export function SettingsPage() {
           { id: 'providers' as Section, icon: <Zap size={12} />,      label: 'Providers' },
           { id: 'spawn'     as Section, icon: <Monitor size={12} />,  label: 'Spawn Padrão' },
           { id: 'envvars'   as Section, icon: <Variable size={12} />, label: 'Env Vars' },
-          { id: 'skill'     as Section, icon: <Download size={12} />, label: 'Skill & CLI' },
-          { id: 'discord'   as Section, icon: <Gamepad2 size={12} />, label: 'Discord'   },
-          { id: 'advanced'  as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
+          { id: 'skill'          as Section, icon: <Download size={12} />, label: 'Skill & CLI' },
+          { id: 'notifications'  as Section, icon: <Bell size={12} />,     label: 'Notificações' },
+          { id: 'discord'        as Section, icon: <Gamepad2 size={12} />, label: 'Discord'   },
+          { id: 'advanced'       as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
         ] as const).map(({ id, icon, label }) => (
           <button key={id} onClick={() => toggleSection(id)}
             className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-[11px] transition-all ${open.includes(id) ? 'bg-[#4F46E5]/10 border border-[#4F46E5]/20 text-indigo-300' : 'text-slate-500 hover:bg-white/5 border border-transparent hover:border-white/5 hover:text-slate-300'}`}
@@ -780,6 +790,45 @@ export function SettingsPage() {
             </div>
           </SectionCard>
 
+          {/* ── Notificações ──────────────────────────────────────────── */}
+          <SectionCard id="notifications" icon={<Bell size={13} />} title="Notificações" badge="Desktop" active={open.includes('notifications')} onToggle={toggleSection}>
+            <p className="text-[10px] text-slate-500 leading-relaxed mb-3">
+              Notificações desktop nativas. Configure quando o Codebrain deve te alertar.
+            </p>
+            <Row label="Agente completa tarefa" description="Notifica quando um agente fica idle após >30s de atividade">
+              <Toggle
+                enabled={notifOnTaskComplete}
+                onChange={async (v) => {
+                  setNotifOnTaskComplete(v);
+                  await (window as any).codeBrainApp?.appConfig?.set?.({ notifications: { onTaskComplete: v, onMessage: notifOnMessage, onBuildResult: notifOnBuildResult } });
+                }}
+              />
+            </Row>
+            <Divider />
+            <Row label="Agente recebe mensagem" description="Notifica ao receber mensagens de outros agentes via pane_send_message">
+              <Toggle
+                enabled={notifOnMessage}
+                onChange={async (v) => {
+                  setNotifOnMessage(v);
+                  await (window as any).codeBrainApp?.appConfig?.set?.({ notifications: { onTaskComplete: notifOnTaskComplete, onMessage: v, onBuildResult: notifOnBuildResult } });
+                }}
+              />
+            </Row>
+            <Divider />
+            <Row label="Build falha ou sucede" description="Notifica quando um build/test termina com sucesso ou falha">
+              <Toggle
+                enabled={notifOnBuildResult}
+                onChange={async (v) => {
+                  setNotifOnBuildResult(v);
+                  await (window as any).codeBrainApp?.appConfig?.set?.({ notifications: { onTaskComplete: notifOnTaskComplete, onMessage: notifOnMessage, onBuildResult: v } });
+                }}
+              />
+            </Row>
+            <p className="text-[9px] text-slate-600 font-mono mt-3">
+              As notificações são salvas automaticamente ao alternar.
+            </p>
+          </SectionCard>
+
           {/* ── Discord ──────────────────────────────────────────────── */}
           <SectionCard id="discord" icon={<Gamepad2 size={13} />} title="Discord Rich Presence" active={open.includes('discord')} onToggle={toggleSection}>
             <p className="text-[10px] text-slate-500 leading-relaxed">
@@ -876,6 +925,7 @@ export function SettingsPage() {
             { label: 'Env Vars',  value: `${Object.keys(globalEnv).length} variáve${Object.keys(globalEnv).length !== 1 ? 'is' : 'l'}` },
             { label: 'Skill',     value: skillStatus === null ? '—' : skillStatus.installed ? 'Instalada' : 'Não instalada' },
             { label: 'CLI',       value: cliStatus === null ? '—' : cliStatus.found ? 'Encontrada' : 'Não encontrada' },
+            { label: 'Notificações', value: `${[notifOnTaskComplete && 'tarefa', notifOnMessage && 'msg', notifOnBuildResult && 'build'].filter(Boolean).length} ativa(s)` },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between text-[10px] py-2 border-b border-white/[0.04]">
               <span className="text-slate-600">{label}</span>

@@ -182,6 +182,48 @@ function createMCPBridge(ptyManager, opts = {}) {
     } catch {}
   });
 
+  // ── Desktop notification on idle (task complete) ────────────────────────
+  // Track when panes receive writes so we can detect >30s of activity.
+  const paneActivityStart = new Map();
+  const notifyIdleDebounce = new Map();
+  // Record write timestamps for activity tracking
+  const originalWritePane = paneHandlers.writePane.bind(paneHandlers);
+  paneHandlers.writePane = async function trackedWritePane(paneId, text, submit) {
+    const now = Date.now();
+    if (!paneActivityStart.has(paneId)) paneActivityStart.set(paneId, now);
+    return originalWritePane(paneId, text, submit);
+  };
+  ptyManager.on("idle", ({ paneId }) => {
+    try {
+      const configStore = opts.configStore;
+      if (!configStore) return;
+      const notifSettings = configStore.get()?.notifications;
+      if (!notifSettings?.onTaskComplete) return;
+      const startedAt = paneActivityStart.get(paneId);
+      if (!startedAt) return;
+      const activityDuration = Date.now() - startedAt;
+      paneActivityStart.delete(paneId);
+      if (activityDuration < 30000) return; // Only notify after >30s of activity
+      // Debounce: one notification per 60s per pane
+      const now = Date.now();
+      const lastNotif = notifyIdleDebounce.get(paneId) || 0;
+      if (now - lastNotif < 60000) return;
+      notifyIdleDebounce.set(paneId, now);
+      // Get pane label
+      const label = paneLabels.get(paneId) || paneId.slice(0, 8);
+      // Fire desktop notification via Electron Notification API
+      try {
+        const { Notification } = require("electron");
+        if (Notification.isSupported()) {
+          new Notification({
+            title: "Codebrain",
+            body: `Agente "${label}" concluiu a tarefa`,
+          }).show();
+        }
+      } catch {}
+    } catch {}
+  });
+
   // ── Auto-check for unread messages on idle ──────────────────────────────
   // When a pane goes idle, check if it has unread messages in the file inbox.
   // If so, inject the pane_read_messages command into the agent's STDIN so it
@@ -326,6 +368,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     agentScorer,
     costTracker,
     workerManager,
+    configStore: opts.configStore,
     // Override listPanes to pass paneLabels
     async listPanes() {
       return paneHandlers.listPanes(paneLabels);

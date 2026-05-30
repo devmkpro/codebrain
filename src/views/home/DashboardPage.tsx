@@ -29,12 +29,12 @@ function folderName(p: string) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function StatCard({ icon, label, value, sub, color = '#4F46E5' }: { icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div className="p-4 rounded-xl border border-white/5 bg-[#0A0A0B]/60 flex flex-col gap-2">
+    <div className="p-4 rounded-xl border border-white/5 bg-[#0A0A0B]/60 flex flex-col gap-2 hover:border-white/10 hover:bg-[#0A0A0B]/80 transition-all group cursor-default">
       <div className="flex items-center gap-2" style={{ color }}>
         {icon}
         <span className="text-[9px] font-mono uppercase tracking-widest text-slate-600">{label}</span>
       </div>
-      <p className="text-2xl font-bold text-white font-mono">{value}</p>
+      <p className="text-2xl font-bold text-white font-mono group-hover:scale-105 transition-transform origin-left">{value}</p>
       {sub && <p className="text-[9px] text-slate-700">{sub}</p>}
     </div>
   );
@@ -43,15 +43,15 @@ function StatCard({ icon, label, value, sub, color = '#4F46E5' }: { icon: React.
 function PaneRow({ pane }: { pane: any }) {
   const isRun = pane.status === 'running';
   return (
-    <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-white/5 bg-[#0A0A0B]/50 hover:border-white/10 transition-all">
-      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRun ? 'bg-emerald-400 animate-pulse' : pane.kind === 'browser' ? 'bg-cyan-400' : 'bg-slate-700'}`} />
+    <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-white/[0.04] bg-[#0A0A0B]/50 hover:border-white/10 hover:bg-[#0A0A0B]/70 transition-all">
+      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRun ? 'bg-emerald-400 animate-pulse shadow-[0_0_4px_rgba(52,211,153,0.4)]' : pane.kind === 'browser' ? 'bg-cyan-400' : 'bg-slate-700'}`} />
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-mono text-slate-300 truncate">
           {pane.agent ?? 'shell'}{pane.model ? ` · ${pane.model}` : ''}
         </p>
       </div>
       <span className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-full shrink-0 ${
-        isRun ? 'bg-emerald-500/10 text-emerald-400' : pane.kind === 'browser' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-white/5 text-slate-600'
+        isRun ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15' : pane.kind === 'browser' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-white/5 text-slate-600'
       }`}>
         {pane.kind === 'browser' ? 'browser' : pane.status ?? 'idle'}
       </span>
@@ -64,23 +64,25 @@ function WorkspaceGroup({ tab, panes, onSwitch }: { tab: any; panes: any[]; onSw
   const running = panes.filter(p => p.status === 'running').length;
   const [open,  setOpen] = useState(true);
   return (
-    <div className="rounded-xl border border-white/5 bg-[#0A0A0B]/30 overflow-hidden mb-3">
+    <div className="rounded-xl border border-white/[0.04] bg-[#0A0A0B]/30 overflow-hidden mb-3 hover:border-white/[0.06] transition-all">
       <div
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.02] transition-all cursor-pointer"
       >
-        <Server size={13} className="text-[#4F46E5] shrink-0" />
+        <div className="w-7 h-7 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center shrink-0">
+          <Server size={12} className="text-violet-400" />
+        </div>
         <div className="flex-1 min-w-0 text-left">
           <p className="text-[11px] font-bold text-slate-200 truncate">{name}</p>
           <p className="text-[9px] font-mono text-slate-600 truncate">{tab.workspacePath}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full ${running > 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-600 bg-white/5'}`}>
+          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full ${running > 0 ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/15' : 'text-slate-600 bg-white/5'}`}>
             {panes.length} pane{panes.length !== 1 ? 's' : ''}{running > 0 ? ` · ${running} ativo${running !== 1 ? 's' : ''}` : ''}
           </span>
           <button
             onClick={e => { e.stopPropagation(); onSwitch(); }}
-            className="text-[9px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded hover:bg-indigo-500/20 transition-all uppercase tracking-widest"
+            className="text-[9px] font-mono text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded hover:bg-violet-500/20 hover:shadow-[0_0_8px_rgba(139,92,246,0.1)] transition-all uppercase tracking-widest"
           >
             ir →
           </button>
@@ -105,9 +107,9 @@ function TaskRow({ task }: { task: any }) {
     : task.name;
   return (
     <div className={`flex items-start gap-2.5 p-3 rounded-lg border transition-all ${
-      task.status === 'in_progress' ? 'border-red-500/15 bg-red-500/5'
+      task.status === 'in_progress' ? 'border-violet-500/15 bg-violet-500/5'
       : task.status === 'done'      ? 'border-white/[0.03] opacity-60'
-      : 'border-white/5 bg-[#0A0A0B]/50'
+      : 'border-white/[0.04] bg-[#0A0A0B]/50 hover:border-white/[0.06]'
     }`}>
       {task.status === 'done'
         ? <Activity size={11} className="text-emerald-500 shrink-0 mt-0.5" />
@@ -222,13 +224,13 @@ export function DashboardPage() {
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* ── Left sidebar ─────────────────────────────────────────── */}
-      <aside className="w-72 border-r border-white/5 bg-[#0F0F13] hidden md:flex flex-col overflow-hidden">
+      <aside className="w-72 border-r border-white/[0.04] hidden md:flex flex-col overflow-hidden" style={{ background: 'linear-gradient(180deg, #0F0F13 0%, #0D0D14 100%)' }}>
         {/* CTA */}
-        <div className="p-5 border-b border-white/5">
+        <div className="p-5 border-b border-white/[0.04]">
           <button
             onClick={() => handleOpen()}
             disabled={launching}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#4F46E5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4338CA] disabled:opacity-60 disabled:cursor-wait transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[11px] font-bold uppercase tracking-widest hover:from-violet-500 hover:to-indigo-500 hover:shadow-[0_0_20px_rgba(139,92,246,0.25)] disabled:opacity-60 disabled:cursor-wait transition-all"
           >
             <FolderOpen size={14} />
             {launching ? 'Iniciando…' : 'Abrir Workspace'}
@@ -276,10 +278,10 @@ export function DashboardPage() {
             { href: '/settings'   as const, label: 'Configurações',   icon: <Zap size={12} /> },
           ]).map(({ href, label, icon }) => (
             <Link key={href} href={href}
-              className="flex items-center justify-between p-3 rounded-lg border border-white/5 hover:border-[#4F46E5]/30 hover:bg-[#4F46E5]/5 transition-all group"
+              className="flex items-center justify-between p-3 rounded-lg border border-white/[0.04] hover:border-violet-500/30 hover:bg-violet-500/5 transition-all group"
             >
               <div className="flex items-center gap-2 text-slate-500 group-hover:text-slate-300">{icon}<span className="text-[10px] font-medium">{label}</span></div>
-              <ChevronRight size={12} className="text-slate-700 group-hover:text-[#4F46E5]" />
+              <ChevronRight size={12} className="text-slate-700 group-hover:text-violet-400 transition-colors" />
             </Link>
           ))}
         </div>
@@ -288,7 +290,7 @@ export function DashboardPage() {
       {/* ── Center ───────────────────────────────────────────────── */}
       <section className="flex-1 flex flex-col bg-[#0B0B0E] overflow-hidden">
         {/* Sub-nav */}
-        <div className="h-10 border-b border-white/5 flex items-center px-6 justify-between bg-[#0F0F13]/50 shrink-0">
+        <div className="h-10 border-b border-white/[0.04] flex items-center px-6 justify-between bg-[#0F0F13]/50 shrink-0 backdrop-blur-sm">
           <div className="flex h-7 bg-white/5 rounded p-0.5 border border-white/10">
             {(['panes', 'tasks'] as const).map(t => (
               <button key={t} onClick={() => setView(t)}
@@ -310,7 +312,7 @@ export function DashboardPage() {
               <motion.div key="panes" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="relative z-10">
                 {panes.length === 0 ? (
                   <EmptyState
-                    icon={<Terminal size={32} className="text-slate-800" />}
+                    icon={<Terminal size={32} className="text-violet-500/40" />}
                     title="Nenhum pane ativo"
                     sub="Abra um workspace para começar"
                     action={{ label: 'Abrir Workspace', onClick: () => handleOpen() }}
@@ -357,10 +359,10 @@ export function DashboardPage() {
       </section>
 
       {/* ── Right sidebar — Recent workspaces ────────────────────── */}
-      <aside className="w-80 border-l border-white/5 bg-[#0F0F13] hidden xl:flex flex-col overflow-hidden">
-        <div className="p-5 border-b border-white/5 flex items-center justify-between">
+      <aside className="w-80 border-l border-white/[0.04] hidden xl:flex flex-col overflow-hidden" style={{ background: 'linear-gradient(180deg, #0F0F13 0%, #0D0D14 100%)' }}>
+        <div className="p-5 border-b border-white/[0.04] flex items-center justify-between">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Recentes</h3>
-          <span className="text-[9px] font-mono text-slate-700">{recents.length}</span>
+          <span className="text-[9px] font-mono text-slate-700 bg-white/5 px-1.5 py-0.5 rounded">{recents.length}</span>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ scrollbarWidth: 'thin' }}>
           {recents.length === 0 ? (
@@ -372,13 +374,13 @@ export function DashboardPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.04 }}
               onClick={() => handleOpen(path)}
-              className="w-full p-3.5 rounded-xl border border-white/5 bg-[#0A0A0B]/60 hover:border-[#4F46E5]/30 hover:bg-[#4F46E5]/5 transition-all text-left group"
+              className="w-full p-3.5 rounded-xl border border-white/[0.04] bg-[#0A0A0B]/60 hover:border-violet-500/20 hover:bg-violet-500/[0.04] hover:shadow-[0_0_16px_rgba(139,92,246,0.06)] transition-all text-left group"
             >
               <div className="flex items-center justify-between mb-1.5">
-                <div className="w-7 h-7 rounded-lg bg-[#4F46E5]/10 border border-[#4F46E5]/20 flex items-center justify-center shrink-0">
-                  <FolderOpen size={13} className="text-[#4F46E5]" />
+                <div className="w-7 h-7 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center shrink-0 group-hover:bg-violet-500/15 group-hover:border-violet-500/25 transition-all">
+                  <FolderOpen size={13} className="text-violet-400" />
                 </div>
-                <ChevronRight size={12} className="text-slate-700 group-hover:text-[#4F46E5] transition-colors" />
+                <ChevronRight size={12} className="text-slate-700 group-hover:text-violet-400 transition-colors" />
               </div>
               <p className="text-[12px] font-bold text-slate-200 truncate group-hover:text-white transition-colors">{folderName(path)}</p>
               <p className="text-[9px] font-mono text-slate-600 truncate mt-0.5">{path}</p>
@@ -386,9 +388,9 @@ export function DashboardPage() {
           ))}
         </div>
         {recents.length > 0 && (
-          <div className="p-4 border-t border-white/5">
+          <div className="p-4 border-t border-white/[0.04]">
             <button onClick={() => handleOpen()}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:border-[#4F46E5]/30 hover:text-slate-300 transition-all"
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:border-violet-500/30 hover:text-slate-300 hover:bg-violet-500/5 transition-all cursor-pointer"
             ><Plus size={11} /> Outro Workspace</button>
           </div>
         )}
@@ -399,14 +401,16 @@ export function DashboardPage() {
 
 function EmptyState({ icon, title, sub, action }: { icon: React.ReactNode; title: string; sub: string; action?: { label: string; onClick: () => void } }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      {icon}
+    <div className="flex flex-col items-center justify-center py-16 gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-violet-500/5 border border-violet-500/10 flex items-center justify-center">
+        {icon}
+      </div>
       <div className="text-center">
-        <p className="text-[12px] font-bold text-slate-600">{title}</p>
-        {sub && <p className="text-[10px] text-slate-700 mt-1">{sub}</p>}
+        <p className="text-[13px] font-bold text-slate-500">{title}</p>
+        {sub && <p className="text-[10px] text-slate-600 mt-1.5 max-w-xs leading-relaxed">{sub}</p>}
       </div>
       {action && (
-        <button onClick={action.onClick} className="px-4 py-2 rounded-lg bg-[#4F46E5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4338CA] transition-colors">
+        <button onClick={action.onClick} className="mt-1 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[11px] font-bold uppercase tracking-widest hover:from-violet-500 hover:to-indigo-500 hover:shadow-[0_0_20px_rgba(139,92,246,0.25)] transition-all cursor-pointer">
           {action.label}
         </button>
       )}

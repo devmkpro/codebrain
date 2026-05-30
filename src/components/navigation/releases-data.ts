@@ -14,6 +14,44 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.7.0",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "Discord Rich Presence com Client ID configurável nas Settings"
+      },
+      {
+        "kind": "feat",
+        "text": "Atalhos de teclado: F12, Ctrl+R, Ctrl+Q, Ctrl+W, Ctrl+M, Escape"
+      },
+      {
+        "kind": "feat",
+        "text": "Layout redesenhado: gradientes violet/indigo, glow effects, thinking-pulse animation"
+      },
+      {
+        "kind": "feat",
+        "text": "Notificações desktop avançadas com toggles nas Settings (agente idle, mensagem, build)"
+      },
+      {
+        "kind": "feat",
+        "text": "Marketplace de Skills: Featured Skills, tag filters, badge de updates, instalar tudo"
+      },
+      {
+        "kind": "feat",
+        "text": "Export de sessão em Markdown e JSON com dialog nativo de salvar"
+      },
+      {
+        "kind": "feat",
+        "text": "Histórico de sessões persistido em SQLite com painel navegável"
+      },
+      {
+        "kind": "fix",
+        "text": "Preços corretos para Codex (gpt-5.5, gpt-5.4, gpt-5.4-mini) e Claude Opus 4.7/4.8 via OpenRouter"
+      }
+    ]
+  },
+  {
     "version": "1.6.9",
     "date": "maio 2026",
     "highlights": [

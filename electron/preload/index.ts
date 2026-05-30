@@ -162,6 +162,8 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
       ipcRenderer.invoke("session:deleteOne", workspacePath, sessionId),
     saveSnapshot: (workspacePath: string) => ipcRenderer.invoke("session:saveSnapshot", workspacePath),
     loadSnapshot: (workspacePath: string) => ipcRenderer.invoke("session:loadSnapshot", workspacePath),
+    export: (opts: { paneId?: string; format: "markdown" | "json"; includeAll?: boolean }) =>
+      ipcRenderer.invoke("session:export", opts),
   },
 
   claude: {

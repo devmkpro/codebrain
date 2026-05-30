@@ -94,6 +94,7 @@ function buildMcpBridge(ctx: AppContext) {
     providerHealth: ctx.providerHealth,
     hooksManager: ctx.hooksManager,
     costTracker: ctx.costTracker, // Shared singleton — same instance for MCP + IPC
+    configStore: ctx.configStore, // For notification settings
     roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };
 }

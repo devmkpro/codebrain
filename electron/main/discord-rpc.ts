@@ -117,6 +117,7 @@ const discordRichPresence = new DiscordRichPresence();
  */
 export function setupDiscordRPC(clientId?: string): void {
   const id = clientId || DEFAULT_APPLICATION_ID;
+  log.info("[discord-rpc] Starting with Application ID:", id);
   void discordRichPresence.start(id);
 }
 

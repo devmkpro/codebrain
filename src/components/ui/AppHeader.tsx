@@ -4,7 +4,8 @@ import {
   X, Plus, Settings, Activity, FolderOpen, Save, RotateCcw,
   ListTodo, Terminal, Globe, Users, Zap, Map, FileText,
   ChevronRight, ChevronDown, Home, Mic, MicOff, Volume2,
-  Shield, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, DollarSign,
+  Shield, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, DollarSign, History,
+  Bell, Search, Download, FileJson,
 } from 'lucide-react';
 import { Logo } from '../auth/Logo';
 import { Link, useRouter } from '../../lib/router';
@@ -20,6 +21,7 @@ import {
 } from '../../stores/tasks-store';
 import { useMemoryStore } from '../../stores/memory-store';
 import { useCostStore } from '../../stores/cost-store';
+import { useSessionHistoryStore } from '../../stores/session-history-store';
 import { useVoiceStore } from '../../stores/voice-store';
 import { useBrowserStore } from '../../stores/browser-store';
 import { useTerminalSettings } from '../../stores/terminal-settings-store';
@@ -113,15 +115,15 @@ function HomeHeader() {
     <>
 
       <header
-        className="h-14 border-b border-white/5 flex items-center px-6 justify-between bg-[#0F0F13] shrink-0 z-50 relative"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        className="h-14 border-b border-white/[0.04] flex items-center px-6 justify-between shrink-0 z-50 relative"
+        style={{ WebkitAppRegion: 'drag', background: 'linear-gradient(90deg, #0F0F13 0%, #111118 50%, #0F0F13 100%)' } as React.CSSProperties}
       >
         {/* Brand */}
         <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <Link href="/" className="flex items-center gap-2.5 group">
             <Logo size={22} />
             <span className="text-[14px] font-bold tracking-tight text-white">
-              Codebrain <span className="text-[#9d4edd]">OS</span>
+              Codebrain <span className="bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">OS</span>
             </span>
           </Link>
         </div>
@@ -140,28 +142,36 @@ function HomeHeader() {
 
         {/* Right */}
         <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          {/* Notification bell */}
+          <button
+            className="relative w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-300 hover:bg-white/[0.04] transition-all cursor-pointer"
+            title="Notificações"
+          >
+            <Bell size={14} />
+          </button>
+
           {/* Providers */}
           <button onClick={() => m.openProviders('list')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-slate-300 hover:border-white/20 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-violet-300 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all cursor-pointer"
           ><Zap size={11} /> Providers</button>
 
           {/* Squad */}
           <button onClick={() => m.setShowSquad(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-slate-300 hover:border-white/20 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-indigo-300 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all cursor-pointer"
           ><Users size={11} /> Squad</button>
 
           {/* Back to workspace */}
           {tabs.length > 0 && (
             <button
               onClick={() => useNavStore.getState().setActiveTab(useNavStore.getState().activeTabIndex)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#9d4edd]/10 border border-[#9d4edd]/20 text-violet-400 text-[10px] font-bold uppercase tracking-widest hover:bg-[#9d4edd]/20 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold uppercase tracking-widest hover:bg-violet-500/20 hover:shadow-[0_0_12px_rgba(139,92,246,0.15)] transition-all cursor-pointer"
             ><Activity size={11} /> Workspace</button>
           )}
 
           {/* Account */}
           <div ref={accountRef} className="relative">
             <button onClick={() => setShowAccount(v => !v)}
-              className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/25 flex items-center justify-center hover:bg-indigo-500/30 transition-all cursor-pointer"
+              className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/25 flex items-center justify-center hover:from-indigo-500/30 hover:to-violet-500/30 hover:shadow-[0_0_12px_rgba(99,102,241,0.2)] transition-all cursor-pointer"
             >
               <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail?.slice(0, 1).toUpperCase() ?? '?'}</span>
             </button>
@@ -188,7 +198,7 @@ function AccountDropdown({ profile, authEmail, activeWorkspace, modals: m, onClo
   ];
 
   return (
-    <div className="fixed right-2 top-[90px] w-64 bg-[#0c0c14] border border-white/[0.08] rounded-xl shadow-2xl z-[10000] overflow-hidden">
+    <div className="fixed right-2 top-[90px] w-64 bg-[#0c0c14]/95 border border-white/[0.08] rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-[10000] overflow-hidden backdrop-blur-md">
       <div className="px-4 py-3 border-b border-white/5">
         <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-0.5">Conta</p>
         <p className="font-mono text-[11px] text-slate-300 truncate">{authEmail}</p>
@@ -522,6 +532,70 @@ function PaneMenu({
   );
 }
 
+// ─── Export Menu ─────────────────────────────────────────────────────────────
+function ExportMenu() {
+  const [open, setOpen] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const handleExport = async (format: "markdown" | "json") => {
+    setBusy(true);
+    setOpen(false);
+    try {
+      const result = await window.codeBrainApp.session.export({ format, includeAll: true });
+      if (!result) {
+        window.codeBrainApp.notify("Codebrain", "Erro: sem resposta do processo principal");
+      } else if (!result.ok) {
+        if (result.error === "cancelado") {
+          // usuário cancelou o dialog — silencioso
+        } else if (result.error === "Nenhum pane ativo para exportar") {
+          window.codeBrainApp.notify("Codebrain", "Abra um terminal antes de exportar a sessão");
+        } else {
+          window.codeBrainApp.notify("Codebrain", `Erro ao exportar: ${result.error}`);
+        }
+      } else {
+        window.codeBrainApp.notify("Codebrain", `Sessão exportada com sucesso!`);
+      }
+    } catch (err: any) {
+      window.codeBrainApp.notify("Codebrain", `Erro ao exportar sessão: ${err?.message ?? String(err)}`);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div ref={ref} className="relative h-full">
+      <IconBtn icon={<Download size={15} strokeWidth={1.5} />} label="Exportar Sessão" onClick={() => setOpen(!open)} disabled={busy} />
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-[9999] bg-[#0c0c14] border border-white/10 rounded-lg shadow-2xl py-1 w-44">
+          <button
+            onClick={() => handleExport("markdown")}
+            className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-white/[0.05] cursor-pointer transition-colors"
+          >
+            <FileText size={13} className="text-violet-400" />
+            <span className="font-mono text-[11px] text-gray-300">Markdown (.md)</span>
+          </button>
+          <button
+            onClick={() => handleExport("json")}
+            className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-white/[0.05] cursor-pointer transition-colors"
+          >
+            <FileJson size={13} className="text-emerald-400" />
+            <span className="font-mono text-[11px] text-gray-300">JSON (.json)</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Audio / Voice Indicator ──────────────────────────────────────────────────
 function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
   const voiceStats = useVoiceStore(s => s.stats);
@@ -598,6 +672,9 @@ function WorkspaceHeader() {
 
   const costVisible = useCostStore(s => s.visible);
   const toggleCost = useCostStore(s => s.toggle);
+
+  const historyVisible = useSessionHistoryStore(s => s.visible);
+  const toggleHistory = useSessionHistoryStore(s => s.toggle);
 
   const appZoom = useTerminalSettings(s => s.appZoom);
   const increaseAppZoom = useTerminalSettings(s => s.increaseAppZoom);
@@ -734,18 +811,18 @@ function WorkspaceHeader() {
 
       {/* ── Main header row ───────────────────────────────────────── */}
       <div
-        className="h-12 border-b border-white/[0.06] flex items-stretch bg-[#0F0F13] shrink-0 overflow-x-auto relative"
-        style={{ WebkitAppRegion: 'drag', scrollbarWidth: 'none' } as React.CSSProperties}
+        className="h-12 border-b border-white/[0.04] flex items-stretch shrink-0 overflow-x-auto relative"
+        style={{ WebkitAppRegion: 'drag', scrollbarWidth: 'none', background: 'linear-gradient(90deg, #0F0F13 0%, #111118 50%, #0F0F13 100%)' } as React.CSSProperties}
       >
         {/* Brand / Home */}
         <button
           onClick={goHome}
-          className={`shrink-0 px-5 flex items-center gap-3 border-r border-white/[0.08] focus:outline-none group transition-all cursor-pointer ${onHome ? 'bg-violet-500/8' : 'hover:bg-white/[0.04]'}`}
+          className={`shrink-0 px-5 flex items-center gap-3 border-r border-white/[0.06] focus:outline-none group transition-all cursor-pointer ${onHome ? 'bg-violet-500/[0.06]' : 'hover:bg-white/[0.04]'}`}
           style={{ WebkitAppRegion: 'no-drag', minWidth: 140 } as React.CSSProperties}
           title="Home"
         >
           <Logo size={16} />
-          <span className={`font-mono text-[9px] font-bold tracking-[0.2em] transition-colors ${onHome ? 'text-violet-400' : 'text-slate-700 group-hover:text-violet-300'}`}>
+          <span className={`font-mono text-[9px] font-bold tracking-[0.2em] transition-colors ${onHome ? 'bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent' : 'text-slate-700 group-hover:text-violet-300'}`}>
             CODEBRAIN
           </span>
         </button>
@@ -800,6 +877,9 @@ function WorkspaceHeader() {
 
           {/* Usage */}
           <IconBtn icon={<DollarSign size={15} strokeWidth={1.5} />} label="Token Usage" onClick={toggleCost} active={costVisible} />
+
+          {/* History */}
+          <IconBtn icon={<History size={15} strokeWidth={1.5} />} label="History" onClick={toggleHistory} active={historyVisible} />
           <VDiv />
 
           {/* Session Map */}
@@ -817,6 +897,9 @@ function WorkspaceHeader() {
           {activeWorkspace && (
             <IconBtn icon={<Save size={15} strokeWidth={1.5} />} label="Salvar Sessão" onClick={handleSave} disabled={snapshotBusy} />
           )}
+
+          {/* Export Session */}
+          <ExportMenu />
 
           {/* Restore Session */}
           {activeWorkspace && (
@@ -836,7 +919,7 @@ function WorkspaceHeader() {
               <VDiv />
               <button
                 onClick={() => setShowPaneMenu(v => !v)}
-                className={`px-3 flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest focus:outline-none transition-all border-l border-white/[0.06] cursor-pointer ${showPaneMenu ? 'text-[#00d9ff] bg-[#00d9ff]/10' : 'text-violet-400/70 hover:text-[#00d9ff] hover:bg-[#00d9ff]/[0.06]'}`}
+                className={`px-3 flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest focus:outline-none transition-all border-l border-white/[0.06] cursor-pointer ${showPaneMenu ? 'text-[#00d9ff] bg-[#00d9ff]/10' : 'text-violet-400/70 hover:text-[#00d9ff] hover:bg-[#00d9ff]/[0.06] hover:shadow-[0_0_8px_rgba(0,217,255,0.08)]'}`}
                 title="Novo terminal / Restaurar sessão"
               >
                 <Plus size={12} strokeWidth={2.5} /> SHELL
@@ -866,7 +949,7 @@ function WorkspaceHeader() {
               className="h-full px-3 flex items-center gap-1.5 text-slate-600 hover:text-slate-300 hover:bg-white/[0.03] transition-all focus:outline-none cursor-pointer"
               title="Conta"
             >
-              <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/25 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/25 flex items-center justify-center hover:from-indigo-500/30 hover:to-violet-500/30 hover:shadow-[0_0_10px_rgba(99,102,241,0.15)] transition-all">
                 <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail?.slice(0, 1).toUpperCase() ?? '?'}</span>
               </div>
             </button>

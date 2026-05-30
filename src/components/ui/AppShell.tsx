@@ -10,6 +10,7 @@ import { WorkspaceView } from '../workspace/WorkspaceView';
 import { TasksSidebar }  from '../tasks/TasksSidebar';
 import { MemoryPanel }   from '../memory/MemoryPanel';
 import { UsageSidebar }  from '../settings/UsageSidebar';
+import { SessionHistoryPanel } from '../session/SessionHistoryPanel';
 import { WhatsNewModal } from '../navigation/WhatsNewModal';
 import { useNavStore }   from '../../stores/nav-store';
 
@@ -39,7 +40,7 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
 
   return (
     <RouterProvider>
-      <div className="flex flex-col bg-[#0B0B0E] text-slate-200 overflow-hidden" style={{ height: '100%' }}>
+      <div className="flex flex-col bg-[#0B0B0E] text-slate-200 overflow-hidden" style={{ height: '100%', background: 'linear-gradient(180deg, #0F0F13 0%, #0B0B0E 100%)' }}>
 
         {/*
           ── HEADER ────────────────────────────────────────────────────────────
@@ -81,6 +82,7 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
           <TasksSidebar />
           <MemoryPanel />
           <UsageSidebar />
+          <SessionHistoryPanel />
         </div>
 
         <AppFooter />
@@ -90,9 +92,9 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
       <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} currentVersion={appVersion} />
 
       {workspaceToast && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[9999]">
-          <div className="px-4 py-2 bg-[#111]/90 border border-white/10 rounded-lg shadow-xl backdrop-blur-sm">
-            <span className="font-mono text-[13px] font-bold text-gray-200 tracking-wide">
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[9999] animate-in fade-in zoom-in-95 duration-200">
+          <div className="px-5 py-3 bg-[#0c0c14]/95 border border-violet-500/20 rounded-xl shadow-[0_0_30px_rgba(139,92,246,0.15)] backdrop-blur-md">
+            <span className="font-mono text-[13px] font-bold text-slate-200 tracking-wide">
               {workspaceToast}
             </span>
           </div>

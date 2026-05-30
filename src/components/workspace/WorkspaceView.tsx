@@ -257,7 +257,7 @@ export function WorkspaceView({
   const showPicker = sessions !== null && workspacePanes.length === 0 && view?.kind !== "map" && view?.kind !== "files" && !autoSpawning;
   const showSessionLoading = sessionsLoading && workspacePanes.length === 0 && view?.kind !== "map" && view?.kind !== "files" && !autoSpawning;
 
-  return <div ref={rootRef} className="flex flex-col h-full bg-[#0B0B0E]" onDragOver={e => {
+  return <div ref={rootRef} className="flex flex-col h-full" style={{ background: 'linear-gradient(180deg, #0D0D14 0%, #0B0B0E 100%)' }} onDragOver={e => {
     if (!e.dataTransfer.types.includes(CODEBRAIN_FILE_DRAG_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
@@ -271,9 +271,12 @@ export function WorkspaceView({
     {/* ── Auto-spawning squad ───────────────────────────────── */}
     {autoSpawning && (
       <div className="flex-1 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 rounded-full border-2 border-[#4F46E5]/30 border-t-[#4F46E5] animate-spin" />
-          <p className="font-mono text-[11px] text-slate-500 uppercase tracking-widest">Iniciando squad…</p>
+        <div className="flex flex-col items-center gap-5">
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full border-2 border-violet-500/20 border-t-violet-500 animate-spin" />
+            <div className="absolute inset-0 w-10 h-10 rounded-full border-2 border-indigo-500/10 border-b-indigo-500/40 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+          </div>
+          <p className="font-mono text-[11px] text-slate-400 uppercase tracking-[0.2em]">Iniciando squad…</p>
         </div>
       </div>
     )}
@@ -312,7 +315,7 @@ export function WorkspaceView({
         <div className="max-w-2xl mx-auto px-6 py-8">
           {/* Header */}
           <div className="mb-8">
-            <p className="font-mono text-[10px] text-[#4F46E5] uppercase tracking-[0.25em] mb-2">
+            <p className="font-mono text-[10px] bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent uppercase tracking-[0.25em] mb-2">
               Workspace
             </p>
             <h2 className="text-xl font-bold text-white tracking-tight">{folderName}</h2>
@@ -321,22 +324,27 @@ export function WorkspaceView({
 
           {sessions.length === 0 ? (
             /* Empty state */
-            <div className="flex flex-col items-center justify-center py-16 gap-5">
-              <div className="w-14 h-14 rounded-2xl bg-[#4F46E5]/10 border border-[#4F46E5]/20 flex items-center justify-center">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
+            <div className="flex flex-col items-center justify-center py-16 gap-6">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/10 to-indigo-500/10 border border-violet-500/15 flex items-center justify-center">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.7)" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                </div>
               </div>
               <div className="text-center">
                 <p className="text-[14px] font-bold text-slate-400">Nenhuma sessão salva</p>
-                <p className="text-[11px] text-slate-600 mt-1.5 max-w-xs leading-relaxed">
-                  Use <span className="font-bold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded mx-0.5">+ PANE</span>
-                  no canto superior direito para abrir uma sessão com um provider.
+                <p className="text-[11px] text-slate-600 mt-2 max-w-xs leading-relaxed">
+                  Use <span className="font-bold text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded mx-0.5">+ SHELL</span>
+                  no header para abrir uma sessão com um provider.
                 </p>
               </div>
               <button
                 onClick={handleNew}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#4F46E5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4338CA] transition-colors cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[11px] font-bold uppercase tracking-widest hover:from-violet-500 hover:to-indigo-500 hover:shadow-[0_0_20px_rgba(139,92,246,0.25)] transition-all cursor-pointer"
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 Nova Sessão

@@ -176,6 +176,23 @@ function createMemoryStore(dbPath) {
       created_at   INTEGER NOT NULL DEFAULT (unixepoch())
     );
     CREATE INDEX IF NOT EXISTS idx_snapshots_aggregate ON event_snapshots(aggregate_id);
+
+    CREATE TABLE IF NOT EXISTS session_history (
+      id           TEXT PRIMARY KEY,
+      pane_id      TEXT,
+      label        TEXT,
+      agent        TEXT,
+      model        TEXT,
+      provider_id  TEXT,
+      workspace    TEXT,
+      started_at   INTEGER,
+      ended_at     INTEGER,
+      duration_ms  INTEGER,
+      exit_code    INTEGER,
+      output_preview TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_session_history_workspace ON session_history(workspace);
+    CREATE INDEX IF NOT EXISTS idx_session_history_ended ON session_history(ended_at);
   `);
 
   // Migration: add scope column if not already present (ALTER TABLE lacks IF NOT EXISTS)
@@ -292,6 +309,19 @@ function createMemoryStore(dbPath) {
     `),
     eventCount: db.prepare(`SELECT COUNT(*) as count FROM events WHERE aggregate_id = ?`),
     pruneEvents: db.prepare(`DELETE FROM events WHERE aggregate_id = ? AND sequence <= ?`),
+    // Session history
+    insertSessionHistory: db.prepare(`
+      INSERT INTO session_history (id, pane_id, label, agent, model, provider_id, workspace, started_at, ended_at, duration_ms, exit_code, output_preview)
+      VALUES (@id, @pane_id, @label, @agent, @model, @provider_id, @workspace, @started_at, @ended_at, @duration_ms, @exit_code, @output_preview)
+    `),
+    listSessionHistory: db.prepare(`
+      SELECT * FROM session_history
+      WHERE (@workspace IS NULL OR workspace = @workspace)
+      ORDER BY ended_at DESC LIMIT @limit OFFSET @offset
+    `),
+    getSessionHistory: db.prepare(`SELECT * FROM session_history WHERE id = ?`),
+    deleteSessionHistory: db.prepare(`DELETE FROM session_history WHERE id = ?`),
+    clearSessionHistory: db.prepare(`DELETE FROM session_history WHERE (@workspace IS NULL OR workspace = @workspace)`),
   };
 
   // ── ID Generator ──────────────────────────────────────────────────────────
@@ -848,6 +878,67 @@ function createMemoryStore(dbPath) {
             byAggregateType: byAggregateType.reduce((acc, row) => ({ ...acc, [row.aggregate_type]: row.count }), {}),
             byEventType: byEventType.reduce((acc, row) => ({ ...acc, [row.event_type]: row.count }), {})
         };
+    },
+
+    // ── Session History ─────────────────────────────────────────────────────
+
+    /**
+     * Save a session history entry.
+     */
+    saveSessionHistory({ pane_id, label, agent, model, provider_id, workspace, started_at, ended_at, duration_ms, exit_code, output_preview }) {
+      const id = `sh_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      stmts.insertSessionHistory.run({
+        id,
+        pane_id: pane_id || null,
+        label: label || null,
+        agent: agent || null,
+        model: model || null,
+        provider_id: provider_id || null,
+        workspace: workspace || null,
+        started_at: started_at || null,
+        ended_at: ended_at || Date.now(),
+        duration_ms: duration_ms || null,
+        exit_code: exit_code !== undefined ? exit_code : null,
+        output_preview: output_preview || null,
+      });
+      return { ok: true, id };
+    },
+
+    /**
+     * List session history entries.
+     */
+    listSessionHistory({ workspace, limit = 50, offset = 0 } = {}) {
+      const rows = stmts.listSessionHistory.all({
+        workspace: workspace || null,
+        limit,
+        offset,
+      });
+      return { ok: true, sessions: rows, count: rows.length };
+    },
+
+    /**
+     * Get a single session history entry.
+     */
+    getSessionHistory({ id }) {
+      const row = stmts.getSessionHistory.get(id);
+      if (!row) return { ok: false, error: "not found" };
+      return { ok: true, session: row };
+    },
+
+    /**
+     * Delete a session history entry.
+     */
+    deleteSessionHistory({ id }) {
+      stmts.deleteSessionHistory.run(id);
+      return { ok: true };
+    },
+
+    /**
+     * Clear session history.
+     */
+    clearSessionHistory({ workspace } = {}) {
+      stmts.clearSessionHistory.run({ workspace: workspace || null });
+      return { ok: true };
     },
 
     /**

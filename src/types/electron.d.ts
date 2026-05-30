@@ -76,6 +76,21 @@ export interface TokenPayload {
   totalTokens: number;
 }
 
+export interface SessionHistoryEntry {
+  id: string;
+  pane_id?: string;
+  label?: string;
+  agent?: string;
+  model?: string;
+  provider_id?: string;
+  workspace?: string;
+  started_at?: number;
+  ended_at?: number;
+  duration_ms?: number;
+  exit_code?: number;
+  output_preview?: string;
+}
+
 export interface Squad {
   id: string;
   name: string;
@@ -124,6 +139,11 @@ export interface WorkspaceConfig {
 export interface AppConfig {
   theme?: "dark" | "light";
   autoRestore?: boolean;
+  notifications?: {
+    onTaskComplete?: boolean;
+    onMessage?: boolean;
+    onBuildResult?: boolean;
+  };
   [key: string]: unknown;
 }
 
@@ -324,11 +344,12 @@ export interface CodebrainApp {
   };
   session: {
     load: (workspacePath: string) => Promise<unknown>;
-    loadAll: (workspacePath: string) => Promise<unknown[]>;
+    loadAll: (workspacePath: string) => Promise<SessionHistoryEntry[]>;
     clear: (workspacePath: string) => Promise<void>;
-    deleteOne: (workspacePath: string, sessionId: string) => Promise<void>;
+    deleteOne: (workspacePath: string, sessionId: string) => Promise<{ ok: boolean; error?: string }>;
     saveSnapshot: (workspacePath: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
     loadSnapshot: (workspacePath: string) => Promise<{ ok: boolean; snapshot?: unknown; error?: string }>;
+    export: (opts: { paneId?: string; format: "markdown" | "json"; includeAll?: boolean }) => Promise<{ ok: boolean; path?: string; error?: string }>;
   };
   claude: {
     summary: (sessionId: string) => Promise<string>;

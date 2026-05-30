@@ -24,24 +24,50 @@ const Package = ({ size = 12, className = "" }: { size?: number; className?: str
 const X = ({ size = 12, className = "" }: { size?: number; className?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
 );
+const Star = ({ size = 12, className = "" }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+);
+const Layers = ({ size = 12, className = "" }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></svg>
+);
+
+// ── Featured Skills Config ──
+const FEATURED_IDS = ["codebrain", "api-testing", "react-fullstack"];
+const FEATURED_GRADIENTS = [
+  "from-indigo-500/20 to-violet-500/20",
+  "from-emerald-500/20 to-teal-500/20",
+  "from-amber-500/20 to-orange-500/20",
+  "from-rose-500/20 to-pink-500/20",
+];
 
 // ── Skill Card ──
 
-function SkillCard({ entry, onView, onUninstall }: {
+function SkillCard({ entry, onView, onUninstall, registryVersion }: {
   entry: SkillEntry;
   onView: () => void;
   onUninstall: () => void;
+  registryVersion?: string;
 }) {
   const m = entry.manifest;
+  const hasUpdate = registryVersion && registryVersion !== m.version;
   return (
     <div
       onClick={onView}
-      className="group p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-indigo-500/30 transition-all cursor-pointer"
+      className={`group p-3 rounded-xl border transition-all cursor-pointer ${
+        hasUpdate
+          ? 'border-amber-500/20 bg-amber-500/[0.03] hover:bg-amber-500/[0.06] hover:border-amber-500/40'
+          : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-indigo-500/30'
+      }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <Package size={13} className="text-indigo-400 shrink-0" />
           <span className="text-[11px] font-semibold text-slate-200 truncate">{m.name}</span>
+          {hasUpdate && (
+            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-[7px] font-bold text-amber-300 border border-amber-500/20 animate-pulse">
+              v{registryVersion}
+            </span>
+          )}
         </div>
         <span className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
           m.type === "squad"
@@ -57,7 +83,7 @@ function SkillCard({ entry, onView, onUninstall }: {
           ))}
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[8px] font-mono text-slate-600">v{m.version}</span>
+          <span className={`text-[8px] font-mono ${hasUpdate ? 'text-amber-400' : 'text-slate-600'}`}>v{m.version}</span>
           <button
             onClick={(e) => { e.stopPropagation(); onUninstall(); }}
             className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/15 text-slate-600 hover:text-red-400 transition-all"
@@ -157,11 +183,13 @@ function SkillDetailModal({ manifest, content, onClose, onUninstall }: {
 // ── Main Panel ──
 
 export default function SkillsPanel() {
-  const { installed, registrySkills, loading, syncing, error, loadInstalled, loadRegistry, installFromRegistry, uninstallSkill, sync, getSkill } = useSkillsStore();
+  const { installed, registrySkills, loading, syncing, error, loadInstalled, loadRegistry, installFromRegistry, uninstallSkill, sync, getSkill, installAll } = useSkillsStore();
   const [filter, setFilter] = useState<"all" | "prompt" | "squad">("all");
   const [selectedSkill, setSelectedSkill] = useState<{ manifest: SkillManifest; content?: Record<string, string> } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [installAllBusy, setInstallAllBusy] = useState(false);
 
   useEffect(() => {
     loadInstalled();
@@ -198,8 +226,23 @@ export default function SkillsPanel() {
     setTimeout(() => setStatusMsg(null), 3000);
   }, [sync]);
 
+  const handleInstallAll = useCallback(async () => {
+    if (installAllBusy) return;
+    setInstallAllBusy(true);
+    try {
+      const result = await installAll();
+      setStatusMsg(`Installed ${result.installed} skill(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}`);
+    } catch {
+      setStatusMsg("Install all failed");
+    } finally {
+      setInstallAllBusy(false);
+    }
+    setTimeout(() => setStatusMsg(null), 3000);
+  }, [installAll, installAllBusy]);
+
   const filteredInstalled = installed.filter(e =>
     (filter === "all" || e.manifest.type === filter) &&
+    (!tagFilter || (e.manifest.tags || []).includes(tagFilter)) &&
     (!searchQuery || e.manifest.name.toLowerCase().includes(searchQuery.toLowerCase()) || e.manifest.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
@@ -207,8 +250,26 @@ export default function SkillsPanel() {
   const filteredRegistry = registrySkills.filter(s =>
     !installedIds.has(s.id) &&
     (filter === "all" || s.type === filter) &&
+    (!tagFilter || (s.tags || []).includes(tagFilter)) &&
     (!searchQuery || s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  // All unique tags from installed + registry
+  const allTags = Array.from(new Set([
+    ...installed.flatMap(e => e.manifest.tags || []),
+    ...registrySkills.flatMap(s => s.tags || []),
+  ])).sort();
+
+  // Featured skills from registry (not yet installed)
+  const featuredSkills = registrySkills.filter(s =>
+    FEATURED_IDS.includes(s.id) && !installedIds.has(s.id)
+  );
+
+  // Update badge: installed skills with older version than registry
+  const availableUpdates = installed.filter(e => {
+    const regSkill = registrySkills.find(r => r.id === e.manifest.id);
+    return regSkill && regSkill.version !== e.manifest.version;
+  });
 
   return (
     <div className="flex flex-col h-full">
@@ -218,6 +279,11 @@ export default function SkillsPanel() {
           <Package size={13} className="text-indigo-400" />
           <span className="text-[11px] font-bold text-white tracking-wide">Skills</span>
           <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-[8px] font-mono text-indigo-300">{installed.length}</span>
+          {availableUpdates.length > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-[8px] font-bold text-amber-300 border border-amber-500/20 animate-pulse">
+              {availableUpdates.length} update{availableUpdates.length > 1 ? 's' : ''}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <button
@@ -251,7 +317,7 @@ export default function SkillsPanel() {
             className="w-full pl-7 pr-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[10px] text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/30 transition-colors"
           />
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 flex-wrap">
           {(["all", "prompt", "squad"] as const).map(t => (
             <button
               key={t}
@@ -265,6 +331,32 @@ export default function SkillsPanel() {
               {t === "all" ? "All" : t}
             </button>
           ))}
+          {allTags.length > 0 && (
+            <>
+              <span className="w-px h-4 bg-white/10 mx-0.5 self-center" />
+              {allTags.slice(0, 8).map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+                  className={`px-1.5 py-0.5 rounded text-[8px] font-mono transition-colors ${
+                    tagFilter === tag
+                      ? "bg-violet-500/15 text-violet-300 border border-violet-500/20"
+                      : "text-slate-600 hover:text-slate-400 border border-transparent hover:border-white/10"
+                  }`}
+                >
+                  #{tag}
+                </button>
+              ))}
+            </>
+          )}
+          {tagFilter && (
+            <button
+              onClick={() => setTagFilter(null)}
+              className="px-1.5 py-0.5 rounded text-[8px] text-red-400 hover:text-red-300 border border-transparent transition-colors"
+            >
+              clear
+            </button>
+          )}
         </div>
       </div>
 
@@ -282,6 +374,40 @@ export default function SkillsPanel() {
 
       {/* Skills list */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        {/* Featured Skills */}
+        {featuredSkills.length > 0 && !searchQuery && !tagFilter && filter === "all" && (
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-wider text-amber-400/70 mb-2 flex items-center gap-1.5">
+              <Star size={10} className="text-amber-400" /> Featured
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
+              {featuredSkills.map((skill, i) => (
+                <div
+                  key={skill.id}
+                  className={`group min-w-[180px] p-3 rounded-xl bg-gradient-to-br ${FEATURED_GRADIENTS[i % FEATURED_GRADIENTS.length]} border border-white/[0.08] hover:border-amber-500/30 transition-all cursor-pointer flex flex-col`}
+                  onClick={() => handleInstall(skill.id)}
+                >
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Star size={11} className="text-amber-300 shrink-0" />
+                    <span className="text-[11px] font-bold text-white truncate">{skill.name}</span>
+                  </div>
+                  <p className="text-[9px] text-slate-300/70 line-clamp-2 mb-2 flex-1">{skill.description}</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-1">
+                      {(skill.tags || []).slice(0, 2).map(tag => (
+                        <span key={tag} className="px-1 py-0.5 rounded bg-white/10 text-[7px] font-mono text-white/60">{tag}</span>
+                      ))}
+                    </div>
+                    <button className="px-2 py-0.5 rounded bg-white/15 text-[8px] font-bold text-white group-hover:bg-white/25 transition-colors">
+                      Install
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Installed */}
         {filteredInstalled.length > 0 && (
           <div>
@@ -293,6 +419,7 @@ export default function SkillsPanel() {
                   entry={entry}
                   onView={() => handleView(entry.manifest.id)}
                   onUninstall={() => handleUninstall(entry.manifest.id)}
+                  registryVersion={registrySkills.find(r => r.id === entry.manifest.id)?.version}
                 />
               ))}
             </div>
@@ -302,7 +429,20 @@ export default function SkillsPanel() {
         {/* Available from registry */}
         {filteredRegistry.length > 0 && (
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-2">Available from Registry</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                Available from Registry
+                <span className="ml-1.5 text-slate-600">({filteredRegistry.length})</span>
+              </p>
+              <button
+                onClick={handleInstallAll}
+                disabled={installAllBusy}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/20 text-indigo-300 text-[8px] font-bold uppercase tracking-wider hover:bg-indigo-500/25 transition-colors disabled:opacity-40"
+              >
+                <Layers size={9} className={installAllBusy ? "animate-spin" : ""} />
+                {installAllBusy ? 'Installing...' : 'Install All'}
+              </button>
+            </div>
             <div className="grid gap-2">
               {filteredRegistry.map(skill => (
                 <div

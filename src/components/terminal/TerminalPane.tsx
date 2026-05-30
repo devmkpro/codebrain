@@ -410,7 +410,13 @@ export function TerminalPane({
     const text = paths.map(p => /\s/.test(p) ? `"${p}"` : p).join(" ");
     api.pty.write(pane.id, text + " ");
   }, [pane.id]);
-  return <div className={`flex flex-col h-full border cursor-pointer ${isActive ? "border-indigo-500/40 shadow-[0_0_12px_rgba(239,68,68,0.1)]" : "border-white/5 hover:border-white/10"} rounded-lg overflow-hidden bg-black backdrop-blur transition-all duration-300 relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onContextMenu={handleContextMenu}>
+  return <div className={`flex flex-col h-full border cursor-pointer ${
+      isActive
+        ? pane.status === "running"
+          ? "border-violet-500/50 shadow-[0_0_16px_rgba(139,92,246,0.15)] animate-[thinking-pulse_3s_ease-in-out_infinite]"
+          : "border-indigo-500/40 shadow-[0_0_12px_rgba(99,102,241,0.1)]"
+        : "border-white/5 hover:border-white/10"
+    } rounded-lg overflow-hidden bg-black backdrop-blur transition-all duration-300 relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onContextMenu={handleContextMenu}>
 
     <AnimatePresence>
       {contextMenu && (

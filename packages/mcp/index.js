@@ -302,6 +302,24 @@ function createCodebrainMCPServer(bridge) {
           }
         } catch {}
 
+        // ── Desktop notification for incoming message ─────────────────────
+        try {
+          const configStore = bridge.configStore;
+          if (configStore?.get) {
+            const notifSettings = configStore.get()?.notifications;
+            if (notifSettings?.onMessage) {
+              const { Notification } = require("electron");
+              if (Notification.isSupported()) {
+                const shortFrom = args.from.slice(0, 8);
+                new Notification({
+                  title: "Codebrain",
+                  body: `Mensagem de ${shortFrom}: ${args.content.slice(0, 80)}`,
+                }).show();
+              }
+            }
+          }
+        } catch {}
+
         return { content: [{ type: "text", text: JSON.stringify({ ok: true, messageId: id }) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };

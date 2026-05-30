@@ -112,6 +112,8 @@ const DEFAULT_MODEL_COSTS = {
   "anthropic/claude-3.5-haiku": { input: 0.80, output: 4.0 },
   "anthropic/claude-sonnet-4": { input: 3.0, output: 15.0 },
   "anthropic/claude-opus-4": { input: 15.0, output: 75.0 },
+  "anthropic/claude-opus-4.7": { input: 5.0, output: 25.0, cache_read: 0.50 },
+  "anthropic/claude-opus-4.8": { input: 5.0, output: 25.0, cache_read: 0.50 },
   "anthropic/claude-opus-4.7-fast": { input: 30.0, output: 150.0 },
   "google/gemini-2.5-pro": { input: 1.25, output: 10.0 },
   "google/gemini-2.5-flash": { input: 0.30, output: 2.50 },
@@ -137,6 +139,18 @@ const DEFAULT_MODEL_COSTS = {
   "x-ai/grok-3": { input: 3.0, output: 15.0 },
   "x-ai/grok-3-mini": { input: 0.30, output: 0.50 },
   "x-ai/grok-4.3": { input: 1.25, output: 2.50 },
+
+  // ==========================================
+  // CODEX (OpenAI Codex CLI — via ChatGPT OAuth or API key)
+  // Pricing from openai.com/api/pricing — per 1M tokens (2026-05-30)
+  // ==========================================
+  "gpt-5.5": { input: 5.00, output: 30.00, cache_read: 0.50 },
+  "gpt-5.4": { input: 2.50, output: 15.00, cache_read: 0.25 },
+  "gpt-5.4-mini": { input: 0.75, output: 4.50, cache_read: 0.075 },
+  "codex-auto-review": { input: 2.50, output: 15.00, cache_read: 0.25 },
+  // Aliases used by Codex CLI internally
+  "gpt-4o-codex": { input: 2.50, output: 10.0 },
+  "gpt-4.1-codex": { input: 2.00, output: 8.00 },
 
   // ==========================================
   // API MODEL NAME ALIASES
