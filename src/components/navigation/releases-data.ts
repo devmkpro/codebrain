@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.6.9",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add native Gemini CLI agent + Codex cross-platform fixes"
+      }
+    ]
+  },
+  {
     "version": "1.6.5",
     "date": "maio 2026",
     "highlights": [
