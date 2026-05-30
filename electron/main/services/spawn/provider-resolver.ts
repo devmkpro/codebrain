@@ -111,13 +111,35 @@ export function resolveProvider(
     if (targetType) {
       const allProviders = getEnhancedProviders(ctx);
 
-      // For claude models + claude agent, prefer claude-oauth (OAuth, no API key needed)
-      if (targetType === "anthropic-compat" && agent === "claude") {
+      // For claude models: prefer claude-oauth (Plano Claude) when CLI is detected,
+      // regardless of agent name — session restore / orchestrator may send agent="openclaude"
+      if (targetType === "anthropic-compat") {
         provider = allProviders.find((p: any) => p.id === "claude-oauth") ?? null;
+        if (provider) {
+          agent = "claude"; // must use claude CLI for OAuth
+          log.info(`[resolveProvider] Claude model "${model}" → claude-oauth (Plano)`);
+        }
       }
-      // Fall back to first provider of matching type
+      // Fall back to first provider of matching type (e.g. direct Anthropic API key)
       if (!provider) {
         provider = allProviders.find((p: any) => p.type === targetType) ?? null;
+      }
+      // Fallback: if no direct provider found (e.g. anthropic-compat unavailable),
+      // try OpenRouter or any openai-compat provider that might proxy the model
+      if (!provider && targetType !== "openai-compat") {
+        provider = allProviders.find((p: any) => {
+          if (p.type !== "openai-compat") return false;
+          const pm: string[] = p.models ?? [];
+          const isOpenRouter = (p.id ?? "").startsWith("openrouter") ||
+            (p.baseUrl || "").includes("openrouter");
+          // OpenRouter supports any model via "provider/model" format
+          if (isOpenRouter) return true;
+          // Other openai-compat: check if they have this model or a similar one
+          return pm.some((m: string) => m.includes(model!.split("-").slice(0, 2).join("-")));
+        }) ?? null;
+        if (provider) {
+          log.info(`[resolveProvider] Model "${model}" (type "${targetType}") → fallback to openai-compat provider "${provider.id}"`);
+        }
       }
       if (provider) {
         providerId = provider.id;
