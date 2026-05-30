@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.7.6",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.7.6 — complete light mode fix, inline gradients → CSS classes"
+      }
+    ]
+  },
+  {
     "version": "1.7.5",
     "date": "maio 2026",
     "highlights": [
