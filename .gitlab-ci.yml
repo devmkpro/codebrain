@@ -69,30 +69,6 @@ build_windows:
   only:
     - tags
 
-# macOS Build (requires a self-hosted runner with tag: macos)
-# Run manually when a macOS runner is available
-build_macos:
-  stage: build
-  tags:
-    - macos
-  when: manual
-  allow_failure: true
-  before_script:
-    - rm -rf node_modules
-    - npm ci --prefer-offline
-  script:
-    - npm run build
-    - npx electron-builder --mac dmg zip --x64 --arm64 --publish never
-    - ls -lh dist/
-  artifacts:
-    paths:
-      - dist/*.dmg
-      - dist/*.zip
-      - dist/latest-mac.yml
-    expire_in: 1 week
-  only:
-    - tags
-
 # Create GitLab Release
 release:
   stage: release
@@ -104,9 +80,6 @@ release:
       artifacts: true
     - job: build_windows
       artifacts: true
-    - job: build_macos
-      artifacts: true
-      optional: true
   script:
     - node scripts/create-release.mjs
   only:
