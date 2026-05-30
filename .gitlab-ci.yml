@@ -69,11 +69,14 @@ build_windows:
   only:
     - tags
 
-# macOS Build
+# macOS Build (requires a self-hosted runner with tag: macos)
+# Run manually when a macOS runner is available
 build_macos:
   stage: build
   tags:
     - macos
+  when: manual
+  allow_failure: true
   before_script:
     - rm -rf node_modules
     - npm ci --prefer-offline
