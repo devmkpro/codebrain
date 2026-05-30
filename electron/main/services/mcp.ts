@@ -5,6 +5,7 @@ import type { AppContext, McpServerInfo } from "../context";
 import { safeSend, ApiProxy } from "../context";
 import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
+import { writeContextFiles } from "./workspace";
 
 export function writeMcpConfig(ctx: AppContext, info: McpServerInfo): void {
   // Home ~/.mcp.json (stdio transport) is already written by setup-claude.ts.
@@ -95,6 +96,7 @@ function buildMcpBridge(ctx: AppContext) {
     hooksManager: ctx.hooksManager,
     costTracker: ctx.costTracker, // Shared singleton — same instance for MCP + IPC
     configStore: ctx.configStore, // For notification settings
+    updateContextFiles: (wsPath: string) => writeContextFiles(ctx, wsPath),
     roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };
 }

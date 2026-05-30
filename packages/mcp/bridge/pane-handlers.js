@@ -157,6 +157,71 @@ function createPaneHandlers(ptyManager, opts) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) };
       }
     },
+
+    async handoffSubmit({ paneId, summary, status, artifacts }) {
+      try {
+        const store = opts.memoryStore;
+        if (!store) return { ok: false, error: "memory store not available" };
+        const workspace = opts.getCurrentWorkspacePath?.() || null;
+        const result = store.submitHandoff({ paneId, summary, status, artifacts, workspace });
+        // Fire hook event
+        try { opts.hooksManager?.fire?.("handoff_submitted", { paneId, status, summary: summary.slice(0, 100) }); } catch {}
+        return result;
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+
+    async handoffWait({ paneIds, returnOn = "all", timeoutMs = 300000 }) {
+      const store = opts.memoryStore;
+      if (!store) return { ok: false, error: "memory store not available" };
+      if (!Array.isArray(paneIds) || paneIds.length === 0) return { ok: false, error: "paneIds array is required" };
+
+      const deadline = Date.now() + timeoutMs;
+      const pollInterval = 500; // ms
+
+      while (Date.now() < deadline) {
+        const results = [];
+        for (const pid of paneIds) {
+          const handoff = store.getHandoff({ paneId: pid });
+          if (handoff.ok) results.push(handoff.handoff);
+        }
+
+        if (returnOn === "any" && results.length > 0) {
+          return { ok: true, handoffs: results, waited: true };
+        }
+        if (returnOn === "all" && results.length === paneIds.length) {
+          return { ok: true, handoffs: results, waited: true };
+        }
+
+        // Wait before next poll
+        await new Promise(r => setTimeout(r, pollInterval));
+      }
+
+      // Timeout — return whatever we have
+      const finalResults = [];
+      for (const pid of paneIds) {
+        const handoff = store.getHandoff({ paneId: pid });
+        if (handoff.ok) finalResults.push(handoff.handoff);
+      }
+      return { ok: true, handoffs: finalResults, timedOut: true };
+    },
+
+    async writeManyPanes({ paneIds, text, submit = true }) {
+      if (!Array.isArray(paneIds) || paneIds.length === 0) return { ok: false, error: "paneIds array is required" };
+      if (!text) return { ok: false, error: "text is required" };
+
+      const results = [];
+      for (const paneId of paneIds) {
+        try {
+          const result = await this.writePane(paneId, text, submit);
+          results.push({ paneId, ...result });
+        } catch (err) {
+          results.push({ paneId, ok: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+      return { ok: true, results, count: results.length };
+    },
   };
 }
 

@@ -6,7 +6,87 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Copy, Clipboard, Square, MessageSquare, Terminal as TerminalIcon, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
+// ── MK Thinking Labels ────────────────────────────────────────────────────────
+const MK_THINKING_PHRASES = [
+  "Codebrain ativado 🧠",
+  "café do MK esquentando ☕",
+  "MK mode: ON 🔥",
+  "MK aprovaria isso? 🤔",
+  "construído com obsessão pelo MK",
+  "powered by MK ⚡",
+  "isso aqui é Codebrain baby 💜",
+  "Codebrain pensando forte... 🤯",
+  "agentes em campo 🕵️",
+  "Codebrain não para nunca 🚀",
+  "tokens voando pelo ar ✨",
+  "multi-agente mode ativado 🤖",
+  "analisando o universo... 🌌",
+  "squad reunido, missão em andamento 🎯",
+];
+
+const MK_EXPENSIVE_PHRASES = [
+  "MK: isso tá me custando um rim 💸",
+  "MK vendeu o carro pra pagar esse token 🚗💨",
+  "AGI tá chegando... junto com a fatura 📃",
+  "isso aqui vale mais que o salário do MK 💀",
+  "MK: por que o Opus não é gratuito?? 😭",
+  "queimando $$ igual o MK queima café ☕💸",
+  "o MK aprovou... o banco não 🏦",
+  "Codebrain: IA cara, resultado top 💎",
+  "tokens de ouro sendo processados ✨💰",
+  "Codebrain premium mode ativado 👑",
+  "isso não é bug, é feature cara 💸",
+  "IA de luxo trabalhando... 🦾",
+];
+
+function MKThinkingLabelWrapper({ paneId, isActivelyWorking }: { paneId: string; isActivelyWorking: boolean }) {
+  const agentCost = useCostStore((s) => s.summary?.byAgent?.[paneId]?.cost ?? 0);
+  // Só aparece após 3s de output contínuo — reseta imediatamente ao parar
+  const [visible, setVisible] = React.useState(false);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (isActivelyWorking) {
+      timerRef.current = setTimeout(() => setVisible(true), 3000);
+    } else {
+      setVisible(false);
+    }
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [isActivelyWorking]);
+  // Quando não está ativamente trabalhando → nada (nem o dot)
+  if (!visible) return null;
+  return (
+    <span className="flex items-center gap-2 text-[10px] font-mono text-red-400/80">
+      <span className="w-1.5 h-3 bg-red-500 animate-pulse"></span>
+      <MKThinkingLabel paneId={paneId} agentCost={agentCost} />
+    </span>
+  );
+}
+
+function MKThinkingLabel({ paneId, agentCost }: { paneId: string; agentCost: number }) {
+  const isExpensive = agentCost > 10;
+  const phrases = isExpensive ? MK_EXPENSIVE_PHRASES : MK_THINKING_PHRASES;
+  const safePaneId = paneId || "";
+  const [idx, setIdx] = React.useState(() =>
+    Math.abs((safePaneId || "x").split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % phrases.length
+  );
+  React.useEffect(() => {
+    // Troca a frase a cada 8s — bem mais devagar
+    const interval = setInterval(() => {
+      setIdx((i) => (i + 1) % phrases.length);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [isExpensive]);
+  return (
+    <span className={isExpensive ? "text-amber-400/90" : undefined}>
+      {isExpensive && <span className="mr-1">💸</span>}
+      {phrases[idx]}
+    </span>
+  );
+}
+
 // TerminalPane
+import { useCostStore } from "../../stores/cost-store";
 import { usePanesStore } from "../../stores/panes-store";
 import { FONT_OPTIONS, TERMINAL_THEMES, useTerminalSettings } from "../../stores/terminal-settings-store";
 import { StatusDot, shortenPath } from "../panes/StatusDot";
@@ -22,6 +102,8 @@ export function TerminalPane({
   const termRef = React.useRef(null);
   const fitAddonRef = React.useRef(null);
   const spawnedRef = React.useRef(false);
+  const lastOutputRef = React.useRef(0);
+  const [isActivelyWorking, setIsActivelyWorking] = React.useState(false);
   const paneRef = React.useRef(pane);
   paneRef.current = pane;
   const updatePane = usePanesStore(s => s.updatePane);
@@ -289,6 +371,7 @@ export function TerminalPane({
         // so the sent text doesn't appear duplicated in the terminal
         if (echo) return;
         termRef.current.write(data);
+        lastOutputRef.current = Date.now();
       }
     });
     const unsubExit = window.codeBrainApp?.pty.onExit((paneId) => {
@@ -319,6 +402,21 @@ export function TerminalPane({
       }
     };
   }, [initTerminal]);
+  // Rastreia output ativo real — reseta quando pane para de rodar
+  React.useEffect(() => {
+    if (pane.status !== "running") {
+      lastOutputRef.current = 0;
+      setIsActivelyWorking(false);
+      return;
+    }
+    const interval = setInterval(() => {
+      const lastOutput = lastOutputRef.current;
+      // Só considera ativo se houve output nos últimos 4s
+      const isActive = lastOutput > 0 && (Date.now() - lastOutput) < 4000;
+      setIsActivelyWorking(isActive);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [pane.status]);
   React.useEffect(() => {
     const doFit = () => {
       if (!containerRef.current) return;
@@ -489,10 +587,7 @@ export function TerminalPane({
             <div className="flex items-center gap-2">
               <span className="text-red-500 font-mono text-[10px] font-bold animate-pulse">❯</span>
               {pane.status === "running" ? (
-                <span className="flex items-center gap-2 text-[10px] font-mono text-red-400/80">
-                  <span className="w-1.5 h-3 bg-red-500 animate-pulse"></span>
-                  agent thinking...
-                </span>
+                <MKThinkingLabelWrapper paneId={pane.paneId} isActivelyWorking={isActivelyWorking} />
               ) : (
                 <span className="w-1.5 h-3 bg-gray-500/50 animate-[pulse_2s_infinite]"></span>
               )}

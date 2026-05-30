@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import type { AppContext } from "../context";
-import { readRecentWorkspaces, saveRecentWorkspaces, touchWorkspace } from "../services/workspace";
+import { readRecentWorkspaces, saveRecentWorkspaces, touchWorkspace, writeContextFiles } from "../services/workspace";
 
 /** Directories that indicate a project root */
 const PROJECT_MARKERS = [
@@ -44,6 +44,7 @@ export function registerWorkspaceHandlers(ctx: AppContext): void {
     if (projectRoot) {
       ctx.currentWorkspacePath = projectRoot;
       touchWorkspace(ctx, projectRoot);
+      writeContextFiles(ctx, projectRoot);
       return { path: projectRoot, autoDetected: true };
     }
 
@@ -52,12 +53,14 @@ export function registerWorkspaceHandlers(ctx: AppContext): void {
     if (recents.length > 0 && fs.existsSync(recents[0])) {
       ctx.currentWorkspacePath = recents[0];
       touchWorkspace(ctx, recents[0]);
+      writeContextFiles(ctx, recents[0]);
       return { path: recents[0], autoDetected: false, fromRecent: true };
     }
 
     // 3. Fall back to cwd itself
     ctx.currentWorkspacePath = targetDir;
     touchWorkspace(ctx, targetDir);
+    writeContextFiles(ctx, targetDir);
     return { path: targetDir, autoDetected: false, fallback: true };
   });
 
@@ -71,12 +74,14 @@ export function registerWorkspaceHandlers(ctx: AppContext): void {
     const wsPath = result.filePaths[0];
     ctx.currentWorkspacePath = wsPath;
     touchWorkspace(ctx, wsPath);
+    writeContextFiles(ctx, wsPath);
     return wsPath;
   });
 
   ipcMain.handle("workspace:set", async (_event, dir: string) => {
     ctx.currentWorkspacePath = dir;
     touchWorkspace(ctx, dir);
+    writeContextFiles(ctx, dir);
   });
 
   ipcMain.handle("workspace:save", async (_event, _config: Record<string, unknown>) => {});

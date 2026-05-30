@@ -14,40 +14,54 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.7.1",
-    "date": "em desenvolvimento",
+    "version": "1.7.3",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "Discord Rich Presence com Client ID configurável nas Settings"
+        "text": "Handoff pattern: handoff_submit + handoff_wait + pane_write_many para coordenação confiável de squads"
       },
       {
         "kind": "feat",
-        "text": "Atalhos de teclado: F12, Ctrl+R, Ctrl+Q, Ctrl+W, Ctrl+M, Escape"
+        "text": "Tabelas SQLite dedicadas para agents e agent_messages com tracking automático via hooks"
       },
       {
         "kind": "feat",
-        "text": "Layout redesenhado: gradientes violet/indigo, glow effects, thinking-pulse animation"
+        "text": "Context files por workspace: .claude/codebrain-context.md e .gemini/codebrain-context.md gerados automaticamente"
       },
       {
         "kind": "feat",
-        "text": "Notificações desktop avançadas com toggles nas Settings (agente idle, mensagem, build)"
+        "text": "Skills injetadas no system prompt de todos os agentes (Claude, OpenClaude, MIMO, Gemini, Codex)"
       },
       {
         "kind": "feat",
-        "text": "Marketplace de Skills: Featured Skills, tag filters, badge de updates, instalar tudo"
+        "text": "MKThinkingLabel: frases divertidas no terminal só quando agente está ativamente processando output"
       },
       {
         "kind": "feat",
-        "text": "Export de sessão em Markdown e JSON com dialog nativo de salvar"
-      },
-      {
-        "kind": "feat",
-        "text": "Histórico de sessões persistido em SQLite com painel navegável"
+        "text": "Auto-detecção de skills via UserPromptSubmit hook com triggers configuráveis"
       },
       {
         "kind": "fix",
-        "text": "Preços corretos para Codex (gpt-5.5, gpt-5.4, gpt-5.4-mini) e Claude Opus 4.7/4.8 via OpenRouter"
+        "text": "Preços corretos GPT-5.5 ($5/$30), GPT-5.4 ($2.5/$15), GPT-5.4-mini ($0.75/$4.5), Claude Opus 4.7/4.8 OpenRouter"
+      }
+    ]
+  },
+  {
+    "version": "1.7.0",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.7.0 — Discord RPC, layout redesign, notifications, skills marketplace, session export & history"
+      },
+      {
+        "kind": "fix",
+        "text": "claude-oauth fallback for anthropic-compat models regardless of agent name"
+      },
+      {
+        "kind": "feat",
+        "text": "Discord Rich Presence + macOS keyboard shortcuts"
       }
     ]
   },

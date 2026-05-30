@@ -226,6 +226,102 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ── mcp__codebrain__pane_write_many ────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__pane_write_many",
+    "Write the same text to multiple panes at once. Useful for broadcasting a task prompt to all workers simultaneously.",
+    {
+      paneIds: z.array(z.string()).describe("Array of pane IDs to write to."),
+      text:    z.string().describe("Text to send to each pane's stdin."),
+      submit:  z.boolean().optional().describe("If true (default), append newline to submit."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.writeManyPanes({ paneIds: args.paneIds, text: args.text, submit: args.submit !== false });
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__handoff_submit ────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__handoff_submit",
+    "Worker calls this as its LAST action to report a structured result. The orchestrator uses handoff_wait to collect these results.",
+    {
+      paneId:    z.string().describe("The worker's pane ID."),
+      summary:   z.string().describe("Brief summary of what was accomplished or what blocked progress."),
+      status:    z.enum(["done", "blocked", "error"]).describe("Result status: done (success), blocked (needs help), error (failed)."),
+      artifacts: z.array(z.string()).optional().describe("List of artifact paths or identifiers produced (e.g. file paths, URLs)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.handoffSubmit(args);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__handoff_wait ──────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__handoff_wait",
+    "Orchestrator waits for workers to submit their handoff results. Polls until returnOn condition is met or timeout.",
+    {
+      paneIds:    z.array(z.string()).describe("Worker pane IDs to wait for."),
+      returnOn:   z.enum(["any", "all"]).optional().describe("Return when: 'any' (first result) or 'all' (every worker). Default: all."),
+      timeoutMs:  z.number().optional().describe("Max wait time in ms (default 300000 = 5 min)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.handoffWait({ paneIds: args.paneIds, returnOn: args.returnOn || "all", timeoutMs: args.timeoutMs || 300000 });
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__agent_list ────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__agent_list",
+    "List all active and recently exited agents (panes) with their role, model, and status. Data is persisted in SQLite for session history.",
+    {
+      workspace: z.string().optional().describe("Filter by workspace path."),
+      limit:     z.number().optional().describe("Max results (default 50)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.agentList({ workspace: args.workspace, limit: args.limit });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__agent_messages ────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__agent_messages",
+    "Retrieve messages sent to a specific agent pane from other agents. Includes full message history persisted in SQLite (unlike pane_read_messages which uses file-based inbox).",
+    {
+      paneId:     z.string().describe("Target pane ID to get messages for."),
+      unreadOnly: z.boolean().optional().describe("If true, only return unread messages."),
+      workspace:  z.string().optional().describe("Filter by workspace path."),
+      limit:      z.number().optional().describe("Max results (default 50)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.agentMessages({ paneId: args.paneId, unreadOnly: args.unreadOnly, workspace: args.workspace, limit: args.limit });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
   // ── mcp__codebrain__pane_send_message ──────────────────────────────────────
   server.tool(
     "mcp__codebrain__pane_send_message",
@@ -286,6 +382,19 @@ function createCodebrainMCPServer(bridge) {
 
         // Inject a compact one-line notification into the recipient's terminal.
         // Debounced: if multiple messages arrive within 3s, only one ping.
+        // Also persist to agent_messages table for durable history.
+        try {
+          if (bridge.memoryStore) {
+            const ws = bridge.getCurrentWorkspacePath?.() || null;
+            bridge.memoryStore.saveAgentMessage({
+              fromPane: args.from,
+              toPane: args.to,
+              content: args.content,
+              type: msgType,
+              workspace: ws,
+            });
+          }
+        } catch {}
         try {
           if (bridge.notifyPane) {
             const now = Date.now();

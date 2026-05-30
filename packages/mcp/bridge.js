@@ -263,6 +263,52 @@ function createMCPBridge(ptyManager, opts = {}) {
   // ── Create handler factories ─────────────────────────────────────────────
   const sharedOpts = { ...opts, paneLabels, roleMap, messageBus, agentScorer };
   const paneHandlers = createPaneHandlers(ptyManager, sharedOpts);
+
+  // ── Agent registry + message handlers (simple CRUD via memoryStore) ────
+  const agentHandlers = {
+    async agentList({ workspace, limit } = {}) {
+      const store = opts.memoryStore;
+      if (!store) return { ok: false, error: "memory store not available" };
+      return store.listAgents({ workspace, limit });
+    },
+    async agentMessages({ paneId, unreadOnly, workspace, limit } = {}) {
+      const store = opts.memoryStore;
+      if (!store) return { ok: false, error: "memory store not available" };
+      return store.getAgentMessages({ paneId, unreadOnly, workspace, limit });
+    },
+  };
+
+  // ── Auto-register agents on pane lifecycle events ─────────────────────────
+  // pane_spawned → upsertAgent + update context files
+  // pane_exited → updateAgentStatus + update context files
+  if (opts.hooksManager) {
+    opts.hooksManager.on("pane_spawned", ({ paneId, agent, model, providerId }) => {
+      try {
+        const store = opts.memoryStore;
+        if (!store) return;
+        const label = paneLabels.get(paneId) || null;
+        const role = roleMap.get(paneId) || "worker";
+        const workspace = opts.getCurrentWorkspacePath?.() || null;
+        store.upsertAgent({ paneId, label, role, model, providerId, status: "active", workspace });
+        // Update context files with new agent info
+        if (workspace && opts.updateContextFiles) {
+          try { opts.updateContextFiles(workspace); } catch {}
+        }
+      } catch {}
+    });
+    opts.hooksManager.on("pane_exited", ({ paneId }) => {
+      try {
+        const store = opts.memoryStore;
+        if (!store) return;
+        store.updateAgentStatus({ paneId, status: "exited" });
+        // Update context files to remove exited agent
+        const workspace = opts.getCurrentWorkspacePath?.() || null;
+        if (workspace && opts.updateContextFiles) {
+          try { opts.updateContextFiles(workspace); } catch {}
+        }
+      } catch {}
+    });
+  }
   paneHandlers.roleMap = roleMap;
 
   const browserHandlers = createBrowserHandlers(opts);
@@ -363,6 +409,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...bgWorkerHandlers,
     ...consensusHandlers,
     ...expandedHooksHandlers,
+    ...agentHandlers,
     // Expose foundational instances
     messageBus,
     agentScorer,

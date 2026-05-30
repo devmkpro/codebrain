@@ -193,6 +193,51 @@ function createMemoryStore(dbPath) {
     );
     CREATE INDEX IF NOT EXISTS idx_session_history_workspace ON session_history(workspace);
     CREATE INDEX IF NOT EXISTS idx_session_history_ended ON session_history(ended_at);
+
+    CREATE TABLE IF NOT EXISTS handoffs (
+      id             TEXT PRIMARY KEY,
+      pane_id        TEXT NOT NULL,
+      summary        TEXT,
+      status         TEXT CHECK(status IN ('done','blocked','error')),
+      artifacts      TEXT,
+      submitted_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+      workspace      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_handoffs_pane ON handoffs(pane_id);
+    CREATE INDEX IF NOT EXISTS idx_handoffs_workspace ON handoffs(workspace);
+    CREATE INDEX IF NOT EXISTS idx_handoffs_submitted ON handoffs(submitted_at);
+
+    CREATE TABLE IF NOT EXISTS agents (
+      id           TEXT PRIMARY KEY,
+      pane_id      TEXT UNIQUE,
+      label        TEXT,
+      role         TEXT,
+      model        TEXT,
+      provider_id  TEXT,
+      status       TEXT DEFAULT 'active',
+      spawned_at   INTEGER,
+      exited_at    INTEGER,
+      workspace    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+    CREATE INDEX IF NOT EXISTS idx_agents_workspace ON agents(workspace);
+
+    CREATE TABLE IF NOT EXISTS agent_messages (
+      id           TEXT PRIMARY KEY,
+      from_pane    TEXT,
+      to_pane      TEXT,
+      content      TEXT,
+      type         TEXT,
+      task_id      TEXT,
+      parent_id    TEXT,
+      read         INTEGER DEFAULT 0,
+      created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+      workspace    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_msgs_to ON agent_messages(to_pane);
+    CREATE INDEX IF NOT EXISTS idx_agent_msgs_from ON agent_messages(from_pane);
+    CREATE INDEX IF NOT EXISTS idx_agent_msgs_workspace ON agent_messages(workspace);
+    CREATE INDEX IF NOT EXISTS idx_agent_msgs_created ON agent_messages(created_at);
   `);
 
   // Migration: add scope column if not already present (ALTER TABLE lacks IF NOT EXISTS)
@@ -202,6 +247,14 @@ function createMemoryStore(dbPath) {
     if (!String(e.message).includes("duplicate column")) throw e;
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope)`);
+
+  // Migration: ensure agents.pane_id has UNIQUE constraint (table may pre-exist without it)
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_pane_unique ON agents(pane_id)`);
+  } catch (e) {
+    // If pane_id column doesn't exist yet, the table was just created with UNIQUE — fine
+    if (!String(e.message).includes("no such table")) throw e;
+  }
 
   // ── Knowledge Graph + Vector Store ────────────────────────────────────────
   let knowledgeGraph;
@@ -322,6 +375,46 @@ function createMemoryStore(dbPath) {
     getSessionHistory: db.prepare(`SELECT * FROM session_history WHERE id = ?`),
     deleteSessionHistory: db.prepare(`DELETE FROM session_history WHERE id = ?`),
     clearSessionHistory: db.prepare(`DELETE FROM session_history WHERE (@workspace IS NULL OR workspace = @workspace)`),
+    // Handoffs
+    insertHandoff: db.prepare(`
+      INSERT OR REPLACE INTO handoffs (id, pane_id, summary, status, artifacts, submitted_at, workspace)
+      VALUES (@id, @pane_id, @summary, @status, @artifacts, @submitted_at, @workspace)
+    `),
+    getHandoffByPane: db.prepare(`SELECT * FROM handoffs WHERE pane_id = ? ORDER BY submitted_at DESC LIMIT 1`),
+    listHandoffs: db.prepare(`
+      SELECT * FROM handoffs
+      WHERE (@workspace IS NULL OR workspace = @workspace)
+      ORDER BY submitted_at DESC LIMIT @limit
+    `),
+    clearHandoffs: db.prepare(`DELETE FROM handoffs WHERE (@workspace IS NULL OR workspace = @workspace)`),
+    // Agents
+    upsertAgent: db.prepare(`
+      INSERT INTO agents (id, pane_id, label, role, model, provider_id, status, spawned_at, workspace)
+      VALUES (@id, @pane_id, @label, @role, @model, @provider_id, @status, @spawned_at, @workspace)
+      ON CONFLICT(pane_id) DO UPDATE SET
+        label = excluded.label, role = excluded.role, model = excluded.model,
+        provider_id = excluded.provider_id, status = excluded.status
+    `),
+    updateAgentStatus: db.prepare(`UPDATE agents SET status = ?, exited_at = ? WHERE pane_id = ?`),
+    listAgents: db.prepare(`
+      SELECT * FROM agents
+      WHERE (@workspace IS NULL OR workspace = @workspace)
+      ORDER BY spawned_at DESC LIMIT @limit
+    `),
+    getAgentByPane: db.prepare(`SELECT * FROM agents WHERE pane_id = ?`),
+    // Agent Messages
+    insertAgentMessage: db.prepare(`
+      INSERT INTO agent_messages (id, from_pane, to_pane, content, type, task_id, parent_id, workspace)
+      VALUES (@id, @from_pane, @to_pane, @content, @type, @task_id, @parent_id, @workspace)
+    `),
+    getAgentMessages: db.prepare(`
+      SELECT * FROM agent_messages
+      WHERE to_pane = @to_pane
+        AND (@workspace IS NULL OR workspace = @workspace)
+        AND (@unread_only = 0 OR read = 0)
+      ORDER BY created_at DESC LIMIT @limit
+    `),
+    markMessageRead: db.prepare(`UPDATE agent_messages SET read = 1 WHERE id = ?`),
   };
 
   // ── ID Generator ──────────────────────────────────────────────────────────
@@ -336,6 +429,12 @@ function createMemoryStore(dbPath) {
   }
   function genSnapshotId() {
     return `snap_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+  function genHandoffId() {
+    return `hoff_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+  function genAgentId() {
+    return `agent_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -938,6 +1037,171 @@ function createMemoryStore(dbPath) {
      */
     clearSessionHistory({ workspace } = {}) {
       stmts.clearSessionHistory.run({ workspace: workspace || null });
+      return { ok: true };
+    },
+
+    // ── Handoff Pattern ─────────────────────────────────────────────────────
+
+    /**
+     * Submit a handoff result from a worker pane.
+     * @param {{ paneId: string, summary: string, status: string, artifacts?: string[], workspace?: string }} opts
+     */
+    submitHandoff({ paneId, summary, status, artifacts, workspace }) {
+      if (!paneId || !summary || !status) return { ok: false, error: "paneId, summary, and status are required" };
+      if (!["done", "blocked", "error"].includes(status)) return { ok: false, error: "status must be done|blocked|error" };
+      const id = genHandoffId();
+      stmts.insertHandoff.run({
+        id,
+        pane_id: paneId,
+        summary,
+        status,
+        artifacts: JSON.stringify(artifacts || []),
+        submitted_at: Date.now(),
+        workspace: workspace || null,
+      });
+      return { ok: true, id };
+    },
+
+    /**
+     * Get the latest handoff for a pane.
+     * @param {{ paneId: string }} opts
+     */
+    getHandoff({ paneId }) {
+      if (!paneId) return { ok: false, error: "paneId is required" };
+      const row = stmts.getHandoffByPane.get(paneId);
+      if (!row) return { ok: false, error: "no handoff found" };
+      return { ok: true, handoff: { ...row, artifacts: JSON.parse(row.artifacts || "[]") } };
+    },
+
+    /**
+     * List handoffs, optionally filtered by workspace.
+     * @param {{ workspace?: string, limit?: number, paneIds?: string[] }} opts
+     */
+    listHandoffs({ workspace, limit = 50, paneIds } = {}) {
+      let rows;
+      if (paneIds && paneIds.length > 0) {
+        // Get latest handoff for each requested paneId
+        rows = [];
+        for (const pid of paneIds) {
+          const row = stmts.getHandoffByPane.get(pid);
+          if (row) rows.push(row);
+        }
+      } else {
+        rows = stmts.listHandoffs.all({ workspace: workspace || null, limit });
+      }
+      return {
+        ok: true,
+        handoffs: rows.map(r => ({ ...r, artifacts: JSON.parse(r.artifacts || "[]") })),
+        count: rows.length,
+      };
+    },
+
+    /**
+     * Clear handoffs for a workspace (or all).
+     * @param {{ workspace?: string }} opts
+     */
+    clearHandoffs({ workspace } = {}) {
+      stmts.clearHandoffs.run({ workspace: workspace || null });
+      return { ok: true };
+    },
+
+    // ── Agent Registry ───────────────────────────────────────────────────────
+
+    /**
+     * Upsert an agent record (insert or update on pane_id conflict).
+     * @param {{ paneId: string, label?: string, role?: string, model?: string, providerId?: string, status?: string, workspace?: string }} opts
+     */
+    upsertAgent({ paneId, label, role, model, providerId, status = "active", workspace }) {
+      if (!paneId) return { ok: false, error: "paneId is required" };
+      stmts.upsertAgent.run({
+        id: genAgentId(),
+        pane_id: paneId,
+        label: label || null,
+        role: role || "worker",
+        model: model || null,
+        provider_id: providerId || null,
+        status,
+        spawned_at: Date.now(),
+        workspace: workspace || null,
+      });
+      return { ok: true };
+    },
+
+    /**
+     * Update an agent's status (e.g. 'exited', 'active', 'busy').
+     * @param {{ paneId: string, status: string }} opts
+     */
+    updateAgentStatus({ paneId, status }) {
+      if (!paneId || !status) return { ok: false, error: "paneId and status are required" };
+      const exitedAt = status === "exited" ? Date.now() : null;
+      stmts.updateAgentStatus.run(status, exitedAt, paneId);
+      return { ok: true };
+    },
+
+    /**
+     * List agents, optionally filtered by workspace.
+     * @param {{ workspace?: string, limit?: number }} opts
+     */
+    listAgents({ workspace, limit = 50 } = {}) {
+      const rows = stmts.listAgents.all({ workspace: workspace || null, limit });
+      return { ok: true, agents: rows, count: rows.length };
+    },
+
+    /**
+     * Get an agent by pane ID.
+     * @param {{ paneId: string }} opts
+     */
+    getAgent({ paneId }) {
+      if (!paneId) return { ok: false, error: "paneId is required" };
+      const row = stmts.getAgentByPane.get(paneId);
+      if (!row) return { ok: false, error: "not found" };
+      return { ok: true, agent: row };
+    },
+
+    // ── Agent Messages ───────────────────────────────────────────────────────
+
+    /**
+     * Save an agent message to the database.
+     * @param {{ fromPane: string, toPane: string, content: string, type?: string, taskId?: string, parentId?: string, workspace?: string }} opts
+     */
+    saveAgentMessage({ fromPane, toPane, content, type, taskId, parentId, workspace }) {
+      if (!fromPane || !toPane || !content) return { ok: false, error: "fromPane, toPane, and content are required" };
+      const id = `amsg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      stmts.insertAgentMessage.run({
+        id,
+        from_pane: fromPane,
+        to_pane: toPane,
+        content,
+        type: type || "update",
+        task_id: taskId || null,
+        parent_id: parentId || null,
+        workspace: workspace || null,
+      });
+      return { ok: true, id };
+    },
+
+    /**
+     * Get messages for a pane.
+     * @param {{ paneId: string, unreadOnly?: boolean, workspace?: string, limit?: number }} opts
+     */
+    getAgentMessages({ paneId, unreadOnly = false, workspace, limit = 50 } = {}) {
+      if (!paneId) return { ok: false, error: "paneId is required" };
+      const rows = stmts.getAgentMessages.all({
+        to_pane: paneId,
+        workspace: workspace || null,
+        unread_only: unreadOnly ? 1 : 0,
+        limit,
+      });
+      return { ok: true, messages: rows, count: rows.length };
+    },
+
+    /**
+     * Mark a message as read.
+     * @param {{ id: string }} opts
+     */
+    markMessageRead({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      stmts.markMessageRead.run(id);
       return { ok: true };
     },
 
