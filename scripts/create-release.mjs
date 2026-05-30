@@ -77,18 +77,20 @@ const jobs = await apiGet(
 );
 const linuxJob = jobs.find((j) => j.name === "build_linux");
 const windowsJob = jobs.find((j) => j.name === "build_windows");
+const macosJob = jobs.find((j) => j.name === "build_macos");
 
 if (!linuxJob || !windowsJob) {
   console.error("Could not find build jobs:", jobs.map((j) => j.name));
   process.exit(1);
 }
 
-console.log(`Linux job: ${linuxJob.id}, Windows job: ${windowsJob.id}`);
+console.log(`Linux job: ${linuxJob.id}, Windows job: ${windowsJob.id}${macosJob ? `, macOS job: ${macosJob.id}` : " (macOS not available)"}`);
 
 // Upload update manifests and installers to Package Registry
-const exeFile = readdirSync("dist").find((f) => f.endsWith("-win-x64.exe"));
-const appImageFile = readdirSync("dist").find((f) => f.endsWith(".AppImage"));
-const debFile = readdirSync("dist").find((f) => f.endsWith(".deb"));
+const distFiles = readdirSync("dist");
+const exeFile = distFiles.find((f) => f.endsWith("-win-x64.exe"));
+const appImageFile = distFiles.find((f) => f.endsWith(".AppImage"));
+const debFile = distFiles.find((f) => f.endsWith(".deb"));
 
 if (!exeFile) throw new Error("Windows installer not found in dist/");
 if (!appImageFile) throw new Error("AppImage not found in dist/");
@@ -100,8 +102,46 @@ await uploadToRegistry(exeFile, `dist/${exeFile}`);
 await uploadToRegistry(appImageFile, `dist/${appImageFile}`);
 await uploadToRegistry(debFile, `dist/${debFile}`);
 
+// macOS artifacts (optional — only if build_macos job ran)
+const dmgFiles = distFiles.filter((f) => f.endsWith(".dmg"));
+const macZipFiles = distFiles.filter((f) => f.includes("-mac") && f.endsWith(".zip"));
+const latestMac = distFiles.find((f) => f === "latest-mac.yml");
+
+for (const f of [...dmgFiles, ...macZipFiles]) {
+  await uploadToRegistry(f, `dist/${f}`);
+}
+if (latestMac) await uploadToRegistry("latest-mac.yml", "dist/latest-mac.yml");
+
 // Create GitLab release with download links pointing to Package Registry
 const registryBase = `${PKG_REGISTRY}`;
+
+const downloadLinks = [
+  {
+    name: "Windows x64 Setup",
+    url: `${registryBase}/${exeFile}`,
+    link_type: "package",
+  },
+  {
+    name: "Linux x64 AppImage",
+    url: `${registryBase}/${appImageFile}`,
+    link_type: "package",
+  },
+  {
+    name: "Linux x64 Deb",
+    url: `${registryBase}/${debFile}`,
+    link_type: "package",
+  },
+];
+
+// Add macOS download links if available
+for (const dmg of dmgFiles) {
+  const arch = dmg.includes("arm64") ? "ARM64" : dmg.includes("x64") ? "x64" : "";
+  downloadLinks.push({
+    name: `macOS ${arch} DMG`.trim(),
+    url: `${registryBase}/${dmg}`,
+    link_type: "package",
+  });
+}
 
 const release = {
   tag_name: TAG,
@@ -111,29 +151,14 @@ const release = {
 ### Downloads
 - **Windows x64**: Setup exe
 - **Linux x64**: AppImage
-- **Linux x64**: Deb
+- **Linux x64**: Deb${dmgFiles.length > 0 ? "\n- **macOS**: DMG (x64 + ARM64)" : ""}
 
 ### Changes
-- Model validation for squad spawning
+- Native Gemini CLI + Codex CLI agent support
+- Cross-platform CLI detection
 - Bug fixes and improvements`,
   assets: {
-    links: [
-      {
-        name: "Windows x64 Setup",
-        url: `${registryBase}/${exeFile}`,
-        link_type: "package",
-      },
-      {
-        name: "Linux x64 AppImage",
-        url: `${registryBase}/${appImageFile}`,
-        link_type: "package",
-      },
-      {
-        name: "Linux x64 Deb",
-        url: `${registryBase}/${debFile}`,
-        link_type: "package",
-      },
-    ],
+    links: downloadLinks,
   },
 };
 
