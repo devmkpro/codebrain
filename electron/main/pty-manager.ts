@@ -65,8 +65,8 @@ const pathCache = new Map<string, string | null>();
 const AGENT_DEFAULTS: Record<string, { binary: string; args: string[] }> = {
   openclaude: { binary: "openclaude", args: [] },
   claude: { binary: "claude", args: [] },
-  gemini: { binary: "openclaude", args: [] },
-  "gemini-cli": { binary: "gemini", args: [] },
+  gemini: { binary: "gemini", args: [] },      // Gemini CLI nativo
+  "gemini-cli": { binary: "gemini", args: [] }, // alias para gemini
   codex: { binary: "codex", args: [] },
   shell: { binary: defaultShell(), args: [] },
 };
@@ -268,7 +268,7 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
 }
 
 export function isTerminalAgent(agent: string): boolean {
-  return agent === "openclaude" || agent === "claude" || agent === "gemini";
+  return agent === "openclaude" || agent === "claude" || agent === "gemini" || agent === "gemini-cli" || agent === "codex";
 }
 
 interface PaneState {

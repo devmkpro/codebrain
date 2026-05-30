@@ -59,8 +59,8 @@ export async function spawnPaneInternal(
 
     const args = [...(config.args ?? [])];
     const isCodex = agent === "codex" || provider?.type === "codex";
-    const isGeminiCli = agent === "gemini-cli" || provider?.type === "gemini-cli";
-    const isClaudeCompatible = !isCodex && !isGeminiCli && (agent === "openclaude" || agent === "claude" || agent === "gemini");
+    const isGeminiCli = agent === "gemini-cli" || agent === "gemini" || provider?.type === "gemini-cli";
+    const isClaudeCompatible = !isCodex && !isGeminiCli && (agent === "openclaude" || agent === "claude");
 
     if (isClaudeCompatible && !args.includes("--permission-mode")) {
       args.push("--permission-mode", config.permissionMode ?? "bypassPermissions");
@@ -276,7 +276,7 @@ export async function spawnPaneInternal(
       }
     }
 
-    if (ctx.mcpServerInfo && (agent === "openclaude" || agent === "claude")) {
+    if (ctx.mcpServerInfo) {
       env["CODEBRAIN_MCP_URL"] = ctx.mcpServerInfo.streamableHttpUrl;
       env["CODEBRAIN_MCP_SSE_URL"] = ctx.mcpServerInfo.sseUrl;
       env["CODEBRAIN_MCP_PORT"] = String(ctx.mcpServerInfo.port);
