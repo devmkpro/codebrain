@@ -242,6 +242,13 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     install: () => ipcRenderer.invoke("cli:install"),
   },
 
+  discord: {
+    updatePresence: (args: { details: string; state?: string }) =>
+      ipcRenderer.invoke("discord:updatePresence", args),
+    status: () => ipcRenderer.invoke("discord:status"),
+    setClientId: (clientId: string) => ipcRenderer.invoke("discord:setClientId", clientId),
+  },
+
   tasks: {
     list: () => ipcRenderer.invoke("tasks:list"),
     onUpdated: (cb: (state: unknown) => void) => {

@@ -389,6 +389,11 @@ export interface CodebrainApp {
     detect: () => Promise<{ found: boolean; path?: string }>;
     redetect: () => Promise<{ found: boolean; path?: string }>;
   };
+  discord: {
+    updatePresence: (args: { details: string; state?: string }) => Promise<{ ok: boolean; connected?: boolean; error?: string }>;
+    status: () => Promise<{ connected: boolean; clientId: string }>;
+    setClientId: (clientId: string) => Promise<{ ok: boolean; error?: string }>;
+  };
   tasks: {
     list: () => Promise<Task[]>;
     onUpdated: (cb: (state: TasksState) => void) => () => void;

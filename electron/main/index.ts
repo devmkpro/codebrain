@@ -20,6 +20,7 @@ import { startMcpServer } from "./services/mcp";
 import { attachNetworkTracking } from "./services/network";
 import { setupHooks } from "./services/hooks";
 import { setupClaudeIntegration } from "./services/setup-claude";
+import { setupDiscordRPC, teardownDiscordRPC } from "./discord-rpc";
 
 log.initialize();
 
@@ -95,6 +96,10 @@ app.whenReady().then(async () => {
   registerAllIpcHandlers(ctx);
   setupAutoUpdater(ctx.mainWindow);
 
+  // Discord Rich Presence (fire-and-forget, silent if Discord not running)
+  const discordClientId = ctx.configStore.get().discordClientId as string | undefined;
+  setupDiscordRPC(discordClientId);
+
   // PTY event forwarding
   ctx.ptyManager.on("output", (paneId: string, data: string) => {
     safeSend(ctx, "pty:output", paneId, data, false);
@@ -137,6 +142,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", async () => {
+  teardownDiscordRPC();
   if (ctx.mcpServerInfo) {
     ctx.mcpServerInfo.close();
     ctx.mcpServerInfo = null;

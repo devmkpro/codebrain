@@ -4,7 +4,7 @@ import {
   Terminal, Zap, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, Info, Save,
   RotateCcw, Download, Trash2, RefreshCw, Shield,
-  Type, Monitor, Plus, X, Variable,
+  Type, Monitor, Plus, X, Variable, Gamepad2,
 } from 'lucide-react';
 import {
   useTerminalSettings,
@@ -139,6 +139,10 @@ export function SettingsPage() {
   const [geminiCliStatus,  setGeminiCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
+  // Discord RPC
+  const [discordClientId, setDiscordClientId] = useState('');
+  const [discordConnected, setDiscordConnected] = useState(false);
+  const [discordMsg, setDiscordMsg] = useState<string | null>(null);
   // Global env vars
   const [globalEnv, setGlobalEnv] = useState<Record<string, string>>({});
   const [envMsg, setEnvMsg] = useState<string | null>(null);
@@ -214,10 +218,18 @@ export function SettingsPage() {
         setProviderDefaultModels(saved);
       } catch {}
     })();
-    // Load appConfig (globalEnv)
+    // Load appConfig (globalEnv, discordClientId)
     (window as any).codeBrainApp?.appConfig?.get?.()
       .then((cfg: any) => {
         if (cfg && typeof cfg.globalEnv === 'object' && cfg.globalEnv) setGlobalEnv(cfg.globalEnv as Record<string, string>);
+        if (cfg?.discordClientId) setDiscordClientId(cfg.discordClientId);
+      })
+      .catch(() => {});
+    // Load Discord status
+    (window as any).codeBrainApp?.discord?.status?.()
+      .then((s: any) => {
+        if (s?.clientId) setDiscordClientId(s.clientId);
+        setDiscordConnected(s?.connected ?? false);
       })
       .catch(() => {});
   }, []);
@@ -283,6 +295,7 @@ export function SettingsPage() {
           { id: 'spawn'     as Section, icon: <Monitor size={12} />,  label: 'Spawn Padrão' },
           { id: 'envvars'   as Section, icon: <Variable size={12} />, label: 'Env Vars' },
           { id: 'skill'     as Section, icon: <Download size={12} />, label: 'Skill & CLI' },
+          { id: 'discord'   as Section, icon: <Gamepad2 size={12} />, label: 'Discord'   },
           { id: 'advanced'  as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
         ] as const).map(({ id, icon, label }) => (
           <button key={id} onClick={() => toggleSection(id)}
@@ -765,6 +778,51 @@ export function SettingsPage() {
                 <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
               </button>
             </div>
+          </SectionCard>
+
+          {/* ── Discord ──────────────────────────────────────────────── */}
+          <SectionCard id="discord" icon={<Gamepad2 size={13} />} title="Discord Rich Presence" active={open.includes('discord')} onToggle={toggleSection}>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              Mostre "Codebrain" no seu perfil do Discord enquanto o app estiver aberto.
+              Crie um Application em <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">discord.com/developers</a> e cole o Client ID abaixo.
+            </p>
+
+            <div className="flex items-center gap-2 mt-2">
+              <div className={`w-2 h-2 rounded-full ${discordConnected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <span className="text-[10px] text-slate-400">{discordConnected ? 'Conectado ao Discord' : 'Desconectado'}</span>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Application ID</label>
+              <input
+                type="text"
+                value={discordClientId}
+                onChange={e => { setDiscordClientId(e.target.value); setDiscordMsg(null); }}
+                placeholder="1510333918245683380"
+                className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-indigo-500/50"
+              />
+            </div>
+
+            <button
+              onClick={async () => {
+                const id = discordClientId.trim();
+                if (!id) { setDiscordMsg('Cole o Application ID'); return; }
+                try {
+                  await (window as any).codeBrainApp?.discord?.setClientId?.(id);
+                  setDiscordMsg('Salvo! Reconectando...');
+                  setTimeout(async () => {
+                    const s = await (window as any).codeBrainApp?.discord?.status?.();
+                    setDiscordConnected(s?.connected ?? false);
+                    setDiscordMsg(s?.connected ? 'Conectado!' : 'Não foi possível conectar (Discord aberto?)');
+                  }, 2000);
+                } catch { setDiscordMsg('Erro ao salvar'); }
+              }}
+              className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-600/30 transition-all"
+            >
+              <Save size={11} /> Salvar e Reconectar
+            </button>
+
+            {discordMsg && <p className="text-[10px] text-slate-400 mt-1">{discordMsg}</p>}
           </SectionCard>
 
           {/* ── Avançado ─────────────────────────────────────────────── */}
