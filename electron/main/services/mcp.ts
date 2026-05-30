@@ -1,56 +1,13 @@
 import { ipcMain } from "electron";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import type { AppContext, McpServerInfo } from "../context";
 import { safeSend, ApiProxy } from "../context";
 import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
-import { writeContextFiles } from "./workspace";
+import { refreshAllWorkspaces } from "./workspace";
 
 export function writeMcpConfig(ctx: AppContext, info: McpServerInfo): void {
-  // Home ~/.mcp.json (stdio transport) is already written by setup-claude.ts.
-  // Workspace .mcp.json (SSE transport) must be updated whenever the MCP server
-  // restarts with a new port (port=0 → random each time). We iterate all known
-  // workspace CWDs from paneConfigs, recent workspaces, and rewrite their
-  // .mcp.json with the current URL.
-
-  const updatedPaths = new Set<string>();
-
-  // 1. Update .mcp.json in the current workspace
-  if (ctx.currentWorkspacePath) {
-    updatedPaths.add(ctx.currentWorkspacePath);
-  }
-
-  // 2. Update .mcp.json in all active pane workspaces
-  for (const [, cfg] of ctx.paneConfigs) {
-    if (cfg.cwd) updatedPaths.add(cfg.cwd);
-  }
-
-  // 3. Update .mcp.json in all recent workspaces (survives restarts)
-  try {
-    if (fs.existsSync(ctx.WORKSPACES_FILE)) {
-      const recents: string[] = JSON.parse(fs.readFileSync(ctx.WORKSPACES_FILE, "utf-8"));
-      for (const ws of recents) {
-        if (ws && fs.existsSync(ws)) updatedPaths.add(ws);
-      }
-    }
-  } catch (e) {
-    console.warn("[writeMcpConfig] Failed to read recent workspaces:", e);
-  }
-
-  const mcpContent = JSON.stringify({
-    mcpServers: { codebrain: { type: "sse", url: info.sseUrl } },
-  }, null, 2);
-
-  for (const cwd of updatedPaths) {
-    try {
-      const mcpPath = path.join(cwd, ".mcp.json");
-      fs.writeFileSync(mcpPath, mcpContent, "utf-8");
-      console.log(`[writeMcpConfig] Updated .mcp.json → ${mcpPath} (port ${info.port})`);
-    } catch (e) {
-      console.warn(`[writeMcpConfig] Failed to update .mcp.json in ${cwd}:`, e);
-    }
-  }
+  // Delegate to refreshAllWorkspaces which handles all providers + all workspaces in one pass.
+  refreshAllWorkspaces(ctx, info);
 }
 
 function buildMcpBridge(ctx: AppContext) {

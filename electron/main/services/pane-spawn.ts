@@ -307,14 +307,13 @@ export async function spawnPaneInternal(
       }
 
       // MCP server config via -c flag (short URL, safe for CLI)
-      if (ctx.mcpServerInfo) {
-        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
-          try { await ctx.mcpServerReady; } catch {}
-        }
-        if (!args.some((a: string) => a.includes("mcp_servers.codebrain."))) {
-          args.push("-c", `mcp_servers.codebrain.url=${tomlStr(ctx.mcpServerInfo.streamableHttpUrl)}`);
-          args.push("-c", `mcp_servers.codebrain.default_tools_approval_mode=${tomlStr("approve")}`);
-        }
+      // Wait for MCP server if not yet ready (race condition: Codex spawned before MCP boots)
+      if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
+        try { await ctx.mcpServerReady; } catch {}
+      }
+      if (ctx.mcpServerInfo && !args.some((a: string) => a.includes("mcp_servers.codebrain."))) {
+        args.push("-c", `mcp_servers.codebrain.url=${tomlStr(ctx.mcpServerInfo.streamableHttpUrl)}`);
+        args.push("-c", `mcp_servers.codebrain.default_tools_approval_mode=${tomlStr("approve")}`);
       }
 
       // System prompt → file, then pass file PATH via -c (avoids error 206 = cmd too long)
@@ -364,11 +363,12 @@ export async function spawnPaneInternal(
       env["GEMINI_CLI_TRUST_WORKSPACE"] = "true";
 
       // MCP config → .gemini/settings.json (Overclock pattern with atomic write)
+      // Wait for MCP server if not yet ready (race condition: Gemini spawned before MCP boots)
+      if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
+        try { await ctx.mcpServerReady; } catch {}
+      }
       let geminiMcpConfigured = false;
       if (ctx.mcpServerInfo) {
-        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
-          try { await ctx.mcpServerReady; } catch {}
-        }
         const geminiDir = path.join(cwd, ".gemini");
         const settingsPath = path.join(geminiDir, "settings.json");
         try {

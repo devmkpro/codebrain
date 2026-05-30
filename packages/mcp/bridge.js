@@ -186,13 +186,6 @@ function createMCPBridge(ptyManager, opts = {}) {
   // Track when panes receive writes so we can detect >30s of activity.
   const paneActivityStart = new Map();
   const notifyIdleDebounce = new Map();
-  // Record write timestamps for activity tracking
-  const originalWritePane = paneHandlers.writePane.bind(paneHandlers);
-  paneHandlers.writePane = async function trackedWritePane(paneId, text, submit) {
-    const now = Date.now();
-    if (!paneActivityStart.has(paneId)) paneActivityStart.set(paneId, now);
-    return originalWritePane(paneId, text, submit);
-  };
   ptyManager.on("idle", ({ paneId }) => {
     try {
       const configStore = opts.configStore;
@@ -263,6 +256,14 @@ function createMCPBridge(ptyManager, opts = {}) {
   // ── Create handler factories ─────────────────────────────────────────────
   const sharedOpts = { ...opts, paneLabels, roleMap, messageBus, agentScorer };
   const paneHandlers = createPaneHandlers(ptyManager, sharedOpts);
+
+  // Record write timestamps for activity tracking (patch must come after paneHandlers is created)
+  const originalWritePane = paneHandlers.writePane.bind(paneHandlers);
+  paneHandlers.writePane = async function trackedWritePane(paneId, text, submit) {
+    const now = Date.now();
+    if (!paneActivityStart.has(paneId)) paneActivityStart.set(paneId, now);
+    return originalWritePane(paneId, text, submit);
+  };
 
   // ── Agent registry + message handlers (simple CRUD via memoryStore) ────
   const agentHandlers = {

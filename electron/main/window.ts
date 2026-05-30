@@ -69,14 +69,6 @@ export function createWindow(): BrowserWindow {
       return;
     }
 
-    // Escape → Minimize window
-    if (input.key === "Escape") {
-      if (!win.isMinimized()) {
-        win.minimize();
-      }
-      return;
-    }
-
     // Ctrl+Q / Cmd+Q → Quit app
     if (cmdOrCtrl && input.key === "q" && !input.shift && !input.alt) {
       app.quit();

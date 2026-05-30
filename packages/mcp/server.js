@@ -148,41 +148,54 @@ async function startMCPServer(ptyManager, opts = {}) {
     res.writeHead(404).end("Not found");
   });
 
-  const port = opts.port || 0;
+  const preferredPort = opts.port ?? (process.env.CODEBRAIN_MCP_PORT ? parseInt(process.env.CODEBRAIN_MCP_PORT, 10) : 61010);
 
-  return new Promise((resolve, reject) => {
-    let started = false;
-    server.listen(port, "127.0.0.1", () => {
-      started = true;
-      const actualPort = server.address().port;
-      const info = {
-        port: actualPort,
-        sseUrl: `http://127.0.0.1:${actualPort}/sse`,
-        streamableHttpUrl: `http://127.0.0.1:${actualPort}/mcp`,
-        close: () => {
-          // Close all transports
-          for (const sid in transports) {
-            try { transports[sid].close(); } catch {}
-            delete transports[sid];
-          }
-          server.close();
-        },
-      };
-      console.log(`[MCP] CodeBrain MCP server listening on http://127.0.0.1:${actualPort}`);
-      console.log(`[MCP]   SSE: ${info.sseUrl}`);
-      console.log(`[MCP]   Streamable HTTP: ${info.streamableHttpUrl}`);
-      resolve(info);
+  function doListen(port) {
+    return new Promise((resolve, reject) => {
+      let started = false;
+      server.listen(port, "127.0.0.1", () => {
+        started = true;
+        const actualPort = server.address().port;
+        const info = {
+          port: actualPort,
+          sseUrl: `http://127.0.0.1:${actualPort}/sse`,
+          streamableHttpUrl: `http://127.0.0.1:${actualPort}/mcp`,
+          close: () => {
+            // Close all transports
+            for (const sid in transports) {
+              try { transports[sid].close(); } catch {}
+              delete transports[sid];
+            }
+            server.close();
+          },
+        };
+        console.log(`[MCP] CodeBrain MCP server listening on http://127.0.0.1:${actualPort}`);
+        console.log(`[MCP]   SSE: ${info.sseUrl}`);
+        console.log(`[MCP]   Streamable HTTP: ${info.streamableHttpUrl}`);
+        resolve(info);
+      });
+      server.on("error", (err) => {
+        // Non-fatal socket errors (client disconnect, headers already sent) — just log
+        if (err.code === "ECONNRESET" || err.code === "ERR_HTTP_HEADERS_SENT" || err.code === "EPIPE") {
+          console.warn("[MCP] Non-fatal server error (client disconnect):", err.code);
+          return;
+        }
+        // Fatal only during startup
+        if (!started) reject(err);
+        else console.error("[MCP] Server error:", err);
+      });
     });
-    server.on("error", (err) => {
-      // Non-fatal socket errors (client disconnect, headers already sent) — just log
-      if (err.code === "ECONNRESET" || err.code === "ERR_HTTP_HEADERS_SENT" || err.code === "EPIPE") {
-        console.warn("[MCP] Non-fatal server error (client disconnect):", err.code);
-        return;
-      }
-      // Fatal only during startup
-      if (!started) reject(err);
-      else console.error("[MCP] Server error:", err);
-    });
+  }
+
+  // Try preferred fixed port first; if busy (dev hot-reload scenario), fall back to random port
+  return doListen(preferredPort).catch((err) => {
+    if (err.code === "EADDRINUSE") {
+      console.warn(`[MCP] Port ${preferredPort} already in use (dev mode?), falling back to random port`);
+      // Remove previous error listener before re-attempting
+      server.removeAllListeners("error");
+      return doListen(0);
+    }
+    throw err;
   });
 }
 

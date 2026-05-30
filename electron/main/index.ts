@@ -20,6 +20,7 @@ import { startMcpServer } from "./services/mcp";
 import { attachNetworkTracking } from "./services/network";
 import { setupHooks } from "./services/hooks";
 import { setupClaudeIntegration } from "./services/setup-claude";
+import { refreshAllWorkspaces, clearCodexGlobalConfig } from "./services/workspace";
 import { setupDiscordRPC, teardownDiscordRPC } from "./discord-rpc";
 
 log.initialize();
@@ -91,6 +92,14 @@ app.whenReady().then(async () => {
 
   // Auto-install bundled skills (~/.codebrain/skills/<id>)
   autoInstallBundledSkills();
+
+  // Clean up any stale codebrain MCP entry in ~/.codex/config.toml from a previous
+  // crashed session. MCP is injected via -c flag at spawn time (Overclock pattern),
+  // never via config.toml — so any leftover entry there causes Codex to error on startup.
+  clearCodexGlobalConfig();
+
+  // Refresh all workspace provider files (pre-MCP, uses fixed port default)
+  refreshAllWorkspaces(ctx);
 
   ctx.mainWindow = createWindow();
   registerAllIpcHandlers(ctx);
@@ -172,6 +181,8 @@ app.on("before-quit", async () => {
     ctx.mcpServerInfo = null;
   }
   ctx.ptyManager.killAll();
+  // Remove codebrain from ~/.codex/config.toml so Codex doesn't error on a dead server
+  clearCodexGlobalConfig();
   if (isUpdateInstallRequested()) return;
   teardownAutoUpdater();
 });
