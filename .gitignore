@@ -45,6 +45,8 @@ npm-debug.log*
 
 # ── AI tool configs ───────────────────────────────────────────────────────────
 .gemini/*
+.claude/*
+.codex/*
 .openclaude/
 
 # ── Temp build configs (electron-vite creates these sometimes) ────────────────
