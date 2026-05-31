@@ -100,6 +100,7 @@ export async function spawnPaneInternal(
         paneId,
         cwd,
         model,
+        agent,
         role: config.role,
         sessionContext: config.sessionContext,
       });
@@ -369,7 +370,7 @@ export async function spawnPaneInternal(
 
       // System prompt → file, then pass file PATH via -c (avoids error 206 = cmd too long)
       const instructionsFile = buildSystemPrompt(ctx, {
-        paneId, cwd, model, role: config.role, sessionContext: config.sessionContext,
+        paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
       });
       if (!args.some((a: string) => a.includes("model_instructions_file="))) {
         // Normalize to forward slashes for TOML compatibility
@@ -457,7 +458,7 @@ export async function spawnPaneInternal(
 
       // System prompt → .gemini/codebrain-context.md + add to contextFileName
       const promptFile = buildSystemPrompt(ctx, {
-        paneId, cwd, model, role: config.role, sessionContext: config.sessionContext,
+        paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
       });
       try {
         const promptContent = fs.readFileSync(promptFile, "utf-8");

@@ -28,6 +28,42 @@ function ensureSkillsDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
+/**
+ * Sync a skill to ~/.claude/skills/<id>.md so Claude Code CLI can invoke it via Skill() tool.
+ * Called automatically after skillCreate and skillInstall.
+ */
+function syncSkillToClaudeCli(skillDir) {
+  try {
+    const manifest = readManifest(skillDir);
+    if (!manifest || !manifest.id) return;
+
+    const promptFile = path.join(skillDir, manifest.entrypoint ?? "prompt.md");
+    if (!fs.existsSync(promptFile)) return;
+
+    const prompt = fs.readFileSync(promptFile, "utf-8");
+    const triggers = (manifest.triggers ?? []).map(t => `  - ${t}`).join("\n");
+
+    const mdContent = `---
+name: ${manifest.id}
+description: ${manifest.description ?? ""}
+version: ${manifest.version ?? "1.0.0"}
+triggers:
+${triggers}
+---
+
+${prompt}`;
+
+    const claudeSkillsDir = path.join(os.homedir(), ".claude", "skills");
+    if (!fs.existsSync(claudeSkillsDir)) fs.mkdirSync(claudeSkillsDir, { recursive: true });
+
+    const outPath = path.join(claudeSkillsDir, `${manifest.id}.md`);
+    fs.writeFileSync(outPath, mdContent, "utf-8");
+  } catch (err) {
+    // Non-fatal — skill still works via system prompt injection
+    console.warn("[skill-handlers] syncSkillToClaudeCli failed:", err?.message);
+  }
+}
+
 function readManifest(skillDir) {
   try {
     return JSON.parse(fs.readFileSync(path.join(skillDir, "skill.json"), "utf-8"));
@@ -132,6 +168,9 @@ function createSkillHandlers(opts) {
       fs.writeFileSync(path.join(skillDir, "skill.json"), JSON.stringify(manifest, null, 2), "utf-8");
       fs.writeFileSync(path.join(skillDir, "prompt.md"), prompt, "utf-8");
 
+      // Sync to ~/.claude/skills/ so Claude Code CLI can invoke via Skill() tool
+      syncSkillToClaudeCli(skillDir);
+
       return {
         ok: true,
         id,
@@ -182,6 +221,9 @@ function createSkillHandlers(opts) {
           } catch {}
         }
 
+        // Sync to ~/.claude/skills/ so Claude Code CLI can invoke via Skill() tool
+        syncSkillToClaudeCli(skillDir);
+
         return { ok: true, manifest };
       } catch (err) {
         return { ok: false, error: err?.message || String(err) };
@@ -225,6 +267,9 @@ function createSkillHandlers(opts) {
 
             const entryRes = await fetch(`${REGISTRY_BASE}/skills/${entry.id}/${manifest.entrypoint}`);
             if (entryRes.ok) fs.writeFileSync(path.join(skillDir, manifest.entrypoint), await entryRes.text());
+
+            // Sync to ~/.claude/skills/ so Claude Code CLI can invoke via Skill() tool
+            syncSkillToClaudeCli(skillDir);
 
             results.push({ id: entry.id, action: localManifest ? "updated" : "installed", version: entry.version });
           }

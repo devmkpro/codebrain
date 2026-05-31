@@ -41,6 +41,7 @@ export interface PromptBuilderConfig {
   model?: string;
   role?: string;
   sessionContext?: string;
+  agent?: string;
 }
 
 interface SkillManifest {
@@ -49,50 +50,90 @@ interface SkillManifest {
   type: string;
   description?: string;
   triggers?: string[];
+  entrypoint?: string;
+}
+
+interface LoadedSkill {
+  manifest: SkillManifest;
+  content: string | null; // prompt.md content, null if unreadable
 }
 
 /**
- * Reads installed skills from project (.codebrain/skills/) and global (~/.codebrain/skills/)
- * and builds a system prompt section so every agent knows which skills are available
- * and uses them automatically based on triggers.
+ * Reads skills from all skill directories in priority order:
+ *   1. Project-local:  <cwd>/.codebrain/skills/
+ *   2. Global:         ~/.codebrain/skills/
+ *
+ * Deduplicates by skill id (project takes priority over global).
+ * Returns both manifest and full prompt.md content for each skill.
  */
-function buildSkillsSection(cwd: string): string {
+function loadSkills(cwd: string): LoadedSkill[] {
   const skillDirs: string[] = [];
 
-  // Project-local skills
+  // 1. Project-local skills
   const projectSkillsDir = path.join(cwd || "", ".codebrain", "skills");
   if (fs.existsSync(projectSkillsDir)) skillDirs.push(projectSkillsDir);
 
-  // Global skills (~/.codebrain/skills/)
+  // 2. Global skills (~/.codebrain/skills/)
   const globalSkillsDir = path.join(os.homedir(), ".codebrain", "skills");
   if (fs.existsSync(globalSkillsDir)) skillDirs.push(globalSkillsDir);
 
-  const skills: SkillManifest[] = [];
+  const loaded: LoadedSkill[] = [];
+  const seenIds = new Set<string>();
+
   for (const dir of skillDirs) {
     try {
       for (const entry of fs.readdirSync(dir)) {
-        const manifestPath = path.join(dir, entry, "skill.json");
+        const skillDir = path.join(dir, entry);
+        const manifestPath = path.join(skillDir, "skill.json");
         if (!fs.existsSync(manifestPath)) continue;
         try {
           const manifest: SkillManifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-          if (manifest.id && !skills.find(s => s.id === manifest.id)) {
-            skills.push(manifest);
-          }
+          if (!manifest.id || seenIds.has(manifest.id)) continue;
+          seenIds.add(manifest.id);
+
+          // Read prompt content
+          const entrypoint = manifest.entrypoint ?? "prompt.md";
+          const promptPath = path.join(skillDir, entrypoint);
+          let content: string | null = null;
+          try {
+            if (fs.existsSync(promptPath)) content = fs.readFileSync(promptPath, "utf-8");
+          } catch {}
+
+          loaded.push({ manifest, content });
         } catch {}
       }
     } catch {}
   }
 
+  return loaded;
+}
+
+/**
+ * Builds the skills section of the system prompt.
+ *
+ * Strategy differs by agent:
+ * - Claude Code CLI ("claude"): has the native Skill() tool that reads ~/.claude/skills/*.md
+ *   → inject summary table + Skill() invocation instructions only (content already synced)
+ * - All other CLIs (openclaude, gemini, codex, etc.): no Skill() tool
+ *   → inject the FULL prompt.md content of each skill inline so the agent can execute it
+ */
+function buildSkillsSection(cwd: string, agent?: string): string {
+  const skills = loadSkills(cwd);
   if (skills.length === 0) return "";
 
+  const isClaudeCodeCli = agent === "claude";
+
+  // Summary table — used by all agents
   const rows = skills
     .map(s => {
-      const triggers = (s.triggers ?? []).join(", ") || "—";
-      return `| \`${s.id}\` | ${s.description ?? s.name} | ${triggers} |`;
+      const triggers = (s.manifest.triggers ?? []).join(", ") || "—";
+      return `| \`${s.manifest.id}\` | ${s.manifest.description ?? s.manifest.name} | ${triggers} |`;
     })
     .join("\n");
 
-  return `\n\n## Skills Disponíveis — USE AUTOMATICAMENTE
+  if (isClaudeCodeCli) {
+    // Claude Code has Skill() tool — just the table + invocation rule
+    return `\n\n## Skills Disponíveis — USE AUTOMATICAMENTE
 
 Você tem skills especializadas. **SEMPRE invoque a skill correta via \`Skill()\` tool ANTES de responder**, sem esperar o usuário pedir. Detecte pela intenção do pedido:
 
@@ -101,6 +142,34 @@ Você tem skills especializadas. **SEMPRE invoque a skill correta via \`Skill()\
 ${rows}
 
 **REGRA OBRIGATÓRIA:** Se o pedido do usuário corresponder a qualquer trigger acima → invoque imediatamente com \`Skill({ skill: "id-da-skill" })\`. Não pergunte, não explique — invoque direto.`;
+  }
+
+  // Non-Claude-Code CLIs: inject full skill content inline
+  // The agent executes the skill steps directly from the prompt.
+  let section = `\n\n## Skills Disponíveis — EXECUTE AUTOMATICAMENTE
+
+Você tem skills especializadas com guias completos abaixo. **Ao detectar um trigger, execute diretamente os passos da skill correspondente** sem esperar o usuário pedir.
+
+| Skill | Descrição | Triggers (palavras-chave) |
+|---|---|---|
+${rows}
+
+**REGRA OBRIGATÓRIA:** Se o pedido do usuário corresponder a qualquer trigger → execute imediatamente os passos da skill. Não pergunte, não explique — execute direto.
+
+---
+
+`;
+
+  for (const { manifest, content } of skills) {
+    if (!content) continue;
+    const triggers = (manifest.triggers ?? []).join(", ") || "—";
+    section += `### Skill: \`${manifest.id}\` — ${manifest.description ?? manifest.name}\n`;
+    section += `**Triggers:** ${triggers}\n\n`;
+    section += content.trim();
+    section += "\n\n---\n\n";
+  }
+
+  return section;
 }
 
 /**
@@ -214,7 +283,7 @@ function buildMemoryContext(ctx: AppContext, workspace: string): string {
  * Returns the path to pass via --system-prompt-file.
  */
 export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig): string {
-  const { paneId, cwd, model, role, sessionContext } = config;
+  const { paneId, cwd, model, role, sessionContext, agent } = config;
 
   const allProviders = ctx.providerStore.listFull();
   const configuredProviders = allProviders.filter((p: any) => p.id !== "claude-oauth");
@@ -276,7 +345,8 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
   sysPrompt += `\n\n## Codebrain Runtime\n\n- Version: ${_appVersion}\n- MCP Tools: ${MCP_TOOL_COUNT}\n- Providers: ${providerLabels}`;
 
   // Skills section — inject all installed skills so every agent knows them
-  sysPrompt += buildSkillsSection(cwd);
+  // Claude Code gets summary + Skill() invocation; other CLIs get full content inline
+  sysPrompt += buildSkillsSection(cwd, agent);
 
   // Write to temp file (avoids Windows cmd-line length limit)
   const tmpDir = path.join(cwd || os.homedir(), ".codebrain", "tmp");
