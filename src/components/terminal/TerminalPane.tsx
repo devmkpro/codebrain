@@ -582,13 +582,13 @@ export function TerminalPane({
           <PaneTitle pane={pane} />
           <ProviderBadge providerId={pane.providerId} model={pane.model} agent={pane.agent} />
           <PaneIdBadge paneId={pane.id} />
-          {/* ── MCP warning badge for CLIs without native MCP support ── */}
-          {(pane.agent === "cursor" || pane.agent === "copilot") && (
+          {/* ── MCP warning badge — cursor-agent: MCP support unconfirmed (not installed) ── */}
+          {pane.agent === "cursor" && (
             <span
-              title="Este CLI não tem suporte MCP nativo. O Codebrain tenta configurar via arquivo (.cursor/mcp.json ou --additional-mcp-config), mas as ferramentas MCP podem não estar disponíveis."
+              title="cursor-agent: suporte MCP não confirmado. O Codebrain escreve .cursor/mcp.json mas o binário cursor-agent pode não lê-lo. Verifique se as ferramentas MCP estão disponíveis."
               className="inline-flex shrink-0 items-center gap-1 rounded border border-yellow-500/40 bg-yellow-500/10 px-1.5 py-[1px] font-mono text-[9px] font-bold uppercase tracking-widest text-yellow-400 no-mcp-warning"
             >
-              ⚠ no mcp
+              ⚠ mcp?
             </span>
           )}
         </div>
