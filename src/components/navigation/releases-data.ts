@@ -14,8 +14,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.8.7",
+    "version": "1.8.8",
     "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "⚠ no-mcp badge for cursor/copilot in terminal header"
+      }
+    ]
+  },
+  {
+    "version": "1.8.7",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "feat",
