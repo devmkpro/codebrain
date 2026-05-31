@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.2",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.8.2 — model-based terminal icons + dark mode contrast + missions UI"
+      }
+    ]
+  },
+  {
     "version": "1.8.1",
     "date": "maio 2026",
     "highlights": [
