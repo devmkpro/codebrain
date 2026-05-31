@@ -210,6 +210,32 @@ function which(binary: string): string | null {
     } catch {}
   }
 
+  // Windows: Electron may have a stripped PATH — also search the user/system registry PATH
+  if (IS_WIN) {
+    try {
+      const userPath = execSync(
+        `reg query "HKCU\\Environment" /v PATH`,
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+      ).match(/PATH\s+REG(?:_EXPAND)?_SZ\s+(.+)/i)?.[1]?.trim() ?? "";
+      const sysPath = execSync(
+        `reg query "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" /v PATH`,
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+      ).match(/PATH\s+REG(?:_EXPAND)?_SZ\s+(.+)/i)?.[1]?.trim() ?? "";
+      const allDirs = [...new Set([userPath, sysPath].join(";").split(";").filter(Boolean))];
+      for (const dir of allDirs) {
+        for (const ext of [".cmd", ".exe", ".bat", ""]) {
+          const candidate = nodepath.join(dir, binary + ext);
+          if (nodefs.existsSync(candidate)) {
+            pathCache.set(binary, candidate);
+            // Also prepend this dir to process.env.PATH so subsequent `where` calls find it
+            prependWindowsRuntimePath(candidate);
+            return candidate;
+          }
+        }
+      }
+    } catch {}
+  }
+
   for (const candidate of commonPaths(binary)) {
     if (nodefs.existsSync(candidate)) { pathCache.set(binary, candidate); return candidate; }
   }
@@ -221,22 +247,30 @@ function which(binary: string): string | null {
 // ── Windows helpers (ported from Overclock pattern) ───────────────────────────
 
 /**
- * Quote a single argument for cmd.exe, escaping special chars.
- * Wraps in double-quotes and escapes % ^ & | < > ( ) "
+ * Quote a single argument for use inside a cmd.exe double-quoted string.
+ * Backslashes do NOT need escaping in cmd.exe (unlike Unix shells).
+ * Only escape cmd.exe metacharacters: % ^ & | < > ( ) "
  */
 function quoteWindowsCmdArg(arg: string): string {
   if (arg.length === 0) return '""';
-  return `"${arg.replace(/([%^&|<>()"\\])/g, "^$1")}"`;
+  // Escape cmd metacharacters EXCEPT backslash (\ is literal in cmd.exe)
+  const escaped = arg.replace(/([%^&|<>()"!])/g, "^$1");
+  // Wrap in quotes if contains spaces or special chars
+  return escaped.includes(" ") || escaped !== arg ? `"${arg.replace(/"/g, '\\"')}"` : arg;
 }
 
 /**
- * Build a cmd.exe command line string using `call "path" args` pattern.
- * Returns a single string to pass as args[0] after /d /s /c.
- * This is the only reliable way to run .cmd/.bat files with spaces in paths.
+ * Build cmd.exe args array for running a .cmd/.bat file via `cmd.exe /d /s /c call "path" args`.
+ * Returns string[] for node-pty: ["/d", "/s", "/c", "call \"path\" arg1 arg2"]
+ * The part after /c MUST be a single string — node-pty joins it correctly.
  */
-function buildWindowsCmdLine(resolved: string, args: string[]): string {
-  const parts = ["call", quoteWindowsCmdArg(resolved), ...args.map(quoteWindowsCmdArg)];
-  return `/d /s /c ${parts.join(" ")}`;
+function buildWindowsCmdLine(resolved: string, args: string[]): string[] {
+  // cmd.exe /d /s /c "call \"path with spaces\" arg1 arg2"
+  // The outer quotes wrap the whole command; inner path must be double-quoted.
+  const quotedPath = `"${resolved.replace(/"/g, '\\"')}"`;
+  const quotedArgs = args.map(a => a.includes(" ") ? `"${a.replace(/"/g, '\\"')}"` : a);
+  const command = ["call", quotedPath, ...quotedArgs].join(" ");
+  return ["/d", "/s", "/c", command];
 }
 
 /**
@@ -247,17 +281,38 @@ function windowsNodeScriptFromShim(shimPath: string): string | null {
   if (!/\.(cmd|bat)$/i.test(shimPath)) return null;
   try {
     const source = nodefs.readFileSync(shimPath, "utf8");
-    // Standard npm shim pattern: `node  "%~dp0\node_modules\<pkg>\bin\<script>"  %*`
-    const match = source.match(/node(?:\.exe)?\s+"?([^"\r\n]+\.js)"?/i)
-                ?? source.match(/"%~dp0\\([^"\r\n]+\.js)"/i);
-    if (!match) return null;
     const shimDir = nodepath.dirname(shimPath);
-    // Handle relative paths like %~dp0\node_modules\...
-    const scriptPath = match[1].replace(/%~dp0\\/gi, "").replace(/^\.\//, "");
-    const resolved = nodepath.isAbsolute(scriptPath)
-      ? scriptPath
-      : nodepath.join(shimDir, scriptPath);
-    return nodefs.existsSync(resolved) ? resolved : null;
+
+    // Pattern 1: standard npm shim — `node  "%~dp0\node_modules\pkg\bin\script.js"  %*`
+    // Also handles `"%_prog%"  "%dp0%\node_modules\..."` (GitHub Copilot / newer npm pattern)
+    const patterns: RegExp[] = [
+      // GitHub Copilot / newer npm pattern: "%_prog%"  "%dp0%\node_modules\pkg\file.js" %*
+      // or: "%dp0%\node_modules\pkg\file.js" %*
+      /"%(?:~)?dp0%?\\([^"\r\n]+\.js)"\s*%\*/i,
+      // Standard npm: node  "%~dp0\node_modules\pkg\bin\script.js"  %*
+      /node(?:\.exe)?\s+"%(~)?dp0%?\\([^"\r\n]+\.js)"/i,
+      // Inline node invocation: "%_prog%"  "%dp0%\path\script.js"
+      /"[^"]*node[^"]*"\s+"[^"]*dp0[^"]*\\([^"\r\n]+\.js)"/i,
+      // Plain: node  "path\to\script.js"  (absolute or relative)
+      /\bnode(?:\.exe)?\s+"([^"\r\n]+\.js)"/i,
+      // Plain without quotes: node path/to/script.js
+      /\bnode(?:\.exe)?\s+([^\s\r\n"]+\.js)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = source.match(pattern);
+      if (!match) continue;
+      // Get last capture group (handles optional groups)
+      const rawPath = (match[match.length - 1] ?? "")
+        .replace(/%(?:~)?dp0%?\\/gi, "")   // strip %dp0%\ and %~dp0\
+        .replace(/^\.\//, "");
+      if (!rawPath) continue;
+      const resolved = nodepath.isAbsolute(rawPath)
+        ? rawPath
+        : nodepath.join(shimDir, rawPath);
+      if (nodefs.existsSync(resolved)) return resolved;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -356,12 +411,11 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
       }
 
       // Step 3: fallback — run via cmd.exe using `call "path" args` pattern.
-      // CRITICAL: use /d /s /c so the whole command is one shell string.
-      // Use quoteWindowsCmdArg on each arg to handle spaces and special chars.
+      // buildWindowsCmdLine returns string[] ready for node-pty spawn.
       const comspec = process.env["COMSPEC"] ?? "cmd.exe";
-      const cmdLine = buildWindowsCmdLine(resolved, [...defaults.args, ...extraArgs]);
-      log.info(`[pty] Windows cmd.exe fallback: ${comspec} ${cmdLine}`);
-      return { binary: comspec, args: [cmdLine], fellBackToOpenClaude: false };
+      const cmdArgs = buildWindowsCmdLine(resolved, [...defaults.args, ...extraArgs]);
+      log.info(`[pty] Windows cmd.exe fallback: ${comspec} ${cmdArgs.join(" ")}`);
+      return { binary: comspec, args: cmdArgs, fellBackToOpenClaude: false };
     }
   }
 

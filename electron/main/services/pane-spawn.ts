@@ -455,8 +455,11 @@ export async function spawnPaneInternal(
         if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
           try { await ctx.mcpServerReady; } catch {}
         }
+        // Copilot expects: {"mcpServers": {"name": {...}}}
         const mcpJson = JSON.stringify({
-          codebrain: { url: ctx.mcpServerInfo.streamableHttpUrl, type: "http" }
+          mcpServers: {
+            codebrain: { url: ctx.mcpServerInfo.streamableHttpUrl, type: "http" }
+          }
         });
         args.push("--additional-mcp-config", mcpJson);
         log.info("[spawnPaneInternal] Copilot MCP via --additional-mcp-config");
