@@ -1268,7 +1268,7 @@ function createMemoryStore(dbPath) {
       if (!id || !column) return { ok: false, error: "id and column are required" };
       const validColumns = ["inbox", "assigned", "in_progress", "review", "done"];
       if (!validColumns.includes(column)) return { ok: false, error: `column must be one of: ${validColumns.join(", ")}` };
-      const completedAt = column === "done" ? Date.now() : null;
+      const completedAt = column === "done" ? Math.floor(Date.now() / 1000) : null;
       const result = db.prepare(
         `UPDATE kanban_tasks SET column_name = ?, updated_at = unixepoch(), completed_at = ? WHERE id = ?`
       ).run(column, completedAt, id);

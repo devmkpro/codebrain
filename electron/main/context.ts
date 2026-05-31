@@ -10,7 +10,7 @@ import { ConfigStore } from "./config-store";
 import { CliDetector } from "./cli-detector";
 import { AudioConfigStore } from "./audio-config-store";
 import { HooksManager } from "./services/hooks";
-import { createSessionWatchers } from "./services/session-watchers";
+import { createSessionWatchers, type SessionWatcherManager } from "./services/session-watchers";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { createMemoryStore } = require("../../packages/memory/store.js");
@@ -123,7 +123,7 @@ export function createAppContext() {
     memoryStore: createMemoryStore(MEMORY_DB_FILE),
     hooksManager: new HooksManager(),
     costTracker: new CostTracker({ dataDir: DATA_DIR }),
-    sessionWatchers: null as ReturnType<typeof createSessionWatchers> | null,
+    sessionWatchers: null as SessionWatcherManager | null,
 
     // Paths
     DATA_DIR,
