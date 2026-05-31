@@ -28,6 +28,7 @@ import { useTerminalSettings } from '../../stores/terminal-settings-store';
 import { ProvidersModal } from '../providers/ProvidersModal';
 import { SquadModal } from '../squads/SquadModal';
 import { DiagnosticsModal } from '../diagnostics/DiagnosticsModal';
+import { MissionsMenu } from './MissionsMenu';
 
 // ─── Shared modal-state hook ──────────────────────────────────────────────────
 function useModals() {
@@ -68,7 +69,7 @@ function IconBtn({
     >
       {icon}
       {badge !== undefined && badge > 0 && (
-        <span className="absolute top-1.5 right-0.5 font-mono text-[7px] font-bold bg-indigo-500 text-white rounded-full min-w-[13px] h-[13px] flex items-center justify-center px-0.5">
+        <span className="absolute top-1.5 right-0.5 font-mono text-[9px] font-bold bg-indigo-500 text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
           {badge > 9 ? '9+' : badge}
         </span>
       )}
@@ -81,8 +82,9 @@ const VDiv = () => <div className="w-px h-5 bg-white/[0.06] shrink-0 self-center
 
 // ─── Home Header ─────────────────────────────────────────────────────────────
 function HomeHeader() {
-  const { route } = useRouter();
+  const { route, navigate } = useRouter();
   const tabs = useNavStore(s => s.tabs);
+  const goHome = useNavStore(s => s.goHome);
   const authEmail = useAuthStore(s => s.email);
   const activeWorkspace = tabs[(useNavStore(s => s.activeTabIndex))]?.workspacePath as string | undefined;
 
@@ -146,6 +148,7 @@ function HomeHeader() {
           <button
             className="relative w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-300 hover:bg-white/[0.04] transition-all cursor-pointer"
             title="Notificações"
+            onClick={() => { goHome(); navigate('/settings'); }}
           >
             <Bell size={14} />
           </button>
@@ -200,7 +203,7 @@ function AccountDropdown({ profile, authEmail, activeWorkspace, modals: m, onClo
   return (
     <div className="fixed right-2 top-[90px] w-64 bg-[#0c0c14]/95 border border-white/[0.08] rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-[10000] overflow-hidden backdrop-blur-md">
       <div className="px-4 py-3 border-b border-white/5">
-        <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-0.5">Conta</p>
+        <p className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">Conta</p>
         <p className="font-mono text-[11px] text-slate-300 truncate">{authEmail}</p>
       </div>
       {/* profile && (
@@ -483,7 +486,7 @@ function PaneMenu({
                   <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">
                     <div className="truncate">+ {model}</div>
                     {modelPricingLabelFromMap(model, costModels) && (
-                      <div className="font-mono text-[8px] text-emerald-500/60 mt-0.5">{modelPricingLabelFromMap(model, costModels)}</div>
+                      <div className="font-mono text-[10px] text-emerald-400/70 mt-0.5">{modelPricingLabelFromMap(model, costModels)}</div>
                     )}
                   </button>
                 ))
@@ -822,7 +825,7 @@ function WorkspaceHeader() {
           title="Home"
         >
           <Logo size={16} />
-          <span className={`font-mono text-[9px] font-bold tracking-[0.2em] transition-colors ${onHome ? 'bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent' : 'text-slate-700 group-hover:text-violet-300'}`}>
+          <span className={`font-mono text-[9px] font-bold tracking-[0.2em] transition-colors ${onHome ? 'bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent' : 'text-slate-500 group-hover:text-violet-300'}`}>
             CODEBRAIN
           </span>
         </button>
@@ -847,7 +850,7 @@ function WorkspaceHeader() {
                 onClick={() => setActiveTab(i)}
                 title={tab.workspacePath}
                 className={`group relative flex items-center gap-2 px-5 cursor-pointer shrink-0 min-w-0 max-w-[180px] rounded-md select-none transition-all
-                  ${isActive ? 'bg-violet-500/12 text-slate-50 border border-violet-500/30 after:absolute after:bottom-1.5 after:left-2 after:right-2 after:h-1 after:bg-gradient-to-r after:from-[#9d4edd] after:to-[#00d9ff] after:rounded' : isMissing ? 'text-slate-700' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] border border-transparent'}
+                  ${isActive ? 'bg-violet-500/12 text-slate-50 border border-violet-500/30 after:absolute after:bottom-1.5 after:left-2 after:right-2 after:h-1 after:bg-gradient-to-r after:from-[#9d4edd] after:to-[#00d9ff] after:rounded' : isMissing ? 'text-slate-500' : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.05] border border-transparent'}
                   ${isDragging ? 'opacity-40' : ''}
                   ${isTarget ? 'bg-[#9d4edd]/15 border border-[#9d4edd]/30' : ''} border`}
                 style={{ height: 44 }}
@@ -863,6 +866,13 @@ function WorkspaceHeader() {
             );
           })}
         </div>
+
+        {/* Missions menu — só aparece quando há workspace ativo */}
+        {activeWorkspace && (
+          <div className="flex items-stretch border-l border-white/[0.06]" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+            <MissionsMenu activeWorkspace={activeWorkspace} />
+          </div>
+        )}
 
         <div className="flex-1" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
 

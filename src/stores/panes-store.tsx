@@ -50,7 +50,8 @@ export const usePanesStore = create((set, get) => ({
       subtaskId: config.subtaskId,
       providerId: config.providerId,
       model: config.model,
-      permissionMode: config.permissionMode
+      permissionMode: config.permissionMode,
+      missionId: config.missionId,
     };
     set(s => {
       const ws = pane.workspacePath ?? pane.cwd;
@@ -121,5 +122,8 @@ export const usePanesStore = create((set, get) => ({
         [workspacePath]: reinserted
       }
     };
-  })
+  }),
+  updatePaneMission: (paneId, missionId) => set(s => ({
+    panes: s.panes.map(p => p.id === paneId ? { ...p, missionId } : p),
+  }))
 }));

@@ -319,7 +319,7 @@ export function App() {
           <div className="flex flex-col h-full bg-[#0B0B0E] items-center justify-center">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-1.5 rounded-full bg-[#4F46E5] animate-pulse" />
-              <span className="font-mono text-[10px] text-slate-700 uppercase tracking-widest">Carregando…</span>
+              <span className="font-mono text-[10px] text-slate-400 uppercase tracking-widest">Carregando…</span>
             </div>
           </div>
         </AuthGate>

@@ -114,6 +114,7 @@ const DEFAULT_MODEL_COSTS = {
   "anthropic/claude-opus-4": { input: 15.0, output: 75.0 },
   "anthropic/claude-opus-4.7": { input: 5.0, output: 25.0, cache_read: 0.50 },
   "anthropic/claude-opus-4.8": { input: 5.0, output: 25.0, cache_read: 0.50 },
+  "anthropic/claude-opus-4-8": { input: 5.0, output: 25.0, cache_read: 0.50 },
   "anthropic/claude-opus-4.7-fast": { input: 30.0, output: 150.0 },
   "google/gemini-2.5-pro": { input: 1.25, output: 10.0 },
   "google/gemini-2.5-flash": { input: 0.30, output: 2.50 },

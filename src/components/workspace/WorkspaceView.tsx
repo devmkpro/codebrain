@@ -29,6 +29,7 @@ export function WorkspaceView({
   const workspacePanes = panes.filter(p => isPathWithin(workspacePath, p.cwd));
   const [autoSpawning, setAutoSpawning] = React.useState(false);
   const autoSpawnDone = React.useRef(false);
+  const favoritePaneRef = React.useRef<any>(null);
   React.useEffect(() => {
     let cancelled = false;
     const getWorkspaceConfig = window.codeBrainApp?.workspaceConfig?.get;
@@ -37,6 +38,7 @@ export function WorkspaceView({
     };
     getWorkspaceConfig(workspacePath).then(cfg => {
       if (cancelled) return;
+      favoritePaneRef.current = cfg?.favoritePane ?? null;
       if (!autoSpawnDone.current && workspacePanes.length === 0 && cfg?.autoSpawnSquad?.length) {
         autoSpawnDone.current = true;
         setAutoSpawning(true);
@@ -178,13 +180,47 @@ export function WorkspaceView({
   }, [addPane]);
   const handleNew = React.useCallback(() => {
     setSessions(null);
-    if (view?.kind === "map") navigateInActiveTab({
-      kind: "workspace"
-    });
-    addPane({
-      agent: "claude",
-      cwd: workspacePath
-    });
+    if (view?.kind === "map") navigateInActiveTab({ kind: "workspace" });
+    const fav = favoritePaneRef.current;
+    if (fav?.providerId) {
+      // Use favoritePane config (respects default spawn setting)
+      window.codeBrainApp?.pty.spawn({
+        agent: fav.agent ?? "openclaude",
+        cwd: workspacePath,
+        providerId: fav.providerId,
+        model: fav.model || undefined,
+      }).then((result: any) => {
+        if (result?.ok && result.paneId) {
+          addPane({
+            id: result.paneId,
+            agent: fav.agent ?? "openclaude",
+            cwd: workspacePath,
+            workspacePath,
+            providerId: fav.providerId,
+            model: fav.model || undefined,
+            externallySpawned: true,
+          });
+        }
+      }).catch(() => {});
+    } else {
+      // No favoritePane configured — fallback: let main process decide
+      window.codeBrainApp?.pty.spawn({
+        cwd: workspacePath,
+      }).then((result: any) => {
+        if (result?.ok && result.paneId) {
+          addPane({
+            id: result.paneId,
+            agent: "openclaude",
+            cwd: workspacePath,
+            workspacePath,
+            externallySpawned: true,
+          });
+        }
+      }).catch(() => {
+        // last resort: add a pane directly
+        addPane({ agent: "claude", cwd: workspacePath });
+      });
+    }
   }, [workspacePath, addPane, view, navigateInActiveTab]);
   const handleDelete = React.useCallback(async (e, sessionId) => {
     e.stopPropagation();
@@ -291,7 +327,7 @@ export function WorkspaceView({
           </p>
           {sessionsSlow && (
             <div className="flex flex-col items-center gap-3 mt-2">
-              <p className="font-mono text-[10px] text-slate-700 max-w-sm leading-relaxed">
+              <p className="font-mono text-[10px] text-slate-400 max-w-sm leading-relaxed">
                 Este workspace tem muitas transcrições. Você pode abrir um pane novo sem esperar.
               </p>
               <button
@@ -319,7 +355,7 @@ export function WorkspaceView({
               Workspace
             </p>
             <h2 className="text-xl font-bold text-white tracking-tight">{folderName}</h2>
-            <p className="text-[11px] text-slate-600 mt-1 font-mono">{workspacePath}</p>
+            <p className="text-[11px] text-slate-400 mt-1 font-mono">{workspacePath}</p>
           </div>
 
           {sessions.length === 0 ? (
@@ -337,7 +373,7 @@ export function WorkspaceView({
               </div>
               <div className="text-center">
                 <p className="text-[14px] font-bold text-slate-400">Nenhuma sessão salva</p>
-                <p className="text-[11px] text-slate-600 mt-2 max-w-xs leading-relaxed">
+                <p className="text-[11px] text-slate-400 mt-2 max-w-xs leading-relaxed">
                   Use <span className="font-bold text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded mx-0.5">+ SHELL</span>
                   no header para abrir uma sessão com um provider.
                 </p>
@@ -381,22 +417,22 @@ export function WorkspaceView({
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-mono text-[10px] font-bold text-indigo-400 uppercase">{pane.agent}</span>
-                            {pane.model && <span className="font-mono text-[9px] text-slate-600">{pane.model}</span>}
-                            {isHigh && <span className="text-[8px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">resumível</span>}
-                            {pane.cwd && <span className="font-mono text-[9px] text-slate-700">{pane.cwd.split(/[\\/]/).pop()}</span>}
+                            {pane.model && <span className="font-mono text-[10px] text-slate-400">{pane.model}</span>}
+                            {isHigh && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">resumível</span>}
+                            {pane.cwd && <span className="font-mono text-[10px] text-slate-400">{pane.cwd.split(/[\\/]/).pop()}</span>}
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-mono text-[9px] text-slate-700">{ago}</span>
+                            <span className="font-mono text-[10px] text-slate-500">{ago}</span>
                             <span
                               onClick={e => handleDelete(e, session.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1 text-slate-700 hover:text-red-400 transition-all cursor-pointer"
+                              className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all cursor-pointer"
                             >
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                             </span>
                           </div>
                         </div>
                         {preview && (
-                          <p className="font-mono text-[10px] text-slate-600 truncate leading-relaxed group-hover:text-slate-500 transition-colors">
+                          <p className="font-mono text-[10px] text-slate-400 truncate leading-relaxed group-hover:text-slate-300 transition-colors">
                             {preview}
                           </p>
                         )}
