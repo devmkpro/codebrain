@@ -47,6 +47,8 @@ npm-debug.log*
 .gemini/*
 .claude/*
 .codex/*
+.copilot/*
+.cursor/*
 .openclaude/
 
 # ── Temp build configs (electron-vite creates these sometimes) ────────────────
