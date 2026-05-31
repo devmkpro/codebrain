@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.1",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.8.1 — Overclock-style terminal header + text selection zoom fix"
+      }
+    ]
+  },
+  {
     "version": "1.8.0",
     "date": "maio 2026",
     "highlights": [
