@@ -372,6 +372,13 @@ html, body, #root {
   color: #7f1d1d !important;
 }
 
+/* ══ NO-MCP WARNING BADGE — light mode ═════════════════════════ */
+.light .no-mcp-warning {
+  color: #92400e !important;
+  border-color: rgba(161,98,7,0.35) !important;
+  background: rgba(234,179,8,0.10) !important;
+}
+
 /* ══ PROVIDER BADGE — bordas e fundo no light ══════════════════ */
 /* .provider-badge-default é adicionado ao badge padrão (não-custom) */
 .light .provider-badge-default {

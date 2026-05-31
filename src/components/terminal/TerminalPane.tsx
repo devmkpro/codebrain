@@ -582,6 +582,15 @@ export function TerminalPane({
           <PaneTitle pane={pane} />
           <ProviderBadge providerId={pane.providerId} model={pane.model} agent={pane.agent} />
           <PaneIdBadge paneId={pane.id} />
+          {/* ── MCP warning badge for CLIs without native MCP support ── */}
+          {(pane.agent === "cursor" || pane.agent === "copilot") && (
+            <span
+              title="Este CLI não tem suporte MCP nativo. O Codebrain tenta configurar via arquivo (.cursor/mcp.json ou --additional-mcp-config), mas as ferramentas MCP podem não estar disponíveis."
+              className="inline-flex shrink-0 items-center gap-1 rounded border border-yellow-500/40 bg-yellow-500/10 px-1.5 py-[1px] font-mono text-[9px] font-bold uppercase tracking-widest text-yellow-400 no-mcp-warning"
+            >
+              ⚠ no mcp
+            </span>
+          )}
         </div>
         {/* Right-side action buttons */}
         <div className="absolute right-1.5 top-1/2 z-20 flex -translate-y-1/2 items-center gap-0.5 rounded bg-black/95 px-1 py-0.5 shadow-[0_0_8px_rgba(0,0,0,0.85)]">
