@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.3",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.8.3 — workspace access sandbox (read_external / write_external)"
+      }
+    ]
+  },
+  {
     "version": "1.8.2",
     "date": "maio 2026",
     "highlights": [
