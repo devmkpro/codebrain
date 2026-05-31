@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.5",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.8.5 — fix provider-resolver for CLI agents + light mode terminal/banner fixes"
+      }
+    ]
+  },
+  {
     "version": "1.8.4",
     "date": "maio 2026",
     "highlights": [
