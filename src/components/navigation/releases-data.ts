@@ -108,12 +108,12 @@ export const RELEASES: Release[] = [
     ]
   },
   {
-    "version": "1.8.4",
+    "version": "1.8.13",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "v1.8.4 — missions, notifications, CLI auto-install, sync & perf"
+        "text": "v1.8.13 — missions, notifications, CLI auto-install, sync & perf"
       }
     ]
   },

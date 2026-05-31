@@ -291,7 +291,7 @@ export async function spawnPaneInternal(
     }
 
     // ── Kimi CLI branch (Moonshot) ─────────────────────────────────────────────
-    // MCP: written to ~/.kimi/config.toml under [mcp_servers.codebrain] (Kimi v0.1+ pattern)
+    // Config: written to ~/.kimi-code/config.toml (Kimi Code v0.6+)
     // System prompt: injected via --skills-dir pointing to a temp dir with a codebrain skill.
     // Kimi auto-discovers skills from project .kimi/skills/ and ~/.kimi/skills/, and also from
     // any directory passed via --skills-dir.
@@ -310,27 +310,43 @@ export async function spawnPaneInternal(
         env["OPENAI_BASE_URL"] = provider.baseUrl;
       }
 
-      // MCP: write codebrain server to ~/.kimi/config.toml
-      // Kimi reads [mcp_servers.<name>] from config.toml at startup.
-      if (ctx.mcpServerInfo) {
-        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
-          try { await ctx.mcpServerReady; } catch {}
+      // Config: write model + MCP to ~/.kimi-code/config.toml
+      // Kimi Code v0.6+ reads from ~/.kimi-code/ (not ~/.kimi/)
+      const kimiConfigDir = path.join(os.homedir(), ".kimi-code");
+      const kimiConfigPath = path.join(kimiConfigDir, "config.toml");
+      try {
+        fs.mkdirSync(kimiConfigDir, { recursive: true });
+        let configText = "";
+        try { configText = fs.readFileSync(kimiConfigPath, "utf-8"); } catch {}
+
+        // Ensure model entry exists (e.g. [models."kimi-k2.6"] with max_context_size)
+        const effectiveModel = model || "kimi-k2.6";
+        const modelSection = `[models."${effectiveModel}"]`;
+        if (!configText.includes(modelSection)) {
+          // Remove empty/blank config to start fresh if needed
+          if (!configText.trim()) configText = "";
+          const modelBlock = `\n${modelSection}\nprovider = "kimi-for-coding"\nmodel = "${effectiveModel}"\nmax_context_size = 262144\n`;
+          configText = configText.trimEnd() + modelBlock;
+          log.info("[spawnPaneInternal] Kimi model entry added:", effectiveModel);
         }
-        const kimiConfigDir = path.join(os.homedir(), ".kimi");
-        const kimiConfigPath = path.join(kimiConfigDir, "config.toml");
-        try {
-          fs.mkdirSync(kimiConfigDir, { recursive: true });
-          let configText = "";
-          try { configText = fs.readFileSync(kimiConfigPath, "utf-8"); } catch {}
+
+        // Ensure default_model is set
+        if (!configText.includes("default_model")) {
+          configText = `default_model = "${effectiveModel}"\n` + configText;
+        }
+
+        // MCP: write codebrain server block
+        if (ctx.mcpServerInfo) {
           // Remove existing codebrain mcp block if present
           configText = configText.replace(/\[mcp_servers\.codebrain\][^\[]*/, "").trimEnd();
           const mcpBlock = `\n\n[mcp_servers.codebrain]\nurl = "${ctx.mcpServerInfo.streamableHttpUrl}"\ntype = "http"\ndefault_tools_approval_mode = "approve"\n`;
           configText += mcpBlock;
-          fs.writeFileSync(kimiConfigPath, configText, "utf-8");
-          log.info("[spawnPaneInternal] Kimi MCP config written to", kimiConfigPath);
-        } catch (e) {
-          log.warn("[spawnPaneInternal] Failed to write Kimi config.toml:", e);
         }
+
+        fs.writeFileSync(kimiConfigPath, configText, "utf-8");
+        log.info("[spawnPaneInternal] Kimi config written to", kimiConfigPath);
+      } catch (e) {
+        log.warn("[spawnPaneInternal] Failed to write Kimi config.toml:", e);
       }
 
       // System prompt: Kimi has --skills-dir to load skills from a custom directory.
