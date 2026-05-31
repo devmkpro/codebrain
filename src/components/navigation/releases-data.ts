@@ -14,8 +14,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.8.9",
+    "version": "1.8.10",
     "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "cursor CLI binary detection — prefer \"agent\", fallback to \"cursor-agent\""
+      }
+    ]
+  },
+  {
+    "version": "1.8.9",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
