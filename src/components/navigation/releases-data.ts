@@ -14,8 +14,30 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.14",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "Kimi CLI v0.6 auto-config + bump version to 1.8.14"
+      },
+      {
+        "kind": "fix",
+        "text": "update KimiSessionWatcher root path to use .kimi-code directory"
+      },
+      {
+        "kind": "fix",
+        "text": "update release version to 1.8.13 and add AGENTS.md file"
+      },
+      {
+        "kind": "fix",
+        "text": "update .gitignore to include .copilot and .cursor directories"
+      }
+    ]
+  },
+  {
     "version": "1.8.13",
-    "date": "em desenvolvimento",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
@@ -108,12 +130,12 @@ export const RELEASES: Release[] = [
     ]
   },
   {
-    "version": "1.8.13",
+    "version": "1.8.4",
     "date": "maio 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "v1.8.13 — missions, notifications, CLI auto-install, sync & perf"
+        "text": "v1.8.4 — missions, notifications, CLI auto-install, sync & perf"
       }
     ]
   },
