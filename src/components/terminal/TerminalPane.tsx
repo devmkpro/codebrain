@@ -582,15 +582,6 @@ export function TerminalPane({
           <PaneTitle pane={pane} />
           <ProviderBadge providerId={pane.providerId} model={pane.model} agent={pane.agent} />
           <PaneIdBadge paneId={pane.id} />
-          {/* ── MCP warning badge — cursor-agent: MCP support unconfirmed (not installed) ── */}
-          {pane.agent === "cursor" && (
-            <span
-              title="cursor-agent: suporte MCP não confirmado. O Codebrain escreve .cursor/mcp.json mas o binário cursor-agent pode não lê-lo. Verifique se as ferramentas MCP estão disponíveis."
-              className="inline-flex shrink-0 items-center gap-1 rounded border border-yellow-500/40 bg-yellow-500/10 px-1.5 py-[1px] font-mono text-[9px] font-bold uppercase tracking-widest text-yellow-400 no-mcp-warning"
-            >
-              ⚠ mcp?
-            </span>
-          )}
         </div>
         {/* Right-side action buttons */}
         <div className="absolute right-1.5 top-1/2 z-20 flex -translate-y-1/2 items-center gap-0.5 rounded bg-black/95 px-1 py-0.5 shadow-[0_0_8px_rgba(0,0,0,0.85)]">

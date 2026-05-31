@@ -69,7 +69,7 @@ const AGENT_DEFAULTS: Record<string, { binary: string; args: string[] }> = {
   "gemini-cli": { binary: "gemini", args: [] }, // alias para gemini
   codex: { binary: "codex", args: [] },
   kimi: { binary: "kimi", args: [] },          // Kimi (Moonshot)
-  cursor: { binary: "agent", args: [] },         // Cursor CLI (binary: "agent", fallback: "cursor-agent")
+  cursor: { binary: "cursor-agent", args: [] },   // Cursor CLI (installs to %LOCALAPPDATA%\cursor-agent\)
   copilot: { binary: "copilot", args: [] },    // GitHub Copilot
   shell: { binary: defaultShell(), args: [] },
 };
@@ -87,6 +87,7 @@ function commonPaths(binary: string): string[] {
       `${appData}\\npm`,
       `${localAppData}\\Programs\\${binary}`,
       `${localAppData}\\${binary}\\bin`,
+      `${localAppData}\\cursor-agent`,           // Cursor CLI installer path (Windows)
       `${home}\\.local\\bin`,
       `${home}\\.bun\\bin`,
       `${programFiles}\\nodejs`,
@@ -212,14 +213,10 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
     }
   }
   if (!resolved && agent === "cursor") {
-    // Cursor CLI installs as "agent" (new) or "cursor-agent" (old) depending on version/platform.
-    // Try both so either installation works.
-    resolved = which("cursor-agent");
-    if (resolved) log.info(`[pty] cursor: "agent" not found, using "cursor-agent": ${resolved}`);
-    if (!resolved) {
-      resolved = which("agent");
-      if (resolved) log.info(`[pty] cursor: found "agent": ${resolved}`);
-    }
+    // Cursor CLI installs as "cursor-agent" (Windows installer to %LOCALAPPDATA%\cursor-agent\)
+    // or as "agent" subcommand on some platforms. Try "agent" as fallback.
+    resolved = which("agent");
+    if (resolved) log.info(`[pty] cursor: "cursor-agent" not found, using "agent": ${resolved}`);
   }
   // Strip claude-specific CLI flags when falling back to openclaude
   // OpenClaude handles provider routing via env vars, not CLI flags

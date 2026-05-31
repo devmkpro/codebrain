@@ -361,9 +361,11 @@ export async function spawnPaneInternal(
     }
 
     // ── Cursor CLI branch ─────────────────────────────────────────────────────
-    // MCP: cursor-agent reads .cursor/mcp.json in cwd (same as Cursor IDE).
-    // System prompt: Cursor does not have a --system-prompt flag; context is injected
-    // via .cursor/rules/ directory (AGENTS.md / cursor-rules pattern).
+    // Binary: cursor-agent (installs to %LOCALAPPDATA%\cursor-agent\ on Windows)
+    // MCP: reads .cursor/mcp.json in cwd. Auto-approve via --approve-mcps flag.
+    //      Also supports `cursor-agent mcp enable <id>` for persistent approval.
+    // System prompt: injected via .cursor/rules/codebrain.mdc (Cursor rules).
+    // Docs: https://docs.cursor.com/cli/overview
     const isCursor = agent === "cursor";
     if (isCursor) {
       if (model && !args.includes("-m") && !args.includes("--model")) {
@@ -375,7 +377,24 @@ export async function spawnPaneInternal(
         env["OPENAI_API_KEY"] = cursorKey;
       }
 
-      // MCP: write .cursor/mcp.json to cwd (Cursor reads this at startup)
+      // Bypass permissions + sandbox (--yolo = --force, --sandbox disabled)
+      if (!args.includes("--yolo") && !args.includes("--force")) {
+        args.push("--yolo");
+      }
+      if (!args.includes("--sandbox")) {
+        args.push("--sandbox", "disabled");
+      }
+      // Auto-approve all MCP servers (avoids interactive prompt on first use)
+      if (!args.includes("--approve-mcps")) {
+        args.push("--approve-mcps");
+      }
+      // Trust workspace without prompting
+      if (!args.includes("--trust")) {
+        args.push("--trust");
+      }
+
+      // MCP: write codebrain server to .cursor/mcp.json in cwd
+      // cursor-agent reads this at startup (same format as Cursor IDE)
       if (ctx.mcpServerInfo) {
         if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
           try { await ctx.mcpServerReady; } catch {}
@@ -397,6 +416,7 @@ export async function spawnPaneInternal(
       }
 
       // System prompt: write .cursor/rules/codebrain.mdc (Cursor rules file)
+      // cursor-agent loads all *.mdc files from .cursor/rules/ at startup
       try {
         const promptFile = buildSystemPrompt(ctx, {
           paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
@@ -405,12 +425,13 @@ export async function spawnPaneInternal(
         const rulesDir = path.join(cwd, ".cursor", "rules");
         fs.mkdirSync(rulesDir, { recursive: true });
         fs.writeFileSync(path.join(rulesDir, "codebrain.mdc"), promptContent, "utf-8");
-        log.info("[spawnPaneInternal] Cursor rules file written");
+        log.info("[spawnPaneInternal] Cursor rules written to .cursor/rules/codebrain.mdc");
       } catch (e) {
         log.warn("[spawnPaneInternal] Failed to write .cursor/rules/codebrain.mdc:", e);
       }
 
       log.info("[spawnPaneInternal] Cursor model:", model ?? "MISSING");
+      log.info("[spawnPaneInternal] Cursor args:", args.join(" "));
     }
 
     // ── Copilot CLI branch (GitHub) ───────────────────────────────────────────
