@@ -82,6 +82,15 @@ function commonPaths(binary: string): string[] {
     const programFiles = process.env["ProgramFiles"] ?? "C:\\Program Files";
     const roamingNpm = `${home}\\AppData\\Roaming\\npm`;
     const exts = [".cmd", ".exe", ".bat", ""];
+    // Scan for node-vX.Y.Z-win-x64 directories in Program Files (npm global bins live there)
+    const nodeDirs: string[] = [];
+    try {
+      const pfEntries = nodefs.readdirSync(programFiles);
+      for (const entry of pfEntries) {
+        if (/^node-v\d/.test(entry)) nodeDirs.push(`${programFiles}\\${entry}`);
+      }
+    } catch {}
+
     const dirs = [
       roamingNpm,
       `${appData}\\npm`,
@@ -92,6 +101,7 @@ function commonPaths(binary: string): string[] {
       `${home}\\.bun\\bin`,
       `${programFiles}\\nodejs`,
       `${programFiles}\\${binary}`,
+      ...nodeDirs,                               // node-vX.Y.Z-win-x64 (npm global installs)
     ];
     const paths: string[] = [];
     for (const d of dirs) for (const e of exts) paths.push(`${d}\\${binary}${e}`);
@@ -121,18 +131,33 @@ function commonPaths(binary: string): string[] {
     }
   } catch {}
 
+  // Scan node-vX.Y.Z dirs under /usr/local/lib (some Linux setups)
+  const nodeLibPaths: string[] = [];
+  try {
+    const nodeLib = "/usr/local/lib";
+    if (nodefs.existsSync(nodeLib)) {
+      for (const entry of nodefs.readdirSync(nodeLib)) {
+        if (/^node[_-]?v?\d/.test(entry)) nodeLibPaths.push(`${nodeLib}/${entry}/bin/${binary}`);
+      }
+    }
+  } catch {}
+
   return [
     ...nvmPaths,
     ...fnmPaths,
+    ...nodeLibPaths,
     `${home}/.volta/bin/${binary}`,
     `${home}/.local/share/pnpm/${binary}`,
     `${home}/.local/bin/${binary}`,
     `${home}/.claude/local/${binary}`,
+    `${home}/.kimi-code/bin/${binary}`,          // Kimi (macOS/Linux installer)
+    `${home}/.cursor-agent/bin/${binary}`,       // Cursor (macOS/Linux installer)
     `${home}/.bun/bin/${binary}`,
     `${home}/.npm-global/bin/${binary}`,
-    "/opt/homebrew/bin/" + binary,
-    "/usr/local/bin/" + binary,
+    "/opt/homebrew/bin/" + binary,               // Homebrew (macOS Apple Silicon)
+    "/usr/local/bin/" + binary,                  // Homebrew (macOS Intel) + Linux
     "/usr/bin/" + binary,
+    "/snap/bin/" + binary,                       // Snap packages (Ubuntu/Linux)
   ];
 }
 
@@ -193,6 +218,77 @@ function which(binary: string): string | null {
   return null;
 }
 
+// ── Windows helpers (ported from Overclock pattern) ───────────────────────────
+
+/**
+ * Quote a single argument for cmd.exe, escaping special chars.
+ * Wraps in double-quotes and escapes % ^ & | < > ( ) "
+ */
+function quoteWindowsCmdArg(arg: string): string {
+  if (arg.length === 0) return '""';
+  return `"${arg.replace(/([%^&|<>()"\\])/g, "^$1")}"`;
+}
+
+/**
+ * Build a cmd.exe command line string using `call "path" args` pattern.
+ * Returns a single string to pass as args[0] after /d /s /c.
+ * This is the only reliable way to run .cmd/.bat files with spaces in paths.
+ */
+function buildWindowsCmdLine(resolved: string, args: string[]): string {
+  const parts = ["call", quoteWindowsCmdArg(resolved), ...args.map(quoteWindowsCmdArg)];
+  return `/d /s /c ${parts.join(" ")}`;
+}
+
+/**
+ * Read a Windows npm .cmd shim and extract the underlying Node.js script path.
+ * Returns null if the shim doesn't follow the standard npm pattern.
+ */
+function windowsNodeScriptFromShim(shimPath: string): string | null {
+  if (!/\.(cmd|bat)$/i.test(shimPath)) return null;
+  try {
+    const source = nodefs.readFileSync(shimPath, "utf8");
+    // Standard npm shim pattern: `node  "%~dp0\node_modules\<pkg>\bin\<script>"  %*`
+    const match = source.match(/node(?:\.exe)?\s+"?([^"\r\n]+\.js)"?/i)
+                ?? source.match(/"%~dp0\\([^"\r\n]+\.js)"/i);
+    if (!match) return null;
+    const shimDir = nodepath.dirname(shimPath);
+    // Handle relative paths like %~dp0\node_modules\...
+    const scriptPath = match[1].replace(/%~dp0\\/gi, "").replace(/^\.\//, "");
+    const resolved = nodepath.isAbsolute(scriptPath)
+      ? scriptPath
+      : nodepath.join(shimDir, scriptPath);
+    return nodefs.existsSync(resolved) ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a Windows .cmd shim to a {binary: node.exe, args: [script.js, ...]} object.
+ * Lets us bypass cmd.exe entirely — no quoting/space-in-path issues.
+ */
+function resolveWindowsNodeShim(shimPath: string, args: string[]): { binary: string; args: string[] } | null {
+  const script = windowsNodeScriptFromShim(shimPath);
+  if (!script) return null;
+  const nodeBinary = which("node") ?? process.env["NODE"] ?? "node";
+  return { binary: nodeBinary, args: [script, ...args] };
+}
+
+/**
+ * Prepend the binary's own directory to the process PATH so sibling tools
+ * (node.exe, etc.) are findable at runtime without relying on the user's PATH.
+ */
+function prependWindowsRuntimePath(resolvedBinary: string): void {
+  try {
+    const dir = nodepath.dirname(resolvedBinary);
+    const current = (process.env["PATH"] ?? "").split(";");
+    if (!current.some(p => p.toLowerCase() === dir.toLowerCase())) {
+      process.env["PATH"] = [dir, ...current].join(";");
+      log.info(`[pty] Prepended to PATH: ${dir}`);
+    }
+  } catch {}
+}
+
 export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { binary: string; args: string[]; fellBackToOpenClaude: boolean } {
   const defaults = AGENT_DEFAULTS[agent] ?? { binary: agent, args: [] };
   const binary = defaults.binary;
@@ -237,41 +333,36 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
     return { binary: fallback, args: [], fellBackToOpenClaude: false };
   }
 
-  if (IS_WIN && (/\.(cmd|bat)$/i.test(resolved))) {
-    // Try .exe variant first (avoids cmd.exe wrapper issues with ConPTY)
-    const exePath = resolved.replace(/\.(cmd|bat)$/i, ".exe");
-    try {
-      if (nodefs.existsSync(exePath)) {
-        return { binary: exePath, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
-      }
-    } catch {}
+  if (IS_WIN) {
+    // Add the binary's directory to PATH so sibling binaries are findable at runtime
+    prependWindowsRuntimePath(resolved);
 
-    // Try node_modules direct path (bypasses .cmd wrapper entirely)
-    const scriptName = nodepath.basename(resolved, nodepath.extname(resolved));
-    const binDir = nodepath.dirname(resolved);
-    const directScript = nodepath.join(binDir, "node_modules", "@gitlawb", scriptName, "bin", scriptName);
-    try {
-      if (nodefs.existsSync(directScript)) {
-        let nodeBinary = which("node");
-        if (!nodeBinary && process.env.NODE) {
-          nodeBinary = process.env.NODE;
+    if (/\.(cmd|bat)$/i.test(resolved)) {
+      // Step 1: try .exe variant (avoids cmd.exe wrapper — faster, no quoting issues)
+      const exePath = resolved.replace(/\.(cmd|bat)$/i, ".exe");
+      try {
+        if (nodefs.existsSync(exePath)) {
+          return { binary: exePath, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
         }
-        // Fallback to "node" and let the OS figure it out if all else fails
-        if (!nodeBinary) nodeBinary = "node";
-        
-        return {
-          binary: nodeBinary,
-          args: [directScript, ...defaults.args, ...extraArgs],
-          fellBackToOpenClaude: false,
-        };
-      }
-    } catch (e) {
-      log.error(`[resolveCommand] direct script resolution error:`, e);
-    }
+      } catch {}
 
-    // Fallback to cmd.exe via defaultShell()
-    const comspec = defaultShell();
-    return { binary: comspec, args: ["/d", "/c", resolved, ...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
+      // Step 2: read the .cmd shim to find the underlying Node.js script, run with node.exe directly.
+      // This bypasses cmd.exe entirely — no quoting issues, no space-in-path bugs.
+      // Pattern: npm-installed CLIs on Windows ship as <name>.cmd shims pointing to <name>.js
+      const nodeShim = resolveWindowsNodeShim(resolved, [...defaults.args, ...extraArgs]);
+      if (nodeShim) {
+        log.info(`[pty] Windows node shim: ${resolved} → node ${nodeShim.args[0]}`);
+        return { ...nodeShim, fellBackToOpenClaude: false };
+      }
+
+      // Step 3: fallback — run via cmd.exe using `call "path" args` pattern.
+      // CRITICAL: use /d /s /c so the whole command is one shell string.
+      // Use quoteWindowsCmdArg on each arg to handle spaces and special chars.
+      const comspec = process.env["COMSPEC"] ?? "cmd.exe";
+      const cmdLine = buildWindowsCmdLine(resolved, [...defaults.args, ...extraArgs]);
+      log.info(`[pty] Windows cmd.exe fallback: ${comspec} ${cmdLine}`);
+      return { binary: comspec, args: [cmdLine], fellBackToOpenClaude: false };
+    }
   }
 
   return { binary: resolved, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude };
