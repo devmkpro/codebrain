@@ -18,6 +18,10 @@ export const RELEASES: Release[] = [
     "date": "maio 2026",
     "highlights": [
       {
+        "kind": "fix",
+        "text": "resolve circular type reference + kanban timestamp unit mismatch"
+      },
+      {
         "kind": "feat",
         "text": "v1.8.1 — Overclock-style terminal header + text selection zoom fix"
       }
