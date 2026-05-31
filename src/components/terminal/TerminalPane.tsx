@@ -552,7 +552,7 @@ export function TerminalPane({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             style={{ top: contextMenu.y, left: contextMenu.x }}
-            className="absolute z-[9999] min-w-[160px] bg-[#0A0A0B] border border-white/10 rounded-lg shadow-2xl py-1 overflow-hidden backdrop-blur-xl"
+            className="absolute z-[9999] min-w-[160px] bg-[#0A0A0B] border border-white/10 rounded-lg shadow-2xl py-1 overflow-hidden backdrop-blur-xl terminal-context-menu"
           >
             <button onClick={copyToClipboard} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
               <Copy size={12} className="text-slate-500" />

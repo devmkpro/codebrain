@@ -161,22 +161,68 @@ export function resolveProvider(
     if (targetType) {
       const allProviders = getEnhancedProviders(ctx);
 
+      // ── Agent-pinned resolution: when agent explicitly specifies a dedicated CLI,
+      // ALWAYS prefer its matching virtual provider — never let generic type-matching
+      // pick a different provider (e.g. OpenRouter) and corrupt the agent binary.
+      //
+      // codex agent + any gpt-*/o* model → codex-oauth (ChatGPT) or codex (API key)
+      if ((agent === "codex") && (targetType === "openai-compat" || targetType === "codex")) {
+        provider = allProviders.find((p: any) => p.id === "codex-oauth")
+                ?? allProviders.find((p: any) => p.type === "codex")
+                ?? null;
+        if (provider) {
+          log.info(`[resolveProvider] codex agent + model "${model}" (${targetType}) → pinned to "${provider.id}"`);
+        }
+      }
+
+      // gemini-cli agent + gemini-* model → gemini-cli provider (native CLI)
+      if (!provider && (agent === "gemini" || agent === "gemini-cli") && targetType === "gemini-compat") {
+        provider = allProviders.find((p: any) => p.id === "gemini-cli") ?? null;
+        if (provider) {
+          agent = "gemini-cli"; // normalize agent to canonical name
+          log.info(`[resolveProvider] gemini-cli agent + model "${model}" → pinned to gemini-cli provider`);
+        }
+      }
+
+      // kimi agent + kimi-* model → kimi provider (not generic openai-compat)
+      if (!provider && agent === "kimi" && targetType === "openai-compat") {
+        provider = allProviders.find((p: any) => p.id === "kimi"
+                || p.type === "openai-compat" && (p.id ?? "").toLowerCase().includes("kimi"))
+                ?? null;
+        if (provider) {
+          log.info(`[resolveProvider] kimi agent + model "${model}" → pinned to kimi provider`);
+        }
+      }
+
       // For claude models: prefer claude-oauth (Plano Claude) when CLI is detected,
       // regardless of agent name — session restore / orchestrator may send agent="openclaude"
-      if (targetType === "anthropic-compat") {
+      if (!provider && targetType === "anthropic-compat") {
         provider = allProviders.find((p: any) => p.id === "claude-oauth") ?? null;
         if (provider) {
           agent = "claude"; // must use claude CLI for OAuth
           log.info(`[resolveProvider] Claude model "${model}" → claude-oauth (Plano)`);
         }
       }
+
+      // gemini-compat model without a pinned agent → prefer openclaude gemini provider
+      // (NOT gemini-cli, which is the native binary and requires explicit agent="gemini")
+      if (!provider && targetType === "gemini-compat") {
+        provider = allProviders.find((p: any) => p.type === "gemini-compat") ?? null;
+        if (provider) {
+          log.info(`[resolveProvider] Gemini model "${model}" → openclaude gemini-compat provider "${provider.id}"`);
+        }
+      }
+
       // Fall back to first provider of matching type (e.g. direct Anthropic API key)
       if (!provider) {
         provider = allProviders.find((p: any) => p.type === targetType) ?? null;
       }
       // Fallback: if no direct provider found (e.g. anthropic-compat unavailable),
-      // try OpenRouter or any openai-compat provider that might proxy the model
-      if (!provider && targetType !== "openai-compat") {
+      // try OpenRouter or any openai-compat provider that might proxy the model.
+      // IMPORTANT: only use OpenRouter as last resort — never for agent-pinned CLIs
+      // (codex, gemini, kimi) because OpenRouter uses openclaude, not their native binary.
+      const isAgentPinnedCli = agent === "codex" || agent === "gemini" || agent === "gemini-cli" || agent === "kimi" || agent === "cursor" || agent === "copilot";
+      if (!provider && targetType !== "openai-compat" && !isAgentPinnedCli) {
         provider = allProviders.find((p: any) => {
           if (p.type !== "openai-compat") return false;
           const pm: string[] = p.models ?? [];

@@ -15,7 +15,7 @@ export function ProviderBadge({ providerId, model, agent }: { providerId?: strin
   const isCustom = !!provider && provider.type !== "oauth";
   const cls = isCustom
     ? "text-red-400 border-red-500/30 bg-red-500/10"
-    : "text-gray-500 border-white/10 bg-white/[0.03]";
+    : "text-gray-500 border-white/10 bg-white/[0.03] provider-badge-default";
   const effectiveModel = model ?? provider?.models?.[0];
   const shortModel = effectiveModel ? modelShortName(effectiveModel).slice(0, 22) : null;
   if (!shortModel) return null;

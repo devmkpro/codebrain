@@ -310,6 +310,76 @@ html, body, #root {
 .light [class*="bg-[#0c0c14]"]     { background: #ffffff !important; }
 .light [class*="bg-[#0c0c14]/95"]  { background: rgba(255,255,255,0.97) !important; }
 
+/* ══ TERMINAL HEADER — action buttons container ═════════════════ */
+/* Fix: bg-black/95 no header do terminal fica preto no light mode */
+.light [class*="bg-black/95"] {
+  background: rgba(240,240,252,0.96) !important;
+  box-shadow: 0 0 8px rgba(30,30,80,0.12) !important;
+}
+/* Fix: bg-black/50 no pane header do terminal */
+.light [class*="bg-black/50"] {
+  background: rgba(240,240,252,0.85) !important;
+}
+/* Fix: botões de ação (ExternalLink, X) no header do terminal */
+.light .text-gray-600 { color: #4a4a68 !important; }
+/* Sombra preta intensa no header dos botões */
+.light [class*="shadow-[0_0_8px_rgba(0,0,0,0.85)]"] {
+  box-shadow: 0 0 8px rgba(30,30,80,0.15) !important;
+}
+
+/* ══ UPDATE NOTIFICATION BANNER — versão no topo ═══════════════ */
+/* Fix: bg-gray-900/95 quase preto no light mode */
+.light [class*="bg-gray-900/95"] {
+  background: rgba(240,240,252,0.97) !important;
+  border-bottom-color: rgba(30,30,70,0.14) !important;
+}
+/* Fix: texto "CodeBrain" e versão no banner */
+.light [class*="bg-gray-900/95"] .text-gray-600 { color: #4a4a68 !important; }
+.light [class*="bg-gray-900/95"] .text-gray-300 { color: #1a1a2e !important; }
+.light [class*="bg-gray-900/95"] .text-gray-400 { color: #38385a !important; }
+.light [class*="bg-gray-900/95"] .text-gray-500 { color: #6b6b8a !important; }
+/* Fix: barra de progresso de download */
+.light [class*="bg-gray-900/95"] [class*="bg-gray-800"] { background: rgba(30,30,70,0.12) !important; }
+/* Fix: texto de status genérico no banner */
+.light .text-gray-700 { color: #38385a !important; }
+
+/* ══ TERMINAL CONTEXT MENU — fundo e texto no light ════════════ */
+/* .terminal-context-menu é adicionado ao menu de contexto do terminal */
+.light .terminal-context-menu {
+  background: #ffffff !important;
+  border-color: rgba(30,30,70,0.15) !important;
+  box-shadow: 0 4px 20px rgba(30,30,80,0.14) !important;
+}
+.light .terminal-context-menu button {
+  color: #2a2a4a !important;
+}
+.light .terminal-context-menu button:hover {
+  background: rgba(30,30,70,0.07) !important;
+  color: #1a1a2e !important;
+}
+.light .terminal-context-menu button svg {
+  color: #6b6b8a !important;
+}
+.light .terminal-context-menu .h-\[1px\] {
+  background: rgba(30,30,70,0.10) !important;
+}
+/* Stop terminal button — preservar vermelho legível */
+.light .terminal-context-menu button.text-red-400 {
+  color: #991b1b !important;
+}
+.light .terminal-context-menu button.text-red-400:hover {
+  background: rgba(239,68,68,0.07) !important;
+  color: #7f1d1d !important;
+}
+
+/* ══ PROVIDER BADGE — bordas e fundo no light ══════════════════ */
+/* .provider-badge-default é adicionado ao badge padrão (não-custom) */
+.light .provider-badge-default {
+  color: #4a4a68 !important;
+  border-color: rgba(30,30,70,0.22) !important;
+  background: rgba(30,30,70,0.06) !important;
+}
+
 /* ── Electron drag regions ────────────────────────────────────── */
 [style*="WebkitAppRegion: drag"]    { -webkit-app-region: drag; }
 [style*="WebkitAppRegion: no-drag"] { -webkit-app-region: no-drag; }
