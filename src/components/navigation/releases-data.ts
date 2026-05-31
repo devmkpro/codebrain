@@ -14,8 +14,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.8.6",
+    "version": "1.8.7",
     "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.8.7 — MCP + system prompt for Kimi, Cursor, Copilot CLIs"
+      }
+    ]
+  },
+  {
+    "version": "1.8.6",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "feat",
