@@ -14,8 +14,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.8.10",
+    "version": "1.8.11",
     "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "cursor-agent binary detection + MCP/flags fully wired"
+      }
+    ]
+  },
+  {
+    "version": "1.8.10",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
