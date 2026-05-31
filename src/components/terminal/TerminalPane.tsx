@@ -3,7 +3,7 @@ import { X$1 } from "../../stores/providers-store";
 import { usePushToTalk, spawnedPaneIds, openWebLink } from "../../stores/voice-store";
 import { xtermExports, addonFitExports, L } from "../../lib/xterm-exports";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { Copy, Clipboard, Square, MessageSquare, Terminal as TerminalIcon, Settings } from "lucide-react";
+import { Copy, Clipboard, Square, MessageSquare, Terminal as TerminalIcon, Settings, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 // ── MK Thinking Labels ────────────────────────────────────────────────────────
@@ -90,6 +90,7 @@ import { FONT_OPTIONS, TERMINAL_THEMES, useTerminalSettings } from "../../stores
 import { StatusDot, shortenPath } from "../panes/StatusDot";
 import { PaneTitle } from "../panes/PaneTitle";
 import { ProviderBadge } from "../panes/ProviderBadge";
+import { PaneIdBadge } from "../panes/PaneIdBadge";
 import { SavedContextPanel } from "../panes/SavedContextPanel";
 export function TerminalPane({
   pane,
@@ -238,25 +239,32 @@ export function TerminalPane({
     term.open(containerRef.current);
 
     // Fix text selection with CSS zoom: xterm uses getBoundingClientRect()
-    // (returns viewport/zoomed coords) but divides by cssCellWidth (unzoomed).
-    // We override clientX/clientY getters on mouse events to return unzoomed
-    // coordinates, matching xterm's internal coordinate space.
+    // (returns viewport/zoomed coords) and clientX/clientY (also zoomed).
+    // The difference clientX - rect.left = zoomed pixels, but xterm divides
+    // by cssCellWidth (unzoomed) → wrong cell coords.
+    // FIX: override getBoundingClientRect on the terminal element to return
+    // unzoomed coords so the math works: (zoomedClient - unzoomedRect) / cellWidth.
     const el = (term as any).element as HTMLElement | undefined;
     if (el) {
       termElementRef.current = el;
-      const zoomFixHandler = (e: MouseEvent) => {
-        const zoom = parseFloat(document.body.style.zoom) || 1;
-        if (zoom === 1) return;
-        // Capture raw values BEFORE overriding getters
-        const rawX = e.clientX;
-        const rawY = e.clientY;
-        Object.defineProperty(e, 'clientX', { get: () => rawX / zoom });
-        Object.defineProperty(e, 'clientY', { get: () => rawY / zoom });
+      const origGetBCR = el.getBoundingClientRect.bind(el);
+      let cachedZoom = parseFloat(document.body.style.zoom) || 1;
+      const updateZoom = () => { cachedZoom = parseFloat(document.body.style.zoom) || 1; };
+      const zoomObserver = new MutationObserver(updateZoom);
+      zoomObserver.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+      (el as any).__zoomObserver = zoomObserver;
+      (el as any).__origGetBCR = origGetBCR;
+      el.getBoundingClientRect = () => {
+        const r = origGetBCR();
+        if (cachedZoom === 1) return r;
+        return {
+          top: r.top / cachedZoom, left: r.left / cachedZoom,
+          right: r.right / cachedZoom, bottom: r.bottom / cachedZoom,
+          width: r.width / cachedZoom, height: r.height / cachedZoom,
+          x: r.x / cachedZoom, y: r.y / cachedZoom,
+          toJSON: () => r.toJSON(),
+        };
       };
-      zoomFixHandlerRef.current = zoomFixHandler;
-      el.addEventListener('mousedown', zoomFixHandler, true);
-      el.addEventListener('mousemove', zoomFixHandler, true);
-      el.addEventListener('mouseup', zoomFixHandler, true);
     }
 
     if (gpuAcceleration) {
@@ -393,13 +401,14 @@ export function TerminalPane({
     return () => {
       const term = termRef.current;
       if (term) {
-        // Clean up zoom-fix event listeners
+        // Clean up zoom-fix: disconnect observer, restore getBoundingClientRect
         const el = termElementRef.current;
-        const handler = zoomFixHandlerRef.current;
-        if (el && handler) {
-          el.removeEventListener('mousedown', handler, true);
-          el.removeEventListener('mousemove', handler, true);
-          el.removeEventListener('mouseup', handler, true);
+        if (el) {
+          (el as any).__zoomObserver?.disconnect();
+          const origBCR = (el as any).__origGetBCR;
+          if (origBCR) el.getBoundingClientRect = origBCR;
+          delete (el as any).__zoomObserver;
+          delete (el as any).__origGetBCR;
         }
         termElementRef.current = null;
         zoomFixHandlerRef.current = null;
@@ -556,22 +565,47 @@ export function TerminalPane({
       )}
     </AnimatePresence>
 
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity duration-300 bg-black/60 backdrop-blur-sm border border-white/10 rounded-md px-2 py-1 select-none cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("application/x-codebrain-pane", pane.id);
-    }}>
-      <StatusDot status={pane.status} />
-      <PaneTitle pane={pane} />
-      <ProviderBadge providerId={pane.providerId} model={pane.model} />
-      <button className="text-gray-500 hover:text-indigo-400 ml-1 leading-none transition-colors" onClick={e => {
-        e.stopPropagation();
-        window.codeBrainApp?.pty.kill(pane.id);
-        spawnedPaneIds.delete(pane.id);
-        usePanesStore.getState().removePane(pane.id);
-      }} title="Close pane (Cmd+W)">
-        <X$1 size={20} strokeWidth={2} />
-      </button>
-    </div>
+      {/* ── Pane Header (Overclock-style) ─────────────────────────────────── */}
+      <div className="relative flex min-h-7 items-center overflow-hidden bg-black/50 border-b border-white/5 py-1.5 pl-3 pr-16 select-none shrink-0 cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("application/x-codebrain-pane", pane.id);
+      }}>
+        <div className="flex min-w-0 max-w-full items-center gap-1.5 overflow-hidden">
+          <StatusDot status={pane.status} />
+          <PaneTitle pane={pane} />
+          <ProviderBadge providerId={pane.providerId} model={pane.model} agent={pane.agent} />
+          <PaneIdBadge paneId={pane.id} />
+        </div>
+        {/* Right-side action buttons */}
+        <div className="absolute right-1.5 top-1/2 z-20 flex -translate-y-1/2 items-center gap-0.5 rounded bg-black/95 px-1 py-0.5 shadow-[0_0_8px_rgba(0,0,0,0.85)]">
+          <button
+            type="button"
+            className="text-gray-600 hover:text-gray-300 px-1 leading-none transition-colors"
+            onClick={e => {
+              e.stopPropagation();
+              // Open terminal in detached window via IPC
+              window.codeBrainApp?.pty?.detach?.(pane.id);
+            }}
+            draggable={false}
+            title="Destacar pane em nova janela"
+            aria-label="Destacar pane em nova janela"
+          >
+            <ExternalLink size={12} strokeWidth={1.5} />
+          </button>
+          <button
+            className="text-gray-500 hover:text-red-400 px-1 leading-none transition-colors"
+            onClick={e => {
+              e.stopPropagation();
+              window.codeBrainApp?.pty.kill(pane.id);
+              spawnedPaneIds.delete(pane.id);
+              usePanesStore.getState().removePane(pane.id);
+            }}
+            title="Close pane (Cmd+W)"
+          >
+            <X$1 size={12} strokeWidth={1.5} />
+          </button>
+        </div>
+      </div>
     <div className="relative z-0 h-full flex flex-col">
       <SavedContextPanel pane={pane} open={showSavedContext} onToggle={() => setShowSavedContext(v2 => !v2)} />
       <div className={`flex-1 min-h-0 relative ${dropHover ? "ring-2 ring-red-500/40" : ""}`} onDragEnter={e => {
