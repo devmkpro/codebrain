@@ -267,12 +267,16 @@ class GeminiSessionWatcher extends BaseSessionWatcher {
 
 // ── KimiSessionWatcher ─────────────────────────────────────────────────────
 
+/** Kimi Code v0.6+ uses wd_<basename>_<12-char-sha256(forward-slash-path)> as session directory name */
 function kimiProjectHash(workDir: string): string {
-  return crypto.createHash("md5").update(workDir).digest("hex");
+  const basename = path.basename(workDir).toLowerCase();
+  const normalized = workDir.replace(/\\/g, "/");
+  const hash = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 12);
+  return `wd_${basename}_${hash}`;
 }
 
 class KimiSessionWatcher extends BaseSessionWatcher {
-  private root = path.join(os.homedir(), ".kimi", "sessions");
+  private root = path.join(os.homedir(), ".kimi-code", "sessions");
 
   constructor(onCapture: (c: CapturedSession) => void) {
     super("kimi", onCapture);
