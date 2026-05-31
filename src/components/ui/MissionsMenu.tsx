@@ -28,7 +28,10 @@ export function MissionsMenu({ activeWorkspace }: { activeWorkspace: string }) {
   const popupRef = React.useRef<HTMLDivElement>(null);
 
   // store
-  const allMissions = useMissionsStore(s => s.missionsByWorkspace[activeWorkspace] ?? []);
+  // NOTE: must use shallow selector or stable reference — returning `?? []` creates a new array
+  // on every render when the key is missing, causing React 19 useSyncExternalStore infinite loop.
+  const missionsByWorkspace = useMissionsStore(s => s.missionsByWorkspace);
+  const allMissions = missionsByWorkspace[activeWorkspace] ?? [];
   const missions = React.useMemo(() => allMissions.filter(m => m.status !== 'archived'), [allMissions]);
   const activeMissionId = useMissionsStore(s => s.getActiveMissionId(activeWorkspace));
   const ensureMission = useMissionsStore(s => s.ensureMissionForWorkspace);
