@@ -19,6 +19,16 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "fix",
+        "text": "Windows CLI binary resolution — port Overclock's cmd.exe pattern"
+      }
+    ]
+  },
+  {
+    "version": "1.8.11",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
         "text": "cursor-agent binary detection + MCP/flags fully wired"
       }
     ]
