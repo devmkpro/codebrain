@@ -297,6 +297,11 @@ function windowsNodeScriptFromShim(shimPath: string): string | null {
       /\bnode(?:\.exe)?\s+"([^"\r\n]+\.js)"/i,
       // Plain without quotes: node path/to/script.js
       /\bnode(?:\.exe)?\s+([^\s\r\n"]+\.js)/i,
+      // ── Extensionless scripts (e.g. openclaude bin) ──
+      // "%_prog%"  "%dp0%\node_modules\@scope\pkg\bin\name" %*  (no .js extension)
+      /"%_prog%"\s+"%dp0%\\([^"\r\n]+)"\s*%\*/i,
+      // node  "%~dp0\path\to\script"  (extensionless, with quotes)
+      /node(?:\.exe)?\s+"%(~)?dp0%?\\([^"\r\n]+)"/i,
     ];
 
     for (const pattern of patterns) {

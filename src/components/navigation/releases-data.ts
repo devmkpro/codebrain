@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.15",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "inject Codebrain skills inline for all CLIs including Claude Code"
+      }
+    ]
+  },
+  {
     "version": "1.8.14",
     "date": "maio 2026",
     "highlights": [
