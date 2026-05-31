@@ -29,6 +29,7 @@ const LEVEL_DOT: Record<NotifLevel, string> = {
 
 export function NotificationsBell() {
   const [open, setOpen] = React.useState(false);
+  const [anchor, setAnchor] = React.useState<{ top: number; right: number } | null>(null);
   const unread = useNotificationsStore(s => s.unreadCount);
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   const panelRef  = React.useRef<HTMLDivElement>(null);
@@ -50,11 +51,25 @@ export function NotificationsBell() {
   const markAllRead = useNotificationsStore(s => s.markAllRead);
   React.useEffect(() => { if (open) markAllRead(); }, [open, markAllRead]);
 
+  const handleToggle = () => {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      // Compensate for CSS body zoom: getBoundingClientRect returns zoomed coords
+      // but fixed positioning uses unzoomed viewport coords.
+      const zoom = parseFloat(document.body.style.zoom) || 1;
+      setAnchor({
+        top: (rect.bottom + 6) / zoom,
+        right: (window.innerWidth - rect.right) / zoom,
+      });
+    }
+    setOpen(v => !v);
+  };
+
   return (
-    <div className="relative flex items-stretch">
+    <>
       <button
         ref={buttonRef}
-        onClick={() => setOpen(v => !v)}
+        onClick={handleToggle}
         className={`relative w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer focus:outline-none
           ${open ? 'text-violet-300 bg-violet-500/10' : 'text-slate-600 hover:text-slate-300 hover:bg-white/[0.04]'}`}
         title="Notificações"
@@ -65,17 +80,17 @@ export function NotificationsBell() {
         )}
       </button>
 
-      {open && (
-        <NotificationsPanel ref={panelRef} onClose={() => setOpen(false)} />
+      {open && anchor && (
+        <NotificationsPanel ref={panelRef} onClose={() => setOpen(false)} anchor={anchor} />
       )}
-    </div>
+    </>
   );
 }
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
-const NotificationsPanel = React.forwardRef<HTMLDivElement, { onClose: () => void }>(
-  ({ onClose }, ref) => {
+const NotificationsPanel = React.forwardRef<HTMLDivElement, { onClose: () => void; anchor: { top: number; right: number } }>(
+  ({ onClose, anchor }, ref) => {
     const notifications = useNotificationsStore(s => s.notifications);
     const dismiss = useNotificationsStore(s => s.dismiss);
     const clear   = useNotificationsStore(s => s.clear);
@@ -83,9 +98,13 @@ const NotificationsPanel = React.forwardRef<HTMLDivElement, { onClose: () => voi
     return (
       <div
         ref={ref}
-        className="absolute right-0 top-[calc(100%+6px)] z-[10020] w-[340px] max-w-[calc(100vw-1rem)]
+        className="fixed z-[99999] w-[340px] max-w-[calc(100vw-1rem)]
                    rounded-xl border border-white/10 bg-[#0a0a0a] shadow-2xl overflow-hidden"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        style={{
+          top: anchor.top,
+          right: anchor.right,
+          WebkitAppRegion: 'no-drag',
+        } as React.CSSProperties}
       >
         {/* header */}
         <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-white/[0.06]">

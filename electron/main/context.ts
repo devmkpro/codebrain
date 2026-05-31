@@ -102,6 +102,7 @@ export function createAppContext() {
     // Pane tracking
     paneConfigs: new Map<string, PaneConfig>(),
     paneRegistry: new Map<string, PaneRegistryEntry>(),
+    detachedPaneIds: new Set<string>(),
 
     // Provider health tracking
     providerHealth: new Map<string, ProviderHealth>(),

@@ -104,6 +104,112 @@ ${rows}
 }
 
 /**
+ * Lists active agents in the same workspace so the new agent knows its teammates
+ * and can coordinate from the start.
+ */
+function buildActiveAgentsContext(ctx: AppContext, workspace: string, ownPaneId: string): string {
+  try {
+    const livePanes = ctx.ptyManager.list().filter((p: any) => {
+      if (p.paneId === ownPaneId) return false; // skip self
+      if (ctx.detachedPaneIds.has(p.paneId)) return false;
+      const paneWs = p.workspacePath ?? p.cwd ?? "";
+      if (paneWs && workspace) {
+        try {
+          const path = require("node:path");
+          return path.resolve(paneWs) === path.resolve(workspace);
+        } catch { return false; }
+      }
+      return false;
+    });
+
+    if (livePanes.length === 0) return "";
+
+    let block = `\n\n## Agentes Ativos no Workspace — SEUS COLEGAS
+
+Os seguintes agentes estão ativos agora no mesmo workspace. Coordene com eles via \`pane_send_message\`:
+
+`;
+
+    for (const p of livePanes) {
+      const label = (p as any).label || p.agent || "agente";
+      const model = p.model ? ` [${p.model}]` : "";
+      const status = (p as any).status || "running";
+      block += `- **${label}**${model} — paneId: \`${p.paneId}\` (${status})\n`;
+    }
+
+    block += `
+**REGRA:** Quando finalizar sua tarefa, envie um resumo aos colegas via \`pane_send_message\`. Quando receber mensagem de um colega, responda imediatamente. Use \`pane_list()\` para ver o status atual dos panes.
+`;
+
+    return block;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Reads existing memories and patterns for the workspace and builds a
+ * context block that is injected into the system prompt — forces agents
+ * to be aware of shared knowledge from the start.
+ */
+function buildMemoryContext(ctx: AppContext, workspace: string): string {
+  try {
+    const store = ctx.memoryStore as any;
+
+    // Fetch recent memories for this workspace (semantic + episodic + procedural)
+    const memResult = store.list({ workspace, limit: 20 });
+    const memories: any[] = memResult?.memories ?? [];
+
+    // Fetch top patterns (sorted by quality_score DESC in the store)
+    const patResult = store.listPatterns({ limit: 15 });
+    const patterns: any[] = patResult?.patterns ?? [];
+
+    if (memories.length === 0 && patterns.length === 0) {
+      // Even with no memories yet, enforce the read-first protocol
+      return `\n\n## Memória Compartilhada do Workspace\n\n> **REGRA OBRIGATÓRIA:** Antes de iniciar QUALQUER tarefa, execute:\n> \`\`\`\n> mcp__codebrain__memory_search({ query: "<palavras-chave da tarefa>" })\n> mcp__codebrain__pattern_list({})\n> \`\`\`\n> A memória compartilhada é o único mecanismo de coordenação entre agentes no mesmo workspace. Ignorar este passo causa conflitos e retrabalho.\n\nNenhuma memória ou pattern registrado ainda para este workspace. Você é o primeiro agente aqui — comece a gravar descobertas com \`memory_write\` e patterns com \`pattern_write\`.`;
+    }
+
+    let block = `\n\n## Memória Compartilhada do Workspace — LEIA ANTES DE AGIR
+
+> **REGRA OBRIGATÓRIA:** Você DEVE consultar \`mcp__codebrain__memory_search\` e \`mcp__codebrain__pattern_list\` ANTES de iniciar qualquer tarefa. Nunca repita trabalho que já está na memória. Sempre grave descobertas importantes via \`mcp__codebrain__memory_write\`.
+
+### Contexto atual do workspace \`${workspace}\`
+
+`;
+
+    if (memories.length > 0) {
+      block += `**Memórias recentes (${memories.length}):**\n`;
+      for (const m of memories) {
+        const tags = (m.tags ?? []).length > 0 ? ` [${m.tags.join(", ")}]` : "";
+        const preview = (m.content ?? "").slice(0, 200).replace(/\n/g, " ");
+        block += `- **[${m.type ?? "working"}]** \`${m.key ?? m.id}\`${tags}: ${preview}${m.content?.length > 200 ? "…" : ""}\n`;
+      }
+    }
+
+    if (patterns.length > 0) {
+      block += `\n**Patterns aprendidos (${patterns.length}) — USE-OS:**\n`;
+      for (const p of patterns) {
+        const score = typeof p.quality_score === "number" ? ` (score: ${p.quality_score.toFixed(2)})` : "";
+        const preview = (p.description ?? "").slice(0, 180).replace(/\n/g, " ");
+        block += `- **[${p.pattern_type ?? "general"}]**${score}: ${preview}${p.description?.length > 180 ? "…" : ""}\n`;
+      }
+    }
+
+    block += `
+**PROTOCOLO OBRIGATÓRIO:**
+1. **INÍCIO DE CADA TAREFA** → chame \`memory_search\` com palavras-chave relevantes + \`pattern_list\` para ver padrões aplicáveis
+2. **DURANTE A TAREFA** → ao descobrir algo importante, grave imediatamente com \`memory_write\`
+3. **FIM DE CADA TAREFA** → grave o resultado e lições aprendidas; se descobriu um padrão útil, grave com \`pattern_write\`
+4. **NUNCA** comece uma tarefa sem antes verificar se já existe solução na memória
+`;
+
+    return block;
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Builds the Codebrain system prompt and writes it to a temp file.
  * Returns the path to pass via --system-prompt-file.
  */
@@ -117,6 +223,12 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
   let sysPrompt = CODEBRAIN_SYSTEM_PROMPT;
   sysPrompt += `\n\n## Seu Workspace\n\nVocê está trabalhando no diretório:\n\`${cwd}\`\n\nTodos os caminhos de arquivo são relativos a este diretório.`;
   sysPrompt += `\n\n## Seu ID de Pane\n\nSeu paneId é: \`${paneId}\`\n\nUse este ID como campo "from" ao enviar mensagens via pane_send_message, e como campo "paneId" ao ler mensagens via pane_read_messages.`;
+
+  // Inject shared memory + patterns — forces agents to read and reuse knowledge
+  sysPrompt += buildMemoryContext(ctx, cwd);
+
+  // Inject active agents in the workspace so this agent knows its teammates
+  sysPrompt += buildActiveAgentsContext(ctx, cwd, paneId);
 
   // Workspace access policy — sandbox for file operations outside workspace
   const accessMode = ctx.workspaceConfigStore.getAccessMode(cwd);

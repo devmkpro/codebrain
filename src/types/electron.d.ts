@@ -323,11 +323,13 @@ export interface CodebrainApp {
     readRaw: (paneId: string, lastN?: number) => Promise<Uint8Array>;
     readRawText: (paneId: string) => Promise<string>;
     kill: (paneId: string) => Promise<void>;
+    detach: (paneId: string) => Promise<{ ok: boolean; error?: string }>;
     list: () => Promise<PtyInfo[]>;
     resize: (paneId: string, cols: number, rows: number) => Promise<void>;
     onOutput: (callback: (paneId: string, data: string, echo?: boolean) => void) => () => void;
     onExit: (callback: (paneId: string, exitCode: number) => void) => () => void;
     onPaneAdded: (callback: (info: PtyInfo) => void) => () => void;
+    onPaneReattached: (callback: (paneId: string) => void) => () => void;
     onPaneSession: (callback: (info: { paneId: string; session?: Session; claudeSessionId?: string }) => void) => () => void;
   };
   workspace: {
@@ -409,6 +411,8 @@ export interface CodebrainApp {
   cli: {
     detect: () => Promise<{ found: boolean; path?: string }>;
     redetect: () => Promise<{ found: boolean; path?: string }>;
+    install: () => Promise<{ ok: boolean; error?: string; info?: object }>;
+    installCli: (cli: string) => Promise<{ ok: boolean; error?: string; info?: object }>;
   };
   discord: {
     updatePresence: (args: { details: string; state?: string }) => Promise<{ ok: boolean; connected?: boolean; error?: string }>;

@@ -13,15 +13,30 @@ import { useTerminalSettings } from "../stores/terminal-settings-store";
 import { useSessionRestore } from "../hooks/useSessionRestore";
 import { UpdateNotificationBanner } from "../components/navigation/UpdateNotificationBanner";
 import { AuthGate } from "../components/auth/AuthGate";
+import { useNotificationsStore } from "../stores/notifications-store";
 // WorkspaceTabs moved into AppShell/AppHeader
 import { AppShell } from "../components/ui/AppShell";
 import { WhatsNewModal, LATEST_RELEASE_VERSION } from "../components/navigation/WhatsNewModal";
 import { CliInstallModal } from "../components/modals/CliInstallModal";
+import { CliSetupBanner } from "../components/modals/CliSetupBanner";
+import { DetachedPaneView } from "../components/terminal/DetachedPaneView";
+
+// Detect detached pane mode from URL search params
+const _urlParams = new URLSearchParams(window.location.search);
+const DETACHED_PANE_ID = _urlParams.get("detachedPane");
+const DETACHED_WORKSPACE = _urlParams.get("workspace") || "";
 
 function basename(p: string): string {
   return p.replace(/[/\\]+$/, "").split(/[/\\]/).pop() ?? p;
 }
 export function App() {
+  // Detached pane mode: render a single terminal in its own window
+  if (DETACHED_PANE_ID) {
+    return <AuthGate>
+      <DetachedPaneView paneId={DETACHED_PANE_ID} workspacePath={DETACHED_WORKSPACE} />
+    </AuthGate>;
+  }
+
   const panes = usePanesStore(s => s.panes);
   const addPane = usePanesStore(s => s.addPane);
   const removePane = usePanesStore(s => s.removePane);
@@ -36,17 +51,37 @@ export function App() {
   const [workspaceToast, setWorkspaceToast] = React.useState(null);
   const toastTimeout = React.useRef(null);
   const [cliMissing, setCliMissing] = React.useState(false);
+  const [cliStatuses, setCliStatuses] = React.useState<Record<string, any>>({});
+  const [showCliSetup, setShowCliSetup] = React.useState(false);
 
   React.useEffect(() => {
     useNavStore.persist.rehydrate();
     setNavHydrated(true);
 
-    // Check for OpenClaude CLI on startup
+    // Check CLIs on startup — show banner if openclaude missing OR if optional CLIs not installed
     const checkCli = async () => {
       try {
         const info = await (window as any).codeBrainApp?.cli?.detect();
-        if (info && !info.openclaude.found) {
+        if (!info) return;
+        setCliStatuses({
+          openclaude: info.openclaude,
+          codex: info.codex,
+          gemini: info.gemini,
+          claude: info.claude,
+        });
+        // Show old modal if openclaude missing (blocks usage)
+        if (!info.openclaude?.found) {
           setCliMissing(true);
+        }
+        // Show optional CLI setup banner if codex or gemini missing (user may want them)
+        // Only show once per session — use sessionStorage flag
+        const key = "codebrain.cliSetupShown";
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, "1");
+          // Show if openclaude is fine but optional ones are missing
+          if (info.openclaude?.found && (!info.codex?.found || !info.gemini?.found)) {
+            setTimeout(() => setShowCliSetup(true), 1500); // slight delay after startup
+          }
         }
       } catch (err) {
         console.error("Failed to detect CLI:", err);
@@ -121,6 +156,31 @@ export function App() {
     return () => timers.forEach(window.clearTimeout);
   }, [reconcileLivePanes]);
   useSessionRestore(workspace, addPane);
+
+  // When a detached window closes, re-add the pane to the main window
+  React.useEffect(() => {
+    const off = window.codeBrainApp?.pty.onPaneReattached?.((paneId: string) => {
+      // Fetch live pane info and re-add it
+      window.codeBrainApp?.pty.list?.().then((result: any) => {
+        const found = result?.panes?.find?.((p: any) => p.paneId === paneId);
+        if (found) {
+          addPane({
+            id: found.paneId,
+            externallySpawned: true,
+            agent: found.agent,
+            cwd: found.cwd,
+            workspacePath: found.workspacePath,
+            session: found.session,
+            claudeSessionId: found.claudeSessionId,
+            providerId: found.providerId,
+            model: found.model,
+          });
+        }
+      }).catch(() => {});
+    });
+    return () => off?.();
+  }, [addPane]);
+
   React.useEffect(() => {
     const off = window.codeBrainApp?.pty.onPaneAdded?.(info => {
       const extra = info;
@@ -191,14 +251,27 @@ export function App() {
   const decreaseAppZoom = useTerminalSettings(s => s.decreaseAppZoom);
   const resetAppZoom = useTerminalSettings(s => s.resetAppZoom);
   const theme = useTerminalSettings(s => s.theme);
+  const reducedAnimations = useTerminalSettings(s => (s as any).reducedAnimations ?? false);
+  const disableBackdropBlur = useTerminalSettings(s => (s as any).disableBackdropBlur ?? false);
   const [whatsNewOpen, setWhatsNewOpen] = React.useState(false);
   const [appVersion, setAppVersion] = React.useState(null);
   React.useEffect(() => {
     const root2 = document.documentElement;
-    if (theme === "light") root2.classList.add("light");else root2.classList.remove("light");
-  }, [theme]);
+    if (theme === "light") root2.classList.add("light"); else root2.classList.remove("light");
+    // Performance CSS classes applied at root level
+    if (reducedAnimations) root2.classList.add("reduced-motion"); else root2.classList.remove("reduced-motion");
+    if (disableBackdropBlur) root2.classList.add("no-backdrop-blur"); else root2.classList.remove("no-backdrop-blur");
+  }, [theme, reducedAnimations, disableBackdropBlur]);
   React.useEffect(() => {
-    document.body.style.zoom = String(appZoom);
+    // Clamp zoom to sane range — guard against bad persisted values
+    const safeZoom = Math.max(0.5, Math.min(2, appZoom));
+    if (safeZoom !== appZoom) {
+      useTerminalSettings.setState({ appZoom: 1 });
+      document.body.style.zoom = '';
+      return;
+    }
+    // Only set zoom when not 1 — avoid shrinking the default layout
+    document.body.style.zoom = appZoom === 1 ? '' : String(appZoom);
   }, [appZoom]);
   React.useEffect(() => {
     window.codeBrainApp?.app?.version().then(v2 => {
@@ -294,25 +367,29 @@ export function App() {
         if (pane) setActive(pane.id);
         return;
       }
+      // Ctrl+= / Ctrl++ / Ctrl+Shift++ (ABNT2: + requires shift) → zoom UI
       if (meta && (e.key === "=" || e.key === "+")) {
         e.preventDefault();
         increaseAppZoom();
         return;
       }
-      if (meta && e.key === "-") {
+      // Ctrl+- / Ctrl+_ → zoom out UI
+      if (meta && (e.key === "-" || e.key === "_")) {
         e.preventDefault();
         decreaseAppZoom();
         return;
       }
+      // Ctrl+0 → reset zoom UI + font size
       if (meta && e.key === "0") {
         e.preventDefault();
         resetAppZoom();
+        resetFontSize();
         return;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [panes, activePaneId, handleAddPane, removePane, setActive, increaseAppZoom, decreaseAppZoom, resetAppZoom]);
+  }, [panes, activePaneId, handleAddPane, removePane, setActive, increaseAppZoom, decreaseAppZoom, resetAppZoom, resetFontSize]);
   if (!navHydrated) {
     return <React.Fragment>
         <AuthGate>
@@ -339,6 +416,13 @@ export function App() {
           onClose={() => setCliMissing(false)}
           onInstalled={() => setCliMissing(false)}
         />
+        {showCliSetup && !cliMissing && (
+          <CliSetupBanner
+            cliStatuses={cliStatuses}
+            onClose={() => setShowCliSetup(false)}
+            onInstalled={(cli) => setCliStatuses(s => ({ ...s, [cli]: { found: true } }))}
+          />
+        )}
       </AuthGate>
     </React.Fragment>;
 }

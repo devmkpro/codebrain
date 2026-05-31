@@ -112,6 +112,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     readRaw: (paneId: string, lastN?: number) => ipcRenderer.invoke("pty:readRaw", paneId, lastN),
     readRawText: (paneId: string) => ipcRenderer.invoke("pty:readRawText", paneId),
     kill: (paneId: string) => ipcRenderer.invoke("pty:kill", paneId),
+    detach: (paneId: string) => ipcRenderer.invoke("pty:detach", paneId),
     list: () => ipcRenderer.invoke("pty:list"),
     resize: (paneId: string, cols: number, rows: number) => ipcRenderer.invoke("pty:resize", paneId, cols, rows),
     onOutput: (callback: (paneId: string, data: string, echo?: boolean) => void) => {
@@ -128,6 +129,11 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
       const handler = (_evt: unknown, info: unknown) => callback(info);
       ipcRenderer.on("pane:added", handler);
       return () => ipcRenderer.off("pane:added", handler);
+    },
+    onPaneReattached: (callback: (paneId: string) => void) => {
+      const handler = (_evt: unknown, paneId: string) => callback(paneId);
+      ipcRenderer.on("pane:reattached", handler);
+      return () => ipcRenderer.off("pane:reattached", handler);
     },
     onPaneSession: (callback: (info: unknown) => void) => {
       const handler = (_evt: unknown, info: unknown) => callback(info);
@@ -242,6 +248,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     detect: () => ipcRenderer.invoke("cli:detect"),
     redetect: () => ipcRenderer.invoke("cli:redetect"),
     install: () => ipcRenderer.invoke("cli:install"),
+    installCli: (cli: string) => ipcRenderer.invoke("cli:install-cli", cli),
   },
 
   discord: {

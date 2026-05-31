@@ -31,6 +31,7 @@ import { DiagnosticsModal } from '../diagnostics/DiagnosticsModal';
 import { MissionsMenu } from './MissionsMenu';
 import { NotificationsBell } from './NotificationsPanel';
 import { useNotificationsStore } from '../../stores/notifications-store';
+import { notify } from '../../lib/notify';
 
 // ─── Shared modal-state hook ──────────────────────────────────────────────────
 function useModals() {
@@ -552,20 +553,20 @@ function ExportMenu() {
     try {
       const result = await window.codeBrainApp.session.export({ format, includeAll: true });
       if (!result) {
-        window.codeBrainApp.notify("Codebrain", "Erro: sem resposta do processo principal");
+        notify("Codebrain", "Erro: sem resposta do processo principal", "error");
       } else if (!result.ok) {
         if (result.error === "cancelado") {
           // usuário cancelou o dialog — silencioso
         } else if (result.error === "Nenhum pane ativo para exportar") {
-          window.codeBrainApp.notify("Codebrain", "Abra um terminal antes de exportar a sessão");
+          notify("Codebrain", "Abra um terminal antes de exportar a sessão", "warning");
         } else {
-          window.codeBrainApp.notify("Codebrain", `Erro ao exportar: ${result.error}`);
+          notify("Codebrain", `Erro ao exportar: ${result.error}`, "error");
         }
       } else {
-        window.codeBrainApp.notify("Codebrain", `Sessão exportada com sucesso!`);
+        notify("Codebrain", "Sessão exportada com sucesso!", "success");
       }
     } catch (err: any) {
-      window.codeBrainApp.notify("Codebrain", `Erro ao exportar sessão: ${err?.message ?? String(err)}`);
+      notify("Codebrain", `Erro ao exportar sessão: ${err?.message ?? String(err)}`, "error");
     }
     setBusy(false);
   };
@@ -655,7 +656,9 @@ const ACCESS_OPTIONS = [
 function AccessModeSelector({ activeWorkspace }: { activeWorkspace: string }) {
   const [mode, setMode] = React.useState<string>("write_external");
   const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = React.useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (!activeWorkspace) return;
@@ -667,13 +670,25 @@ function AccessModeSelector({ activeWorkspace }: { activeWorkspace: string }) {
   // Close dropdown on outside click
   React.useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const handler = (e: MouseEvent) => {
+      if (btnRef.current?.contains(e.target as Node)) return;
+      if (dropdownRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
   const current = ACCESS_OPTIONS.find(o => o.id === mode) ?? ACCESS_OPTIONS[0];
   const CurrIcon = current.Icon;
+
+  const handleToggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setAnchor({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setOpen(v => !v);
+  };
 
   const handleSelect = async (id: string) => {
     setMode(id);
@@ -682,9 +697,10 @@ function AccessModeSelector({ activeWorkspace }: { activeWorkspace: string }) {
   };
 
   return (
-    <div ref={ref} className="relative flex items-center">
+    <>
       <button
-        onClick={() => setOpen(v => !v)}
+        ref={btnRef}
+        onClick={handleToggle}
         className={`flex items-center gap-1 px-2 py-1 rounded font-mono text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
           mode === "read_external"
             ? "text-amber-400/80 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/15"
@@ -696,7 +712,11 @@ function AccessModeSelector({ activeWorkspace }: { activeWorkspace: string }) {
         <span className="hidden xl:inline">{current.label}</span>
       </button>
       {open && (
-        <div className="absolute top-full right-0 mt-1 w-56 bg-[#0c0c14]/95 border border-white/10 rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-[10000] overflow-hidden backdrop-blur-md">
+        <div
+          ref={dropdownRef}
+          className="fixed w-56 bg-[#0c0c14]/95 border border-white/10 rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden backdrop-blur-md"
+          style={{ top: anchor.top, right: anchor.right, zIndex: 100000 }}
+        >
           <div className="px-3 py-2 border-b border-white/5">
             <p className="font-mono text-[8px] text-slate-500 uppercase tracking-widest">Acesso ao Workspace</p>
           </div>
@@ -722,7 +742,7 @@ function AccessModeSelector({ activeWorkspace }: { activeWorkspace: string }) {
           })}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -837,7 +857,7 @@ function WorkspaceHeader() {
     setSnapshotBusy(true);
     try {
       const r = await (window as any).codeBrainApp?.session?.saveSnapshot(activeWorkspace);
-      if (r?.ok) (window as any).codeBrainApp?.notify?.('Sessão salva', 'Snapshot salvo.');
+      if (r?.ok) notify('Sessão salva', 'Snapshot salvo.', 'success');
     } finally { setSnapshotBusy(false); }
   };
 
@@ -850,10 +870,11 @@ function WorkspaceHeader() {
       const { deterministicRestore } = await import("../../lib/session-restore");
       const result = await deterministicRestore(r.snapshot, addPane, permMode);
       if (result.restored > 0) {
-        (window as any).codeBrainApp?.notify?.(
+        notify(
           "Sessão restaurada",
           `${result.restored} pane(s) restaurado(s).` +
-            (result.skipped > 0 ? ` ${result.skipped} pulado(s).` : "")
+            (result.skipped > 0 ? ` ${result.skipped} pulado(s).` : ""),
+          'success'
         );
       }
     } finally { setSnapshotBusy(false); }

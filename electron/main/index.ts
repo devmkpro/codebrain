@@ -22,6 +22,7 @@ import { setupHooks } from "./services/hooks";
 import { setupClaudeIntegration } from "./services/setup-claude";
 import { refreshAllWorkspaces, clearCodexGlobalConfig } from "./services/workspace";
 import { setupDiscordRPC, teardownDiscordRPC } from "./discord-rpc";
+import { createSessionWatchers } from "./services/session-watchers";
 
 log.initialize();
 
@@ -151,7 +152,6 @@ app.whenReady().then(async () => {
   setupHooks(ctx.hooksManager, ctx.ptyManager, ctx);
 
   // Session watchers — capture CLI transcripts from Kimi, Antigravity, Cursor, Copilot, Codex, Gemini
-  const { createSessionWatchers } = require("./services/session-watchers");
   ctx.sessionWatchers = createSessionWatchers(ctx);
   ctx.sessionWatchers.start();
   ctx.hooksManager.on("pane_spawned", (event: any) => {

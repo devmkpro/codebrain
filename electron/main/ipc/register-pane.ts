@@ -1,6 +1,7 @@
-import { ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
 import type { AppContext } from "../context";
 import { spawnPaneInternal } from "../services/pane-spawn";
+import { createDetachedPaneWindow } from "../window";
 
 export function registerPaneHandlers(ctx: AppContext): void {
   ipcMain.handle("pty:spawn", async (_event, config) => spawnPaneInternal(ctx, config));
@@ -30,10 +31,58 @@ export function registerPaneHandlers(ctx: AppContext): void {
     catch (err) { return { ok: false, error: String(err) }; }
   });
 
-  ipcMain.handle("pty:list", async () => ({ ok: true, panes: ctx.ptyManager.list() }));
+  // pty:list filters out detached panes so the main window doesn't re-add them
+  ipcMain.handle("pty:list", async () => ({
+    ok: true,
+    panes: ctx.ptyManager.list().filter(p => !ctx.detachedPaneIds.has(p.paneId)),
+  }));
 
   ipcMain.handle("pty:resize", async (_event, paneId: string, cols: number, rows: number) => {
     try { ctx.ptyManager.resize(paneId, cols, rows); return { ok: true }; }
     catch (err) { return { ok: false, error: String(err) }; }
+  });
+
+  // ── Detach pane into its own window ────────────────────────────────────────
+  ipcMain.handle("pty:detach", async (_event, paneId: string) => {
+    if (typeof paneId !== "string" || !paneId) return { ok: false, error: "invalid paneId" };
+
+    // Check if already detached
+    const existing = BrowserWindow.getAllWindows().find(w => {
+      try {
+        const url = new URL(w.webContents.getURL());
+        return url.searchParams.get("detachedPane") === paneId;
+      } catch { return false; }
+    });
+    if (existing) {
+      if (existing.isMinimized()) existing.restore();
+      existing.show();
+      existing.focus();
+      return { ok: true };
+    }
+
+    // Get workspace path from pane config
+    const cfg = ctx.paneConfigs.get(paneId);
+    const workspacePath = cfg?.cwd ?? ctx.currentWorkspacePath;
+
+    // Mark as detached so pty:list filters it out of the main window
+    ctx.detachedPaneIds.add(paneId);
+
+    const detachedWin = createDetachedPaneWindow(paneId, workspacePath);
+
+    // When the detached window closes, un-mark the pane and notify main window
+    detachedWin.once("closed", () => {
+      ctx.detachedPaneIds.delete(paneId);
+      // Notify main window(s) that the pane is back so they can re-add it if still alive
+      BrowserWindow.getAllWindows().forEach(w => {
+        try {
+          const url = new URL(w.webContents.getURL());
+          if (!url.searchParams.has("detachedPane")) {
+            w.webContents.send("pane:reattached", paneId);
+          }
+        } catch { /* ignore */ }
+      });
+    });
+
+    return { ok: true };
   });
 }

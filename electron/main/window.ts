@@ -28,6 +28,12 @@ export function createWindow(): BrowserWindow {
     },
   });
 
+  // Always reset native webview zoom — prevents accumulated zoom from previous sessions
+  win.webContents.once("did-finish-load", () => {
+    win.webContents.setZoomFactor(1);
+    win.webContents.setZoomLevel(0);
+  });
+
   win.once("ready-to-show", () => win.show());
 
   win.webContents.on("before-input-event", (event, input) => {
@@ -57,16 +63,18 @@ export function createWindow(): BrowserWindow {
       return;
     }
 
-    // Ctrl+- / Cmd+- → Block zoom out
-    if (cmdOrCtrl && input.key === "-") {
-      event.preventDefault();
-      return;
-    }
-
-    // Ctrl+Shift++ / Cmd+Shift++ → Block zoom in
-    if (cmdOrCtrl && input.shift && (input.key === "=" || input.key === "+")) {
-      event.preventDefault();
-      return;
+    // Ctrl+= / Ctrl++ / Ctrl+- / Ctrl+0 → handled by renderer JS (appZoom).
+    // Prevent Electron from also applying its own native webview zoom on top.
+    if (cmdOrCtrl && !input.alt && (input.key === "=" || input.key === "+" || input.key === "-" || input.key === "_" || input.key === "0")) {
+      // Block the native zoom behavior but still let the keydown reach the renderer.
+      // We do this by immediately resetting the zoom after Electron would apply it.
+      setImmediate(() => {
+        if (!win.isDestroyed()) {
+          win.webContents.setZoomFactor(1);
+          win.webContents.setZoomLevel(0);
+        }
+      });
+      return; // don't preventDefault — let JS handler in renderer fire
     }
 
     // Ctrl+Q / Cmd+Q → Quit app
@@ -100,6 +108,49 @@ export function createWindow(): BrowserWindow {
   win.on("close", (e) => {
     if (isUpdateInstallRequested()) return;
   });
+
+  return win;
+}
+
+/**
+ * Creates a new BrowserWindow for a detached terminal pane.
+ * The window loads the app with ?detachedPane=<id> so the renderer
+ * can show a single-pane view with minimal chrome.
+ */
+export function createDetachedPaneWindow(paneId: string, workspacePath: string): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 900,
+    height: 600,
+    minWidth: 500,
+    minHeight: 400,
+    backgroundColor: "#000000",
+    titleBarStyle: "hidden",
+    titleBarOverlay: {
+      color: "#0c0c14",
+      symbolColor: "#94a3b8",
+      height: 38
+    },
+    trafficLightPosition: { x: 14, y: 14 },
+    frame: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      webviewTag: true,
+    },
+  });
+
+  win.once("ready-to-show", () => win.show());
+
+  if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+    win.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}?detachedPane=${encodeURIComponent(paneId)}&workspace=${encodeURIComponent(workspacePath)}`);
+  } else {
+    win.loadFile(path.join(__dirname, "../renderer/index.html"), {
+      search: `?detachedPane=${encodeURIComponent(paneId)}&workspace=${encodeURIComponent(workspacePath)}`,
+    });
+  }
 
   return win;
 }

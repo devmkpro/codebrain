@@ -21,6 +21,7 @@ export function MissionsMenu({ activeWorkspace }: { activeWorkspace: string }) {
   const [treeAnchor, setTreeAnchor] = React.useState<{ left: number; top: number } | null>(null);
   const [renamingMissionId, setRenamingMissionId] = React.useState<string | null>(null);
   const [missionTitleDraft, setMissionTitleDraft] = React.useState('');
+  const [closeRequest, setCloseRequest] = React.useState<{ mission: Mission; paneCount: number } | null>(null);
   const missionRenameCancelledRef = React.useRef(false);
   const missionSelectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const buttonRef = React.useRef<HTMLButtonElement>(null);
@@ -155,6 +156,19 @@ export function MissionsMenu({ activeWorkspace }: { activeWorkspace: string }) {
   };
 
   const handleClose = (mission: Mission) => {
+    const paneCount = panes.filter(p => {
+      if ((p.workspacePath ?? p.cwd) !== activeWorkspace) return false;
+      return (p as any).missionId
+        ? (p as any).missionId === mission.id
+        : mission.id === activeMission;
+    }).length;
+    setShowTree(false);
+    setCloseRequest({ mission, paneCount });
+  };
+
+  const confirmClose = () => {
+    if (!closeRequest) return;
+    const { mission } = closeRequest;
     const paneIds = panes
       .filter(p => {
         if ((p.workspacePath ?? p.cwd) !== activeWorkspace) return false;
@@ -163,9 +177,7 @@ export function MissionsMenu({ activeWorkspace }: { activeWorkspace: string }) {
           : mission.id === activeMission;
       })
       .map(p => p.id);
-
-    setShowTree(false);
-    // Kill panes
+    setCloseRequest(null);
     for (const pid of paneIds) {
       usePanesStore.getState().removePane(pid);
       (window as any).codeBrainApp?.pty?.kill?.(pid)?.catch?.(() => {});
@@ -180,6 +192,59 @@ export function MissionsMenu({ activeWorkspace }: { activeWorkspace: string }) {
 
   return (
     <>
+      {/* ── Confirm close modal ───────────────────────────────── */}
+      {closeRequest && (
+        <div
+          className="fixed inset-0 z-[10030] flex items-center justify-center"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          {/* backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+            onClick={() => setCloseRequest(null)}
+          />
+          <div className="relative w-[340px] rounded-xl border border-white/10 bg-[#0d0d0d] shadow-2xl p-5 flex flex-col gap-4">
+            {/* icon + title */}
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-violet-500/25 bg-violet-500/10 text-violet-300">
+                <X size={16} strokeWidth={1.7} />
+              </div>
+              <div>
+                <p className="font-mono text-[11px] font-bold text-slate-100">Fechar missão</p>
+                <p className="font-mono text-[10px] text-slate-500 mt-0.5 truncate max-w-[230px]" title={closeRequest.mission.title}>
+                  {closeRequest.mission.title}
+                </p>
+              </div>
+            </div>
+
+            {/* body */}
+            <p className="font-mono text-[10px] leading-relaxed text-slate-400">
+              {closeRequest.paneCount > 0
+                ? <>Esta missão tem <span className="text-violet-300 font-bold">{closeRequest.paneCount} terminal{closeRequest.paneCount !== 1 ? 'is' : ''}</span> aberto{closeRequest.paneCount !== 1 ? 's' : ''}. Todos serão encerrados.</>
+                : <>A missão será arquivada.</>}
+            </p>
+
+            {/* actions */}
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setCloseRequest(null)}
+                className="px-3 py-1.5 rounded-lg border border-white/10 font-mono text-[10px] text-slate-400 hover:text-slate-200 hover:border-white/20 transition-all focus:outline-none"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmClose}
+                className="px-3 py-1.5 rounded-lg border border-violet-500/40 bg-violet-500/15 font-mono text-[10px] font-bold text-violet-300 hover:bg-violet-500/25 hover:border-violet-500/60 transition-all focus:outline-none"
+              >
+                Fechar missão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Trigger button ────────────────────────────────────── */}
       <button
         ref={buttonRef}

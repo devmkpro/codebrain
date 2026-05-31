@@ -219,6 +219,29 @@ function createMCPBridge(ptyManager, opts = {}) {
     } catch {}
   });
 
+  // ── Sync: broadcast "agent finished" when a pane goes idle ─────────────
+  // Every agent in the same workspace is notified when a peer finishes work.
+  // This enables real-time coordination without manual polling.
+  const idleBroadcastDebounce = new Map();
+  ptyManager.on("idle", ({ paneId, idle }) => {
+    try {
+      const now = Date.now();
+      const last = idleBroadcastDebounce.get(paneId) || 0;
+      if (now - last < 15000) return; // debounce 15s
+      idleBroadcastDebounce.set(paneId, now);
+      const label = paneLabels.get(paneId) || paneId.slice(0, 8);
+      const role = roleMap.get(paneId) || "worker";
+      const workspace = opts.getCurrentWorkspacePath?.() || null;
+      // Build a brief summary from last output lines
+      const lastLines = idle?.lastOutput?.slice(-3) || [];
+      const summary = lastLines.join(" ").replace(/\x1b\[[0-9;]*m/g, "").trim().slice(0, 200);
+      const content = summary
+        ? `Agente "${label}" (${role}) finalizou trabalho. Últimas linhas: ${summary}`
+        : `Agente "${label}" (${role}) está idle/aguardando.`;
+      sendAgentNotification(ptyManager, paneLabels, paneId, content, "update", messageBus, workspace);
+    } catch {}
+  });
+
   // ── Auto-check for unread messages on idle ──────────────────────────────
   // When a pane goes idle, check if it has unread messages in the file inbox.
   // If so, inject the pane_read_messages command into the agent's STDIN so it
@@ -293,6 +316,13 @@ function createMCPBridge(ptyManager, opts = {}) {
         const role = roleMap.get(paneId) || "worker";
         const workspace = opts.getCurrentWorkspacePath?.() || null;
         store.upsertAgent({ paneId, label, role, model, providerId, status: "active", workspace });
+        // Notify all other agents that a new peer joined
+        const agentDesc = [label && `"${label}"`, role, model && `(${model})`].filter(Boolean).join(" ");
+        sendAgentNotification(
+          ptyManager, paneLabels, paneId,
+          `Novo agente entrou no workspace: ${agentDesc} — paneId: ${paneId}. Quando finalizar sua tarefa, notifique-o via pane_send_message.`,
+          "update", messageBus, workspace
+        );
         // Update context files with new agent info
         if (workspace && opts.updateContextFiles) {
           try { opts.updateContextFiles(workspace); } catch {}
@@ -304,8 +334,15 @@ function createMCPBridge(ptyManager, opts = {}) {
         const store = opts.memoryStore;
         if (!store) return;
         store.updateAgentStatus({ paneId, status: "exited" });
-        // Update context files to remove exited agent
+        // Notify others that this agent exited
+        const label = paneLabels.get(paneId) || paneId.slice(0, 8);
         const workspace = opts.getCurrentWorkspacePath?.() || null;
+        sendAgentNotification(
+          ptyManager, paneLabels, paneId,
+          `Agente "${label}" (${paneId}) saiu do workspace. Adapte-se se dependia deste agente.`,
+          "update", messageBus, workspace
+        );
+        // Update context files to remove exited agent
         if (workspace && opts.updateContextFiles) {
           try { opts.updateContextFiles(workspace); } catch {}
         }

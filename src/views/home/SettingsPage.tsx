@@ -5,17 +5,20 @@ import {
   AlertTriangle, CheckCircle2, Info, Save,
   RotateCcw, Download, Trash2, RefreshCw, Shield,
   Type, Monitor, Plus, X, Variable, Gamepad2, Bell,
+  Mic, Cloud, Cpu,
 } from 'lucide-react';
 import {
   useTerminalSettings,
   FONT_OPTIONS,
+  SCROLLBACK_OPTIONS,
   DEFAULT_SIZE,
   MIN_SIZE,
   MAX_SIZE,
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
+import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'notifications' | 'discord' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'voice' | 'notifications' | 'discord' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -126,6 +129,90 @@ function AddEnvVarRow({ onAdd }: { onAdd: (key: string, value: string) => void }
   );
 }
 
+// ─── CliRow — reutilizável para cada CLI na seção Skill & CLI ────────────────
+function CliRow({
+  label, description, status, installKey, cliBusy, onDetect, onInstalled, setCliBusy,
+}: {
+  label: string;
+  description: React.ReactNode;
+  status: { found: boolean; path?: string; version?: string } | null;
+  installKey: string | null; // null = sem auto-install (ex: Claude Code)
+  cliBusy: boolean;
+  onDetect: () => void;
+  onInstalled: ((key: string) => void) | null;
+  setCliBusy: (v: boolean) => void;
+}) {
+  const [installing, setInstalling] = useState(false);
+  const [installErr, setInstallErr] = useState<string | null>(null);
+
+  const handleInstall = async () => {
+    if (!installKey) return;
+    setInstalling(true);
+    setInstallErr(null);
+    try {
+      const r = await (window as any).codeBrainApp?.cli?.installCli?.(installKey);
+      if (r?.ok) {
+        onInstalled?.(installKey);
+        onDetect();
+      } else {
+        setInstallErr(r?.error || 'Erro ao instalar.');
+      }
+    } catch (e) {
+      setInstallErr(String(e));
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const isInstalling = installing || (cliBusy && installing);
+
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-[11px] font-medium text-slate-300">{label}</p>
+          {status && (
+            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${status.found ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-amber-400 border-amber-500/20 bg-amber-500/5'}`}>
+              {status.found ? '✓ instalado' : '✗ não encontrado'}
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] text-slate-600 mt-0.5 leading-relaxed">{description}</p>
+        {status?.path && status.found && (
+          <p className="text-[9px] font-mono text-slate-700 mt-0.5 truncate">{status.path}</p>
+        )}
+        {status?.version && (
+          <p className="text-[9px] font-mono text-slate-700 mt-0.5">{status.version}</p>
+        )}
+        {installErr && (
+          <p className="text-[9px] font-mono text-red-400 mt-1 leading-relaxed">{installErr}</p>
+        )}
+      </div>
+      <div className="flex gap-2 shrink-0">
+        {installKey && !status?.found && (
+          <button
+            onClick={handleInstall}
+            disabled={isInstalling || cliBusy}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-300 text-[10px] font-bold uppercase tracking-widest hover:bg-violet-500/20 disabled:opacity-40 transition-all whitespace-nowrap"
+          >
+            {isInstalling
+              ? <RefreshCw size={11} className="animate-spin" />
+              : <Download size={11} />}
+            {isInstalling ? 'Instalando…' : 'Instalar'}
+          </button>
+        )}
+        <button
+          onClick={onDetect}
+          disabled={cliBusy}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all whitespace-nowrap"
+        >
+          <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export function SettingsPage() {
   const [open,      setOpen]   = useState<Section[]>(['terminal']);
@@ -142,6 +229,11 @@ export function SettingsPage() {
   const [copilotCliStatus, setCopilotCliStatus] = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
+  // Voice / BrainVoice
+  const [audioConfig, setAudioConfig] = useState<any>(null);
+  const [audioKey, setAudioKey] = useState('');
+  const [audioBusy, setAudioBusy] = useState(false);
+  const [audioMsg, setAudioMsg] = useState<string | null>(null);
   // Discord RPC
   const [discordClientId, setDiscordClientId] = useState('');
   const [discordConnected, setDiscordConnected] = useState(false);
@@ -185,6 +277,12 @@ export function SettingsPage() {
   const setGpuAcceleration = useTerminalSettings(s => s.setGpuAcceleration);
   const lowGpuMode       = useTerminalSettings(s => s.lowGpuMode);
   const setLowGpuMode    = useTerminalSettings(s => s.setLowGpuMode);
+  const scrollbackSize   = useTerminalSettings(s => (s as any).scrollbackSize ?? 5000);
+  const setScrollbackSize = useTerminalSettings(s => (s as any).setScrollbackSize);
+  const reducedAnimations = useTerminalSettings(s => (s as any).reducedAnimations ?? false);
+  const setReducedAnimations = useTerminalSettings(s => (s as any).setReducedAnimations);
+  const disableBackdropBlur = useTerminalSettings(s => (s as any).disableBackdropBlur ?? false);
+  const setDisableBackdropBlur = useTerminalSettings(s => (s as any).setDisableBackdropBlur);
 
   // Providers
   const providers    = useProvidersStore(s => s.providers) as any[];
@@ -194,6 +292,10 @@ export function SettingsPage() {
     // Load shells
     (window as any).codeBrainApp?.shells?.list?.()
       .then((s: string[]) => setShells(s ?? []))
+      .catch(() => {});
+    // Load audio/voice config
+    (window as any).codeBrainApp?.audio?.getConfig?.()
+      .then((cfg: any) => { if (cfg) setAudioConfig(cfg); })
       .catch(() => {});
     // Load skill status
     (window as any).codeBrainApp?.skill?.status?.()
@@ -415,6 +517,29 @@ export function SettingsPage() {
 
             <Row label="Baixo uso de GPU" description="Remove fundo animado, blur, glows e animações sem mudar para tema claro">
               <Toggle enabled={lowGpuMode} onChange={setLowGpuMode} />
+            </Row>
+            <Divider />
+
+            <Row label="Animações reduzidas" description="Desativa animações Framer Motion (motion/react) — menos CPU em PCs fracos">
+              <Toggle enabled={reducedAnimations} onChange={setReducedAnimations} />
+            </Row>
+            <Divider />
+
+            <Row label="Sem Backdrop Blur" description="Desativa backdrop-blur nos panes — GPU-intensivo em muitos terminais abertos">
+              <Toggle enabled={disableBackdropBlur} onChange={setDisableBackdropBlur} />
+            </Row>
+            <Divider />
+
+            <Row label="Buffer de rolagem" description="Linhas mantidas em memória por pane — reduza para PCs com pouca RAM">
+              <select
+                value={scrollbackSize}
+                onChange={e => setScrollbackSize(Number(e.target.value))}
+                className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer hover:border-white/20 transition-colors"
+              >
+                {SCROLLBACK_OPTIONS.map(o => (
+                  <option key={o.id} value={o.value}>{o.label}</option>
+                ))}
+              </select>
             </Row>
           </SectionCard>
 
@@ -717,147 +842,72 @@ export function SettingsPage() {
             <Divider />
 
             {/* OpenClaude CLI */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-medium text-slate-300">OpenClaude CLI</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">Detecta o binário <span className="font-mono">openclaude</span> no PATH.</p>
-                {cliStatus && (
-                  <>
-                    <p className={`text-[9px] font-mono mt-1 ${cliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {cliStatus.found ? `✓ ${cliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
-                    </p>
-                    {cliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{cliStatus.version}</p>}
-                  </>
-                )}
-              </div>
-              <button
-                onClick={handleRedetectCli}
-                disabled={cliBusy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
-              >
-                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
-              </button>
-            </div>
+            <CliRow
+              label="OpenClaude CLI"
+              description={<>Motor principal dos agentes Codebrain. Instale via <span className="font-mono">npm install -g @gitlawb/openclaude</span>.</>}
+              status={cliStatus}
+              installKey="openclaude"
+              cliBusy={cliBusy}
+              onDetect={handleRedetectCli}
+              onInstalled={(k) => { setCliStatus({ found: true }); }}
+              setCliBusy={setCliBusy}
+            />
 
             <Divider />
 
             {/* Claude CLI (official) */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-medium text-slate-300">Claude Code CLI</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">
-                  Claude original da Anthropic — usado pelo provider <span className="font-mono">Claude (Plano)</span>.
-                  {!claudeCliStatus?.found && (
-                    <> Instale com <span className="font-mono">npm install -g @anthropic-ai/claude-code</span>.</>
-                  )}
-                </p>
-                {claudeCliStatus && (
-                  <>
-                    <p className={`text-[9px] font-mono mt-1 ${claudeCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {claudeCliStatus.found ? `✓ ${claudeCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
-                    </p>
-                    {claudeCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{claudeCliStatus.version}</p>}
-                  </>
-                )}
-              </div>
-              <button
-                onClick={handleRedetectCli}
-                disabled={cliBusy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
-              >
-                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
-              </button>
-            </div>
+            <CliRow
+              label="Claude Code CLI"
+              description={<>CLI oficial da Anthropic — provider <span className="font-mono">Claude (Plano)</span>. Instale via <span className="font-mono">npm install -g @anthropic-ai/claude-code</span>.</>}
+              status={claudeCliStatus}
+              installKey={null}
+              cliBusy={cliBusy}
+              onDetect={handleRedetectCli}
+              onInstalled={null}
+              setCliBusy={setCliBusy}
+            />
 
             <Divider />
 
             {/* Codex CLI (OpenAI) */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-medium text-slate-300">Codex CLI</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">
-                  Codex da OpenAI — usado pelo provider <span className="font-mono">Codex (ChatGPT)</span>.
-                  {!codexCliStatus?.found && (
-                    <> Instale com <span className="font-mono">npm install -g @openai/codex</span>.</>
-                  )}
-                </p>
-                {codexCliStatus && (
-                  <>
-                    <p className={`text-[9px] font-mono mt-1 ${codexCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {codexCliStatus.found ? `✓ ${codexCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
-                    </p>
-                    {codexCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{codexCliStatus.version}</p>}
-                  </>
-                )}
-              </div>
-              <button
-                onClick={handleRedetectCli}
-                disabled={cliBusy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
-              >
-                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
-              </button>
-            </div>
+            <CliRow
+              label="Codex CLI (OpenAI)"
+              description={<>CLI da OpenAI — provider <span className="font-mono">Codex (ChatGPT)</span>. Instale via <span className="font-mono">npm install -g @openai/codex</span>.</>}
+              status={codexCliStatus}
+              installKey="codex"
+              cliBusy={cliBusy}
+              onDetect={handleRedetectCli}
+              onInstalled={(k) => { setCodexCliStatus({ found: true }); }}
+              setCliBusy={setCliBusy}
+            />
 
             <Divider />
 
             {/* Gemini CLI (Google) */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-medium text-slate-300">Gemini CLI</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">
-                  Gemini CLI nativo da Google — usado pelo provider <span className="font-mono">Gemini CLI</span>.
-                  {!geminiCliStatus?.found && (
-                    <> Instale com <span className="font-mono">npm install -g @google/gemini-cli</span>.</>
-                  )}
-                </p>
-                {geminiCliStatus && (
-                  <>
-                    <p className={`text-[9px] font-mono mt-1 ${geminiCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {geminiCliStatus.found ? `✓ ${geminiCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
-                    </p>
-                    {geminiCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{geminiCliStatus.version}</p>}
-                  </>
-                )}
-              </div>
-              <button
-                onClick={handleRedetectCli}
-                disabled={cliBusy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
-              >
-                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
-              </button>
-            </div>
+            <CliRow
+              label="Gemini CLI (Google)"
+              description={<>CLI nativo da Google — provider <span className="font-mono">Gemini CLI</span>. Instale via <span className="font-mono">npm install -g @google/gemini-cli</span>.</>}
+              status={geminiCliStatus}
+              installKey="gemini"
+              cliBusy={cliBusy}
+              onDetect={handleRedetectCli}
+              onInstalled={(k) => { setGeminiCliStatus({ found: true }); }}
+              setCliBusy={setCliBusy}
+            />
 
             <Divider />
 
             {/* Kimi CLI (Moonshot) */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-medium text-slate-300">Kimi CLI</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">
-                  Kimi da Moonshot — agente CLI direto.
-                  {!kimiCliStatus?.found && (
-                    <> Instale com <span className="font-mono">npm install -g @moonshot-ai/kimi</span>.</>
-                  )}
-                </p>
-                {kimiCliStatus && (
-                  <>
-                    <p className={`text-[9px] font-mono mt-1 ${kimiCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {kimiCliStatus.found ? `✓ ${kimiCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
-                    </p>
-                    {kimiCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{kimiCliStatus.version}</p>}
-                  </>
-                )}
-              </div>
-              <button
-                onClick={handleRedetectCli}
-                disabled={cliBusy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
-              >
-                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
-              </button>
-            </div>
+            <CliRow
+              label="Kimi CLI (Moonshot)"
+              description={<>Kimi Code CLI da Moonshot AI. Instala via script oficial: <span className="font-mono">curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash</span></>}
+              status={kimiCliStatus}
+              installKey="kimi"
+              cliBusy={cliBusy}
+              onDetect={handleRedetectCli}
+              onInstalled={(k) => { setKimiCliStatus({ found: true }); }}
+              setCliBusy={setCliBusy}
+            />
 
             <Divider />
 
@@ -959,6 +1009,212 @@ export function SettingsPage() {
             </p>
           </SectionCard>
 
+          {/* ── Voice / BrainVoice ───────────────────────────────────── */}
+          <SectionCard id="voice" icon={<Mic size={13} />} title="Voz / BrainVoice" badge={audioConfig?.apiKeySet || audioConfig?.localReady ? '✓ Pronto' : 'Config'} active={open.includes('voice')} onToggle={toggleSection}>
+            <div className="space-y-3">
+              {/* Provider selector */}
+              <div>
+                <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1.5">Provider de transcrição</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setAudioConfig((c: any) => c ? { ...c, provider: 'local' } : { provider: 'local' })}
+                    className={`text-left p-2 rounded border transition-all ${audioConfig?.provider === 'local' ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-white/10 bg-white/[0.02] text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1 font-mono text-[10px] font-bold uppercase tracking-widest">
+                      <Cpu size={12} strokeWidth={1.5} /> Local
+                    </div>
+                    <p className="font-mono text-[9px] leading-relaxed text-slate-600">Zero custo. Usa CPU/GPU e modelo no disco.</p>
+                  </button>
+                  <button
+                    onClick={() => setAudioConfig((c: any) => c ? { ...c, provider: 'groq' } : { provider: 'groq' })}
+                    className={`text-left p-2 rounded border transition-all ${audioConfig?.provider === 'groq' || !audioConfig?.provider ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-white/10 bg-white/[0.02] text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1 font-mono text-[10px] font-bold uppercase tracking-widest">
+                      <Cloud size={12} strokeWidth={1.5} /> Groq
+                    </div>
+                    <p className="font-mono text-[9px] leading-relaxed text-slate-600">Cloud rápido. Usa API key Groq (whisper-large-v3).</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Local config */}
+              {audioConfig?.provider === 'local' ? (
+                <div className="space-y-2">
+                  <div>
+                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Binário whisper.cpp</p>
+                    <input
+                      value={audioConfig?.localBinaryPath ?? ''}
+                      onChange={e => setAudioConfig((c: any) => ({ ...c, localBinaryPath: e.target.value }))}
+                      className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-violet-500/40"
+                      placeholder="Auto: whisper-cli no PATH"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Modelo local .bin</p>
+                    <input
+                      value={audioConfig?.localModelPath ?? ''}
+                      onChange={e => setAudioConfig((c: any) => ({ ...c, localModelPath: e.target.value }))}
+                      className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-violet-500/40"
+                      placeholder="ex: ~/.codebrain-app/models/ggml-small.bin"
+                    />
+                    <p className="font-mono text-[9px] text-slate-700 mt-1">whisper.cpp + modelo ggml. O Codebrain converte chunks com ffmpeg.</p>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Groq API Key</p>
+                  <input
+                    type="password"
+                    value={audioKey}
+                    onChange={e => setAudioKey(e.target.value)}
+                    className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-violet-500/40"
+                    placeholder={audioConfig?.apiKeySet ? '••••••••' : 'gsk_...'}
+                  />
+                </div>
+              )}
+
+              <Divider />
+
+              {/* Model + Language */}
+              <div className="grid grid-cols-2 gap-2">
+                {audioConfig?.provider !== 'local' && (
+                  <div>
+                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Modelo</p>
+                    <select
+                      value={audioConfig?.model ?? 'whisper-large-v3'}
+                      onChange={e => setAudioConfig((c: any) => ({ ...c, model: e.target.value }))}
+                      className="w-full bg-[#1A1A22] border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300 focus:outline-none focus:border-violet-500/40 appearance-none"
+                    >
+                      <option value="whisper-large-v3">whisper-large-v3</option>
+                      <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Idioma</p>
+                  <select
+                    value={audioConfig?.language ?? ''}
+                    onChange={e => setAudioConfig((c: any) => ({ ...c, language: e.target.value }))}
+                    className="w-full bg-[#1A1A22] border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300 focus:outline-none focus:border-violet-500/40 appearance-none"
+                  >
+                    <option value="">Auto</option>
+                    <option value="pt">pt</option>
+                    <option value="en">en</option>
+                    <option value="es">es</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Capture mode */}
+              <div>
+                <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Captura</p>
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    onClick={() => setAudioConfig((c: any) => ({ ...c, captureMode: 'hold' }))}
+                    className={`px-2 py-1.5 rounded border font-mono text-[10px] font-bold uppercase tracking-wider transition-all ${(audioConfig?.captureMode ?? 'hold') === 'hold' ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
+                  >Hold</button>
+                  <button
+                    onClick={() => setAudioConfig((c: any) => ({ ...c, captureMode: 'toggle' }))}
+                    className={`px-2 py-1.5 rounded border font-mono text-[10px] font-bold uppercase tracking-wider transition-all ${audioConfig?.captureMode === 'toggle' ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
+                  >Toggle</button>
+                </div>
+              </div>
+
+              {/* Interaction mode */}
+              <div>
+                <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Modo</p>
+                <button
+                  onClick={() => {
+                    const cur = normalizedVoiceMode(audioConfig?.interactionMode);
+                    const next = cur === 'coding' ? 'conversation' : 'coding';
+                    setAudioConfig((c: any) => ({ ...c, interactionMode: next, outputMode: outputModeForInteractionMode(next) }));
+                  }}
+                  className="w-full px-2 py-1.5 rounded border border-white/10 bg-white/[0.02] font-mono text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:border-white/20 transition-all"
+                >
+                  {normalizedVoiceMode(audioConfig?.interactionMode) === 'coding' ? '🖥 Code (traduz para EN)' : '💬 Chat (mantém idioma original)'}
+                </button>
+              </div>
+
+              {/* Chunk ms + Target WPM */}
+              <div className="space-y-2">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest">Chunk</p>
+                    <span className="font-mono text-[9px] text-slate-500">{((audioConfig?.chunkMs ?? 2800) / 1000).toFixed(1)}s</span>
+                  </div>
+                  <input type="range" min={1800} max={6000} step={100}
+                    value={audioConfig?.chunkMs ?? 2800}
+                    onChange={e => setAudioConfig((c: any) => ({ ...c, chunkMs: Number(e.target.value) }))}
+                    className="w-full accent-violet-500" />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest">Ritmo alvo</p>
+                    <span className="font-mono text-[9px] text-slate-500">{audioConfig?.targetWpm ?? 150} PPM</span>
+                  </div>
+                  <input type="range" min={80} max={240} step={5}
+                    value={audioConfig?.targetWpm ?? 150}
+                    onChange={e => setAudioConfig((c: any) => ({ ...c, targetWpm: Number(e.target.value) }))}
+                    className="w-full accent-violet-500" />
+                </div>
+              </div>
+
+              {/* STT Prompt */}
+              <div>
+                <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Prompt STT (contexto técnico)</p>
+                <input
+                  value={audioConfig?.prompt ?? ''}
+                  onChange={e => setAudioConfig((c: any) => ({ ...c, prompt: e.target.value }))}
+                  className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-violet-500/40"
+                  placeholder="Codebrain, Claude, Codex, MCP, Supabase, Groq"
+                />
+              </div>
+
+              {/* Save button */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={async () => {
+                    if (!audioConfig) return;
+                    setAudioBusy(true);
+                    setAudioMsg(null);
+                    try {
+                      const patch: any = {
+                        provider: audioConfig.provider,
+                        baseUrl: audioConfig.baseUrl,
+                        model: audioConfig.model,
+                        localBinaryPath: audioConfig.localBinaryPath,
+                        localModelPath: audioConfig.localModelPath,
+                        language: audioConfig.language,
+                        prompt: audioConfig.prompt,
+                        chunkMs: audioConfig.chunkMs,
+                        outputMode: audioConfig.outputMode,
+                        captureMode: audioConfig.captureMode,
+                        interactionMode: audioConfig.interactionMode,
+                        targetWpm: audioConfig.targetWpm,
+                      };
+                      if (audioKey.trim()) patch.apiKey = audioKey.trim();
+                      const res = await (window as any).codeBrainApp?.audio?.saveConfig(patch);
+                      if (res?.ok && res.config) {
+                        setAudioConfig(res.config);
+                        setAudioKey('');
+                        setAudioMsg('Voz salva.');
+                      } else {
+                        setAudioMsg('Erro ao salvar.');
+                      }
+                    } catch { setAudioMsg('Erro ao salvar.'); }
+                    finally { setAudioBusy(false); setTimeout(() => setAudioMsg(null), 3000); }
+                  }}
+                  disabled={audioBusy || !audioConfig}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-violet-500/30 text-violet-300 hover:bg-violet-500/10 disabled:opacity-50 transition-all font-mono text-[10px]"
+                >
+                  {audioBusy ? <RefreshCw size={12} strokeWidth={1.5} className="animate-spin" /> : <Save size={12} strokeWidth={1.5} />}
+                  {audioBusy ? 'Salvando…' : 'Salvar voz'}
+                </button>
+                {audioMsg && <p className="font-mono text-[9px] text-slate-500">{audioMsg}</p>}
+              </div>
+            </div>
+          </SectionCard>
+
           {/* ── Discord ──────────────────────────────────────────────── */}
           <SectionCard id="discord" icon={<Gamepad2 size={13} />} title="Discord Rich Presence" active={open.includes('discord')} onToggle={toggleSection}>
             <p className="text-[10px] text-slate-500 leading-relaxed">
@@ -1025,8 +1281,9 @@ export function SettingsPage() {
 
             <button
               onClick={() => {
-                if (!window.confirm('Resetar zoom da interface?')) return;
+                if (!window.confirm('Resetar zoom da interface e tamanho de fonte ao padrão?')) return;
                 resetAppZoom();
+                resetFontSize();
               }}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 transition-all"
             >

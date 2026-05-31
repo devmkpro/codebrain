@@ -115,6 +115,7 @@ export function TerminalPane({
   const cursorBlink = useTerminalSettings(s => s.cursorBlink);
   const gpuAcceleration = useTerminalSettings(s => s.gpuAcceleration);
   const lowGpuMode = useTerminalSettings(s => s.lowGpuMode);
+  const scrollbackSize = useTerminalSettings(s => (s as any).scrollbackSize ?? 5000);
   const fontStack = (FONT_OPTIONS.find(f => f.id === fontFamilyId) ?? FONT_OPTIONS[0]).stack;
   const [dropHover, setDropHover] = React.useState(false);
   const [showSavedContext, setShowSavedContext] = React.useState(true);
@@ -230,7 +231,7 @@ export function TerminalPane({
       fontSize,
       lineHeight: Math.max(1, lineHeight),
       cursorBlink,
-      scrollback: 5e3
+      scrollback: scrollbackSize
     });
     const fitAddon = new addonFitExports.FitAddon();
     term.loadAddon(fitAddon);
@@ -238,12 +239,13 @@ export function TerminalPane({
 
     term.open(containerRef.current);
 
-    // Fix text selection with CSS zoom: xterm uses getBoundingClientRect()
-    // (returns viewport/zoomed coords) and clientX/clientY (also zoomed).
-    // The difference clientX - rect.left = zoomed pixels, but xterm divides
-    // by cssCellWidth (unzoomed) → wrong cell coords.
-    // FIX: override getBoundingClientRect on the terminal element to return
-    // unzoomed coords so the math works: (zoomedClient - unzoomedRect) / cellWidth.
+    // Fix text selection with CSS body zoom.
+    // With body.style.zoom = Z:
+    //   - clientX/clientY are in physical/unzoomed coords (NOT scaled)
+    //   - getBoundingClientRect() returns zoomed coords (scaled by Z)
+    // So: clientX - rect.left gives wrong delta because one is zoomed, one isn't.
+    // Fix: override getBoundingClientRect to un-zoom left/top (position only).
+    // Width/height must stay unmodified — xterm uses them for cell size calculation.
     const el = (term as any).element as HTMLElement | undefined;
     if (el) {
       termElementRef.current = el;
@@ -253,15 +255,19 @@ export function TerminalPane({
       const zoomObserver = new MutationObserver(updateZoom);
       zoomObserver.observe(document.body, { attributes: true, attributeFilter: ['style'] });
       (el as any).__zoomObserver = zoomObserver;
-      (el as any).__origGetBCR = origGetBCR;
       el.getBoundingClientRect = () => {
         const r = origGetBCR();
         if (cachedZoom === 1) return r;
+        // Un-zoom only the position (left/top/x/y) — keep size as-is.
+        // clientX is unzoomed, rect.left is zoomed → divide rect position by zoom.
+        const left = r.left / cachedZoom;
+        const top = r.top / cachedZoom;
         return {
-          top: r.top / cachedZoom, left: r.left / cachedZoom,
-          right: r.right / cachedZoom, bottom: r.bottom / cachedZoom,
-          width: r.width / cachedZoom, height: r.height / cachedZoom,
-          x: r.x / cachedZoom, y: r.y / cachedZoom,
+          left, top, x: left, y: top,
+          right: left + r.width,
+          bottom: top + r.height,
+          width: r.width,
+          height: r.height,
           toJSON: () => r.toJSON(),
         };
       };
@@ -308,6 +314,11 @@ export function TerminalPane({
       if (e.key === "F5" || (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "r") {
         e.preventDefault();
         return false;
+      }
+      // Allow Ctrl/Cmd + zoom keys to propagate to window (font size change)
+      // Covers: Ctrl+=, Ctrl++, Ctrl+Shift+=, Ctrl+Shift++ (teclado ABNT2), Ctrl+-, Ctrl+_, Ctrl+0
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === "=" || e.key === "+" || e.key === "-" || e.key === "_" || e.key === "0")) {
+        return false; // prevent xterm from consuming, let window handler fire
       }
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
@@ -401,14 +412,10 @@ export function TerminalPane({
     return () => {
       const term = termRef.current;
       if (term) {
-        // Clean up zoom-fix: disconnect observer, restore getBoundingClientRect
         const el = termElementRef.current;
         if (el) {
           (el as any).__zoomObserver?.disconnect();
-          const origBCR = (el as any).__origGetBCR;
-          if (origBCR) el.getBoundingClientRect = origBCR;
           delete (el as any).__zoomObserver;
-          delete (el as any).__origGetBCR;
         }
         termElementRef.current = null;
         zoomFixHandlerRef.current = null;
@@ -583,8 +590,12 @@ export function TerminalPane({
             className="text-gray-600 hover:text-gray-300 px-1 leading-none transition-colors"
             onClick={e => {
               e.stopPropagation();
-              // Open terminal in detached window via IPC
-              window.codeBrainApp?.pty?.detach?.(pane.id);
+              window.codeBrainApp?.pty?.detach(pane.id).then((result: any) => {
+                if (result?.ok) {
+                  // Remove from main window grid — it now lives in its own window
+                  usePanesStore.getState().removePane(pane.id);
+                }
+              });
             }}
             draggable={false}
             title="Destacar pane em nova janela"

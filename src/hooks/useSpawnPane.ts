@@ -3,6 +3,7 @@ import { useProvidersStore } from "../stores/providers-store";
 import { usePanesStore } from "../stores/panes-store";
 import { useBrowserStore } from "../stores/browser-store";
 import { useNavStore } from "../stores/nav-store";
+import { notify } from "../lib/notify";
 
 export function useSpawnPane(activeWorkspace: string | undefined) {
   const addPane = usePanesStore(s => s.addPane);
@@ -93,12 +94,12 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
       ...(Object.keys(spawnEnv).length > 0 ? { env: spawnEnv } : {}),
     }).then(result => {
       if (!result?.ok || !result.paneId) {
-        window.codeBrainApp?.notify?.("Erro ao abrir pane", result?.error ?? "spawn retornou erro");
+        notify("Erro ao abrir pane", result?.error ?? "spawn retornou erro", "error");
         return;
       }
       addPane({ id: result.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: nextProviderId, model: nextModel, permissionMode, externallySpawned: true });
     }).catch(err => {
-      window.codeBrainApp?.notify?.("Erro ao abrir pane", String(err));
+      notify("Erro ao abrir pane", String(err), "error");
     });
   };
 
@@ -107,11 +108,11 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
     if (isFilesView || isMapView) navigateInActiveTab({ kind: "workspace" });
     window.codeBrainApp?.pty.spawn({ agent: "shell", cwd: activeWorkspace }).then(result => {
       if (!result?.ok || !result.paneId) {
-        window.codeBrainApp?.notify?.("Erro ao abrir terminal", result?.error ?? "spawn retornou erro");
+        notify("Erro ao abrir terminal", result?.error ?? "spawn retornou erro", "error");
         return;
       }
       addPane({ id: result.paneId, agent: "shell", cwd: activeWorkspace, workspacePath: activeWorkspace, externallySpawned: true });
-    }).catch(err => { window.codeBrainApp?.notify?.("Erro ao abrir terminal", String(err)); });
+    }).catch(err => { notify("Erro ao abrir terminal", String(err), "error"); });
   };
 
   const handleAddBrowser = (isFilesView: boolean, isMapView: boolean) => {

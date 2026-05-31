@@ -2,23 +2,48 @@ import React from "react";
 
 // Grid
 import { usePanesStore } from "../../stores/panes-store";
+import { useMissionsStore } from "../../stores/missions-store";
 import { DropTarget } from "./DropTarget";
 import { BrowserPane } from "../panes/BrowserPane";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { RenderNode } from "./RenderNode";
-export function Grid({
-  workspacePath
-} = {}) {
-  const allPanes = usePanesStore(s => s.panes);
+
+export function Grid({ workspacePath } = {} as any) {
+  const allPanes = usePanesStore(s => s.panes) as any[];
   const activePaneId = usePanesStore(s => s.activePaneId);
-  const layouts = usePanesStore(s => s.layouts);
+  const layouts = usePanesStore(s => s.layouts) as Record<string, Record<string, any>>;
   const setActive = usePanesStore(s => s.setActive);
   const movePaneTo = usePanesStore(s => s.movePaneTo);
+  const ensureMission = useMissionsStore(s => s.ensureMissionForWorkspace);
+
   const ws = workspacePath ?? "";
-  const layout = ws ? layouts[ws] ?? null : null;
-  const panesById = new Map(allPanes.map(p => [p.id, p]));
+
+  // Garantir que existe pelo menos uma missão
+  React.useEffect(() => {
+    if (ws) ensureMission(ws);
+  }, [ws, ensureMission]);
+
+  // Missão ativa para este workspace
+  const activeMissionId = useMissionsStore(s => ws ? s.getActiveMissionId(ws) : null);
+
+  // Layout da missão ativa
+  const layout = ws && activeMissionId ? layouts[ws]?.[activeMissionId] ?? null : null;
+
+  // Panes pertencentes a esta missão
+  const missionPanes = React.useMemo(() => {
+    if (!ws || !activeMissionId) return [];
+    return allPanes.filter(p => {
+      if ((p.workspacePath ?? p.cwd) !== ws) return false;
+      // pane sem missionId → pertence à missão ativa (retrocompatibilidade)
+      return p.missionId ? p.missionId === activeMissionId : true;
+    });
+  }, [allPanes, ws, activeMissionId]);
+
+  const panesById = new Map(missionPanes.map(p => [p.id, p]));
+
   if (!layout) {
-    return <div className="flex-1 flex items-center justify-center select-none relative">
+    return (
+      <div className="flex-1 flex items-center justify-center select-none relative">
         {/* Subtle radial gradient background */}
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at center, rgba(139,92,246,0.03) 0%, transparent 70%)' }} />
         <div className="text-center space-y-5 relative z-10">
@@ -49,16 +74,25 @@ export function Grid({
             ))}
           </div>
         </div>
-      </div>;
+      </div>
+    );
   }
-  const renderLeaf = paneId => {
+
+  const renderLeaf = (paneId: string) => {
     const pane = panesById.get(paneId);
     if (!pane) return null;
-    return <DropTarget pane={pane} workspacePath={ws} movePaneTo={movePaneTo}>
-        {pane.kind === "browser" ? <BrowserPane pane={pane} isActive={pane.id === activePaneId} onClick={() => setActive(pane.id)} /> : <TerminalPane pane={pane} isActive={pane.id === activePaneId} onClick={() => setActive(pane.id)} />}
-      </DropTarget>;
+    return (
+      <DropTarget pane={pane} workspacePath={ws} movePaneTo={movePaneTo}>
+        {pane.kind === "browser"
+          ? <BrowserPane pane={pane} isActive={pane.id === activePaneId} onClick={() => setActive(pane.id)} />
+          : <TerminalPane pane={pane} isActive={pane.id === activePaneId} onClick={() => setActive(pane.id)} />}
+      </DropTarget>
+    );
   };
-  return <div className="h-full w-full overflow-hidden p-1.5">
+
+  return (
+    <div className="h-full w-full overflow-hidden p-1.5">
       <RenderNode node={layout} panesById={panesById} renderLeaf={renderLeaf} />
-    </div>;
+    </div>
+  );
 }

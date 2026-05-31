@@ -27,6 +27,15 @@ export const FONT_OPTIONS = [{
 export const DEFAULT_SIZE = 12;
 export const MIN_SIZE = 8;
 export const MAX_SIZE = 24;
+
+/** Scrollback buffer sizes per performance profile */
+export const SCROLLBACK_OPTIONS = [
+  { id: 'minimal',  label: 'Mínimo (500 linhas)',    value: 500  },
+  { id: 'low',      label: 'Baixo (1 000 linhas)',   value: 1000 },
+  { id: 'medium',   label: 'Médio (5 000 linhas)',   value: 5000 },
+  { id: 'high',     label: 'Alto (20 000 linhas)',   value: 20000 },
+] as const;
+
 export const useTerminalSettings = create()(persist((set, get) => ({
   fontSize: DEFAULT_SIZE,
   fontFamily: "system",
@@ -37,6 +46,13 @@ export const useTerminalSettings = create()(persist((set, get) => ({
   cursorBlink: true,
   gpuAcceleration: true,
   lowGpuMode: false,
+  // Performance options
+  scrollbackSize: 5000 as number,       // xterm scrollback buffer
+  reducedAnimations: false as boolean,  // disable motion/framer-motion animations
+  disableBackdropBlur: false as boolean,// disable backdrop-blur (GPU-heavy)
+  setScrollbackSize: (v: number) => set({ scrollbackSize: v }),
+  setReducedAnimations: (v: boolean) => set({ reducedAnimations: v }),
+  setDisableBackdropBlur: (v: boolean) => set({ disableBackdropBlur: v }),
   increaseAppZoom: () => set({ appZoom: Math.min(3, +(get().appZoom + 0.1).toFixed(1)) }),
   decreaseAppZoom: () => set({ appZoom: Math.max(0.5, +(get().appZoom - 0.1).toFixed(1)) }),
   resetAppZoom: () => set({ appZoom: 1 }),
@@ -69,7 +85,7 @@ export const useTerminalSettings = create()(persist((set, get) => ({
   })
 }), {
   name: "codebrain-app-terminal-settings",
-  version: 3,
+  version: 5,
   // Migrate persisted settings across versions.
   migrate: persisted => {
     const p = persisted ?? {};
@@ -80,6 +96,15 @@ export const useTerminalSettings = create()(persist((set, get) => ({
     if (typeof p.cursorBlink !== "boolean") p.cursorBlink = true;
     if (typeof p.gpuAcceleration !== "boolean") p.gpuAcceleration = true;
     if (typeof p.lowGpuMode !== "boolean") p.lowGpuMode = false;
+    // v4: reset appZoom to 1 — Ctrl+= now controls appZoom correctly,
+    //     old persisted values < 0.9 or > 1.5 indicate a bad state.
+    if (typeof p.appZoom !== "number" || p.appZoom < 0.9 || p.appZoom > 1.5) {
+      p.appZoom = 1;
+    }
+    // v5: new performance options
+    if (typeof p.scrollbackSize !== "number") p.scrollbackSize = 5000;
+    if (typeof p.reducedAnimations !== "boolean") p.reducedAnimations = false;
+    if (typeof p.disableBackdropBlur !== "boolean") p.disableBackdropBlur = false;
     return p;
   }
 }));
