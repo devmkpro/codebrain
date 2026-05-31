@@ -394,8 +394,38 @@ export interface CodebrainApp {
   };
   audio: {
     getConfig: () => Promise<AudioConfig>;
-    saveConfig: (patch: Partial<AudioConfig>) => Promise<void>;
-    transcribe: (args: { audio: ArrayBuffer; mimeType: string }) => Promise<string>;
+    saveConfig: (
+      patch: Partial<AudioConfig>,
+    ) => Promise<{ ok: boolean; config?: AudioConfig; error?: string }>;
+    transcribe: (args: {
+      bytes: ArrayBuffer;
+      mimeType?: string;
+      context?: string;
+    }) => Promise<{ ok: boolean; text?: string; error?: string }>;
+    hardwareInfo: () => Promise<{
+      ok: boolean;
+      hardware?: {
+        cpuModel: string;
+        cpuCores: number;
+        totalRamGb: number;
+        tier: "strong" | "ok" | "weak";
+        recommendation: "local" | "groq";
+        reason: string;
+        recommendedModel: "tiny" | "base" | "small" | "medium" | "large-v3";
+      };
+      error?: string;
+    }>;
+    installWhisper: (args: {
+      targetDir?: string;
+      model?: "tiny" | "base" | "small" | "medium" | "large-v3";
+    }) => Promise<{
+      ok: boolean;
+      output?: string;
+      error?: string;
+      warnings?: string[];
+      config?: AudioConfig;
+    }>;
+    onInstallProgress: (cb: (line: string) => void) => () => void;
   };
   workspaceConfig: {
     get: (wsPath: string) => Promise<WorkspaceConfig>;

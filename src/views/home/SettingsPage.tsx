@@ -234,6 +234,12 @@ export function SettingsPage() {
   const [audioKey, setAudioKey] = useState('');
   const [audioBusy, setAudioBusy] = useState(false);
   const [audioMsg, setAudioMsg] = useState<string | null>(null);
+  // Whisper local: hardware detection + 1-click install
+  const [audioHw, setAudioHw] = useState<any>(null);
+  const [installModel, setInstallModel] = useState<string>('small');
+  const [installDir, setInstallDir] = useState<string>('');
+  const [installBusy, setInstallBusy] = useState(false);
+  const [installLog, setInstallLog] = useState<string | null>(null);
   // Discord RPC
   const [discordClientId, setDiscordClientId] = useState('');
   const [discordConnected, setDiscordConnected] = useState(false);

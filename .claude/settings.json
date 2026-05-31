@@ -161,7 +161,7 @@
     ]
   },
   "env": {
-    "CODEBRAIN_VERSION": "1.8.15",
+    "CODEBRAIN_VERSION": "1.8.16",
     "CODEBRAIN_MCP_ENABLED": "true",
     "CODEBRAIN_SQUADS_ENABLED": "true",
     "CODEBRAIN_SKILLS_ENABLED": "true",
@@ -169,7 +169,7 @@
     "CODEBRAIN_WORKSPACE": "."
   },
   "codebrain": {
-    "version": "1.8.15",
+    "version": "1.8.16",
     "platform": {
       "os": "windows",
       "arch": "x64",
@@ -186,7 +186,7 @@
       "skills": "resources/codebrain-skill/"
     },
     "mcp": {
-      "totalTools": 156,
+      "totalTools": 172,
       "categories": [
         "browser (46 tools)",
         "swarm (19 tools)",
@@ -212,7 +212,13 @@
     "squads": {
       "maxWorkers": 8,
       "defaultTopology": "hierarchical",
-      "roles": ["orchestrator", "backend", "frontend", "ui-tester", "gemini-worker"],
+      "roles": [
+        "orchestrator",
+        "backend",
+        "frontend",
+        "ui-tester",
+        "gemini-worker"
+      ],
       "models": {
         "orchestrator": "gemini-3.1-pro-preview",
         "worker": "gemini-3.1-pro-preview",
@@ -228,7 +234,10 @@
     "skills": {
       "localDir": "~/.codebrain/skills/",
       "registryUrl": "https://gitlab.com/maikeofc18/codebrain-skills/-/raw/main/index.json",
-      "types": ["prompt", "squad"],
+      "types": [
+        "prompt",
+        "squad"
+      ],
       "format": "skill.json manifest + prompt.md / squad.json"
     },
     "providers": [
@@ -245,6 +254,9 @@
       "ipcPattern": "register-*.ts files in electron/main/ipc/",
       "componentPattern": "Functional components with hooks",
       "naming": "kebab-case files, PascalCase components, camelCase functions"
+    },
+    "hooks": {
+      "count": 13
     }
   }
 }

@@ -210,6 +210,13 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     getConfig: () => ipcRenderer.invoke("audio:getConfig"),
     saveConfig: (patch: unknown) => ipcRenderer.invoke("audio:saveConfig", patch),
     transcribe: (args: unknown) => ipcRenderer.invoke("audio:transcribe", args),
+    hardwareInfo: () => ipcRenderer.invoke("audio:hardwareInfo"),
+    installWhisper: (args: unknown) => ipcRenderer.invoke("audio:installWhisper", args),
+    onInstallProgress: (cb: (line: string) => void) => {
+      const handler = (_e: unknown, line: string) => cb(line);
+      ipcRenderer.on("audio:installProgress", handler);
+      return () => ipcRenderer.removeListener("audio:installProgress", handler);
+    },
   },
 
   workspaceConfig: {

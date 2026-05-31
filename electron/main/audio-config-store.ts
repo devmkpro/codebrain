@@ -8,6 +8,7 @@ export const AUDIO_DEFAULTS = {
   model: "whisper-large-v3",
   localBinaryPath: "",
   localModelPath: "",
+  localInstallDir: "",
   language: "pt",
   prompt:
     "Codebrain, Claude, Codex, Groq, MCP, Supabase, pnpm, TypeScript, React, Electron, workspace, pane.",
