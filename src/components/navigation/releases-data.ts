@@ -14,9 +14,23 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.8.15",
-    "date": "em desenvolvimento",
+    "version": "1.8.16",
+    "date": "maio 2026",
     "highlights": [
+      {
+        "kind": "feat",
+        "text": "add local Whisper support for BrainVoice audio + bump v1.8.16"
+      }
+    ]
+  },
+  {
+    "version": "1.8.15",
+    "date": "maio 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "Windows extensionless shim resolver + bump v1.8.15"
+      },
       {
         "kind": "fix",
         "text": "inject Codebrain skills inline for all CLIs including Claude Code"
