@@ -10,6 +10,7 @@ import {
   GEMINI_WORKER_PROMPT,
 } from "../prompts";
 import { MODEL_MAP_BY_TYPE } from "../constants";
+import { workspaceAccessInstruction } from "../../workspace-config-store";
 
 const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
@@ -116,6 +117,10 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
   let sysPrompt = CODEBRAIN_SYSTEM_PROMPT;
   sysPrompt += `\n\n## Seu Workspace\n\nVocê está trabalhando no diretório:\n\`${cwd}\`\n\nTodos os caminhos de arquivo são relativos a este diretório.`;
   sysPrompt += `\n\n## Seu ID de Pane\n\nSeu paneId é: \`${paneId}\`\n\nUse este ID como campo "from" ao enviar mensagens via pane_send_message, e como campo "paneId" ao ler mensagens via pane_read_messages.`;
+
+  // Workspace access policy — sandbox for file operations outside workspace
+  const accessMode = ctx.workspaceConfigStore.getAccessMode(cwd);
+  sysPrompt += `\n\n## Workspace Access Policy\n\n${workspaceAccessInstruction(cwd, accessMode)}`;
 
   // Role-specific prompt
   let rolePrompt = "";

@@ -2,24 +2,60 @@
 
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 /**
  * File and system bridge handlers for MCP tools.
  * Provides structured file access and system diagnostics.
+ * Enforces workspace access mode sandbox (read_external / write_external).
  */
 function createFileHandlers(opts) {
   function getWorkspace() {
     return opts.getCurrentWorkspacePath?.() || process.cwd();
   }
 
+  function isWithinWorkspace(filePath, ws) {
+    const resolved = path.resolve(filePath);
+    return resolved === ws || resolved.startsWith(ws + path.sep);
+  }
+
   function resolveSafe(filePath) {
     const ws = getWorkspace();
     const resolved = path.resolve(ws, filePath);
-    // Prevent path traversal outside workspace
-    if (!resolved.startsWith(ws) && !resolved.startsWith(os.homedir())) {
+    // Prevent path traversal outside workspace AND outside home
+    if (!isWithinWorkspace(resolved, ws) && !resolved.startsWith(os.homedir())) {
       throw new Error("Path traversal not allowed: " + filePath);
     }
     return resolved;
+  }
+
+  /**
+   * Enforce workspace access mode for operations outside the workspace root.
+   * @param {string} fullPath - resolved absolute path
+   * @param {"read"|"write"} kind - operation type
+   * @throws {Error} if access is denied by workspace policy
+   */
+  function enforceAccessMode(fullPath, kind) {
+    const ws = getWorkspace();
+    // Always allow operations inside the workspace
+    if (isWithinWorkspace(fullPath, ws)) return;
+
+    // Outside workspace — check access mode
+    const store = opts.workspaceConfigStore;
+    if (!store) return; // No store available (CLI/stdio mode) — allow
+
+    const mode = store.getAccessMode(ws);
+    // Both modes allow reading outside; only write_external allows writing outside
+    if (kind === "read") return; // read_external and write_external both allow reads
+
+    // kind === "write" — only write_external allows
+    if (mode !== "write_external") {
+      throw new Error(
+        "workspace access denied: write_external required to edit files outside the workspace. " +
+        `File: ${fullPath}. Current mode: ${mode}. ` +
+        "Ask the user to change workspace access mode in settings."
+      );
+    }
   }
 
   return {
@@ -29,6 +65,7 @@ function createFileHandlers(opts) {
     async fileRead({ path: filePath, encoding }) {
       try {
         const fullPath = resolveSafe(filePath);
+        enforceAccessMode(fullPath, "read");
         if (!fs.existsSync(fullPath)) return { ok: false, error: "file not found" };
         const stat = fs.statSync(fullPath);
         if (stat.isDirectory()) {
@@ -68,6 +105,7 @@ function createFileHandlers(opts) {
     async fileWrite({ path: filePath, content, encoding, createDirs }) {
       try {
         const fullPath = resolveSafe(filePath);
+        enforceAccessMode(fullPath, "write");
         if (createDirs) {
           const dir = path.dirname(fullPath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -85,6 +123,7 @@ function createFileHandlers(opts) {
     async fileSearch({ pattern, content, path: searchPath, limit }) {
       try {
         const basePath = searchPath ? resolveSafe(searchPath) : getWorkspace();
+        enforceAccessMode(basePath, "read");
         const maxResults = limit || 20;
         const results = [];
 

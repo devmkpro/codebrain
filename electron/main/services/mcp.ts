@@ -53,6 +53,7 @@ function buildMcpBridge(ctx: AppContext) {
     hooksManager: ctx.hooksManager,
     costTracker: ctx.costTracker, // Shared singleton — same instance for MCP + IPC
     configStore: ctx.configStore, // For notification settings
+    workspaceConfigStore: ctx.workspaceConfigStore, // For workspace access mode sandbox
     updateContextFiles: (wsPath: string) => writeContextFiles(ctx, wsPath),
     roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };

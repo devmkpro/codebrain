@@ -4,7 +4,7 @@ import {
   X, Plus, Settings, Activity, FolderOpen, Save, RotateCcw,
   ListTodo, Terminal, Globe, Users, Zap, Map, FileText,
   ChevronRight, ChevronDown, Home, Mic, MicOff, Volume2,
-  Shield, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, DollarSign, History,
+  Shield, Lock, Unlock, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, DollarSign, History,
   Bell, Search, Download, FileJson,
 } from 'lucide-react';
 import { Logo } from '../auth/Logo';
@@ -29,6 +29,8 @@ import { ProvidersModal } from '../providers/ProvidersModal';
 import { SquadModal } from '../squads/SquadModal';
 import { DiagnosticsModal } from '../diagnostics/DiagnosticsModal';
 import { MissionsMenu } from './MissionsMenu';
+import { NotificationsBell } from './NotificationsPanel';
+import { useNotificationsStore } from '../../stores/notifications-store';
 
 // ─── Shared modal-state hook ──────────────────────────────────────────────────
 function useModals() {
@@ -145,13 +147,7 @@ function HomeHeader() {
         {/* Right */}
         <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           {/* Notification bell */}
-          <button
-            className="relative w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-300 hover:bg-white/[0.04] transition-all cursor-pointer"
-            title="Notificações"
-            onClick={() => { goHome(); navigate('/settings'); }}
-          >
-            <Bell size={14} />
-          </button>
+          <NotificationsBell />
 
           {/* Providers */}
           <button onClick={() => m.openProviders('list')}
@@ -650,6 +646,86 @@ function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
   );
 }
 
+// ─── Workspace Access Mode Selector ──────────────────────────────────────────
+const ACCESS_OPTIONS = [
+  { id: "write_external", label: "R/W Externo", desc: "Ler e editar dentro e fora do workspace", Icon: Unlock },
+  { id: "read_external", label: "R Externo", desc: "Edita só o workspace; pode ler fora", Icon: Lock },
+] as const;
+
+function AccessModeSelector({ activeWorkspace }: { activeWorkspace: string }) {
+  const [mode, setMode] = React.useState<string>("write_external");
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!activeWorkspace) return;
+    (window as any).codeBrainApp?.workspaceConfig?.get(activeWorkspace)
+      .then((cfg: any) => setMode(cfg?.accessMode === "read_external" ? "read_external" : "write_external"))
+      .catch(() => {});
+  }, [activeWorkspace]);
+
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const current = ACCESS_OPTIONS.find(o => o.id === mode) ?? ACCESS_OPTIONS[0];
+  const CurrIcon = current.Icon;
+
+  const handleSelect = async (id: string) => {
+    setMode(id);
+    setOpen(false);
+    try { await (window as any).codeBrainApp?.workspaceConfig?.set(activeWorkspace, { accessMode: id }); } catch {}
+  };
+
+  return (
+    <div ref={ref} className="relative flex items-center">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className={`flex items-center gap-1 px-2 py-1 rounded font-mono text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+          mode === "read_external"
+            ? "text-amber-400/80 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/15"
+            : "text-emerald-400/60 hover:text-emerald-300 bg-emerald-500/[0.06] hover:bg-emerald-500/10"
+        }`}
+        title={current.desc}
+      >
+        <CurrIcon size={11} strokeWidth={2} />
+        <span className="hidden xl:inline">{current.label}</span>
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 w-56 bg-[#0c0c14]/95 border border-white/10 rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-[10000] overflow-hidden backdrop-blur-md">
+          <div className="px-3 py-2 border-b border-white/5">
+            <p className="font-mono text-[8px] text-slate-500 uppercase tracking-widest">Acesso ao Workspace</p>
+          </div>
+          {ACCESS_OPTIONS.map(opt => {
+            const active = mode === opt.id;
+            const Icon = opt.Icon;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => handleSelect(opt.id)}
+                className={`w-full text-left px-3 py-2 flex items-center gap-2.5 transition-all cursor-pointer ${
+                  active ? "bg-violet-500/10 text-violet-300" : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
+                }`}
+              >
+                <Icon size={13} strokeWidth={1.8} />
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] font-bold">{opt.label}</p>
+                  <p className="font-mono text-[9px] text-slate-500 truncate">{opt.desc}</p>
+                </div>
+                {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-violet-400" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Workspace Header ─────────────────────────────────────────────────────────
 function WorkspaceHeader() {
   const tabs = useNavStore(s => s.tabs) as any[];
@@ -867,10 +943,13 @@ function WorkspaceHeader() {
           })}
         </div>
 
-        {/* Missions menu — só aparece quando há workspace ativo */}
+        {/* Missions menu + Access Mode — só aparece quando há workspace ativo */}
         {activeWorkspace && (
-          <div className="flex items-stretch border-l border-white/[0.06]" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <div className="flex items-stretch border-l border-white/[0.06] gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             <MissionsMenu activeWorkspace={activeWorkspace} />
+            <div className="flex items-center px-1.5">
+              <AccessModeSelector activeWorkspace={activeWorkspace} />
+            </div>
           </div>
         )}
 
@@ -878,6 +957,12 @@ function WorkspaceHeader() {
 
         {/* ── Right toolbar ──────────────────────────────────────── */}
         <div className="flex items-stretch shrink-0 gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+
+          {/* Notifications */}
+          <div className="flex items-center px-1">
+            <NotificationsBell />
+          </div>
+          <VDiv />
 
           {/* Tasks */}
           <IconBtn icon={<ListTodo size={15} strokeWidth={1.5} />} label="Tasks" onClick={toggleTasks} active={tasksVisible} badge={tasksCount} />
