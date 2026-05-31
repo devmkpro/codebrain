@@ -26,6 +26,7 @@ export interface SpawnPaneConfig {
   env?: Record<string, string>;
   taskId?: string;
   activityId?: string;
+  missionId?: string;
 }
 
 export async function spawnPaneInternal(
@@ -288,6 +289,56 @@ export async function spawnPaneInternal(
       args.push("--settings", JSON.stringify(settings));
     }
 
+    // ── Kimi CLI branch (Moonshot) ─────────────────────────────────────────────
+    // Direct agent — passes model and API key directly.
+    // Kimi uses OpenAI-compatible API at api.moonshot.cn.
+    const isKimi = agent === "kimi";
+    if (isKimi) {
+      if (model && !args.includes("-m") && !args.includes("--model")) {
+        args.push("-m", model);
+      }
+      // Forward Moonshot API key
+      const moonshotKey = env["MOONSHOT_API_KEY"] || env["OPENAI_API_KEY"] || "";
+      if (moonshotKey) {
+        env["MOONSHOT_API_KEY"] = moonshotKey;
+        env["OPENAI_API_KEY"] = moonshotKey;
+      }
+      if (provider?.baseUrl) {
+        env["OPENAI_BASE_URL"] = provider.baseUrl;
+      }
+      log.info("[spawnPaneInternal] Kimi model:", model ?? "MISSING");
+    }
+
+    // ── Cursor CLI branch ─────────────────────────────────────────────────────
+    // Direct agent — uses OpenAI-compatible API.
+    const isCursor = agent === "cursor";
+    if (isCursor) {
+      if (model && !args.includes("-m") && !args.includes("--model")) {
+        args.push("-m", model);
+      }
+      const cursorKey = env["CURSOR_API_KEY"] || env["OPENAI_API_KEY"] || "";
+      if (cursorKey) {
+        env["CURSOR_API_KEY"] = cursorKey;
+        env["OPENAI_API_KEY"] = cursorKey;
+      }
+      log.info("[spawnPaneInternal] Cursor model:", model ?? "MISSING");
+    }
+
+    // ── Copilot CLI branch (GitHub) ───────────────────────────────────────────
+    // Direct agent — uses GitHub token for authentication.
+    const isCopilot = agent === "copilot";
+    if (isCopilot) {
+      if (model && !args.includes("-m") && !args.includes("--model")) {
+        args.push("-m", model);
+      }
+      const githubToken = env["GITHUB_TOKEN"] || env["COPILOT_TOKEN"] || "";
+      if (githubToken) {
+        env["GITHUB_TOKEN"] = githubToken;
+        env["COPILOT_TOKEN"] = githubToken;
+      }
+      log.info("[spawnPaneInternal] Copilot model:", model ?? "MISSING");
+    }
+
     // ── Codex CLI branch (NOT Claude-compatible) ───────────────────────────────
     // All config via CLI -c flags (short values) + model_instructions_file (path).
     // NO CODEX_HOME override — uses real ~/.codex/ with user's auth tokens.
@@ -330,6 +381,13 @@ export async function spawnPaneInternal(
       if (provider?.id !== "codex-oauth") {
         const openaiKey = env["OPENAI_API_KEY"] || "";
         if (openaiKey) env["OPENAI_API_KEY"] = openaiKey;
+      }
+      // Ollama and other OpenAI-compat local providers: forward base URL
+      // so Codex sends requests to the right endpoint (e.g. http://localhost:11434/v1)
+      if (provider?.type === "openai-compat" && provider?.baseUrl) {
+        env["OPENAI_BASE_URL"] = provider.baseUrl;
+        // Ollama doesn't require a real key — set dummy if missing
+        if (!env["OPENAI_API_KEY"]) env["OPENAI_API_KEY"] = "ollama";
       }
 
       log.info("[spawnPaneInternal] Codex model:", model ?? "MISSING");
@@ -494,6 +552,7 @@ export async function spawnPaneInternal(
       squadOrchestratorWorkerId: config.squadOrchestratorWorkerId,
       taskId: config.taskId,
       activityId: config.activityId,
+      missionId: config.missionId,
     });
     ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
 

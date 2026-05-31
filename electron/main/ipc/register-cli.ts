@@ -11,6 +11,9 @@ export function registerCliHandlers(ctx: AppContext): void {
       { name: "claude", found: info.claude.found, path: info.claude.path, version: info.claude.version },
       { name: "codex", found: info.codex.found, path: info.codex.path, version: info.codex.version },
       { name: "gemini", found: info.gemini.found, path: info.gemini.path, version: info.gemini.version },
+      { name: "kimi", found: info.kimi.found, path: info.kimi.path, version: info.kimi.version },
+      { name: "cursor", found: info.cursor.found, path: info.cursor.path, version: info.cursor.version },
+      { name: "copilot", found: info.copilot.found, path: info.copilot.path, version: info.copilot.version },
     ];
   });
 

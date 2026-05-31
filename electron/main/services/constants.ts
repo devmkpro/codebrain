@@ -198,6 +198,41 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     tokenEnvVar: "OPENAI_API_KEY",
     models: [],
   },
+  // ── New CLI agents (Overclock parity) ────────────────────────────────
+  {
+    id: "kimi",
+    label: "Kimi (Moonshot)",
+    icon: "K",
+    type: "openai-compat",
+    host: "kimi",
+    baseUrl: "https://api.moonshot.cn/v1",
+    tokenEnvVar: "MOONSHOT_API_KEY",
+    models: ["kimi-k2.6", "kimi-k2.5"],
+    labelIncludes: ["kimi", "moonshot"],
+    idIncludes: ["kimi"],
+  },
+  {
+    id: "cursor",
+    label: "Cursor",
+    icon: "CU",
+    type: "openai-compat",
+    host: "cursor",
+    tokenEnvVar: "CURSOR_API_KEY",
+    models: [],
+    labelIncludes: ["cursor"],
+    idIncludes: ["cursor"],
+  },
+  {
+    id: "copilot",
+    label: "GitHub Copilot",
+    icon: "GH",
+    type: "openai-compat",
+    host: "copilot",
+    tokenEnvVar: "GITHUB_TOKEN",
+    models: [],
+    labelIncludes: ["copilot", "github"],
+    idIncludes: ["copilot"],
+  },
 ];
 
 // ─── Derived constants (read-only, computed from registry) ───────────────────

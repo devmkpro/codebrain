@@ -111,6 +111,9 @@ export function TerminalPane({
   const fontFamilyId = useTerminalSettings(s => s.fontFamily);
   const lineHeight = useTerminalSettings(s => s.lineHeight);
   const theme = useTerminalSettings(s => s.theme);
+  const cursorBlink = useTerminalSettings(s => s.cursorBlink);
+  const gpuAcceleration = useTerminalSettings(s => s.gpuAcceleration);
+  const lowGpuMode = useTerminalSettings(s => s.lowGpuMode);
   const fontStack = (FONT_OPTIONS.find(f => f.id === fontFamilyId) ?? FONT_OPTIONS[0]).stack;
   const [dropHover, setDropHover] = React.useState(false);
   const [showSavedContext, setShowSavedContext] = React.useState(true);
@@ -225,7 +228,7 @@ export function TerminalPane({
       fontFamily: fontStack,
       fontSize,
       lineHeight: Math.max(1, lineHeight),
-      cursorBlink: true,
+      cursorBlink,
       scrollback: 5e3
     });
     const fitAddon = new addonFitExports.FitAddon();
@@ -256,12 +259,14 @@ export function TerminalPane({
       el.addEventListener('mouseup', zoomFixHandler, true);
     }
 
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => webgl.dispose());
-      term.loadAddon(webgl);
-    } catch (e) {
-      console.warn("WebGL addon failed to load, falling back to canvas/dom renderer", e);
+    if (gpuAcceleration) {
+      try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => webgl.dispose());
+        term.loadAddon(webgl);
+      } catch (e) {
+        console.warn("WebGL addon failed to load, falling back to canvas/dom renderer", e);
+      }
     }
 
     fitAddon.fit();
@@ -361,7 +366,11 @@ export function TerminalPane({
         status: "idle"
       });
     }
-  }, [pane.id]);
+  }, [pane.id, cursorBlink, gpuAcceleration]);
+  // Runtime cursorBlink update without re-creating terminal
+  React.useEffect(() => {
+    if (termRef.current) termRef.current.options.cursorBlink = cursorBlink;
+  }, [cursorBlink]);
   React.useEffect(() => {
     const unsub = window.codeBrainApp?.pty.onOutput((paneId, data, echo) => {
       if (paneId === pane.id && termRef.current) {
@@ -509,10 +518,14 @@ export function TerminalPane({
   return <div className={`flex flex-col h-full border cursor-pointer ${
       isActive
         ? pane.status === "running"
-          ? "border-violet-500/50 shadow-[0_0_16px_rgba(139,92,246,0.15)] animate-[thinking-pulse_3s_ease-in-out_infinite]"
-          : "border-indigo-500/40 shadow-[0_0_12px_rgba(99,102,241,0.1)]"
+          ? lowGpuMode
+            ? "border-violet-500/50"
+            : "border-violet-500/50 shadow-[0_0_16px_rgba(139,92,246,0.15)] animate-[thinking-pulse_3s_ease-in-out_infinite]"
+          : lowGpuMode
+            ? "border-indigo-500/40"
+            : "border-indigo-500/40 shadow-[0_0_12px_rgba(99,102,241,0.1)]"
         : "border-white/5 hover:border-white/10"
-    } rounded-lg overflow-hidden bg-black backdrop-blur transition-all duration-300 relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onContextMenu={handleContextMenu}>
+    } rounded-lg overflow-hidden bg-black ${lowGpuMode ? "" : "backdrop-blur"} ${lowGpuMode ? "" : "transition-all duration-300"} relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onContextMenu={handleContextMenu}>
 
     <AnimatePresence>
       {contextMenu && (

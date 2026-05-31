@@ -137,6 +137,9 @@ export function SettingsPage() {
   const [claudeCliStatus,  setClaudeCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [codexCliStatus,   setCodexCliStatus]   = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [geminiCliStatus,  setGeminiCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [kimiCliStatus,    setKimiCliStatus]    = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [cursorCliStatus,  setCursorCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [copilotCliStatus, setCopilotCliStatus] = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
   // Discord RPC
@@ -176,6 +179,12 @@ export function SettingsPage() {
   const increaseAppZoom  = useTerminalSettings(s => s.increaseAppZoom);
   const decreaseAppZoom  = useTerminalSettings(s => s.decreaseAppZoom);
   const resetAppZoom     = useTerminalSettings(s => s.resetAppZoom);
+  const cursorBlink      = useTerminalSettings(s => s.cursorBlink);
+  const setCursorBlink   = useTerminalSettings(s => s.setCursorBlink);
+  const gpuAcceleration  = useTerminalSettings(s => s.gpuAcceleration);
+  const setGpuAcceleration = useTerminalSettings(s => s.setGpuAcceleration);
+  const lowGpuMode       = useTerminalSettings(s => s.lowGpuMode);
+  const setLowGpuMode    = useTerminalSettings(s => s.setLowGpuMode);
 
   // Providers
   const providers    = useProvidersStore(s => s.providers) as any[];
@@ -201,6 +210,9 @@ export function SettingsPage() {
         setClaudeCliStatus(s?.claude ?? null);
         setCodexCliStatus(s?.codex ?? null);
         setGeminiCliStatus(s?.gemini ?? null);
+        setKimiCliStatus(s?.kimi ?? null);
+        setCursorCliStatus(s?.cursor ?? null);
+        setCopilotCliStatus(s?.copilot ?? null);
       })
       .catch(() => {});
     loadProviders().catch(() => {});
@@ -389,6 +401,21 @@ export function SettingsPage() {
             <Row label="Tema Claro" description="Alterna entre modo escuro e claro">
               <Toggle enabled={theme === 'light'} onChange={v => setTheme(v ? 'light' : 'dark')} />
             </Row>
+            <Divider />
+
+            <Row label="Cursor piscando" description="Mantém o cursor animado dentro dos panes">
+              <Toggle enabled={cursorBlink} onChange={setCursorBlink} />
+            </Row>
+            <Divider />
+
+            <Row label="Aceleração de hardware" description="Usa a GPU para compor a janela do Electron">
+              <Toggle enabled={gpuAcceleration} onChange={setGpuAcceleration} />
+            </Row>
+            <Divider />
+
+            <Row label="Baixo uso de GPU" description="Remove fundo animado, blur, glows e animações sem mudar para tema claro">
+              <Toggle enabled={lowGpuMode} onChange={setLowGpuMode} />
+            </Row>
           </SectionCard>
 
           {/* ── Shell ────────────────────────────────────────────────── */}
@@ -533,21 +560,34 @@ export function SettingsPage() {
                 <div className="space-y-2">
                   {providers.map((p: any) => {
                     const models: string[] = p.models ?? [];
-                    if (models.length === 0) return null;
                     return (
                       <div key={p.id} className="flex items-center gap-2">
                         <span className="text-[10px] text-slate-400 w-28 truncate shrink-0">{p.label ?? p.id}</span>
-                        <select
-                          value={providerDefaultModels[p.id] ?? models[0]}
-                          onChange={e => {
-                            const next = { ...providerDefaultModels, [p.id]: e.target.value };
-                            setProviderDefaultModels(next);
-                            localStorage.setItem('codebrain.providerDefaultModels', JSON.stringify(next));
-                          }}
-                          className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer"
-                        >
-                          {models.map(m => <option key={m} value={m}>{m}</option>)}
-                        </select>
+                        {models.length > 0 ? (
+                          <select
+                            value={providerDefaultModels[p.id] ?? models[0]}
+                            onChange={e => {
+                              const next = { ...providerDefaultModels, [p.id]: e.target.value };
+                              setProviderDefaultModels(next);
+                              localStorage.setItem('codebrain.providerDefaultModels', JSON.stringify(next));
+                            }}
+                            className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer"
+                          >
+                            {models.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            placeholder="ex: llama3.2, qwen2.5"
+                            value={providerDefaultModels[p.id] ?? ''}
+                            onChange={e => {
+                              const next = { ...providerDefaultModels, [p.id]: e.target.value };
+                              setProviderDefaultModels(next);
+                              localStorage.setItem('codebrain.providerDefaultModels', JSON.stringify(next));
+                            }}
+                            className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 placeholder-slate-700 outline-none focus:border-[#4F46E5] transition-colors"
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -777,6 +817,96 @@ export function SettingsPage() {
                       {geminiCliStatus.found ? `✓ ${geminiCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
                     </p>
                     {geminiCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{geminiCliStatus.version}</p>}
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleRedetectCli}
+                disabled={cliBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+              >
+                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
+              </button>
+            </div>
+
+            <Divider />
+
+            {/* Kimi CLI (Moonshot) */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-medium text-slate-300">Kimi CLI</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">
+                  Kimi da Moonshot — agente CLI direto.
+                  {!kimiCliStatus?.found && (
+                    <> Instale com <span className="font-mono">npm install -g @moonshot-ai/kimi</span>.</>
+                  )}
+                </p>
+                {kimiCliStatus && (
+                  <>
+                    <p className={`text-[9px] font-mono mt-1 ${kimiCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {kimiCliStatus.found ? `✓ ${kimiCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
+                    </p>
+                    {kimiCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{kimiCliStatus.version}</p>}
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleRedetectCli}
+                disabled={cliBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+              >
+                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
+              </button>
+            </div>
+
+            <Divider />
+
+            {/* Cursor CLI */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-medium text-slate-300">Cursor CLI</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">
+                  Cursor Agent — binário <span className="font-mono">cursor-agent</span>.
+                  {!cursorCliStatus?.found && (
+                    <> Instale via <span className="font-mono">cursor.com</span>.</>
+                  )}
+                </p>
+                {cursorCliStatus && (
+                  <>
+                    <p className={`text-[9px] font-mono mt-1 ${cursorCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {cursorCliStatus.found ? `✓ ${cursorCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
+                    </p>
+                    {cursorCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{cursorCliStatus.version}</p>}
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleRedetectCli}
+                disabled={cliBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+              >
+                <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
+              </button>
+            </div>
+
+            <Divider />
+
+            {/* Copilot CLI (GitHub) */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-medium text-slate-300">GitHub Copilot CLI</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">
+                  GitHub Copilot — binário <span className="font-mono">copilot</span>.
+                  {!copilotCliStatus?.found && (
+                    <> Instale com <span className="font-mono">npm install -g @github/copilot</span>.</>
+                  )}
+                </p>
+                {copilotCliStatus && (
+                  <>
+                    <p className={`text-[9px] font-mono mt-1 ${copilotCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {copilotCliStatus.found ? `✓ ${copilotCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
+                    </p>
+                    {copilotCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{copilotCliStatus.version}</p>}
                   </>
                 )}
               </div>

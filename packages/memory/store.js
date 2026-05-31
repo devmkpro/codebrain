@@ -248,6 +248,43 @@ function createMemoryStore(dbPath) {
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope)`);
 
+  // ── Kanban Tasks Table ──────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS kanban_tasks (
+      id           TEXT PRIMARY KEY,
+      title        TEXT NOT NULL,
+      description  TEXT DEFAULT '',
+      column_name  TEXT NOT NULL DEFAULT 'inbox' CHECK(column_name IN ('inbox','assigned','in_progress','review','done')),
+      assigned_to  TEXT,
+      priority     TEXT DEFAULT 'normal' CHECK(priority IN ('low','normal','high','critical')),
+      result       TEXT,
+      workspace    TEXT,
+      created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+      completed_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_kanban_column ON kanban_tasks(column_name);
+    CREATE INDEX IF NOT EXISTS idx_kanban_assigned ON kanban_tasks(assigned_to);
+    CREATE INDEX IF NOT EXISTS idx_kanban_workspace ON kanban_tasks(workspace);
+  `);
+
+  // ── Missions Table ───────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS missions (
+      id           TEXT PRIMARY KEY,
+      title        TEXT NOT NULL,
+      summary      TEXT DEFAULT '',
+      worktreePath TEXT,
+      status       TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','completed','abandoned')),
+      workspace    TEXT,
+      metadata     TEXT,
+      created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at   INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status);
+    CREATE INDEX IF NOT EXISTS idx_missions_workspace ON missions(workspace);
+  `);
+
   // Migration: ensure agents.pane_id has UNIQUE constraint (table may pre-exist without it)
   try {
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_pane_unique ON agents(pane_id)`);
@@ -1203,6 +1240,171 @@ function createMemoryStore(dbPath) {
       if (!id) return { ok: false, error: "id is required" };
       stmts.markMessageRead.run(id);
       return { ok: true };
+    },
+
+    // ── Kanban Tasks ─────────────────────────────────────────────────────────
+
+    /**
+     * Create a kanban task.
+     * @param {{ title: string, description?: string, column?: string, priority?: string, assigned_to?: string, workspace?: string }} opts
+     */
+    createKanbanTask({ title, description = "", column = "inbox", priority = "normal", assigned_to, workspace }) {
+      if (!title) return { ok: false, error: "title is required" };
+      const validColumns = ["inbox", "assigned", "in_progress", "review", "done"];
+      if (!validColumns.includes(column)) return { ok: false, error: `column must be one of: ${validColumns.join(", ")}` };
+      const id = `ktask_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      db.prepare(`
+        INSERT INTO kanban_tasks (id, title, description, column_name, priority, assigned_to, workspace)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, title, description, column, priority, assigned_to || null, workspace || null);
+      return { ok: true, id, column };
+    },
+
+    /**
+     * Move a kanban task to a different column.
+     * @param {{ id: string, column: string }} opts
+     */
+    moveKanbanTask({ id, column }) {
+      if (!id || !column) return { ok: false, error: "id and column are required" };
+      const validColumns = ["inbox", "assigned", "in_progress", "review", "done"];
+      if (!validColumns.includes(column)) return { ok: false, error: `column must be one of: ${validColumns.join(", ")}` };
+      const completedAt = column === "done" ? Date.now() : null;
+      const result = db.prepare(
+        `UPDATE kanban_tasks SET column_name = ?, updated_at = unixepoch(), completed_at = ? WHERE id = ?`
+      ).run(column, completedAt, id);
+      if (result.changes === 0) return { ok: false, error: "task not found" };
+      return { ok: true, column };
+    },
+
+    /**
+     * List kanban tasks with optional filters.
+     * @param {{ column?: string, assigned_to?: string, workspace?: string, limit?: number }} opts
+     */
+    listKanbanTasks({ column, assigned_to, workspace, limit = 50 } = {}) {
+      let query = "SELECT * FROM kanban_tasks WHERE 1=1";
+      const params = [];
+      if (column) { query += " AND column_name = ?"; params.push(column); }
+      if (assigned_to) { query += " AND assigned_to = ?"; params.push(assigned_to); }
+      if (workspace) { query += " AND workspace = ?"; params.push(workspace); }
+      query += " ORDER BY updated_at DESC LIMIT ?";
+      params.push(limit);
+      const rows = db.prepare(query).all(...params);
+      return { ok: true, tasks: rows, count: rows.length };
+    },
+
+    /**
+     * Complete a kanban task with optional result.
+     * @param {{ id: string, result?: string }} opts
+     */
+    completeKanbanTask({ id, result: taskResult }) {
+      if (!id) return { ok: false, error: "id is required" };
+      const res = db.prepare(
+        `UPDATE kanban_tasks SET column_name = 'done', result = ?, updated_at = unixepoch(), completed_at = unixepoch() WHERE id = ?`
+      ).run(taskResult || null, id);
+      if (res.changes === 0) return { ok: false, error: "task not found" };
+      return { ok: true, column: "done" };
+    },
+
+    /**
+     * Assign a kanban task to a pane/agent.
+     * @param {{ id: string, paneId: string }} opts
+     */
+    assignKanbanTask({ id, paneId }) {
+      if (!id || !paneId) return { ok: false, error: "id and paneId are required" };
+      const res = db.prepare(
+        `UPDATE kanban_tasks SET assigned_to = ?, column_name = 'assigned', updated_at = unixepoch() WHERE id = ?`
+      ).run(paneId, id);
+      if (res.changes === 0) return { ok: false, error: "task not found" };
+      return { ok: true, assigned_to: paneId };
+    },
+
+    /**
+     * Delete a kanban task.
+     * @param {{ id: string }} opts
+     */
+    deleteKanbanTask({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      const res = db.prepare("DELETE FROM kanban_tasks WHERE id = ?").run(id);
+      return { ok: true, deleted: res.changes > 0 };
+    },
+
+    // ── Mission Methods ───────────────────────────────────────────────────
+
+    /**
+     * Create a mission.
+     * @param {{ title: string, summary?: string, worktreePath?: string, workspace?: string }} opts
+     */
+    createMission({ title, summary = "", worktreePath, workspace }) {
+      if (!title) return { ok: false, error: "title is required" };
+      const id = `mission_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      db.prepare(`
+        INSERT INTO missions (id, title, summary, worktreePath, workspace)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(id, title, summary, worktreePath || null, workspace || null);
+      return { ok: true, id };
+    },
+
+    /**
+     * Get a mission by ID.
+     * @param {{ id: string }} opts
+     */
+    getMission({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      const row = db.prepare("SELECT * FROM missions WHERE id = ?").get(id);
+      if (!row) return { ok: false, error: "mission not found" };
+      return { ok: true, mission: row };
+    },
+
+    /**
+     * List missions with optional filters.
+     * @param {{ status?: string, workspace?: string, limit?: number }} opts
+     */
+    listMissions({ status, workspace, limit = 50 } = {}) {
+      let query = "SELECT * FROM missions WHERE 1=1";
+      const params = [];
+      if (status) { query += " AND status = ?"; params.push(status); }
+      if (workspace) { query += " AND workspace = ?"; params.push(workspace); }
+      query += " ORDER BY updated_at DESC LIMIT ?";
+      params.push(limit);
+      const rows = db.prepare(query).all(...params);
+      return { ok: true, missions: rows, count: rows.length };
+    },
+
+    /**
+     * Update a mission.
+     * @param {{ id: string, updates: { title?: string, summary?: string, worktreePath?: string, status?: string, metadata?: string } }} opts
+     */
+    updateMission({ id, updates }) {
+      if (!id) return { ok: false, error: "id is required" };
+      if (!updates || Object.keys(updates).length === 0) return { ok: false, error: "updates required" };
+      const validStatuses = ["active", "paused", "completed", "abandoned"];
+      if (updates.status && !validStatuses.includes(updates.status)) {
+        return { ok: false, error: `status must be one of: ${validStatuses.join(", ")}` };
+      }
+      const sets = [];
+      const params = [];
+      for (const [key, val] of Object.entries(updates)) {
+        if (["title", "summary", "worktreePath", "status", "metadata"].includes(key)) {
+          sets.push(`${key === "worktreePath" ? "worktreePath" : key} = ?`);
+          params.push(val);
+        }
+      }
+      if (sets.length === 0) return { ok: false, error: "no valid fields to update" };
+      sets.push("updated_at = unixepoch()");
+      params.push(id);
+      const result = db.prepare(`UPDATE missions SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+      if (result.changes === 0) return { ok: false, error: "mission not found" };
+      return { ok: true };
+    },
+
+    /**
+     * Delete a mission.
+     * @param {{ id: string }} opts
+     */
+    deleteMission({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      const res = db.prepare("DELETE FROM missions WHERE id = ?").run(id);
+      return { ok: true, deleted: res.changes > 0 };
     },
 
     /**

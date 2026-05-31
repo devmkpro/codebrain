@@ -142,12 +142,28 @@ app.whenReady().then(async () => {
       log.error("[session] auto-save history failed:", err);
     }
 
+    ctx.sessionWatchers?.unregisterPane(paneId);
     ctx.paneConfigs.delete(paneId);
     ctx.paneRegistry.delete(paneId);
   });
 
   // Wire lifecycle hooks system
   setupHooks(ctx.hooksManager, ctx.ptyManager, ctx);
+
+  // Session watchers — capture CLI transcripts from Kimi, Antigravity, Cursor, Copilot, Codex, Gemini
+  const { createSessionWatchers } = require("./services/session-watchers");
+  ctx.sessionWatchers = createSessionWatchers(ctx);
+  ctx.sessionWatchers.start();
+  ctx.hooksManager.on("pane_spawned", (event: any) => {
+    const { paneId, data } = event;
+    if (!paneId || !data) return;
+    ctx.sessionWatchers?.registerPane({
+      paneId,
+      agent: data.agent || "unknown",
+      cwd: data.cwd || ctx.currentWorkspacePath,
+      spawnedAt: Date.now(),
+    });
+  });
 
   // Network tracking
   attachNetworkTracking(ctx, session.defaultSession);

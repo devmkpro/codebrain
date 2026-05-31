@@ -16,6 +16,9 @@ export interface AllCliInfo {
   claude: CliInfo;
   codex: CliInfo;
   gemini: CliInfo;
+  kimi: CliInfo;
+  cursor: CliInfo;
+  copilot: CliInfo;
   shell: { path: string };
 }
 
@@ -135,6 +138,9 @@ export class CliDetector {
       claude: detectCli("claude"),
       codex: detectCli("codex"),
       gemini: detectCli("gemini"),
+      kimi: detectCli("kimi"),
+      cursor: detectCli("cursor-agent"),
+      copilot: detectCli("copilot"),
       shell: { path: shell },
     };
   }

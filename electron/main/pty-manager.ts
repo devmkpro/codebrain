@@ -68,6 +68,9 @@ const AGENT_DEFAULTS: Record<string, { binary: string; args: string[] }> = {
   gemini: { binary: "gemini", args: [] },      // Gemini CLI nativo
   "gemini-cli": { binary: "gemini", args: [] }, // alias para gemini
   codex: { binary: "codex", args: [] },
+  kimi: { binary: "kimi", args: [] },          // Kimi (Moonshot)
+  cursor: { binary: "cursor-agent", args: [] }, // Cursor
+  copilot: { binary: "copilot", args: [] },    // GitHub Copilot
   shell: { binary: defaultShell(), args: [] },
 };
 

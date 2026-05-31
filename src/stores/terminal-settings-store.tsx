@@ -34,6 +34,9 @@ export const useTerminalSettings = create()(persist((set, get) => ({
   theme: "dark",
   defaultShellPath: null,
   appZoom: 1,
+  cursorBlink: true,
+  gpuAcceleration: true,
+  lowGpuMode: false,
   increaseAppZoom: () => set({ appZoom: Math.min(3, +(get().appZoom + 0.1).toFixed(1)) }),
   decreaseAppZoom: () => set({ appZoom: Math.max(0.5, +(get().appZoom - 0.1).toFixed(1)) }),
   resetAppZoom: () => set({ appZoom: 1 }),
@@ -58,22 +61,26 @@ export const useTerminalSettings = create()(persist((set, get) => ({
   setTheme: theme => set({
     theme
   }),
+  setCursorBlink: (value: boolean) => set({ cursorBlink: value }),
+  setGpuAcceleration: (value: boolean) => set({ gpuAcceleration: value }),
+  setLowGpuMode: (value: boolean) => set({ lowGpuMode: value }),
   setDefaultShellPath: path => set({
     defaultShellPath: path && path.trim() ? path.trim() : null
   })
 }), {
   name: "codebrain-app-terminal-settings",
-  version: 2,
-  // Migrate persisted lineHeight < 1 (xterm 5.5 rejects).
+  version: 3,
+  // Migrate persisted settings across versions.
   migrate: persisted => {
-    const p = persisted;
+    const p = persisted ?? {};
     if (p && typeof p.lineHeight === "number" && p.lineHeight < 1) {
-      return {
-        ...p,
-        lineHeight: 1
-      };
+      p.lineHeight = 1;
     }
-    return p ?? {};
+    // v3: add new rendering defaults
+    if (typeof p.cursorBlink !== "boolean") p.cursorBlink = true;
+    if (typeof p.gpuAcceleration !== "boolean") p.gpuAcceleration = true;
+    if (typeof p.lowGpuMode !== "boolean") p.lowGpuMode = false;
+    return p;
   }
 }));
 export const TERMINAL_THEMES = {

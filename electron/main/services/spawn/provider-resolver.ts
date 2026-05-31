@@ -90,8 +90,58 @@ export function resolveProvider(
     log.info(`[resolveProvider] gemini-cli → agent="gemini-cli", ${provider.models.length} models`);
   }
 
+  // ── Step 0d: kimi CLI virtual provider ──────────────────────────────────────
+  if (providerId === "kimi") {
+    agent = "kimi";
+    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "kimi");
+    const registryModels = registryTemplate?.models ?? [];
+    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
+    provider = {
+      id: "kimi",
+      type: "openai-compat",
+      host: "kimi",
+      baseUrl: registryTemplate?.baseUrl ?? "https://api.moonshot.cn/v1",
+      models: [...new Set([...allModels])],
+      env: {},
+    };
+    log.info(`[resolveProvider] kimi → agent="kimi", ${provider.models.length} models`);
+  }
+
+  // ── Step 0e: cursor CLI virtual provider ────────────────────────────────────
+  if (providerId === "cursor") {
+    agent = "cursor";
+    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "cursor");
+    const registryModels = registryTemplate?.models ?? [];
+    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
+    provider = {
+      id: "cursor",
+      type: "openai-compat",
+      host: "cursor",
+      models: [...new Set([...allModels])],
+      env: {},
+    };
+    log.info(`[resolveProvider] cursor → agent="cursor", ${provider.models.length} models`);
+  }
+
+  // ── Step 0g: copilot CLI virtual provider ───────────────────────────────────
+  if (providerId === "copilot") {
+    agent = "copilot";
+    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "copilot");
+    const registryModels = registryTemplate?.models ?? [];
+    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
+    provider = {
+      id: "copilot",
+      type: "openai-compat",
+      host: "copilot",
+      models: [...new Set([...allModels])],
+      env: {},
+    };
+    log.info(`[resolveProvider] copilot → agent="copilot", ${provider.models.length} models`);
+  }
+
   // ── Step 1: Explicit providerId ─────────────────────────────────────────────
-  if (!provider && providerId && providerId !== "claude-oauth" && providerId !== "codex-oauth" && providerId !== "gemini-cli") {
+  const VIRTUAL_PROVIDER_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot"];
+  if (!provider && providerId && !VIRTUAL_PROVIDER_IDS.includes(providerId)) {
     provider = ctx.providerStore.listFull().find((p: any) => p.id === providerId) ?? null;
     if (!provider) {
       return {

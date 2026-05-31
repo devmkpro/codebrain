@@ -41,8 +41,9 @@ export function getEnhancedProviders(ctx: AppContext) {
     env: {},
   }] : [];
 
+  const VIRTUAL_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot"];
   const filtered = list
-    .filter(p => p.id !== "claude-oauth" && p.id !== "codex-oauth" && p.id !== "gemini-cli" && !p.label?.includes("Gemini CLI"))
+    .filter(p => !VIRTUAL_IDS.includes(p.id) && !p.label?.includes("Gemini CLI"))
     .map(p => {
       // Look up the canonical template by id
       const template = PROVIDER_REGISTRY.find(t => t.id === p.id);
@@ -75,5 +76,41 @@ export function getEnhancedProviders(ctx: AppContext) {
       return { ...p, host: p.host || "openclaude" };
     });
 
-  return [...claudeOAuthProvider, ...codexOAuthProvider, ...geminiCliProvider, ...filtered];
+  // Virtual Kimi CLI provider — appears when Kimi CLI is installed
+  const kimiDetected = ctx.cliDetector?.getAll()?.kimi?.found ?? false;
+  const kimiTemplate = PROVIDER_REGISTRY.find(t => t.id === "kimi");
+  const kimiProvider = kimiDetected && kimiTemplate ? [{
+    id: kimiTemplate.id,
+    label: kimiTemplate.label,
+    type: kimiTemplate.type as any,
+    host: kimiTemplate.host,
+    models: [...kimiTemplate.models],
+    env: {},
+  }] : [];
+
+  // Virtual Cursor CLI provider — appears when Cursor CLI is installed
+  const cursorDetected = ctx.cliDetector?.getAll()?.cursor?.found ?? false;
+  const cursorTemplate = PROVIDER_REGISTRY.find(t => t.id === "cursor");
+  const cursorProvider = cursorDetected && cursorTemplate ? [{
+    id: cursorTemplate.id,
+    label: cursorTemplate.label,
+    type: cursorTemplate.type as any,
+    host: cursorTemplate.host,
+    models: [...cursorTemplate.models],
+    env: {},
+  }] : [];
+
+  // Virtual Copilot CLI provider — appears when Copilot CLI is installed
+  const copilotDetected = ctx.cliDetector?.getAll()?.copilot?.found ?? false;
+  const copilotTemplate = PROVIDER_REGISTRY.find(t => t.id === "copilot");
+  const copilotProvider = copilotDetected && copilotTemplate ? [{
+    id: copilotTemplate.id,
+    label: copilotTemplate.label,
+    type: copilotTemplate.type as any,
+    host: copilotTemplate.host,
+    models: [...copilotTemplate.models],
+    env: {},
+  }] : [];
+
+  return [...claudeOAuthProvider, ...codexOAuthProvider, ...geminiCliProvider, ...kimiProvider, ...cursorProvider, ...copilotProvider, ...filtered];
 }
