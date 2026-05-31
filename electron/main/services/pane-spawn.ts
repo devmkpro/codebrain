@@ -291,8 +291,10 @@ export async function spawnPaneInternal(
     }
 
     // ── Kimi CLI branch (Moonshot) ─────────────────────────────────────────────
-    // Direct agent — passes model and API key directly.
-    // Kimi uses OpenAI-compatible API at api.moonshot.cn.
+    // MCP: written to ~/.kimi/config.toml under [mcp_servers.codebrain] (Kimi v0.1+ pattern)
+    // System prompt: injected via --skills-dir pointing to a temp dir with a codebrain skill.
+    // Kimi auto-discovers skills from project .kimi/skills/ and ~/.kimi/skills/, and also from
+    // any directory passed via --skills-dir.
     const isKimi = agent === "kimi";
     if (isKimi) {
       if (model && !args.includes("-m") && !args.includes("--model")) {
@@ -307,11 +309,61 @@ export async function spawnPaneInternal(
       if (provider?.baseUrl) {
         env["OPENAI_BASE_URL"] = provider.baseUrl;
       }
+
+      // MCP: write codebrain server to ~/.kimi/config.toml
+      // Kimi reads [mcp_servers.<name>] from config.toml at startup.
+      if (ctx.mcpServerInfo) {
+        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
+          try { await ctx.mcpServerReady; } catch {}
+        }
+        const kimiConfigDir = path.join(os.homedir(), ".kimi");
+        const kimiConfigPath = path.join(kimiConfigDir, "config.toml");
+        try {
+          fs.mkdirSync(kimiConfigDir, { recursive: true });
+          let configText = "";
+          try { configText = fs.readFileSync(kimiConfigPath, "utf-8"); } catch {}
+          // Remove existing codebrain mcp block if present
+          configText = configText.replace(/\[mcp_servers\.codebrain\][^\[]*/, "").trimEnd();
+          const mcpBlock = `\n\n[mcp_servers.codebrain]\nurl = "${ctx.mcpServerInfo.streamableHttpUrl}"\ntype = "http"\ndefault_tools_approval_mode = "approve"\n`;
+          configText += mcpBlock;
+          fs.writeFileSync(kimiConfigPath, configText, "utf-8");
+          log.info("[spawnPaneInternal] Kimi MCP config written to", kimiConfigPath);
+        } catch (e) {
+          log.warn("[spawnPaneInternal] Failed to write Kimi config.toml:", e);
+        }
+      }
+
+      // System prompt: Kimi has --skills-dir to load skills from a custom directory.
+      // Write the Codebrain system prompt as a Kimi skill and point --skills-dir at it.
+      if (!args.includes("--skills-dir")) {
+        try {
+          const promptFile = buildSystemPrompt(ctx, {
+            paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
+          });
+          const promptContent = fs.readFileSync(promptFile, "utf-8");
+          const skillsDir = path.join(cwd, ".codebrain", "tmp", `kimi-skills-${paneId}`);
+          const skillDir = path.join(skillsDir, "codebrain");
+          fs.mkdirSync(skillDir, { recursive: true });
+          fs.writeFileSync(path.join(skillDir, "skill.json"), JSON.stringify({
+            id: "codebrain", name: "Codebrain Context", type: "prompt",
+            description: "Codebrain workspace context and MCP tools guide",
+            triggers: [],
+          }, null, 2), "utf-8");
+          fs.writeFileSync(path.join(skillDir, "prompt.md"), promptContent, "utf-8");
+          args.push("--skills-dir", skillsDir);
+          log.info("[spawnPaneInternal] Kimi skills dir:", skillsDir);
+        } catch (e) {
+          log.warn("[spawnPaneInternal] Failed to write Kimi skills dir:", e);
+        }
+      }
+
       log.info("[spawnPaneInternal] Kimi model:", model ?? "MISSING");
     }
 
     // ── Cursor CLI branch ─────────────────────────────────────────────────────
-    // Direct agent — uses OpenAI-compatible API.
+    // MCP: cursor-agent reads .cursor/mcp.json in cwd (same as Cursor IDE).
+    // System prompt: Cursor does not have a --system-prompt flag; context is injected
+    // via .cursor/rules/ directory (AGENTS.md / cursor-rules pattern).
     const isCursor = agent === "cursor";
     if (isCursor) {
       if (model && !args.includes("-m") && !args.includes("--model")) {
@@ -322,11 +374,50 @@ export async function spawnPaneInternal(
         env["CURSOR_API_KEY"] = cursorKey;
         env["OPENAI_API_KEY"] = cursorKey;
       }
+
+      // MCP: write .cursor/mcp.json to cwd (Cursor reads this at startup)
+      if (ctx.mcpServerInfo) {
+        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
+          try { await ctx.mcpServerReady; } catch {}
+        }
+        const cursorDir = path.join(cwd, ".cursor");
+        const mcpJsonPath = path.join(cursorDir, "mcp.json");
+        try {
+          fs.mkdirSync(cursorDir, { recursive: true });
+          let existing: Record<string, any> = {};
+          try { existing = JSON.parse(fs.readFileSync(mcpJsonPath, "utf-8")); } catch {}
+          const mcpServers = existing.mcpServers ?? {};
+          mcpServers.codebrain = { url: ctx.mcpServerInfo.streamableHttpUrl, type: "http" };
+          existing.mcpServers = mcpServers;
+          fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2), "utf-8");
+          log.info("[spawnPaneInternal] Cursor MCP config written to", mcpJsonPath);
+        } catch (e) {
+          log.warn("[spawnPaneInternal] Failed to write .cursor/mcp.json:", e);
+        }
+      }
+
+      // System prompt: write .cursor/rules/codebrain.mdc (Cursor rules file)
+      try {
+        const promptFile = buildSystemPrompt(ctx, {
+          paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
+        });
+        const promptContent = fs.readFileSync(promptFile, "utf-8");
+        const rulesDir = path.join(cwd, ".cursor", "rules");
+        fs.mkdirSync(rulesDir, { recursive: true });
+        fs.writeFileSync(path.join(rulesDir, "codebrain.mdc"), promptContent, "utf-8");
+        log.info("[spawnPaneInternal] Cursor rules file written");
+      } catch (e) {
+        log.warn("[spawnPaneInternal] Failed to write .cursor/rules/codebrain.mdc:", e);
+      }
+
       log.info("[spawnPaneInternal] Cursor model:", model ?? "MISSING");
     }
 
     // ── Copilot CLI branch (GitHub) ───────────────────────────────────────────
-    // Direct agent — uses GitHub token for authentication.
+    // MCP: copilot supports --additional-mcp-config <json-string> CLI flag.
+    // System prompt: custom instructions loaded from AGENTS.md or passed via --i (initial prompt).
+    // Copilot also reads ~/.copilot/mcp-config.json but we prefer the CLI flag to avoid
+    // polluting global state.
     const isCopilot = agent === "copilot";
     if (isCopilot) {
       if (model && !args.includes("-m") && !args.includes("--model")) {
@@ -337,6 +428,45 @@ export async function spawnPaneInternal(
         env["GITHUB_TOKEN"] = githubToken;
         env["COPILOT_TOKEN"] = githubToken;
       }
+
+      // MCP: pass codebrain server via --additional-mcp-config JSON flag
+      if (ctx.mcpServerInfo && !args.includes("--additional-mcp-config")) {
+        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
+          try { await ctx.mcpServerReady; } catch {}
+        }
+        const mcpJson = JSON.stringify({
+          codebrain: { url: ctx.mcpServerInfo.streamableHttpUrl, type: "http" }
+        });
+        args.push("--additional-mcp-config", mcpJson);
+        log.info("[spawnPaneInternal] Copilot MCP via --additional-mcp-config");
+      }
+
+      // System prompt: write AGENTS.md to cwd (Copilot reads custom instructions from it)
+      // --no-custom-instructions disables this, so only write if not suppressed
+      if (!args.includes("--no-custom-instructions")) {
+        try {
+          const promptFile = buildSystemPrompt(ctx, {
+            paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
+          });
+          const promptContent = fs.readFileSync(promptFile, "utf-8");
+          // Write to .copilot/codebrain-context.md and include it via AGENTS.md import
+          const copilotDir = path.join(cwd, ".copilot");
+          fs.mkdirSync(copilotDir, { recursive: true });
+          fs.writeFileSync(path.join(copilotDir, "codebrain-context.md"), promptContent, "utf-8");
+          // AGENTS.md: include the codebrain context file
+          const agentsPath = path.join(cwd, "AGENTS.md");
+          let agentsContent = "";
+          try { agentsContent = fs.readFileSync(agentsPath, "utf-8"); } catch {}
+          const importLine = `[import]: # (.copilot/codebrain-context.md)`;
+          if (!agentsContent.includes(".copilot/codebrain-context.md")) {
+            fs.writeFileSync(agentsPath, `${importLine}\n\n${agentsContent}`, "utf-8");
+          }
+          log.info("[spawnPaneInternal] Copilot context written to .copilot/codebrain-context.md");
+        } catch (e) {
+          log.warn("[spawnPaneInternal] Failed to write Copilot AGENTS.md:", e);
+        }
+      }
+
       log.info("[spawnPaneInternal] Copilot model:", model ?? "MISSING");
     }
 
