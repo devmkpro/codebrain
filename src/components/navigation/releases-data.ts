@@ -14,8 +14,22 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.8.12",
+    "version": "1.8.13",
     "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "MissionsMenu infinite loop — stable selector for missionsByWorkspace"
+      },
+      {
+        "kind": "fix",
+        "text": "Windows cmd shim resolver + copilot MCP format"
+      }
+    ]
+  },
+  {
+    "version": "1.8.12",
+    "date": "maio 2026",
     "highlights": [
       {
         "kind": "fix",
