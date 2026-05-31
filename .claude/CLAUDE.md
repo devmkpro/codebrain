@@ -7,19 +7,9 @@
 
 ## 🔧 Skills — USE SEMPRE AUTOMATICAMENTE
 
-Você tem skills especializadas instaladas. **SEMPRE invoque a skill correta via `Skill()` tool ANTES de responder**, sem esperar o usuário pedir. Detecte pela intenção:
+Você tem skills especializadas do Codebrain. As skills são injetadas no system prompt com conteúdo completo. **Ao detectar um trigger, execute diretamente os passos da skill correspondente** — não use `Skill()` tool (isso é para slash commands do Claude Code, não para skills do Codebrain).
 
-| Skill | Quando usar |
-|---|---|
-| `version-bump` | bump, versão, nova versão, tag, release, commit+tag, nova tag |
-| `debug-pane` | agente travado, não responde, pane parou, debug, agente não faz nada |
-| `cost-model-update` | preço errado, sem preço, modelo sem preço, corrigir custo, novo modelo |
-| `add-ipc-feature` | adicionar IPC, nova feature IPC, novo IPC, implementar IPC |
-| `add-mcp-tool` | novo MCP tool, adicionar MCP, criar tool, novo tool |
-| `reuse-code` | código duplicado, refatorar, remover duplicação, DRY, centralizar |
-| `codebrain-dev-squad` | squad dev, spawna squad, time de desenvolvimento, squad codebrain |
-
-**REGRA:** Se o pedido do usuário bater com qualquer skill acima → invoque imediatamente com `Skill({ skill: "nome-da-skill" })`. Não pergunte, não explique primeiro — só invoque.
+**REGRA:** Se o pedido do usuário bater com qualquer trigger de skill → execute imediatamente os passos descritos na seção da skill no system prompt. Não pergunte, não explique — execute direto. Se precisar consultar uma skill que não está no prompt, use `mcp__codebrain__skill_get({ id: "nome-da-skill" })`.
 
 ---
 

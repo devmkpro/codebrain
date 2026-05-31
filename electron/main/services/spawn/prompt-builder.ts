@@ -132,16 +132,9 @@ function buildSkillsSection(cwd: string, agent?: string): string {
     .join("\n");
 
   if (isClaudeCodeCli) {
-    // Claude Code has Skill() tool — just the table + invocation rule
-    return `\n\n## Skills Disponíveis — USE AUTOMATICAMENTE
-
-Você tem skills especializadas. **SEMPRE invoque a skill correta via \`Skill()\` tool ANTES de responder**, sem esperar o usuário pedir. Detecte pela intenção do pedido:
-
-| Skill | Descrição | Triggers (palavras-chave) |
-|---|---|---|
-${rows}
-
-**REGRA OBRIGATÓRIA:** Se o pedido do usuário corresponder a qualquer trigger acima → invoque imediatamente com \`Skill({ skill: "id-da-skill" })\`. Não pergunte, não explique — invoque direto.`;
+    // Claude Code: inject full skill content inline (same as other CLIs).
+    // The Skill() tool only works for Claude Code's own slash commands, NOT for Codebrain skills.
+    // So we inject the full prompt.md content so the agent can execute skill steps directly.
   }
 
   // Non-Claude-Code CLIs: inject full skill content inline
