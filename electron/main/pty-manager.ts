@@ -69,7 +69,7 @@ const AGENT_DEFAULTS: Record<string, { binary: string; args: string[] }> = {
   "gemini-cli": { binary: "gemini", args: [] }, // alias para gemini
   codex: { binary: "codex", args: [] },
   kimi: { binary: "kimi", args: [] },          // Kimi (Moonshot)
-  cursor: { binary: "cursor-agent", args: [] }, // Cursor
+  cursor: { binary: "agent", args: [] },         // Cursor CLI (binary: "agent", fallback: "cursor-agent")
   copilot: { binary: "copilot", args: [] },    // GitHub Copilot
   shell: { binary: defaultShell(), args: [] },
 };
@@ -209,6 +209,16 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
     if (resolved) {
       fellBackToOpenClaude = true;
       log.warn(`[pty] "claude" binary not found, falling back to "openclaude": ${resolved}`);
+    }
+  }
+  if (!resolved && agent === "cursor") {
+    // Cursor CLI installs as "agent" (new) or "cursor-agent" (old) depending on version/platform.
+    // Try both so either installation works.
+    resolved = which("cursor-agent");
+    if (resolved) log.info(`[pty] cursor: "agent" not found, using "cursor-agent": ${resolved}`);
+    if (!resolved) {
+      resolved = which("agent");
+      if (resolved) log.info(`[pty] cursor: found "agent": ${resolved}`);
     }
   }
   // Strip claude-specific CLI flags when falling back to openclaude
