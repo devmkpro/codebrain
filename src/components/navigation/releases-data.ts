@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.17",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "correct token attribution per pane in API proxy"
+      }
+    ]
+  },
+  {
     "version": "1.8.16",
     "date": "maio 2026",
     "highlights": [
