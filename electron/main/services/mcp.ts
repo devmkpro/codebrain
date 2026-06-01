@@ -77,14 +77,14 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
     const proxy = new ApiProxy({
       onTokenUsage: (usage: { paneId: string; model: string; inputTokens: number; outputTokens: number }) => {
         // Diagnostic: log exact model name from proxy for debugging pricing
-        console.log(`[CostTracker] onTokenUsage: model="${usage.model}" input=${usage.inputTokens} output=${usage.outputTokens}`);
+        console.log(`[CostTracker] onTokenUsage: model="${usage.model}" paneId="${usage.paneId}" input=${usage.inputTokens} output=${usage.outputTokens}`);
 
-        // Resolve pane attribution: proxy doesn't know which pane made the request,
-        // so we try to match by model name from paneConfigs.
+        // Resolve pane attribution: proxy now provides paneId directly via per-token routing.
+        // Fall back to model-based lookup only when paneId is "unknown".
         let resolvedPaneId = usage.paneId;
         let paneCfg = ctx.paneConfigs.get(resolvedPaneId);
-        if (!paneCfg && usage.model) {
-          // Find pane by model name
+        if ((!paneCfg || resolvedPaneId === "unknown") && usage.model) {
+          // Fallback: find pane by model name (imprecise if multiple panes share a model)
           for (const [pid, cfg] of ctx.paneConfigs) {
             if (cfg.model === usage.model) {
               resolvedPaneId = pid;
@@ -98,7 +98,7 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
           model: usage.model || paneCfg?.model || "unknown",
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
-          agentId: paneCfg?.agent || resolvedPaneId,
+          agentId: paneCfg?.agent || (resolvedPaneId !== "unknown" ? resolvedPaneId : undefined),
           workspace,
           taskId: paneCfg?.taskId,
         });

@@ -244,13 +244,15 @@ export async function spawnPaneInternal(
         // Use registerAnthropicTarget() for per-token routing — no shared-state race condition.
         const realBaseUrl = (env["ANTHROPIC_BASE_URL"] as string) || provider?.baseUrl || "https://api.anthropic.com";
         const tokenKey = env["ANTHROPIC_API_KEY"] || env["ANTHROPIC_AUTH_TOKEN"] || null;
-        ctx.apiProxy?.registerAnthropicTarget(tokenKey, realBaseUrl);
+        ctx.apiProxy?.registerAnthropicTarget(tokenKey, realBaseUrl, paneId);
         env["ANTHROPIC_BASE_URL"] = ctx.apiProxyUrl;
         log.info(`[spawnPaneInternal] API Proxy redirect (Anthropic): ${realBaseUrl} → ${ctx.apiProxyUrl}`);
       }
       if (isGeminiCompat) {
         const realGeminiUrl = env["GEMINI_BASE_URL"] || provider?.baseUrl || "https://generativelanguage.googleapis.com";
         ctx.apiProxy?.setGeminiTargetUrl(realGeminiUrl);
+        const geminiKeyForAttrib = env["GEMINI_API_KEY"] || env["GOOGLE_API_KEY"] || env["ANTHROPIC_API_KEY"] || null;
+        ctx.apiProxy?.registerGeminiPane(paneId, geminiKeyForAttrib);
         env["GEMINI_BASE_URL"] = ctx.apiProxyUrl;
         // Also set OPENAI_BASE_URL — OpenClaude's Gemini adapter validates via OpenAI-compatible /v1/models
         env["OPENAI_BASE_URL"] = ctx.apiProxyUrl;
@@ -260,7 +262,7 @@ export async function spawnPaneInternal(
       if (isOpenAICompat) {
         const realBaseUrl = env["OPENAI_BASE_URL"] || provider?.baseUrl || "https://api.openai.com/v1";
         const tokenKey = env["OPENAI_API_KEY"] || null;
-        ctx.apiProxy?.registerOpenAITarget(tokenKey, realBaseUrl);
+        ctx.apiProxy?.registerOpenAITarget(tokenKey, realBaseUrl, paneId);
         env["OPENAI_BASE_URL"] = ctx.apiProxyUrl;
         log.info(`[spawnPaneInternal] API Proxy redirect (OpenAI-compat): ${realBaseUrl} → ${ctx.apiProxyUrl}`);
 
@@ -271,7 +273,7 @@ export async function spawnPaneInternal(
         const isOpenRouter = (provider?.id ?? "").startsWith("openrouter") || (provider?.baseUrl || "").toLowerCase().includes("openrouter");
         if (isOpenRouter && model?.startsWith("anthropic/")) {
           const orBaseUrl = provider?.baseUrl || "https://openrouter.ai/api/v1";
-          ctx.apiProxy?.registerAnthropicTarget(tokenKey, orBaseUrl);
+          ctx.apiProxy?.registerAnthropicTarget(tokenKey, orBaseUrl, paneId);
           env["ANTHROPIC_BASE_URL"] = ctx.apiProxyUrl;
           log.info(`[spawnPaneInternal] API Proxy redirect (OpenRouter→Anthropic): ${orBaseUrl} → ${ctx.apiProxyUrl}`);
         }

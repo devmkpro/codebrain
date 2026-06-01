@@ -58,10 +58,18 @@ class ApiProxy {
     this._tokenTargetMap = new Map();
     // Fallback for OAuth users (no stable token key)
     this._oauthTarget = null;
+    // Per-token → paneId attribution: Map<tokenPrefix(20 chars), paneId>
+    this._tokenPaneMap = new Map();
+    this._oauthPaneId = null;
     // Per-token routing for OpenAI-compatible providers (OpenRouter, OpenAI, DeepSeek, etc.)
     // Parallel to _tokenTargetMap but for OpenAI-compat targets instead of Anthropic.
     this._openaiTokenTargetMap = new Map();
     this._openaiOauthTarget = null;
+    // Per-token → paneId attribution for OpenAI-compat providers
+    this._openaiTokenPaneMap = new Map();
+    this._openaiOauthPaneId = null;
+    // Gemini-compat pane attribution (one global slot — only one Gemini key per app)
+    this._geminiPaneId = null;
     // Stores thoughtSignature from Gemini response parts, keyed by tool call ID.
     this._thoughtSignatures = new Map();
   }
@@ -138,8 +146,9 @@ class ApiProxy {
    *
    * @param {string|null} tokenOrKey - API key or auth token (null = OAuth user)
    * @param {string} targetUrl - Real API base URL for this token
+   * @param {string} [paneId] - Optional pane ID for token attribution
    */
-  registerAnthropicTarget(tokenOrKey, targetUrl) {
+  registerAnthropicTarget(tokenOrKey, targetUrl, paneId) {
     if (!targetUrl) return;
     if (tokenOrKey) {
       const prefix = String(tokenOrKey).slice(0, 20);
@@ -148,12 +157,14 @@ class ApiProxy {
         console.log(`${LOG_PREFIX} Registered Anthropic route: [${prefix}...] → ${targetUrl}`);
         this._tokenTargetMap.set(prefix, targetUrl);
       }
+      if (paneId) this._tokenPaneMap.set(prefix, paneId);
     } else {
       // OAuth users: no stable token, use a shared OAuth slot
       if (this._oauthTarget !== targetUrl) {
         console.log(`${LOG_PREFIX} Registered Anthropic OAuth route → ${targetUrl}`);
         this._oauthTarget = targetUrl;
       }
+      if (paneId) this._oauthPaneId = paneId;
     }
   }
 
@@ -175,14 +186,30 @@ class ApiProxy {
   }
 
   /**
+   * Resolve the pane ID for an incoming Anthropic request.
+   * @param {http.IncomingMessage} req
+   * @returns {string|null}
+   */
+  _resolveAnthropicPaneId(req) {
+    const auth = req.headers["x-api-key"] || req.headers["authorization"] || "";
+    const token = auth.replace(/^Bearer /i, "").trim();
+    if (token) {
+      const prefix = token.slice(0, 20);
+      if (this._tokenPaneMap.has(prefix)) return this._tokenPaneMap.get(prefix);
+    }
+    return this._oauthPaneId || null;
+  }
+
+  /**
    * Register a per-token OpenAI-compatible target URL.
    * Used for OpenRouter, OpenAI, DeepSeek, Mistral, xAI, etc.
    * Mirrors registerAnthropicTarget() but for OpenAI-compat providers.
    *
    * @param {string|null} tokenOrKey - API key (null = no key)
    * @param {string} targetUrl - Real API base URL for this token
+   * @param {string} [paneId] - Optional pane ID for token attribution
    */
-  registerOpenAITarget(tokenOrKey, targetUrl) {
+  registerOpenAITarget(tokenOrKey, targetUrl, paneId) {
     if (!targetUrl) return;
     if (tokenOrKey) {
       const prefix = String(tokenOrKey).slice(0, 20);
@@ -191,11 +218,29 @@ class ApiProxy {
         console.log(`${LOG_PREFIX} Registered OpenAI-compat route: [${prefix}...] → ${targetUrl}`);
         this._openaiTokenTargetMap.set(prefix, targetUrl);
       }
+      if (paneId) this._openaiTokenPaneMap.set(prefix, paneId);
     } else {
       if (this._openaiOauthTarget !== targetUrl) {
         console.log(`${LOG_PREFIX} Registered OpenAI-compat default route → ${targetUrl}`);
         this._openaiOauthTarget = targetUrl;
       }
+      if (paneId) this._openaiOauthPaneId = paneId;
+    }
+  }
+
+  /**
+   * Register the pane ID for Gemini-compat requests.
+   * Also registers per-API-key attribution if a key is provided.
+   * @param {string} paneId
+   * @param {string} [apiKey] - Optional Gemini API key for per-key attribution
+   */
+  registerGeminiPane(paneId, apiKey) {
+    if (!paneId) return;
+    this._geminiPaneId = paneId;
+    if (apiKey) {
+      const prefix = String(apiKey).slice(0, 20);
+      this._tokenPaneMap.set(prefix, paneId);
+      console.log(`${LOG_PREFIX} Registered Gemini pane: [${prefix}...] → paneId=${paneId}`);
     }
   }
 
@@ -222,6 +267,21 @@ class ApiProxy {
    */
   _hasOpenAITarget(req) {
     return this._resolveOpenAITarget(req) !== null;
+  }
+
+  /**
+   * Resolve the pane ID for an incoming OpenAI-compat request.
+   * @param {http.IncomingMessage} req
+   * @returns {string|null}
+   */
+  _resolveOpenAIPaneId(req) {
+    const auth = req.headers["authorization"] || "";
+    const token = auth.replace(/^Bearer /i, "").trim();
+    if (token) {
+      const prefix = token.slice(0, 20);
+      if (this._openaiTokenPaneMap.has(prefix)) return this._openaiTokenPaneMap.get(prefix);
+    }
+    return this._openaiOauthPaneId || null;
   }
 
   /**
@@ -274,7 +334,7 @@ class ApiProxy {
    * Translates OpenAI format → Gemini native format, forwards to Gemini API,
    * and translates the response back to OpenAI format.
    */
-  _handleOpenAIChatProxy(req, res) {
+  _handleOpenAIChatProxy(req, res, paneId) {
     const bodyChunks = [];
     req.on("data", (chunk) => bodyChunks.push(chunk));
     req.on("end", () => {
@@ -349,9 +409,9 @@ class ApiProxy {
           return;
         }
         if (isStreaming) {
-          this._handleGeminiToOpenAIStream(proxyRes, res, model);
+          this._handleGeminiToOpenAIStream(proxyRes, res, model, paneId);
         } else {
-          this._handleGeminiToOpenAIJson(proxyRes, res, model);
+          this._handleGeminiToOpenAIJson(proxyRes, res, model, paneId);
         }
       });
 
@@ -537,7 +597,7 @@ class ApiProxy {
   /**
    * Handle non-streaming Gemini response → convert to OpenAI format.
    */
-  _handleGeminiToOpenAIJson(proxyRes, res, model) {
+  _handleGeminiToOpenAIJson(proxyRes, res, model, paneId) {
     const chunks = [];
     proxyRes.on("data", (chunk) => chunks.push(chunk));
     proxyRes.on("end", () => {
@@ -549,7 +609,7 @@ class ApiProxy {
 
         // Report token usage
         if (openaiResp.usage) {
-          this._report(model, openaiResp.usage.prompt_tokens || 0, openaiResp.usage.completion_tokens || 0);
+          this._report(model, openaiResp.usage.prompt_tokens || 0, openaiResp.usage.completion_tokens || 0, paneId);
         }
 
         if (!res.headersSent) {
@@ -583,7 +643,7 @@ class ApiProxy {
    * Handle streaming Gemini SSE response → convert to OpenAI SSE format.
    * Supports text content and function call (tool_calls) streaming.
    */
-  _handleGeminiToOpenAIStream(proxyRes, res, model) {
+  _handleGeminiToOpenAIStream(proxyRes, res, model, paneId) {
     if (!res.headersSent) {
       try {
         res.writeHead(200, {
@@ -761,7 +821,7 @@ class ApiProxy {
           usage: { prompt_tokens: inputTokens, completion_tokens: outputTokens, total_tokens: inputTokens + outputTokens },
         };
         safeWrite(`data: ${JSON.stringify(usageChunk)}\n\n`);
-        this._report(model, inputTokens, outputTokens);
+        this._report(model, inputTokens, outputTokens, paneId);
       }
       safeWrite("data: [DONE]\n\n");
       try { res.end(); } catch {}
@@ -898,6 +958,15 @@ class ApiProxy {
     const hasKeyParam = urlObj.searchParams.has("key");
     console.log(`${LOG_PREFIX} → ${req.method} ${req.url} | gemini=${isGemini} | openai=${isOpenAI} | authHeaders=${JSON.stringify(authHeaders)} | keyParam=${hasKeyParam}`);
 
+    // Resolve pane ID for attribution — used by all downstream handlers.
+    // For Gemini-compat requests (OpenAI→Gemini translation path), the auth key
+    // is the Gemini/Google API key stored in _tokenPaneMap via registerGeminiPane().
+    const resolvedPaneId = isGemini
+      ? (this._resolveAnthropicPaneId(req) || this._geminiPaneId || "unknown")
+      : this._hasOpenAITarget(req)
+        ? (this._resolveOpenAIPaneId(req) || "unknown")
+        : (this._resolveAnthropicPaneId(req) || this._geminiPaneId || "unknown");
+
     // Handle OpenAI-compatible requests:
     // - If an OpenAI-compat target is registered (OpenRouter, OpenAI, DeepSeek, etc.),
     //   forward as-is (passthrough) with usage extraction.
@@ -910,7 +979,7 @@ class ApiProxy {
       if (/^\/?(v1\/)?models(\?|$)/.test(req.url || "")) {
         if (hasOpenAITarget) {
           // True OpenAI-compat provider: forward /v1/models to the real endpoint
-          this._handleOpenAIProxyPassthrough(req, res);
+          this._handleOpenAIProxyPassthrough(req, res, resolvedPaneId);
         } else {
           // Gemini adapter health check — return hardcoded Gemini model list
           this._handleOpenAIModelsRequest(req, res);
@@ -922,10 +991,10 @@ class ApiProxy {
       if (/^\/?(v1\/)?chat\/completions/.test(req.url || "")) {
         if (hasOpenAITarget) {
           // True OpenAI-compat provider: forward as-is (passthrough with usage extraction)
-          this._handleOpenAIProxyPassthrough(req, res);
+          this._handleOpenAIProxyPassthrough(req, res, resolvedPaneId);
         } else {
           // Gemini adapter: translate OpenAI → Gemini native format
-          this._handleOpenAIChatProxy(req, res);
+          this._handleOpenAIChatProxy(req, res, resolvedPaneId);
         }
         return;
       }
@@ -1003,11 +1072,11 @@ class ApiProxy {
           console.warn(`${LOG_PREFIX}   ⚠ Auth error from upstream! Headers sent: ${JSON.stringify(Object.keys(headers))}`);
         }
         if (isGemini) {
-          this._handleGeminiResponse(proxyRes, res, requestModel, bodyIsStreaming);
+          this._handleGeminiResponse(proxyRes, res, requestModel, bodyIsStreaming, resolvedPaneId);
         } else if (bodyIsStreaming) {
-          this._handleAnthropicStreamingResponse(proxyRes, res, requestModel);
+          this._handleAnthropicStreamingResponse(proxyRes, res, requestModel, resolvedPaneId);
         } else {
-          this._handleAnthropicJsonResponse(proxyRes, res, requestModel);
+          this._handleAnthropicJsonResponse(proxyRes, res, requestModel, resolvedPaneId);
         }
       });
 
@@ -1041,7 +1110,7 @@ class ApiProxy {
    * Unlike _handleOpenAIChatProxy (which translates to Gemini), this passes through
    * the request unchanged — used for OpenRouter, OpenAI, DeepSeek, etc.
    */
-  _handleOpenAIProxyPassthrough(req, res) {
+  _handleOpenAIProxyPassthrough(req, res, paneId) {
     const targetUrl = this._resolveOpenAITarget(req);
     if (!targetUrl) {
       console.error(`${LOG_PREFIX} _handleOpenAIProxyPassthrough called but no OpenAI target registered`);
@@ -1103,9 +1172,9 @@ class ApiProxy {
         }
 
         if (isStreaming) {
-          this._handleOpenAIStreamingPassthrough(proxyRes, res, requestModel);
+          this._handleOpenAIStreamingPassthrough(proxyRes, res, requestModel, paneId);
         } else {
-          this._handleOpenAIJsonPassthrough(proxyRes, res, requestModel);
+          this._handleOpenAIJsonPassthrough(proxyRes, res, requestModel, paneId);
         }
       });
 
@@ -1131,7 +1200,7 @@ class ApiProxy {
   /**
    * Handle non-streaming OpenAI-compatible response — forward as-is and extract usage.
    */
-  _handleOpenAIJsonPassthrough(proxyRes, res, model) {
+  _handleOpenAIJsonPassthrough(proxyRes, res, model, paneId) {
     const chunks = [];
     proxyRes.on("data", (chunk) => chunks.push(chunk));
     proxyRes.on("end", () => {
@@ -1152,7 +1221,7 @@ class ApiProxy {
       // Extract usage from standard OpenAI format: usage.prompt_tokens / usage.completion_tokens
       try {
         const json = JSON.parse(body.toString());
-        this._extractOpenAIUsage(json, model);
+        this._extractOpenAIUsage(json, model, paneId);
       } catch {}
     });
   }
@@ -1163,7 +1232,7 @@ class ApiProxy {
    * Usage may appear in the last chunk's `usage` field (when stream_options.include_usage=true)
    * or not at all — we extract what's available.
    */
-  _handleOpenAIStreamingPassthrough(proxyRes, res, model) {
+  _handleOpenAIStreamingPassthrough(proxyRes, res, model, paneId) {
     if (!res.headersSent) {
       try { res.writeHead(proxyRes.statusCode, proxyRes.headers); } catch (e) {
         console.warn(`${LOG_PREFIX} Failed to writeHead (OpenAI-compat stream):`, e.code || e.message);
@@ -1222,7 +1291,7 @@ class ApiProxy {
       try { res.end(); } catch {}
 
       if (inputTokens > 0 || outputTokens > 0) {
-        this._report(detectedModel || model, inputTokens, outputTokens);
+        this._report(detectedModel || model, inputTokens, outputTokens, paneId);
       }
     });
   }
@@ -1231,13 +1300,13 @@ class ApiProxy {
    * Extract token usage from a non-streaming OpenAI-compatible response.
    * Standard format: { usage: { prompt_tokens: N, completion_tokens: N } }
    */
-  _extractOpenAIUsage(json, model) {
+  _extractOpenAIUsage(json, model, paneId) {
     if (!json.usage) return;
     const inputTokens = json.usage.prompt_tokens || 0;
     const outputTokens = json.usage.completion_tokens || 0;
     const detectedModel = json.model || model;
     if (inputTokens > 0 || outputTokens > 0) {
-      this._report(detectedModel, inputTokens, outputTokens);
+      this._report(detectedModel, inputTokens, outputTokens, paneId);
     }
   }
 
@@ -1248,7 +1317,7 @@ class ApiProxy {
   /**
    * Handle a non-streaming Anthropic JSON response.
    */
-  _handleAnthropicJsonResponse(proxyRes, res, model) {
+  _handleAnthropicJsonResponse(proxyRes, res, model, paneId) {
     const chunks = [];
     proxyRes.on("data", (chunk) => chunks.push(chunk));
     proxyRes.on("end", () => {
@@ -1266,7 +1335,7 @@ class ApiProxy {
 
       try {
         const json = JSON.parse(body.toString());
-        this._extractAnthropicUsage(json, model);
+        this._extractAnthropicUsage(json, model, paneId);
         // Log helpful message when MIMO returns "Not supported model"
         if (proxyRes.statusCode === 400) {
           const errMsg = json?.error?.message || json?.message || "";
@@ -1284,7 +1353,7 @@ class ApiProxy {
   /**
    * Handle a streaming Anthropic SSE response.
    */
-  _handleAnthropicStreamingResponse(proxyRes, res, model) {
+  _handleAnthropicStreamingResponse(proxyRes, res, model, paneId) {
     if (!res.headersSent) {
       try { res.writeHead(proxyRes.statusCode, proxyRes.headers); } catch (e) {
         console.warn(`${LOG_PREFIX} Failed to writeHead (Anthropic stream):`, e.code || e.message);
@@ -1315,7 +1384,7 @@ class ApiProxy {
         }
       }
       if (accumulated.inputTokens > 0 || accumulated.outputTokens > 0) {
-        this._report(accumulated.model || model, accumulated.inputTokens, accumulated.outputTokens);
+        this._report(accumulated.model || model, accumulated.inputTokens, accumulated.outputTokens, paneId);
       }
     });
   }
@@ -1323,7 +1392,7 @@ class ApiProxy {
   /**
    * Extract token usage from a non-streaming Anthropic response.
    */
-  _extractAnthropicUsage(json, model) {
+  _extractAnthropicUsage(json, model, paneId) {
     let inputTokens = 0;
     let outputTokens = 0;
     // Prefer the REQUEST model — MIMO/other Anthropic-compatible providers may return
@@ -1344,7 +1413,7 @@ class ApiProxy {
     if (!detectedModel && json.message?.model) detectedModel = json.message.model;
 
     if (inputTokens > 0 || outputTokens > 0) {
-      this._report(detectedModel, inputTokens, outputTokens);
+      this._report(detectedModel, inputTokens, outputTokens, paneId);
     }
   }
 
@@ -1395,18 +1464,18 @@ class ApiProxy {
    * Streaming response (alt=sse):
    *   Each SSE data: line contains a JSON chunk, the last one has usageMetadata.
    */
-  _handleGeminiResponse(proxyRes, res, model, isStreaming) {
+  _handleGeminiResponse(proxyRes, res, model, isStreaming, paneId) {
     if (isStreaming) {
-      this._handleGeminiStreamingResponse(proxyRes, res, model);
+      this._handleGeminiStreamingResponse(proxyRes, res, model, paneId);
     } else {
-      this._handleGeminiJsonResponse(proxyRes, res, model);
+      this._handleGeminiJsonResponse(proxyRes, res, model, paneId);
     }
   }
 
   /**
    * Handle a non-streaming Gemini JSON response.
    */
-  _handleGeminiJsonResponse(proxyRes, res, model) {
+  _handleGeminiJsonResponse(proxyRes, res, model, paneId) {
     const chunks = [];
     proxyRes.on("data", (chunk) => chunks.push(chunk));
     proxyRes.on("end", () => {
@@ -1424,7 +1493,7 @@ class ApiProxy {
 
       try {
         const json = JSON.parse(body.toString());
-        this._extractGeminiUsage(json, model);
+        this._extractGeminiUsage(json, model, paneId);
       } catch {}
     });
   }
@@ -1434,7 +1503,7 @@ class ApiProxy {
    * Gemini streaming sends newline-delimited JSON objects.
    * The last chunk contains the usageMetadata.
    */
-  _handleGeminiStreamingResponse(proxyRes, res, model) {
+  _handleGeminiStreamingResponse(proxyRes, res, model, paneId) {
     if (!res.headersSent) {
       try { res.writeHead(proxyRes.statusCode, proxyRes.headers); } catch (e) {
         console.warn(`${LOG_PREFIX} Failed to writeHead (Gemini stream):`, e.code || e.message);
@@ -1496,7 +1565,7 @@ class ApiProxy {
       }
 
       if (inputTokens > 0 || outputTokens > 0) {
-        this._report(detectedModel || model, inputTokens, outputTokens);
+        this._report(detectedModel || model, inputTokens, outputTokens, paneId);
       }
     });
   }
@@ -1504,7 +1573,7 @@ class ApiProxy {
   /**
    * Extract token usage from a non-streaming Gemini response.
    */
-  _extractGeminiUsage(json, model) {
+  _extractGeminiUsage(json, model, paneId) {
     const usage = json.usageMetadata;
     if (!usage) return;
 
@@ -1513,7 +1582,7 @@ class ApiProxy {
     const detectedModel = json.modelVersion || model;
 
     if (inputTokens > 0 || outputTokens > 0) {
-      this._report(detectedModel, inputTokens, outputTokens);
+      this._report(detectedModel, inputTokens, outputTokens, paneId);
     }
   }
 
@@ -1526,16 +1595,17 @@ class ApiProxy {
    * @param {string} model
    * @param {number} inputTokens
    * @param {number} outputTokens
+   * @param {string} [paneId] - Resolved pane ID (or "unknown" if not available)
    */
-  _report(model, inputTokens, outputTokens) {
+  _report(model, inputTokens, outputTokens, paneId) {
     this.onTokenUsage({
-      paneId: "unknown", // Pane attribution handled by mcp.ts callback
+      paneId: paneId || "unknown",
       model,
       inputTokens,
       outputTokens,
     });
     console.log(
-      `${LOG_PREFIX} Token usage: model=${model} input=${inputTokens} output=${outputTokens}`
+      `${LOG_PREFIX} Token usage: model=${model} input=${inputTokens} output=${outputTokens} paneId=${paneId || "unknown"}`
     );
   }
 
