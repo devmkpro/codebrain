@@ -1,9 +1,24 @@
 "use strict";
 
 const http = require("http");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
 const { randomUUID } = require("node:crypto");
-const { createCodebrainMCPServer, registerBrowserTools } = require("./index.js");
+const { createCodebrainMCPServer, registerBrowserTools, registerChromeTools } = require("./index.js");
 const { createMCPBridge } = require("./bridge.js");
+
+/**
+ * Persist the active MCP port to ~/.codebrain/mcp-port so CLIs can
+ * discover the correct URL even when the port falls back to a random one.
+ */
+function saveMcpPort(port) {
+  try {
+    const dir = path.join(os.homedir(), ".codebrain");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "mcp-port"), String(port), "utf-8");
+  } catch {}
+}
 
 /**
  * Starts the CodeBrain MCP server on a local HTTP port.
@@ -19,6 +34,7 @@ async function startMCPServer(ptyManager, opts = {}) {
   const bridge = createMCPBridge(ptyManager, opts);
   const mcpServer = createCodebrainMCPServer(bridge);
   registerBrowserTools(mcpServer, bridge);
+  registerChromeTools(mcpServer, bridge);
 
   // Use CJS require (not ESM import) so it works inside Electron asar in production builds
   const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
@@ -172,6 +188,7 @@ async function startMCPServer(ptyManager, opts = {}) {
         console.log(`[MCP] CodeBrain MCP server listening on http://127.0.0.1:${actualPort}`);
         console.log(`[MCP]   SSE: ${info.sseUrl}`);
         console.log(`[MCP]   Streamable HTTP: ${info.streamableHttpUrl}`);
+        saveMcpPort(actualPort);
         resolve(info);
       });
       server.on("error", (err) => {

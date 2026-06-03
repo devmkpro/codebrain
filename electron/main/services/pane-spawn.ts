@@ -352,7 +352,7 @@ export async function spawnPaneInternal(
       }
 
       // System prompt: Kimi has --skills-dir to load skills from a custom directory.
-      // Write the Codebrain system prompt as a Kimi skill and point --skills-dir at it.
+      // Write the Codebrain system prompt + all .codebrain/skills/ as Kimi-native skills.
       if (!args.includes("--skills-dir")) {
         try {
           const promptFile = buildSystemPrompt(ctx, {
@@ -360,16 +360,45 @@ export async function spawnPaneInternal(
           });
           const promptContent = fs.readFileSync(promptFile, "utf-8");
           const skillsDir = path.join(cwd, ".codebrain", "tmp", `kimi-skills-${paneId}`);
-          const skillDir = path.join(skillsDir, "codebrain");
-          fs.mkdirSync(skillDir, { recursive: true });
-          fs.writeFileSync(path.join(skillDir, "skill.json"), JSON.stringify({
+
+          // 1. "codebrain" skill = full system prompt (context + MCP tools guide)
+          const codebrainSkillDir = path.join(skillsDir, "codebrain");
+          fs.mkdirSync(codebrainSkillDir, { recursive: true });
+          fs.writeFileSync(path.join(codebrainSkillDir, "skill.json"), JSON.stringify({
             id: "codebrain", name: "Codebrain Context", type: "prompt",
             description: "Codebrain workspace context and MCP tools guide",
             triggers: [],
           }, null, 2), "utf-8");
-          fs.writeFileSync(path.join(skillDir, "prompt.md"), promptContent, "utf-8");
+          fs.writeFileSync(path.join(codebrainSkillDir, "prompt.md"), promptContent, "utf-8");
+
+          // 2. Copy real .codebrain/skills/* so Kimi can invoke them natively
+          const cbSkillsSources = [
+            path.join(cwd, ".codebrain", "skills"),
+            path.join(os.homedir(), ".codebrain", "skills"),
+          ];
+          const copiedIds = new Set<string>(["codebrain"]); // avoid overwriting system prompt skill
+          for (const srcDir of cbSkillsSources) {
+            if (!fs.existsSync(srcDir)) continue;
+            for (const entry of fs.readdirSync(srcDir)) {
+              const entryPath = path.join(srcDir, entry);
+              const manifestPath = path.join(entryPath, "skill.json");
+              if (!fs.existsSync(manifestPath)) continue;
+              try {
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+                if (!manifest.id || copiedIds.has(manifest.id)) continue;
+                copiedIds.add(manifest.id);
+                const destSkillDir = path.join(skillsDir, manifest.id);
+                fs.mkdirSync(destSkillDir, { recursive: true });
+                // Copy all files in the skill dir
+                for (const file of fs.readdirSync(entryPath)) {
+                  fs.copyFileSync(path.join(entryPath, file), path.join(destSkillDir, file));
+                }
+              } catch {}
+            }
+          }
+
           args.push("--skills-dir", skillsDir);
-          log.info("[spawnPaneInternal] Kimi skills dir:", skillsDir);
+          log.info(`[spawnPaneInternal] Kimi skills dir: ${skillsDir} (${copiedIds.size} skills)`);
         } catch (e) {
           log.warn("[spawnPaneInternal] Failed to write Kimi skills dir:", e);
         }
