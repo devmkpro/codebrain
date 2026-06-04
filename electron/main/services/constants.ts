@@ -26,7 +26,7 @@ export interface ProviderTemplate {
 export const PROVIDER_REGISTRY: ProviderTemplate[] = [
   {
     id: "mimo",
-    label: "MIMO",
+    label: "MIMO via OpenClaude",
     icon: "MIMO",
     type: "mimo-compat",
     host: "openclaude",
@@ -35,6 +35,18 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     models: ["mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"],
     labelIncludes: ["mimo"],
     idIncludes: ["mimo"],
+  },
+  {
+    id: "mimo-claude",
+    label: "MIMO via Claude",
+    icon: "MIMO",
+    type: "anthropic-compat",
+    host: "claude",
+    baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+    tokenEnvVar: "ANTHROPIC_AUTH_TOKEN", // Overclock pattern: Claude CLI reads ANTHROPIC_AUTH_TOKEN directly
+    models: ["mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"],
+    labelIncludes: ["mimo"],
+    idIncludes: ["mimo-claude"],
   },
   {
     id: "gemini",
@@ -98,7 +110,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
   },
   {
     id: "codex-oauth",
-    label: "Codex (ChatGPT)",
+    label: "Codex (Plano)",
     icon: "OAI",
     type: "codex",
     host: "codex",
@@ -247,7 +259,7 @@ export const MODEL_MAP_BY_TYPE: Record<string, string[]> = Object.fromEntries(
 /** Reverse lookup: model name → provider type */
 const MODEL_TO_TYPE: Record<string, string> = {};
 for (const tpl of PROVIDER_REGISTRY) {
-  if (tpl.type === "oauth" || tpl.type === "gemini-cli") continue; // Skip virtual providers — models overlap
+  if (tpl.type === "oauth" || tpl.type === "gemini-cli" || tpl.id === "mimo-claude") continue; // Skip virtual providers — models overlap
   for (const m of tpl.models) {
     MODEL_TO_TYPE[m] = tpl.type;
   }
@@ -304,7 +316,7 @@ export const CLAUDE_OAUTH_MODELS = PROVIDER_REGISTRY.find(t => t.id === "claude-
 // Derived from PROVIDER_REGISTRY. When adding a new provider, the registry is
 // the single source — this is auto-generated from it for UI compatibility.
 export const BUILTIN_TEMPLATES = PROVIDER_REGISTRY
-  .filter(t => t.id !== "claude-oauth" && t.id !== "codex-oauth" && t.id !== "gemini-cli") // virtual providers, not user-configurable templates
+  .filter(t => t.id !== "claude-oauth" && t.id !== "codex-oauth" && t.id !== "gemini-cli" && t.id !== "mimo-claude") // virtual providers, not user-configurable templates
   .map(t => ({
     id: t.id,
     label: t.label,

@@ -367,6 +367,27 @@ function PaneMenu({
   const navigateInActiveTab = useNavStore(s => s.navigateInActiveTab);
   const favoritePane = React.useRef<any>(null);
   const [favLoaded, setFavLoaded] = React.useState(false);
+  const [modelSearch, setModelSearch] = React.useState('');
+  const [collapsedProviders, setCollapsedProviders] = React.useState<Record<string, boolean>>(() => {
+    // Collapse all providers by default if there are many (>= 2)
+    return {};
+  });
+  const searchRef = React.useRef<HTMLInputElement>(null);
+
+  // Auto-focus search when opened; auto-expand providers when searching
+  React.useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  const toggleProvider = (pid: string) => {
+    setCollapsedProviders(prev => ({ ...prev, [pid]: !prev[pid] }));
+  };
+
+  const isProviderCollapsed = (pid: string) => {
+    // If user never toggled, default: collapse when there are >= 2 providers
+    if (pid in collapsedProviders) return collapsedProviders[pid];
+    return providers.length >= 2;
+  };
 
   // Pricing from cost-tracker (single source of truth — packages/mcp/bridge/cost-tracker.js)
   const costModels = useCostStore(s => s.models);
@@ -435,6 +456,36 @@ function PaneMenu({
     { id: 'plan', label: 'Plan', cls: (a: boolean) => a ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'border-white/10 text-slate-600 hover:text-indigo-400' },
   ];
 
+  // Sort providers intelligently:
+  // 1. OAuth/native plan (claude-oauth) first
+  // 2. Native CLI agents (codex, gemini-cli, kimi, cursor, copilot) — by model count desc
+  // 3. Compat adapters (anthropic-compat, mimo-compat) — by model count desc
+  // 4. Generic API / openai-compat — by model count desc
+  const NATIVE_CLI_KEYWORDS = ['codex', 'gemini cli', 'gemini-cli', 'kimi', 'cursor', 'copilot', 'github'];
+  const providerSortKey = (p: any): number => {
+    if (p.type === 'oauth') return 0;
+    const label = (p.label ?? '').toLowerCase();
+    const isNativeCli = NATIVE_CLI_KEYWORDS.some(k => label.includes(k));
+    if (isNativeCli) return 1;
+    if (p.type === 'anthropic-compat' || p.type === 'mimo-compat') return 2;
+    return 3;
+  };
+  const sortedProviders = [...providers].sort((a, b) => {
+    const ga = providerSortKey(a), gb = providerSortKey(b);
+    if (ga !== gb) return ga - gb;
+    // within same group: more models first
+    return (b.models?.length ?? 0) - (a.models?.length ?? 0);
+  });
+
+  // Filter models across all providers by search term
+  const searchLower = modelSearch.trim().toLowerCase();
+  const filteredProviders = sortedProviders.map(p => {
+    const models = p.models ?? [];
+    if (!searchLower) return { ...p, filteredModels: models };
+    const filteredModels = models.filter((m: string) => m.toLowerCase().includes(searchLower));
+    return { ...p, filteredModels };
+  }).filter(p => !searchLower || p.filteredModels.length > 0 || (p.label as string).toLowerCase().includes(searchLower));
+
   return (
     <>
       <div className="fixed top-[90px] right-2 w-72 max-h-[calc(100vh-100px)] bg-[#0c0c14] border border-white/[0.08] rounded-xl shadow-2xl z-[10000] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
@@ -461,36 +512,68 @@ function PaneMenu({
         </button>
 
         {/* AI Providers */}
-        <p className="px-3 pt-2 pb-0.5 font-mono text-[9px] text-slate-600 uppercase tracking-widest">Agente</p>
+        <div className="px-3 pt-2 pb-1 border-t border-white/5 flex items-center gap-2">
+          <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest">Agente</p>
+          {providers.length > 0 && (
+            <input
+              ref={searchRef}
+              value={modelSearch}
+              onChange={e => setModelSearch(e.target.value)}
+              placeholder="buscar modelo…"
+              className="ml-auto flex-1 bg-white/[0.04] border border-white/[0.08] rounded px-2 py-0.5 font-mono text-[9px] text-slate-300 placeholder-slate-700 outline-none focus:border-indigo-500/40 focus:bg-indigo-500/5 transition-all"
+              onKeyDown={e => e.key === 'Escape' && (modelSearch ? setModelSearch('') : onClose())}
+            />
+          )}
+        </div>
         {providers.length === 0 && (
           <p className="px-3 py-2 font-mono text-[10px] text-slate-700">Nenhum provider configurado</p>
         )}
-        {providers.map(p => {
+        {filteredProviders.map(p => {
           // Always pass the actual provider ID — backend needs it to resolve the correct provider.
           // For claude-oauth (Claude CLI), backend will use agent: "claude" with native OAuth.
           // For anthropic (API key), backend will use agent: "openclaude" with Anthropic provider.
           const pid = p.id;
-          const models = p.models ?? [];
+          const models: string[] = p.filteredModels ?? [];
+          const allModels: string[] = p.models ?? [];
+          const collapsed = !searchLower && isProviderCollapsed(pid);
           return (
             <div key={p.id} className="border-b border-white/5">
-              <div className="px-3 pt-1.5 pb-0.5 flex items-center justify-between">
+              <button
+                onClick={() => !searchLower && toggleProvider(pid)}
+                className={`w-full px-3 pt-1.5 pb-1 flex items-center justify-between gap-2 transition-colors ${!searchLower ? 'hover:bg-white/[0.03] cursor-pointer' : 'cursor-default'}`}
+              >
                 <span className="font-mono text-[10px] font-bold text-indigo-400 truncate">{p.label}</span>
-                <span className="font-mono text-[9px] text-slate-600 ml-2">{p.type === 'oauth' ? 'OAuth' : p.type === 'anthropic-compat' ? 'Compat' : 'OpenAI'}</span>
-              </div>
-              {models.length === 0
-                ? <button onClick={() => handleAddPane(pid)} className="w-full text-left px-3 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">+ default</button>
-                : models.map((model: string) => (
-                  <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">
-                    <div className="truncate">+ {model}</div>
-                    {modelPricingLabelFromMap(model, costModels) && (
-                      <div className="font-mono text-[10px] text-emerald-400/70 mt-0.5">{modelPricingLabelFromMap(model, costModels)}</div>
-                    )}
-                  </button>
-                ))
-              }
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {allModels.length > 0 && (
+                    <span className="font-mono text-[9px] text-slate-700">{allModels.length} modelo{allModels.length !== 1 ? 's' : ''}</span>
+                  )}
+                  <span className="font-mono text-[9px] text-slate-600">{p.type === 'oauth' ? 'OAuth' : p.type === 'anthropic-compat' ? 'Compat' : 'OpenAI'}</span>
+                  {!searchLower && (
+                    <span className={`font-mono text-[9px] text-slate-600 transition-transform ${collapsed ? '' : 'rotate-90'}`}>▶</span>
+                  )}
+                </div>
+              </button>
+              {!collapsed && (
+                <>
+                  {models.length === 0
+                    ? <button onClick={() => handleAddPane(pid)} className="w-full text-left px-3 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">+ default</button>
+                    : models.map((model: string) => (
+                      <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">
+                        <div className="truncate">+ {model}</div>
+                        {modelPricingLabelFromMap(model, costModels) && (
+                          <div className="font-mono text-[10px] text-emerald-400/70 mt-0.5">{modelPricingLabelFromMap(model, costModels)}</div>
+                        )}
+                      </button>
+                    ))
+                  }
+                </>
+              )}
             </div>
           );
         })}
+        {searchLower && filteredProviders.length === 0 && (
+          <p className="px-3 py-2 font-mono text-[10px] text-slate-700">Nenhum modelo encontrado</p>
+        )}
         <button onClick={() => { onClose(); m.openProviders('pickTemplate'); }}
           className="w-full text-left px-3 py-2 font-mono text-[10px] text-slate-500 hover:text-slate-300 hover:bg-white/5 border-b border-white/5 transition-all cursor-pointer"
         >⚙ Configurar providers…</button>
