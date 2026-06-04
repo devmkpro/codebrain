@@ -395,21 +395,9 @@ function createCodebrainMCPServer(bridge) {
             });
           }
         } catch {}
-        try {
-          if (bridge.notifyPane) {
-            const now = Date.now();
-            if (!msgNotifyDebounce) msgNotifyDebounce = new Map();
-            const last = msgNotifyDebounce.get(args.to) || 0;
-            if (now - last > 3000) {
-              msgNotifyDebounce.set(args.to, now);
-              const shortFrom = args.from.slice(0, 8);
-              bridge.notifyPane(
-                args.to,
-                `\x1b[33m⚡ MSG [${msgType}] from ${shortFrom} — read: pane_read_messages(${args.to})\x1b[0m`
-              );
-            }
-          }
-        } catch {}
+        // No terminal injection — agents poll via mcp__codebrain__pane_read_messages.
+        // Injecting text into the terminal output causes Claude Code to echo the
+        // message back to the user as chat input (pane_read_messages spam bug).
 
         // ── Desktop notification for incoming message ─────────────────────
         try {
@@ -1336,16 +1324,6 @@ function createCodebrainMCPServer(bridge) {
   server.tool("mcp__codebrain__event_snapshot", "Force a snapshot for an aggregate.", { aggregate_id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventSnapshot(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
   server.tool("mcp__codebrain__event_stats", "Get event sourcing statistics.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventStats(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
 
-  // ── Cost Tracker Tools ─────────────────────────────────────────────────────
-  server.tool("mcp__codebrain__cost_record", "Record token usage for a session. Calculates cost by model.", { session_id: z.string(), model: z.string(), input_tokens: z.number(), output_tokens: z.number(), agent_id: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.recordUsage({ sessionId: args.session_id, model: args.model, inputTokens: args.input_tokens, outputTokens: args.output_tokens, agentId: args.agent_id, workspace: args.workspace }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
-  server.tool("mcp__codebrain__cost_summary", "Get cost summary: total, by model, by agent.", { workspace: z.string().optional(), session_id: z.string().optional(), period: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.summary({ workspace: args.workspace, sessionId: args.session_id, period: args.period }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
-  server.tool("mcp__codebrain__cost_set_budget", "Set budget limits for a workspace.", { workspace: z.string(), daily_limit: z.number().optional(), monthly_limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.setBudget(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
-  server.tool("mcp__codebrain__cost_get_budget", "Get budget status for a workspace.", { workspace: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.getBudget(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
-  server.tool("mcp__codebrain__cost_alerts", "Get recent cost alerts.", { limit: z.number().optional(), type: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.getAlerts(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
-  server.tool("mcp__codebrain__cost_estimate", "Estimate cost for a model before sending.", { model: z.string(), input_tokens: z.number(), output_tokens: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.estimateCost(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
-  server.tool("mcp__codebrain__cost_models", "List all model pricing (per 1M tokens).", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.listModels(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
-  server.tool("mcp__codebrain__cost_set_model", "Set custom pricing for a model (per 1M tokens).", { model: z.string().describe("Model ID (e.g. 'anthropic/claude-sonnet-4')"), input_cost: z.number().describe("Cost per 1M input tokens (USD)"), output_cost: z.number().describe("Cost per 1M output tokens (USD)") }, async ({ model, input_cost, output_cost }) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.setModelCost({ model, inputCost: input_cost, outputCost: output_cost }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
-  server.tool("mcp__codebrain__cost_reset", "Reset cost tracking data.", { confirm: z.boolean(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.costTracker.reset(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });
 
   // ── Pattern Clustering Tools ───────────────────────────────────────────────
   server.tool("mcp__codebrain__worker_pattern_clusters", "Get k-means pattern clusters.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.workerManager.getPatternClusters(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } });

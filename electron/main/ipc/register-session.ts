@@ -249,35 +249,9 @@ ${panesSummary}
   ipcMain.handle("claude:summary", async () => "");
   ipcMain.handle("log:list", async () => []);
 
-  // ── Token/Cost tracking — uses CostTracker singleton ─────────────────
-  ipcMain.handle("tokens:byTask", async (_evt, taskId?: string) => {
-    const tracker = ctx.costTracker;
-    if (!tracker) return {};
-    const result = tracker.taskSummary({ workspace: ctx.currentWorkspacePath });
-    if (!result.ok) return {};
-    if (taskId) {
-      const task = result.data.tasks.find((t: any) => t.taskId === taskId);
-      return task || {};
-    }
-    return result.data;
-  });
-
-  ipcMain.handle("tokens:byWorkspace", async (_evt, sinceMs?: number) => {
-    const tracker = ctx.costTracker;
-    if (!tracker) return {};
-    const period = sinceMs ? "all" : "all";
-    const result = tracker.summary({ workspace: ctx.currentWorkspacePath, period });
-    if (!result.ok) return {};
-    return result.data;
-  });
-
-  ipcMain.handle("tasks:list", async () => {
-    const tracker = ctx.costTracker;
-    if (!tracker) return { tasks: [] };
-    const result = tracker.taskSummary({ workspace: ctx.currentWorkspacePath });
-    if (!result.ok) return { tasks: [] };
-    return result;
-  });
+  ipcMain.handle("tokens:byTask", async () => ({}));
+  ipcMain.handle("tokens:byWorkspace", async () => ({}));
+  ipcMain.handle("tasks:list", async () => ({ tasks: [] }));
 
   // ── Squad Persistence (real implementation) ────────────────────────────
   ipcMain.handle("squads:list", async () => {

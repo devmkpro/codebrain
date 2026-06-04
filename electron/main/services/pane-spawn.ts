@@ -74,21 +74,66 @@ export async function spawnPaneInternal(
     const { nanoid } = await import("nanoid");
     const paneId = config.paneId ?? nanoid();
 
+    // Wait for MCP server — ALL agents need it. Do this once, up front.
+    if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
+      try { await ctx.mcpServerReady; } catch {}
+    }
+
     // MCP config — write .mcp.json to the project CWD so Claude auto-discovers it.
     // Claude Code v2.1 discovers .mcp.json by scanning cwd and parent dirs.
     // We do NOT pass --mcp-config because that flag overrides auto-discovery and
     // only works when the file is in a location Claude specifically trusts.
-    if (isClaudeCompatible && !ctx.mcpServerInfo && ctx.mcpServerReady) {
-      try { await ctx.mcpServerReady; } catch {}
-    }
     if (isClaudeCompatible && ctx.mcpServerInfo && !args.includes("--mcp-config")) {
       const mcpConfigPath = path.join(cwd, ".mcp.json");
-      const mcpContent = JSON.stringify({
-        mcpServers: { codebrain: { type: "sse", url: ctx.mcpServerInfo.sseUrl } },
-      }, null, 2);
+      const mcpServers: Record<string, any> = {
+        codebrain: { type: "sse", url: ctx.mcpServerInfo.sseUrl },
+      };
+
+      // ── Collect all MCPs installed in Claude Code and inject into .mcp.json ──
+      // This ensures OpenClaude/MIMO panes have access to the same MCPs as
+      // the native Claude CLI (Built-in MCPs + user MCPs from ~/.claude.json).
+
+      // 1. Built-in MCPs: detect known native host executables
+      const builtins: Array<{ name: string; batPath: string; npmPkg?: string }> = [
+        { name: "claude-in-chrome", batPath: path.join(os.homedir(), ".claude", "chrome", "chrome-native-host.bat") },
+      ];
+      for (const { name, batPath } of builtins) {
+        if (fs.existsSync(batPath)) {
+          mcpServers[name] = { type: "stdio", command: batPath, args: [] };
+          log.info(`[spawnPaneInternal] Auto-injected built-in MCP: ${name}`);
+        }
+      }
+
+      // 2. User MCPs from ~/.claude.json (global + current project)
+      const claudeJsonPath = path.join(os.homedir(), ".claude.json");
+      if (fs.existsSync(claudeJsonPath)) {
+        try {
+          const claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, "utf-8"));
+          // Global user-level MCPs
+          const globalMcps: Record<string, any> = claudeJson.mcpServers ?? {};
+          for (const [name, cfg] of Object.entries(globalMcps)) {
+            if (!mcpServers[name]) {
+              mcpServers[name] = cfg;
+              log.info(`[spawnPaneInternal] Injected global MCP from ~/.claude.json: ${name}`);
+            }
+          }
+          // Project-level MCPs (for the current cwd)
+          const projectMcps: Record<string, any> = claudeJson.projects?.[cwd]?.mcpServers ?? {};
+          for (const [name, cfg] of Object.entries(projectMcps)) {
+            if (!mcpServers[name]) {
+              mcpServers[name] = cfg;
+              log.info(`[spawnPaneInternal] Injected project MCP from ~/.claude.json: ${name}`);
+            }
+          }
+        } catch (e) {
+          log.warn("[spawnPaneInternal] Failed to read ~/.claude.json for MCP injection:", e);
+        }
+      }
+
+      const mcpContent = JSON.stringify({ mcpServers }, null, 2);
       try {
         fs.writeFileSync(mcpConfigPath, mcpContent, "utf-8");
-        log.info(`[spawnPaneInternal] Wrote .mcp.json to ${mcpConfigPath}`);
+        log.info(`[spawnPaneInternal] Wrote .mcp.json with ${Object.keys(mcpServers).length} MCPs to ${mcpConfigPath}`);
       } catch (e) {
         log.warn("[spawnPaneInternal] Failed to write .mcp.json to cwd, skipping MCP config:", e);
       }
@@ -151,9 +196,12 @@ export async function spawnPaneInternal(
         }
         if (provider?.baseUrl) {
           env["ANTHROPIC_BASE_URL"] = provider.baseUrl;
-          env["OPENAI_BASE_URL"] = provider.baseUrl;
+          // OpenClaude uses OpenAI-compat format: replace /anthropic suffix with /v1
+          // e.g. https://token-plan-ams.xiaomimimo.com/anthropic → https://token-plan-ams.xiaomimimo.com/v1
+          const openaiBase = provider.baseUrl.replace(/\/anthropic\/?$/, "/v1");
+          env["OPENAI_BASE_URL"] = openaiBase;
         } else if (env["ANTHROPIC_BASE_URL"]) {
-          env["OPENAI_BASE_URL"] = env["ANTHROPIC_BASE_URL"];
+          env["OPENAI_BASE_URL"] = env["ANTHROPIC_BASE_URL"].replace(/\/anthropic\/?$/, "/v1");
         }
         const mimoKey = env["ANTHROPIC_AUTH_TOKEN"] || env["MIMO_API_KEY"] || "";
         if (mimoKey) {
@@ -253,63 +301,7 @@ export async function spawnPaneInternal(
       }
     }
 
-    // ── API Proxy: redirect API calls through local proxy for token tracking ──
-    // The proxy intercepts responses and extracts token usage data.
-    // ALL providers redirect through the proxy (Anthropic, MIMO, Gemini, OpenAI).
-    // For Gemini, the proxy also handles /v1/models health check (OpenAI-compatible)
-    // that OpenClaude's Gemini adapter requires during initialization.
-    if (ctx.apiProxyUrl) {
-      if (isMimo || isAnthropicCompat) {
-        const isMimoClaude = provider?.id === "mimo-claude" ||
-          (isAnthropicCompat && (provider?.baseUrl || "").includes("xiaomimimo.com"));
-
-        if (isMimoClaude) {
-          // Overclock pattern: MIMO via Claude goes DIRECTLY to MIMO — no proxy.
-          // The Claude CLI already has ANTHROPIC_AUTH_TOKEN=<mimo_key> and
-          // ANTHROPIC_BASE_URL=<mimo_url> set in its env. Routing through the
-          // proxy causes token mismatch (proxy can't distinguish MIMO key from OAuth).
-          log.info(`[spawnPaneInternal] MIMO via Claude: bypassing proxy, direct to ${env["ANTHROPIC_BASE_URL"] || provider?.baseUrl}`);
-        } else {
-          // All other Anthropic-compat providers (claude-oauth, anthropic API key, etc)
-          // go through proxy for token tracking.
-          const realBaseUrl = (env["ANTHROPIC_BASE_URL"] as string) || provider?.baseUrl || "https://api.anthropic.com";
-          const tokenKey = env["ANTHROPIC_AUTH_TOKEN"] || env["ANTHROPIC_API_KEY"] || null;
-          ctx.apiProxy?.registerAnthropicTarget(tokenKey, realBaseUrl, paneId);
-          env["ANTHROPIC_BASE_URL"] = ctx.apiProxyUrl;
-          log.info(`[spawnPaneInternal] API Proxy redirect (Anthropic): ${realBaseUrl} → ${ctx.apiProxyUrl}`);
-        }
-      }
-      if (isGeminiCompat) {
-        const realGeminiUrl = env["GEMINI_BASE_URL"] || provider?.baseUrl || "https://generativelanguage.googleapis.com";
-        ctx.apiProxy?.setGeminiTargetUrl(realGeminiUrl);
-        const geminiKeyForAttrib = env["GEMINI_API_KEY"] || env["GOOGLE_API_KEY"] || env["ANTHROPIC_API_KEY"] || null;
-        ctx.apiProxy?.registerGeminiPane(paneId, geminiKeyForAttrib);
-        env["GEMINI_BASE_URL"] = ctx.apiProxyUrl;
-        // Also set OPENAI_BASE_URL — OpenClaude's Gemini adapter validates via OpenAI-compatible /v1/models
-        env["OPENAI_BASE_URL"] = ctx.apiProxyUrl;
-        env["CLAUDE_CODE_DISABLE_PROXY"] = "1";
-        log.info(`[spawnPaneInternal] API Proxy redirect (Gemini): ${realGeminiUrl} → ${ctx.apiProxyUrl}`);
-      }
-      if (isOpenAICompat) {
-        const realBaseUrl = env["OPENAI_BASE_URL"] || provider?.baseUrl || "https://api.openai.com/v1";
-        const tokenKey = env["OPENAI_API_KEY"] || null;
-        ctx.apiProxy?.registerOpenAITarget(tokenKey, realBaseUrl, paneId);
-        env["OPENAI_BASE_URL"] = ctx.apiProxyUrl;
-        log.info(`[spawnPaneInternal] API Proxy redirect (OpenAI-compat): ${realBaseUrl} → ${ctx.apiProxyUrl}`);
-
-        // ── OpenRouter Anthropic model proxy fix ──
-        // When OpenRouter serves Anthropic models, OpenClaude uses its Anthropic client
-        // (reads ANTHROPIC_BASE_URL). We must also register the Anthropic proxy target
-        // so the proxy intercepts and forwards those requests to OpenRouter.
-        const isOpenRouter = (provider?.id ?? "").startsWith("openrouter") || (provider?.baseUrl || "").toLowerCase().includes("openrouter");
-        if (isOpenRouter && model?.startsWith("anthropic/")) {
-          const orBaseUrl = provider?.baseUrl || "https://openrouter.ai/api/v1";
-          ctx.apiProxy?.registerAnthropicTarget(tokenKey, orBaseUrl, paneId);
-          env["ANTHROPIC_BASE_URL"] = ctx.apiProxyUrl;
-          log.info(`[spawnPaneInternal] API Proxy redirect (OpenRouter→Anthropic): ${orBaseUrl} → ${ctx.apiProxyUrl}`);
-        }
-      }
-    }
+    // No API proxy — all providers go direct to their endpoints.
 
     if (ctx.mcpServerInfo) {
       env["CODEBRAIN_MCP_URL"] = ctx.mcpServerInfo.streamableHttpUrl;
@@ -455,28 +447,18 @@ export async function spawnPaneInternal(
         env["OPENAI_API_KEY"] = cursorKey;
       }
 
-      // Bypass permissions + sandbox (--yolo = --force, --sandbox disabled)
-      if (!args.includes("--yolo") && !args.includes("--force")) {
-        args.push("--yolo");
-      }
+      // Sandbox disabled for bypassPermissions (Overclock pattern)
       if (!args.includes("--sandbox")) {
         args.push("--sandbox", "disabled");
       }
-      // Auto-approve all MCP servers (avoids interactive prompt on first use)
+      // Auto-approve MCP servers so cursor-agent doesn't prompt interactively
       if (!args.includes("--approve-mcps")) {
         args.push("--approve-mcps");
-      }
-      // Trust workspace without prompting
-      if (!args.includes("--trust")) {
-        args.push("--trust");
       }
 
       // MCP: write codebrain server to .cursor/mcp.json in cwd
       // cursor-agent reads this at startup (same format as Cursor IDE)
       if (ctx.mcpServerInfo) {
-        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
-          try { await ctx.mcpServerReady; } catch {}
-        }
         const cursorDir = path.join(cwd, ".cursor");
         const mcpJsonPath = path.join(cursorDir, "mcp.json");
         try {
@@ -484,7 +466,9 @@ export async function spawnPaneInternal(
           let existing: Record<string, any> = {};
           try { existing = JSON.parse(fs.readFileSync(mcpJsonPath, "utf-8")); } catch {}
           const mcpServers = existing.mcpServers ?? {};
-          mcpServers.codebrain = { url: ctx.mcpServerInfo.streamableHttpUrl, type: "http" };
+          // cursor-agent supports both SSE and HTTP transports.
+          // Use SSE (legacy) as it has broader compatibility across cursor-agent versions.
+          mcpServers.codebrain = { url: ctx.mcpServerInfo.sseUrl, type: "sse" };
           existing.mcpServers = mcpServers;
           fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2), "utf-8");
           log.info("[spawnPaneInternal] Cursor MCP config written to", mcpJsonPath);
@@ -530,9 +514,6 @@ export async function spawnPaneInternal(
 
       // MCP: pass codebrain server via --additional-mcp-config JSON flag
       if (ctx.mcpServerInfo && !args.includes("--additional-mcp-config")) {
-        if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
-          try { await ctx.mcpServerReady; } catch {}
-        }
         // Copilot expects: {"mcpServers": {"name": {...}}}
         const mcpJson = JSON.stringify({
           mcpServers: {

@@ -14,11 +14,6 @@ import { createSessionWatchers, type SessionWatcherManager } from "./services/se
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { createMemoryStore } = require("../../packages/memory/store.js");
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { CostTracker } = require("../../packages/mcp/bridge/cost-tracker.js");
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { ApiProxy } = require("../../packages/mcp/bridge/api-proxy.js");
-export { ApiProxy };
 
 export interface McpServerInfo {
   port: number;
@@ -96,8 +91,7 @@ export function createAppContext() {
     // MCP server state
     mcpServerInfo: null as McpServerInfo | null,
     mcpServerReady: null as Promise<McpServerInfo> | null,
-    apiProxyUrl: null as string | null,
-    apiProxy: null as any | null, // ApiProxy instance for setTargetUrl() calls
+
 
     // Pane tracking
     paneConfigs: new Map<string, PaneConfig>(),
@@ -123,7 +117,6 @@ export function createAppContext() {
     audioConfigStore: new AudioConfigStore(AUDIO_CONFIG_FILE),
     memoryStore: createMemoryStore(MEMORY_DB_FILE),
     hooksManager: new HooksManager(),
-    costTracker: new CostTracker({ dataDir: DATA_DIR }),
     sessionWatchers: null as SessionWatcherManager | null,
 
     // Paths

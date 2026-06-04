@@ -122,10 +122,14 @@ function tryVersion(binPath: string): string | undefined {
   }
 }
 
-function detectCli(binary: string): CliInfo {
+function detectCli(binary: string, requireVersion = false): CliInfo {
   const found = tryWhich(binary);
   if (!found) return { found: false };
-  return { found: true, path: found, version: tryVersion(found) };
+  const version = tryVersion(found);
+  // For some CLIs (e.g. cursor-agent), the file may exist but not be functional.
+  // requireVersion=true means we only report found if --version succeeds.
+  if (requireVersion && !version) return { found: false };
+  return { found: true, path: found, version };
 }
 
 export class CliDetector {
@@ -139,7 +143,7 @@ export class CliDetector {
       codex: detectCli("codex"),
       gemini: detectCli("gemini"),
       kimi: detectCli("kimi"),
-      cursor: detectCli("cursor-agent"),
+      cursor: detectCli("cursor-agent", true), // requireVersion — file may exist but not be functional
       copilot: detectCli("copilot"),
       shell: { path: shell },
     };

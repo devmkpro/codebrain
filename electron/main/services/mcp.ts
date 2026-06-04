@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 import type { AppContext, McpServerInfo } from "../context";
-import { safeSend, ApiProxy } from "../context";
+import { safeSend } from "../context";
 import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
 import { refreshAllWorkspaces } from "./workspace";
@@ -51,7 +51,6 @@ function buildMcpBridge(ctx: AppContext) {
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
     hooksManager: ctx.hooksManager,
-    costTracker: ctx.costTracker, // Shared singleton — same instance for MCP + IPC
     configStore: ctx.configStore, // For notification settings
     workspaceConfigStore: ctx.workspaceConfigStore, // For workspace access mode sandbox
     updateContextFiles: (wsPath: string) => writeContextFiles(ctx, wsPath),
@@ -63,58 +62,6 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
   const { startMCPServer } = require("../../packages/mcp/server.js");
   const bridge = buildMcpBridge(ctx);
 
-  // Wire up tokens:updated event — emit to renderer on every recordUsage() call
-  if (ctx.costTracker) {
-    ctx.costTracker.onUsageRecorded = (info: { sessionId: string; model: string; inputTokens: number; outputTokens: number; cost: number }) => {
-      safeSend(ctx, "tokens:updated", info);
-    };
-  }
-
-  // Start API proxy for token usage tracking
-  // The proxy intercepts Anthropic-compatible API calls from agent CLIs,
-  // extracts token usage from responses, and reports to CostTracker.
-  try {
-    const proxy = new ApiProxy({
-      onTokenUsage: (usage: { paneId: string; model: string; inputTokens: number; outputTokens: number }) => {
-        // Diagnostic: log exact model name from proxy for debugging pricing
-        console.log(`[CostTracker] onTokenUsage: model="${usage.model}" paneId="${usage.paneId}" input=${usage.inputTokens} output=${usage.outputTokens}`);
-
-        // Resolve pane attribution: proxy now provides paneId directly via per-token routing.
-        // Fall back to model-based lookup only when paneId is "unknown".
-        let resolvedPaneId = usage.paneId;
-        let paneCfg = ctx.paneConfigs.get(resolvedPaneId);
-        if ((!paneCfg || resolvedPaneId === "unknown") && usage.model) {
-          // Fallback: find pane by model name (imprecise if multiple panes share a model)
-          for (const [pid, cfg] of ctx.paneConfigs) {
-            if (cfg.model === usage.model) {
-              resolvedPaneId = pid;
-              paneCfg = cfg;
-              break;
-            }
-          }
-        }
-        const workspace = ctx.currentWorkspacePath || process.cwd();
-        const result = ctx.costTracker.recordUsage({
-          model: usage.model || paneCfg?.model || "unknown",
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          agentId: paneCfg?.agent || (resolvedPaneId !== "unknown" ? resolvedPaneId : undefined),
-          workspace,
-          taskId: paneCfg?.taskId,
-        });
-        if (!result?.ok) {
-          console.warn(`[API Proxy] recordUsage failed: ${result?.error} (model=${usage.model})`);
-        }
-      },
-    });
-    const { port } = await proxy.start();
-    ctx.apiProxyUrl = `http://127.0.0.1:${port}`;
-    ctx.apiProxy = proxy;
-    console.log(`[API Proxy] Token tracking proxy started on ${ctx.apiProxyUrl}`);
-  } catch (err) {
-    console.error("[API Proxy] Failed to start proxy:", err);
-    // Non-fatal — agents will still work, just without token tracking
-  }
 
   const tryStart = async () => {
     const promise = startMCPServer(ctx.ptyManager, bridge);

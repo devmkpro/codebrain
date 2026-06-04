@@ -15,7 +15,10 @@ export function ProviderList({
       </p>
       <div className="space-y-1.5">
         {providers.map(p => {
-        const isBuiltin = p.id === "claude-oauth" || p.id === "codex-oauth" || p.id === "gemini-cli" || p.id === "mimo-claude" || p.type === "oauth";
+        // Virtual providers are auto-detected CLIs — they live only in memory, not in providers.json.
+        // Deleting them does nothing, so hide the button. Identify by known virtual IDs or CLI-only types.
+        const VIRTUAL_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "mimo-claude", "kimi", "cursor", "copilot"];
+        const isBuiltin = VIRTUAL_IDS.includes(p.id) || p.type === "oauth" || p.isVirtual === true;
         const typeLabel = p.type === "oauth" ? "OAuth" : p.type === "anthropic-compat" ? `Anthropic → ${p.host ?? "claude"}` : p.type === "gemini-compat" ? `Gemini → ${p.host ?? "gemini"}` : p.type === "mimo-compat" ? `MIMO → ${p.host ?? "openclaude"}` : p.type === "openai-compat" ? `OpenAI → ${p.host ?? "openclaude"}` : "custom";
         const url = p.env?.ANTHROPIC_BASE_URL ?? p.env?.GEMINI_BASE_URL ?? p.env?.OPENAI_BASE_URL;
         return <div className="group flex items-center gap-3 px-3 py-2 rounded-lg border border-white/5 hover:border-white/10 bg-white/[0.02]">

@@ -14,6 +14,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.19",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "enhance MCP injection logic in spawnPaneInternal function"
+      },
+      {
+        "kind": "feat",
+        "text": "improve anthropic-compat spawn (MIMO/DeepSeek) and provider list UI"
+      }
+    ]
+  },
+  {
     "version": "1.8.18",
     "date": "junho 2026",
     "highlights": [

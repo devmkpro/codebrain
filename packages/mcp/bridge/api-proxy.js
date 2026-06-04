@@ -1028,6 +1028,25 @@ class ApiProxy {
     const headers = { ...req.headers };
     delete headers["host"];
 
+    // Strip Claude CLI fingerprint headers before forwarding to third-party providers
+    // (MIMO, DeepSeek, etc). These headers trigger cross-border / geo-blocking policies
+    // (e.g. MiFE returns 451 "cross-border isolation policy") when present.
+    const isMimoTarget = target.hostname.includes("xiaomimimo.com");
+    const isThirdParty = isMimoTarget || (target.hostname !== "api.anthropic.com" && !target.hostname.includes("openrouter"));
+    if (isThirdParty) {
+      delete headers["x-app"];
+      delete headers["x-claude-code-session-id"];
+      delete headers["x-stainless-arch"];
+      delete headers["x-stainless-lang"];
+      delete headers["x-stainless-os"];
+      delete headers["x-stainless-package-version"];
+      delete headers["x-stainless-retry-count"];
+      delete headers["x-stainless-runtime"];
+      delete headers["x-stainless-runtime-version"];
+      delete headers["x-stainless-timeout"];
+      delete headers["anthropic-dangerous-direct-browser-access"];
+    }
+
     // If this target registered an auth token replacement (e.g. MIMO via Claude OAuth),
     // swap out the incoming OAuth token with the provider's API key before forwarding.
     if (!isGemini && this._oauthTokenReplace) {
@@ -1151,6 +1170,23 @@ class ApiProxy {
     // Forward all headers, strip host
     const headers = { ...req.headers };
     delete headers["host"];
+
+    // Strip Claude CLI fingerprint headers for third-party providers (MIMO, etc.)
+    const isThirdPartyOAI = target.hostname.includes("xiaomimimo.com") ||
+      (!target.hostname.includes("openai.com") && !target.hostname.includes("openrouter.ai"));
+    if (isThirdPartyOAI) {
+      delete headers["x-app"];
+      delete headers["x-claude-code-session-id"];
+      delete headers["x-stainless-arch"];
+      delete headers["x-stainless-lang"];
+      delete headers["x-stainless-os"];
+      delete headers["x-stainless-package-version"];
+      delete headers["x-stainless-retry-count"];
+      delete headers["x-stainless-runtime"];
+      delete headers["x-stainless-runtime-version"];
+      delete headers["x-stainless-timeout"];
+      delete headers["anthropic-dangerous-direct-browser-access"];
+    }
 
     const bodyChunks = [];
     req.on("data", (chunk) => bodyChunks.push(chunk));

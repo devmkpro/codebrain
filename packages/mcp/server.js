@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { randomUUID } = require("node:crypto");
-const { createCodebrainMCPServer, registerBrowserTools, registerChromeTools } = require("./index.js");
+const { createCodebrainMCPServer, registerBrowserTools } = require("./index.js");
 const { createMCPBridge } = require("./bridge.js");
 
 /**
@@ -34,7 +34,6 @@ async function startMCPServer(ptyManager, opts = {}) {
   const bridge = createMCPBridge(ptyManager, opts);
   const mcpServer = createCodebrainMCPServer(bridge);
   registerBrowserTools(mcpServer, bridge);
-  registerChromeTools(mcpServer, bridge);
 
   // Use CJS require (not ESM import) so it works inside Electron asar in production builds
   const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");

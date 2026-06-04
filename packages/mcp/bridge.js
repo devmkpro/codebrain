@@ -23,9 +23,7 @@ const { createPipelineHandlers } = require("./bridge/pipeline-handlers.js");
 const { WorkerManager } = require("./bridge/background-workers.js");
 const { createBackgroundWorkerHandlers } = require("./bridge/worker-handlers.js");
 const { createConsensusHandlers } = require("./bridge/consensus-handlers.js");
-const { CostTracker } = require("./bridge/cost-tracker.js");
 const { createExpandedHooksHandlers } = require("./bridge/hooks-expand-handlers.js");
-const { parseTokenUsage } = require("./bridge/token-parser.js");
 
 // ── Auto-notify helpers ─────────────────────────────────────────────────────
 // When agents make changes (file writes, memory writes), other agents are
@@ -114,32 +112,6 @@ function createMCPBridge(ptyManager, opts = {}) {
     dataDir: opts.dataDir || path.join(os.homedir(), ".codebrain"),
   });
 
-  const costTracker = opts.costTracker || new CostTracker({
-    dataDir: opts.dataDir || path.join(os.homedir(), ".codebrain"),
-    defaultBudget: opts.defaultBudget || null,
-    alertThreshold: opts.alertThreshold || 0.8,
-  });
-
-  // ── Auto-parse token usage from PTY output on idle ───────────────────────
-  ptyManager.on("idle", ({ paneId, idle }) => {
-    try {
-      const lastOutput = idle?.lastOutput;
-      if (!lastOutput || lastOutput.length === 0) return;
-      const usage = parseTokenUsage(lastOutput);
-      if (!usage) return;
-      // Get pane config for metadata
-      const paneCfg = opts.paneConfigs?.get?.(paneId);
-      const workspace = opts.getCurrentWorkspacePath?.() || process.cwd();
-      costTracker.recordUsage({
-        model: usage.model || paneCfg?.model || "unknown",
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        agentId: paneCfg?.agent || paneId,
-        workspace,
-        taskId: paneCfg?.taskId,
-      });
-    } catch {}
-  });
 
   // ── Code-level memory compliance enforcement on idle ─────────────────────
   // When a pane goes idle, check if it actually used memory tools during its
@@ -429,7 +401,6 @@ function createMCPBridge(ptyManager, opts = {}) {
     // Expose foundational instances
     messageBus,
     agentScorer,
-    costTracker,
     workerManager,
     configStore: opts.configStore,
     // Override listPanes to pass paneLabels

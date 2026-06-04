@@ -5,9 +5,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 const PROVIDERS_UPDATED = "providers:updated";
-const TOKEN_USAGE_UPDATED = "tokens:updated";
-const TOKENS_BY_TASK = "tokens:byTask";
-const TOKENS_BY_WORKSPACE = "tokens:byWorkspace";
 
 // PTY output is high-frequency — use a shared listener + fanout to avoid
 // registering N separate ipcRenderer.on handlers.
@@ -151,13 +148,9 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
   },
 
   tokens: {
-    byTask: (taskId: string) => ipcRenderer.invoke(TOKENS_BY_TASK, taskId),
-    byWorkspace: (sinceMs: number) => ipcRenderer.invoke(TOKENS_BY_WORKSPACE, sinceMs),
-    onUpdated: (callback: (payload: unknown) => void) => {
-      const handler = (_evt: unknown, payload: unknown) => callback(payload);
-      ipcRenderer.on(TOKEN_USAGE_UPDATED, handler);
-      return () => ipcRenderer.off(TOKEN_USAGE_UPDATED, handler);
-    },
+    byTask: () => Promise.resolve({}),
+    byWorkspace: () => Promise.resolve({}),
+    onUpdated: () => () => {},
   },
 
   session: {
@@ -362,16 +355,16 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
   },
 
   cost: {
-    summary: (opts?: Record<string, unknown>) => ipcRenderer.invoke("cost:summary", opts ?? {}),
-    taskSummary: (opts?: Record<string, unknown>) => ipcRenderer.invoke("cost:taskSummary", opts ?? {}),
-    setBudget: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:setBudget", opts),
-    getBudget: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:getBudget", opts),
-    getAlerts: (opts?: Record<string, unknown>) => ipcRenderer.invoke("cost:getAlerts", opts ?? {}),
-    listModels: () => ipcRenderer.invoke("cost:listModels"),
-    estimate: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:estimate", opts),
-    reset: (opts?: Record<string, unknown>) => ipcRenderer.invoke("cost:reset", opts ?? {}),
-    setModelCost: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:setModelCost", opts),
-    deleteModelCost: (opts: Record<string, unknown>) => ipcRenderer.invoke("cost:deleteModelCost", opts),
+    summary: () => Promise.resolve({ ok: true, data: {} }),
+    taskSummary: () => Promise.resolve({ ok: true, data: { tasks: [] } }),
+    setBudget: () => Promise.resolve({ ok: true }),
+    getBudget: () => Promise.resolve({ ok: true, data: {} }),
+    getAlerts: () => Promise.resolve({ ok: true, data: [] }),
+    listModels: () => Promise.resolve({ ok: true, data: {} }),
+    estimate: () => Promise.resolve({ ok: true, data: { cost: 0 } }),
+    reset: () => Promise.resolve({ ok: true }),
+    setModelCost: () => Promise.resolve({ ok: true }),
+    deleteModelCost: () => Promise.resolve({ ok: true }),
   },
 
   log: {

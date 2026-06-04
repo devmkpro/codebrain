@@ -10,7 +10,6 @@ import { registerCliHandlers } from "./register-cli";
 import { registerSkillHandlers } from "./register-skill";
 import { registerMiscHandlers } from "./register-misc";
 import { registerMemoryIpc } from "./register-memory";
-import { registerCostIpc } from "./register-cost";
 import { registerDiscordHandlers } from "./register-discord";
 
 export function registerAllIpcHandlers(ctx: AppContext): void {
@@ -25,6 +24,5 @@ export function registerAllIpcHandlers(ctx: AppContext): void {
   registerSkillHandlers(ctx);
   registerMiscHandlers(ctx);
   registerMemoryIpc(ctx);
-  registerCostIpc(ctx);
   registerDiscordHandlers(ctx);
 }

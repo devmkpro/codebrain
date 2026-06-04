@@ -134,12 +134,18 @@ export function getEnhancedProviders(ctx: AppContext) {
     || mimoConfigured?.env?.["MIMO_API_KEY"]
     || mimoConfigured?.env?.["ANTHROPIC_API_KEY"]
     || "";
+  // Inherit baseUrl from the user's configured MIMO provider (ANTHROPIC_BASE_URL),
+  // falling back to the template default. This ensures the correct regional endpoint
+  // (ams/sgp/cn) is used instead of the hardcoded template URL.
+  const mimoBaseUrl = mimoConfigured?.env?.["ANTHROPIC_BASE_URL"]
+    || mimoClaudeTemplate?.baseUrl
+    || "https://token-plan-ams.xiaomimimo.com/anthropic";
   const mimoClaudeProvider = claudeDetected && hasMimoConfigured && mimoClaudeTemplate ? [{
     id: mimoClaudeTemplate.id,
     label: mimoClaudeTemplate.label,
     type: mimoClaudeTemplate.type as any,
     host: mimoClaudeTemplate.host,
-    baseUrl: mimoClaudeTemplate.baseUrl,
+    baseUrl: mimoBaseUrl,
     models: [...mimoClaudeTemplate.models],
     env: mimoKey ? { ANTHROPIC_AUTH_TOKEN: mimoKey, MIMO_API_KEY: mimoKey } : {},
   }] : [];

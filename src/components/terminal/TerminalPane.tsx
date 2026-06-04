@@ -11,7 +11,6 @@ const MK_THINKING_PHRASES = [
   "Codebrain ativado 🧠",
   "café do MK esquentando ☕",
   "MK mode: ON 🔥",
-  "powered by MK ⚡",
   "isso aqui é Codebrain baby 💜",
   "Codebrain pensando forte... 🤯",
   "agentes em campo 🕵️",
@@ -22,23 +21,7 @@ const MK_THINKING_PHRASES = [
   "squad reunido, missão em andamento 🎯",
 ];
 
-const MK_EXPENSIVE_PHRASES = [
-  "MK: isso tá me custando um rim 💸",
-  "MK vendeu o carro pra pagar esse token 🚗💨",
-  "AGI tá chegando... junto com a fatura 📃",
-  "isso aqui vale mais que o salário do MK 💀",
-  "MK: por que o Opus não é gratuito?? 😭",
-  "queimando $$ igual o MK queima café ☕💸",
-  "o MK aprovou... o banco não 🏦",
-  "Codebrain: IA cara, resultado top 💎",
-  "tokens de ouro sendo processados ✨💰",
-  "Codebrain premium mode ativado 👑",
-  "isso não é bug, é feature cara 💸",
-  "IA de luxo trabalhando... 🦾",
-];
-
 function MKThinkingLabelWrapper({ paneId, isActivelyWorking }: { paneId: string; isActivelyWorking: boolean }) {
-  const agentCost = useCostStore((s) => s.summary?.byAgent?.[paneId]?.cost ?? 0);
   // Só aparece após 3s de output contínuo — reseta imediatamente ao parar
   const [visible, setVisible] = React.useState(false);
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,14 +39,13 @@ function MKThinkingLabelWrapper({ paneId, isActivelyWorking }: { paneId: string;
   return (
     <span className="flex items-center gap-2 text-[10px] font-mono text-red-400/80">
       <span className="w-1.5 h-3 bg-red-500 animate-pulse"></span>
-      <MKThinkingLabel paneId={paneId} agentCost={agentCost} />
+      <MKThinkingLabel paneId={paneId} />
     </span>
   );
 }
 
-function MKThinkingLabel({ paneId, agentCost }: { paneId: string; agentCost: number }) {
-  const isExpensive = agentCost > 10;
-  const phrases = isExpensive ? MK_EXPENSIVE_PHRASES : MK_THINKING_PHRASES;
+function MKThinkingLabel({ paneId }: { paneId: string }) {
+  const phrases = MK_THINKING_PHRASES;
   const safePaneId = paneId || "";
   const [idx, setIdx] = React.useState(() =>
     Math.abs((safePaneId || "x").split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % phrases.length
@@ -74,17 +56,15 @@ function MKThinkingLabel({ paneId, agentCost }: { paneId: string; agentCost: num
       setIdx((i) => (i + 1) % phrases.length);
     }, 8000);
     return () => clearInterval(interval);
-  }, [isExpensive]);
+  }, []);
   return (
-    <span className={isExpensive ? "text-amber-400/90" : undefined}>
-      {isExpensive && <span className="mr-1">💸</span>}
+    <span>
       {phrases[idx]}
     </span>
   );
 }
 
 // TerminalPane
-import { useCostStore } from "../../stores/cost-store";
 import { usePanesStore } from "../../stores/panes-store";
 import { FONT_OPTIONS, TERMINAL_THEMES, useTerminalSettings } from "../../stores/terminal-settings-store";
 import { StatusDot, shortenPath } from "../panes/StatusDot";

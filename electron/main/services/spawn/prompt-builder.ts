@@ -284,7 +284,7 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
   // Dynamic workspace section
   let sysPrompt = CODEBRAIN_SYSTEM_PROMPT;
   sysPrompt += `\n\n## Seu Workspace\n\nVocê está trabalhando no diretório:\n\`${cwd}\`\n\nTodos os caminhos de arquivo são relativos a este diretório.`;
-  sysPrompt += `\n\n## Seu ID de Pane\n\nSeu paneId é: \`${paneId}\`\n\nUse este ID como campo "from" ao enviar mensagens via pane_send_message, e como campo "paneId" ao ler mensagens via pane_read_messages.`;
+  sysPrompt += `\n\n## Seu ID de Pane\n\nSeu paneId é: \`${paneId}\`\n\nUse este ID como campo "from" ao enviar mensagens via mcp__codebrain__pane_send_message, e como campo "paneId" ao ler mensagens via mcp__codebrain__pane_read_messages.`;
 
   // Inject shared memory + patterns — forces agents to read and reuse knowledge
   sysPrompt += buildMemoryContext(ctx, cwd);

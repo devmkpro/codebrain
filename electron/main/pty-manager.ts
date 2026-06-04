@@ -406,6 +406,22 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
         }
       } catch {}
 
+      // Step 1.5: detect .cmd shims that invoke PowerShell (e.g. cursor-agent.cmd → cursor-agent.ps1)
+      // Run powershell.exe directly to bypass cmd.exe quoting issues.
+      try {
+        const shimSrc = nodefs.readFileSync(resolved, "utf8");
+        const ps1Match = shimSrc.match(/powershell(?:\.exe)?\s[^"]*"([^"]+\.ps1)"/i);
+        if (ps1Match) {
+          const ps1Path = ps1Match[1].replace(/%SCRIPT_DIR%|%~dp0[^\\]*/gi, nodepath.dirname(resolved));
+          const ps1Resolved = ps1Path.includes("%") ? nodepath.join(nodepath.dirname(resolved), nodepath.basename(ps1Path)) : ps1Path;
+          if (nodefs.existsSync(ps1Resolved)) {
+            const powershell = `${process.env["SystemRoot"] ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+            log.info(`[pty] Windows PowerShell shim: ${resolved} → powershell ${ps1Resolved}`);
+            return { binary: powershell, args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1Resolved, ...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
+          }
+        }
+      } catch {}
+
       // Step 2: read the .cmd shim to find the underlying Node.js script, run with node.exe directly.
       // This bypasses cmd.exe entirely — no quoting issues, no space-in-path bugs.
       // Pattern: npm-installed CLIs on Windows ship as <name>.cmd shims pointing to <name>.js

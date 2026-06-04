@@ -4,7 +4,7 @@ import {
   X, Plus, Settings, Activity, FolderOpen, Save, RotateCcw,
   ListTodo, Terminal, Globe, Users, Zap, Map, FileText,
   ChevronRight, ChevronDown, Home, Mic, MicOff, Volume2,
-  Shield, Lock, Unlock, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, DollarSign, History,
+  Shield, Lock, Unlock, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, History,
   Bell, Search, Download, FileJson,
 } from 'lucide-react';
 import { Logo } from '../auth/Logo';
@@ -20,7 +20,6 @@ import {
   normalizedVoiceMode,
 } from '../../stores/tasks-store';
 import { useMemoryStore } from '../../stores/memory-store';
-import { useCostStore } from '../../stores/cost-store';
 import { useSessionHistoryStore } from '../../stores/session-history-store';
 import { useVoiceStore } from '../../stores/voice-store';
 import { useBrowserStore } from '../../stores/browser-store';
@@ -191,7 +190,6 @@ function AccountDropdown({ profile, authEmail, activeWorkspace, modals: m, onClo
   const goHome = useNavStore(s => s.goHome);
   const rows = [
     ...(activeWorkspace ? [{ label: '⬡ Squad', action: () => { onClose(); m.setShowSquad(true); }, icon: <Users size={11} /> }] : []),
-    { label: '💲 Token Usage', action: () => { onClose(); useCostStore.getState().toggle(); }, icon: <DollarSign size={11} /> },
     { label: '⚙ Configurações', action: () => { onClose(); goHome(); navigate('/settings'); }, icon: <Settings size={11} /> },
     { label: '⚡ Diagnóstico', action: () => { onClose(); m.setShowDiag(true); }, icon: <Activity size={11} /> },
     { label: 'Sair', action: () => { onClose(); (window as any).codeBrainApp?.auth?.logout?.(); }, danger: true },
@@ -340,19 +338,38 @@ function FilesNavBar({ workspacePath }: { workspacePath: string }) {
   );
 }
 
-// ─── Model pricing helpers (source of truth: cost-tracker.js via IPC) ────────
-// Do NOT add hardcoded prices here. Edit packages/mcp/bridge/cost-tracker.js instead.
-function modelPricingLabelFromMap(
-  model: string,
-  models: Record<string, { input: number; output: number; cache_read?: number }>
-): string | null {
+
+// ─── Static model pricing ($/1M tokens) — source: cost-tracker.js ───────────
+const MODEL_PRICES: Record<string, { i: number; o: number }> = {
+  // Claude (Anthropic OAuth / API)
+  "claude-opus-4-8": { i: 5.0, o: 25.0 }, "claude-opus-4-7": { i: 5.0, o: 25.0 },
+  "claude-opus-4-6": { i: 5.0, o: 25.0 },
+  "claude-sonnet-4-6": { i: 3.0, o: 15.0 }, "claude-sonnet-4-5-20250929": { i: 3.0, o: 15.0 },
+  "claude-haiku-4-5-20251001": { i: 1.0, o: 5.0 },
+  // OpenRouter
+  "anthropic/claude-3.5-sonnet": { i: 3.0, o: 15.0 }, "anthropic/claude-sonnet-4": { i: 3.0, o: 15.0 },
+  "anthropic/claude-opus-4": { i: 15.0, o: 75.0 }, "anthropic/claude-opus-4.8": { i: 5.0, o: 25.0 },
+  "anthropic/claude-opus-4.7": { i: 5.0, o: 25.0 },
+  "google/gemini-2.5-pro": { i: 1.25, o: 10.0 }, "google/gemini-2.5-flash": { i: 0.3, o: 2.5 },
+  "google/gemini-2.0-flash": { i: 0.1, o: 0.4 },
+  "openai/gpt-4o": { i: 2.5, o: 10.0 }, "openai/gpt-4.1": { i: 2.0, o: 8.0 },
+  "openai/o3": { i: 2.0, o: 8.0 }, "openai/o4-mini": { i: 1.1, o: 4.4 },
+  // Gemini (via API)
+  "gemini-2.5-pro": { i: 1.25, o: 10.0 }, "gemini-2.5-flash": { i: 0.3, o: 2.5 },
+  "gemini-2.5-flash-lite": { i: 0.1, o: 0.4 },
+  "gemini-2.0-flash": { i: 0.1, o: 0.4 }, "gemini-2.0-flash-lite": { i: 0.075, o: 0.3 },
+  "gemini-3.5-flash": { i: 1.5, o: 9.0 }, "gemini-3.1-pro-preview": { i: 2.0, o: 12.0 },
+  "gemini-3.1-flash-lite": { i: 0.25, o: 1.5 }, "gemini-3-flash-preview": { i: 0.5, o: 3.0 },
+  // MIMO
+  "mimo-v2.5-pro": { i: 0.435, o: 0.87 }, "mimo-v2.5": { i: 0.14, o: 0.28 },
+  "mimo-v2-pro": { i: 1.0, o: 3.0 }, "mimo-v2-omni": { i: 0.4, o: 2.0 },
+  "mimo-v2-flash": { i: 0.1, o: 0.3 },
+};
+function modelPricingLabel(model: string): string | null {
   const lower = model.toLowerCase();
-  for (const [k, v] of Object.entries(models)) {
-    if (k.toLowerCase() === lower) {
-      return `IN $${v.input.toFixed(2)} / OUT $${v.output.toFixed(2)}`;
-    }
-  }
-  return null;
+  const v = MODEL_PRICES[lower] ?? MODEL_PRICES[Object.keys(MODEL_PRICES).find(k => lower.includes(k)) ?? ""];
+  if (!v) return null;
+  return `IN $${v.i.toFixed(2)} / OUT $${v.o.toFixed(2)}`;
 }
 
 // ─── + PANE Dropdown ─────────────────────────────────────────────────────────
@@ -389,10 +406,6 @@ function PaneMenu({
     return providers.length >= 2;
   };
 
-  // Pricing from cost-tracker (single source of truth — packages/mcp/bridge/cost-tracker.js)
-  const costModels = useCostStore(s => s.models);
-  const loadCostModels = useCostStore(s => s.loadModels);
-  React.useEffect(() => { if (Object.keys(costModels).length === 0) loadCostModels(); }, []);
 
   React.useEffect(() => {
     if (!activeWorkspace) return;
@@ -547,7 +560,18 @@ function PaneMenu({
                   {allModels.length > 0 && (
                     <span className="font-mono text-[9px] text-slate-700">{allModels.length} modelo{allModels.length !== 1 ? 's' : ''}</span>
                   )}
-                  <span className="font-mono text-[9px] text-slate-600">{p.type === 'oauth' ? 'OAuth' : p.type === 'anthropic-compat' ? 'Compat' : 'OpenAI'}</span>
+                  {(() => {
+                    const isPlanBased = p.type === 'oauth' ||
+                      ['gemini', 'kimi', 'codex', 'copilot', 'cursor', 'antigravity'].includes(p.host ?? '') ||
+                      NATIVE_CLI_KEYWORDS.some(k => (p.label ?? '').toLowerCase().includes(k));
+                    // Only show "plano" badge if the label doesn't already make it obvious
+                    const labelLower = (p.label ?? '').toLowerCase();
+                    const labelAlreadySaysPlan = labelLower.includes('plano') || labelLower.includes('cli') ||
+                      labelLower.includes('copilot') || labelLower.includes('cursor') || labelLower.includes('kimi');
+                    if (isPlanBased && !labelAlreadySaysPlan) return <span className="font-mono text-[9px] text-violet-400/80">plano</span>;
+                    if (!isPlanBased) return <span className="font-mono text-[9px] text-slate-600">API</span>;
+                    return null;
+                  })()}
                   {!searchLower && (
                     <span className={`font-mono text-[9px] text-slate-600 transition-transform ${collapsed ? '' : 'rotate-90'}`}>▶</span>
                   )}
@@ -560,8 +584,8 @@ function PaneMenu({
                     : models.map((model: string) => (
                       <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">
                         <div className="truncate">+ {model}</div>
-                        {modelPricingLabelFromMap(model, costModels) && (
-                          <div className="font-mono text-[10px] text-emerald-400/70 mt-0.5">{modelPricingLabelFromMap(model, costModels)}</div>
+                        {modelPricingLabel(model) && (
+                          <div className="font-mono text-[10px] text-emerald-400/70 mt-0.5">{modelPricingLabel(model)}</div>
                         )}
                       </button>
                     ))
@@ -852,8 +876,6 @@ function WorkspaceHeader() {
   const memoryVisible = useMemoryStore(s => s.visible);
   const toggleMemory = useMemoryStore(s => s.toggle);
 
-  const costVisible = useCostStore(s => s.visible);
-  const toggleCost = useCostStore(s => s.toggle);
 
   const historyVisible = useSessionHistoryStore(s => s.visible);
   const toggleHistory = useSessionHistoryStore(s => s.toggle);
@@ -1075,8 +1097,6 @@ function WorkspaceHeader() {
           <IconBtn icon={<Database size={15} strokeWidth={1.5} />} label="Memory" onClick={toggleMemory} active={memoryVisible} />
 
           {/* Usage */}
-          <IconBtn icon={<DollarSign size={15} strokeWidth={1.5} />} label="Token Usage" onClick={toggleCost} active={costVisible} />
-
           {/* History */}
           <IconBtn icon={<History size={15} strokeWidth={1.5} />} label="History" onClick={toggleHistory} active={historyVisible} />
           <VDiv />

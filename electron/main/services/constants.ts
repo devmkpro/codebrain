@@ -30,7 +30,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     icon: "MIMO",
     type: "mimo-compat",
     host: "openclaude",
-    baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+    baseUrl: "https://token-plan-ams.xiaomimimo.com/anthropic",
     tokenEnvVar: "MIMO_API_KEY",
     models: ["mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"],
     labelIncludes: ["mimo"],
@@ -42,7 +42,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     icon: "MIMO",
     type: "anthropic-compat",
     host: "claude",
-    baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+    baseUrl: "https://token-plan-ams.xiaomimimo.com/anthropic",
     tokenEnvVar: "ANTHROPIC_AUTH_TOKEN", // Overclock pattern: Claude CLI reads ANTHROPIC_AUTH_TOKEN directly
     models: ["mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"],
     labelIncludes: ["mimo"],
