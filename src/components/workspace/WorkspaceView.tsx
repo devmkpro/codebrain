@@ -30,6 +30,7 @@ export function WorkspaceView({
   const [autoSpawning, setAutoSpawning] = React.useState(false);
   const autoSpawnDone = React.useRef(false);
   const favoritePaneRef = React.useRef<any>(null);
+  const configLoadedRef = React.useRef(false); // true once getWorkspaceConfig resolved
   React.useEffect(() => {
     let cancelled = false;
     const getWorkspaceConfig = window.codeBrainApp?.workspaceConfig?.get;
@@ -39,34 +40,62 @@ export function WorkspaceView({
     getWorkspaceConfig(workspacePath).then(cfg => {
       if (cancelled) return;
       favoritePaneRef.current = cfg?.favoritePane ?? null;
-      if (!autoSpawnDone.current && workspacePanes.length === 0 && cfg?.autoSpawnSquad?.length) {
-        autoSpawnDone.current = true;
-        setAutoSpawning(true);
-        (async () => {
-          for (const item of cfg.autoSpawnSquad) {
-            if (cancelled) break;
-            try {
-              const result = await window.codeBrainApp?.pty.spawn({
-                agent: "openclaude",
-                cwd: workspacePath,
-                providerId: item.providerId || void 0,
-                model: item.model || void 0
-              });
-              if (result?.ok && result.paneId) {
-                addPane({
-                  id: result.paneId,
+      configLoadedRef.current = true;
+      if (!autoSpawnDone.current && workspacePanes.length === 0) {
+        // Auto-spawn squad if configured
+        if (cfg?.autoSpawnSquad?.length) {
+          autoSpawnDone.current = true;
+          setAutoSpawning(true);
+          (async () => {
+            for (const item of cfg.autoSpawnSquad) {
+              if (cancelled) break;
+              try {
+                const result = await window.codeBrainApp?.pty.spawn({
                   agent: "openclaude",
                   cwd: workspacePath,
-                  workspacePath: workspacePath,
                   providerId: item.providerId || void 0,
-                  model: item.model || void 0,
-                  externallySpawned: true
+                  model: item.model || void 0
                 });
-              }
-            } catch {}
-          }
-          if (!cancelled) setAutoSpawning(false);
-        })();
+                if (result?.ok && result.paneId) {
+                  addPane({
+                    id: result.paneId,
+                    agent: "openclaude",
+                    cwd: workspacePath,
+                    workspacePath: workspacePath,
+                    providerId: item.providerId || void 0,
+                    model: item.model || void 0,
+                    externallySpawned: true
+                  });
+                }
+              } catch {}
+            }
+            if (!cancelled) setAutoSpawning(false);
+          })();
+        } else if (cfg?.favoritePane?.providerId) {
+          // Auto-spawn with favoritePane (default spawn model) if configured
+          autoSpawnDone.current = true;
+          const fav = cfg.favoritePane;
+          setAutoSpawning(true);
+          window.codeBrainApp?.pty.spawn({
+            agent: fav.agent ?? "openclaude",
+            cwd: workspacePath,
+            providerId: fav.providerId,
+            model: fav.model || undefined,
+          }).then((result: any) => {
+            if (!cancelled && result?.ok && result.paneId) {
+              addPane({
+                id: result.paneId,
+                agent: fav.agent ?? "openclaude",
+                cwd: workspacePath,
+                workspacePath,
+                providerId: fav.providerId,
+                model: fav.model || undefined,
+                externallySpawned: true,
+              });
+            }
+            if (!cancelled) setAutoSpawning(false);
+          }).catch(() => { if (!cancelled) setAutoSpawning(false); });
+        }
       }
     }).catch(() => {});
     return () => {
@@ -178,9 +207,17 @@ export function WorkspaceView({
       });
     }
   }, [addPane]);
-  const handleNew = React.useCallback(() => {
+  const handleNew = React.useCallback(async () => {
     setSessions(null);
     if (view?.kind === "map") navigateInActiveTab({ kind: "workspace" });
+    // Wait for workspace config to load if not done yet (race condition on fast clicks)
+    if (!configLoadedRef.current) {
+      try {
+        const cfg = await window.codeBrainApp?.workspaceConfig?.get(workspacePath);
+        favoritePaneRef.current = cfg?.favoritePane ?? null;
+        configLoadedRef.current = true;
+      } catch {}
+    }
     const fav = favoritePaneRef.current;
     if (fav?.providerId) {
       // Use favoritePane config (respects default spawn setting)

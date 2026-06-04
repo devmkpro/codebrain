@@ -115,9 +115,9 @@ export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo): 
   // ── Per-workspace files ──
   for (const wsPath of wsSet) {
     try {
-      // 1. .mcp.json — Claude Code SSE transport
+      // 1. .mcp.json — Streamable HTTP transport (works for all agents: Claude, Kimi, Gemini, Codex, Cursor)
       const mcpJson = JSON.stringify({
-        mcpServers: { codebrain: { type: "sse", url: sseUrl } },
+        mcpServers: { codebrain: { type: "streamable-http", url: httpUrl } },
       }, null, 2);
       fs.writeFileSync(path.join(wsPath, ".mcp.json"), mcpJson, "utf-8");
 
@@ -157,7 +157,70 @@ Query the MCP server at ${httpUrl} using Streamable HTTP transport.
     }
   }
 
-  console.log(`[refreshAllWorkspaces] Done — refreshed ${wsSet.size} workspace(s)`);
+  // ── Global CLI agent configs (one-time per refresh) ──
+  // Update ~/.kimi/config.toml, ~/.gemini/settings.json, ~/.codex/config.toml
+  // so ALL agents auto-connect to Codebrain MCP with correct transport.
+
+  // Kimi: ~/.kimi/config.toml (legacy) + ~/.kimi-code/config.toml (v0.6+)
+  for (const kimiDir of [".kimi", ".kimi-code"]) {
+    try {
+      const kimiConfigPath = path.join(os.homedir(), kimiDir, "config.toml");
+      const kimiDirPath = path.join(os.homedir(), kimiDir);
+      if (!fs.existsSync(kimiDirPath)) fs.mkdirSync(kimiDirPath, { recursive: true });
+      let configText = "";
+      try { configText = fs.readFileSync(kimiConfigPath, "utf-8"); } catch {}
+      // Remove existing codebrain block
+      configText = configText.replace(/\[mcp_servers\.codebrain\][^\[]*/g, "").trimEnd();
+      // Add HTTP transport block
+      configText += `\n\n[mcp_servers.codebrain]\nurl = "${httpUrl}"\ntype = "http"\ndefault_tools_approval_mode = "approve"\n`;
+      fs.writeFileSync(kimiConfigPath, configText, "utf-8");
+      console.log(`[refreshAllWorkspaces] Updated Kimi config: ${kimiConfigPath}`);
+    } catch (err) {
+      console.warn(`[refreshAllWorkspaces] Failed to update Kimi config (${kimiDir}):`, err);
+    }
+  }
+
+  // Gemini: ~/.gemini/settings.json
+  try {
+    const geminiSettingsPath = path.join(os.homedir(), ".gemini", "settings.json");
+    const geminiDir = path.join(os.homedir(), ".gemini");
+    if (!fs.existsSync(geminiDir)) fs.mkdirSync(geminiDir, { recursive: true });
+    let settings: Record<string, any> = {};
+    try { settings = JSON.parse(fs.readFileSync(geminiSettingsPath, "utf-8")); } catch {}
+    settings.mcpServers = {
+      ...(settings.mcpServers || {}),
+      codebrain: { url: httpUrl, type: "http" },
+    };
+    const tmpPath = `${geminiSettingsPath}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+    fs.renameSync(tmpPath, geminiSettingsPath);
+    console.log(`[refreshAllWorkspaces] Updated Gemini config: ${geminiSettingsPath}`);
+  } catch (err) {
+    console.warn("[refreshAllWorkspaces] Failed to update Gemini config:", err);
+  }
+
+  // Codex: ~/.codex/config.toml — inject [mcp_servers.codebrain] if missing
+  try {
+    const codexConfigPath = path.join(os.homedir(), ".codex", "config.toml");
+    if (fs.existsSync(codexConfigPath)) {
+      let toml = fs.readFileSync(codexConfigPath, "utf-8");
+      // Only add if not already present (Codex also injects via -c flag at spawn time)
+      if (!toml.includes("[mcp_servers.codebrain]")) {
+        toml = toml.trimEnd() + `\n\n[mcp_servers.codebrain]\nurl = "${httpUrl}"\ntype = "http"\n`;
+        fs.writeFileSync(codexConfigPath, toml, "utf-8");
+        console.log(`[refreshAllWorkspaces] Added codebrain MCP to Codex config: ${codexConfigPath}`);
+      } else {
+        // Update existing block with correct URL
+        toml = toml.replace(/\[mcp_servers\.codebrain\][\s\S]*?(?=\n\[|$)/, `\n[mcp_servers.codebrain]\nurl = "${httpUrl}"\ntype = "http"\n`);
+        fs.writeFileSync(codexConfigPath, toml, "utf-8");
+        console.log(`[refreshAllWorkspaces] Updated Codex config: ${codexConfigPath}`);
+      }
+    }
+  } catch (err) {
+    console.warn("[refreshAllWorkspaces] Failed to update Codex config:", err);
+  }
+
+  console.log(`[refreshAllWorkspaces] Done — refreshed ${wsSet.size} workspace(s) + global configs`);
 }
 
 /**

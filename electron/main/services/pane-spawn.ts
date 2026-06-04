@@ -86,7 +86,7 @@ export async function spawnPaneInternal(
     if (isClaudeCompatible && ctx.mcpServerInfo && !args.includes("--mcp-config")) {
       const mcpConfigPath = path.join(cwd, ".mcp.json");
       const mcpServers: Record<string, any> = {
-        codebrain: { type: "sse", url: ctx.mcpServerInfo.sseUrl },
+        codebrain: { type: "streamable-http", url: ctx.mcpServerInfo.streamableHttpUrl },
       };
 
       // ── Collect all MCPs installed in Claude Code and inject into .mcp.json ──
@@ -344,26 +344,32 @@ export async function spawnPaneInternal(
         let configText = "";
         try { configText = fs.readFileSync(kimiConfigPath, "utf-8"); } catch {}
 
-        // Ensure model entry exists (e.g. [models."kimi-k2.6"] with max_context_size)
         const effectiveModel = model || "kimi-k2.6";
-        const modelSection = `[models."${effectiveModel}"]`;
-        if (!configText.includes(modelSection)) {
-          // Remove empty/blank config to start fresh if needed
-          if (!configText.trim()) configText = "";
-          const modelBlock = `\n${modelSection}\nprovider = "kimi-for-coding"\nmodel = "${effectiveModel}"\nmax_context_size = 262144\n`;
-          configText = configText.trimEnd() + modelBlock;
-          log.info("[spawnPaneInternal] Kimi model entry added:", effectiveModel);
-        }
 
-        // Ensure default_model is set
+        // Set default_model
         if (!configText.includes("default_model")) {
           configText = `default_model = "${effectiveModel}"\n` + configText;
+        } else {
+          configText = configText.replace(/^default_model\s*=\s*".+"/m, `default_model = "${effectiveModel}"`);
+        }
+
+        // Kimi requires [models."<name>"] with provider, model, and max_context_size.
+        // provider = "kimi-for-coding" is the built-in OAuth provider in kimi-code.
+        const KIMI_CONTEXT: Record<string, number> = {
+          "kimi-k2.6": 1000000, "kimi-k2.5": 1000000,
+          "kimi-k2-flash": 131072, "kimi-k2-turbo": 131072,
+        };
+        const modelSection = `[models."${effectiveModel}"]`;
+        if (!configText.includes(modelSection)) {
+          const ctxSize = KIMI_CONTEXT[effectiveModel] ?? 1000000;
+          configText = configText.trimEnd() + `\n\n${modelSection}\nprovider = "kimi-for-coding"\nmodel = "${effectiveModel}"\nmax_context_size = ${ctxSize}\n`;
         }
 
         // MCP: write codebrain server block
         if (ctx.mcpServerInfo) {
           // Remove existing codebrain mcp block if present
           configText = configText.replace(/\[mcp_servers\.codebrain\][^\[]*/, "").trimEnd();
+          // Kimi uses HTTP transport (Streamable HTTP)
           const mcpBlock = `\n\n[mcp_servers.codebrain]\nurl = "${ctx.mcpServerInfo.streamableHttpUrl}"\ntype = "http"\ndefault_tools_approval_mode = "approve"\n`;
           configText += mcpBlock;
         }
@@ -467,8 +473,8 @@ export async function spawnPaneInternal(
           try { existing = JSON.parse(fs.readFileSync(mcpJsonPath, "utf-8")); } catch {}
           const mcpServers = existing.mcpServers ?? {};
           // cursor-agent supports both SSE and HTTP transports.
-          // Use SSE (legacy) as it has broader compatibility across cursor-agent versions.
-          mcpServers.codebrain = { url: ctx.mcpServerInfo.sseUrl, type: "sse" };
+          // Use Streamable HTTP (modern, works with all agents).
+          mcpServers.codebrain = { url: ctx.mcpServerInfo.streamableHttpUrl, type: "http" };
           existing.mcpServers = mcpServers;
           fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2), "utf-8");
           log.info("[spawnPaneInternal] Cursor MCP config written to", mcpJsonPath);
