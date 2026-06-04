@@ -14,6 +14,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.18",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "organize +shell menu with search, accordion and smart provider ordering"
+      },
+      {
+        "kind": "feat",
+        "text": "enhance Kimi skill integration and persist MCP port to user directory"
+      }
+    ]
+  },
+  {
     "version": "1.8.17",
     "date": "junho 2026",
     "highlights": [
