@@ -14,16 +14,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.8.19",
-    "date": "em desenvolvimento",
+    "version": "1.8.20",
+    "date": "junho 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "enhance MCP injection logic in spawnPaneInternal function"
+        "text": "migrate all CLI agents (Claude, Kimi, Gemini, Codex, Cursor) to Streamable HTTP transport"
       },
       {
         "kind": "feat",
-        "text": "improve anthropic-compat spawn (MIMO/DeepSeek) and provider list UI"
+        "text": "auto-sync global CLI configs (Kimi, Gemini, Codex) on workspace refresh"
+      },
+      {
+        "kind": "feat",
+        "text": "auto-spawn favorite pane on new workspace open if configured"
+      },
+      {
+        "kind": "fix",
+        "text": "Kimi config: model context sizes per model + fix default_model overwrite"
       }
     ]
   },
