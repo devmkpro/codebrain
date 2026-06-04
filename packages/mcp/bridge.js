@@ -53,7 +53,9 @@ function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType,
       content: `[AUTO] ${content}`,
       type: msgType,
       timestamp: Date.now(),
-      read: false,
+      read: true, // AUTO messages are pre-read — they must NOT accumulate as unread
+      // Rationale: unread AUTO messages were the main driver of the idle→inject→loop cycle.
+      // Agents can still see them via pane_read_messages(unreadOnly=false) if needed.
     };
     // Send to in-memory bus
     if (messageBus) {
@@ -220,63 +222,33 @@ function createMCPBridge(ptyManager, opts = {}) {
   });
 
   // ── Sync: broadcast "agent finished" when a pane goes idle ─────────────
-  // Every agent in the same workspace is notified when a peer finishes work.
-  // This enables real-time coordination without manual polling.
+  // Only broadcast when there is meaningful summary content (not empty idle pings).
+  // This prevents the feedback loop: idle → broadcast → agent responds → idle → loop.
   const idleBroadcastDebounce = new Map();
   ptyManager.on("idle", ({ paneId, idle }) => {
     try {
       const now = Date.now();
       const last = idleBroadcastDebounce.get(paneId) || 0;
-      if (now - last < 15000) return; // debounce 15s
+      if (now - last < 30000) return; // debounce 30s
       idleBroadcastDebounce.set(paneId, now);
-      const label = paneLabels.get(paneId) || paneId.slice(0, 8);
-      const role = roleMap.get(paneId) || "worker";
       const workspace = opts.getCurrentWorkspacePath?.() || null;
-      // Build a brief summary from last output lines
+      // Build a brief summary from last output lines — ONLY broadcast if meaningful
       const lastLines = idle?.lastOutput?.slice(-3) || [];
       const summary = lastLines.join(" ").replace(/\x1b\[[0-9;]*m/g, "").trim().slice(0, 200);
-      const content = summary
-        ? `Agente "${label}" (${role}) finalizou trabalho. Últimas linhas: ${summary}`
-        : `Agente "${label}" (${role}) está idle/aguardando.`;
+      if (!summary) return; // ← skip empty/idle-only broadcasts — this breaks the loop
+      const label = paneLabels.get(paneId) || paneId.slice(0, 8);
+      const role = roleMap.get(paneId) || "worker";
+      const content = `Agente "${label}" (${role}) finalizou trabalho. Últimas linhas: ${summary}`;
       sendAgentNotification(ptyManager, paneLabels, paneId, content, "update", messageBus, workspace);
     } catch {}
   });
 
-  // ── Auto-check for unread messages on idle ──────────────────────────────
-  // When a pane goes idle, check if it has unread messages in the file inbox.
-  // If so, inject the pane_read_messages command into the agent's STDIN so it
-  // processes it as its next input. This is the only reliable way to make
-  // agents discover messages — output injection alone doesn't trigger action.
-  // Debounced to once per 20s per pane to avoid loops.
-  const msgIdleDebounce = new Map();
-  ptyManager.on("idle", ({ paneId }) => {
-    try {
-      const now = Date.now();
-      const last = msgIdleDebounce.get(paneId) || 0;
-      if (now - last < 20000) return; // debounce 20s
-      const inbox = path.join(MESSAGES_DIR, paneId);
-      if (!fs.existsSync(inbox)) return;
-      const files = fs.readdirSync(inbox).filter(f => f.endsWith(".json"));
-      let unreadCount = 0;
-      for (const file of files) {
-        try {
-          const raw = fs.readFileSync(path.join(inbox, file), "utf-8");
-          const msg = JSON.parse(raw);
-          if (!msg.read) unreadCount++;
-        } catch {}
-      }
-      if (unreadCount > 0) {
-        msgIdleDebounce.set(paneId, now);
-        // Write a short command to the agent's stdin so it processes it as
-        // its next input. writeSilent suppresses echo. Submit after a delay.
-        const cmd = `pane_read_messages(${paneId})`;
-        ptyManager.writeSilent(paneId, cmd);
-        setTimeout(() => {
-          try { ptyManager.write(paneId, "\r"); } catch {}
-        }, 200);
-      }
-    } catch {}
-  });
+  // ── Auto-inject pane_read_messages REMOVED ──────────────────────────────
+  // Previously this hook injected "pane_read_messages(paneId)" into stdin on
+  // every idle event, causing an infinite loop:
+  //   idle → inject cmd → agent runs → reads messages → goes idle → inject → loop
+  // Agents should call pane_read_messages proactively per their system prompt,
+  // not be driven by a polling loop. Messages remain in the inbox until read.
 
   // ── Create handler factories ─────────────────────────────────────────────
   const sharedOpts = { ...opts, paneLabels, roleMap, messageBus, agentScorer };

@@ -212,22 +212,42 @@ export async function spawnPaneInternal(
           // override to avoid format mismatch. Users should use OpenAI-format models.
         }
       } else if (isAnthropicCompat) {
-        const anthropicKey = env["ANTHROPIC_API_KEY"] || env["ANTHROPIC_AUTH_TOKEN"] || "";
+        // ── Overclock pattern (2026-06-04) ───────────────────────────────────
+        // Claude CLI reads ANTHROPIC_AUTH_TOKEN as bearer token, ANTHROPIC_BASE_URL
+        // to route to non-Anthropic providers (MIMO, DeepSeek, Fireworks, etc).
+        // The user stores the key as ANTHROPIC_AUTH_TOKEN in provider env.
+        // For MIMO: tokenEnvVar="ANTHROPIC_AUTH_TOKEN" → env already has the MIMO key.
+        // Fallback: also accept MIMO_API_KEY for backward compat.
+        const mimoKey = env["MIMO_API_KEY"] || "";
+        if (mimoKey && !env["ANTHROPIC_AUTH_TOKEN"]) {
+          env["ANTHROPIC_AUTH_TOKEN"] = mimoKey;
+        }
+        const anthropicKey = env["ANTHROPIC_AUTH_TOKEN"] || env["ANTHROPIC_API_KEY"] || "";
         if (model) {
           env["MODEL"] = model;
           env["ANTHROPIC_MODEL"] = model;
+          // Override ALL Claude CLI model defaults so non-native models (e.g. MIMO) work.
+          // Without these, Claude CLI falls back to its built-in claude-* defaults and
+          // reports "model not found" for custom models like mimo-v2.5-pro.
+          env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model;
+          env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model;
+          env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = model;
+          env["ANTHROPIC_SMALL_FAST_MODEL"] = model;
           if (!args.includes("--model")) args.push("--model", model);
         }
-        // API key users: set base URL and key for proxy redirect below
         if (anthropicKey) {
-          env["ANTHROPIC_API_KEY"] = anthropicKey;
+          // Key user (MIMO, DeepSeek, etc): set ONLY ANTHROPIC_AUTH_TOKEN — not ANTHROPIC_API_KEY.
+          // Setting both causes Claude CLI to warn: "Both ANTHROPIC_AUTH_TOKEN and ANTHROPIC_API_KEY set".
+          // ANTHROPIC_AUTH_TOKEN takes priority over ANTHROPIC_API_KEY in Claude CLI.
           env["ANTHROPIC_AUTH_TOKEN"] = anthropicKey;
+          delete env["ANTHROPIC_API_KEY"]; // avoid the double-auth warning
           if (provider?.baseUrl) {
             env["ANTHROPIC_BASE_URL"] = provider.baseUrl;
           }
+          log.info(`[spawnPaneInternal] AnthropicCompat: key user, baseUrl=${provider?.baseUrl ?? "default"}`);
         } else {
-          // OAuth users (Claude Pro/Team plan): don't override ANTHROPIC_BASE_URL
-          // so the Claude CLI uses its native OAuth login flow
+          // OAuth users (Claude Pro/Team plan): don't set ANTHROPIC_AUTH_TOKEN or
+          // ANTHROPIC_BASE_URL — Claude CLI uses its native OAuth login flow.
           log.info("[spawnPaneInternal] AnthropicCompat: no API key — using Claude CLI native OAuth");
         }
       }
@@ -240,13 +260,24 @@ export async function spawnPaneInternal(
     // that OpenClaude's Gemini adapter requires during initialization.
     if (ctx.apiProxyUrl) {
       if (isMimo || isAnthropicCompat) {
-        // Includes claude-oauth: proxy forwards all headers (including OAuth bearer token).
-        // Use registerAnthropicTarget() for per-token routing — no shared-state race condition.
-        const realBaseUrl = (env["ANTHROPIC_BASE_URL"] as string) || provider?.baseUrl || "https://api.anthropic.com";
-        const tokenKey = env["ANTHROPIC_API_KEY"] || env["ANTHROPIC_AUTH_TOKEN"] || null;
-        ctx.apiProxy?.registerAnthropicTarget(tokenKey, realBaseUrl, paneId);
-        env["ANTHROPIC_BASE_URL"] = ctx.apiProxyUrl;
-        log.info(`[spawnPaneInternal] API Proxy redirect (Anthropic): ${realBaseUrl} → ${ctx.apiProxyUrl}`);
+        const isMimoClaude = provider?.id === "mimo-claude" ||
+          (isAnthropicCompat && (provider?.baseUrl || "").includes("xiaomimimo.com"));
+
+        if (isMimoClaude) {
+          // Overclock pattern: MIMO via Claude goes DIRECTLY to MIMO — no proxy.
+          // The Claude CLI already has ANTHROPIC_AUTH_TOKEN=<mimo_key> and
+          // ANTHROPIC_BASE_URL=<mimo_url> set in its env. Routing through the
+          // proxy causes token mismatch (proxy can't distinguish MIMO key from OAuth).
+          log.info(`[spawnPaneInternal] MIMO via Claude: bypassing proxy, direct to ${env["ANTHROPIC_BASE_URL"] || provider?.baseUrl}`);
+        } else {
+          // All other Anthropic-compat providers (claude-oauth, anthropic API key, etc)
+          // go through proxy for token tracking.
+          const realBaseUrl = (env["ANTHROPIC_BASE_URL"] as string) || provider?.baseUrl || "https://api.anthropic.com";
+          const tokenKey = env["ANTHROPIC_AUTH_TOKEN"] || env["ANTHROPIC_API_KEY"] || null;
+          ctx.apiProxy?.registerAnthropicTarget(tokenKey, realBaseUrl, paneId);
+          env["ANTHROPIC_BASE_URL"] = ctx.apiProxyUrl;
+          log.info(`[spawnPaneInternal] API Proxy redirect (Anthropic): ${realBaseUrl} → ${ctx.apiProxyUrl}`);
+        }
       }
       if (isGeminiCompat) {
         const realGeminiUrl = env["GEMINI_BASE_URL"] || provider?.baseUrl || "https://generativelanguage.googleapis.com";

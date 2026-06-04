@@ -58,6 +58,10 @@ class ApiProxy {
     this._tokenTargetMap = new Map();
     // Fallback for OAuth users (no stable token key)
     this._oauthTarget = null;
+    // When non-null, the proxy replaces the incoming Authorization header with this token
+    // before forwarding to the OAuth-slot target. Used for MIMO via Claude where the
+    // Claude CLI sends its OAuth token but MIMO needs the MIMO_API_KEY instead.
+    this._oauthTokenReplace = null;
     // Per-token → paneId attribution: Map<tokenPrefix(20 chars), paneId>
     this._tokenPaneMap = new Map();
     this._oauthPaneId = null;
@@ -148,7 +152,7 @@ class ApiProxy {
    * @param {string} targetUrl - Real API base URL for this token
    * @param {string} [paneId] - Optional pane ID for token attribution
    */
-  registerAnthropicTarget(tokenOrKey, targetUrl, paneId) {
+  registerAnthropicTarget(tokenOrKey, targetUrl, paneId, replaceToken) {
     if (!targetUrl) return;
     if (tokenOrKey) {
       const prefix = String(tokenOrKey).slice(0, 20);
@@ -165,6 +169,8 @@ class ApiProxy {
         this._oauthTarget = targetUrl;
       }
       if (paneId) this._oauthPaneId = paneId;
+      // Optional: replace the incoming auth token before forwarding (e.g. MIMO via Claude)
+      this._oauthTokenReplace = replaceToken || null;
     }
   }
 
@@ -1021,6 +1027,16 @@ class ApiProxy {
     // Forward all headers (strip host)
     const headers = { ...req.headers };
     delete headers["host"];
+
+    // If this target registered an auth token replacement (e.g. MIMO via Claude OAuth),
+    // swap out the incoming OAuth token with the provider's API key before forwarding.
+    if (!isGemini && this._oauthTokenReplace) {
+      const resolvedTarget = this._resolveAnthropicTarget(req);
+      if (resolvedTarget === this._oauthTarget) {
+        headers["authorization"] = `Bearer ${this._oauthTokenReplace}`;
+        headers["x-api-key"] = this._oauthTokenReplace;
+      }
+    }
 
     const options = {
       hostname: target.hostname,

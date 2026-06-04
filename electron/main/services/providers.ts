@@ -41,15 +41,19 @@ export function getEnhancedProviders(ctx: AppContext) {
     env: {},
   }] : [];
 
-  const VIRTUAL_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot"];
+  const VIRTUAL_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot", "mimo-claude"];
   const filtered = list
     .filter(p => !VIRTUAL_IDS.includes(p.id) && !p.label?.includes("Gemini CLI"))
     .map(p => {
       // Look up the canonical template by id
       const template = PROVIDER_REGISTRY.find(t => t.id === p.id);
       if (template) {
+        // For MIMO (openclaude), always use the registry label so it reads
+        // "MIMO via OpenClaude" instead of user-saved "MIMO".
+        const label = template.id === "mimo" ? template.label : p.label;
         return {
           ...p,
+          label,
           host: template.host,
           type: template.type as any,
           models: [...template.models],
@@ -63,8 +67,11 @@ export function getEnhancedProviders(ctx: AppContext) {
         const labelMatch = tpl.labelIncludes?.some(k => label.includes(k.toLowerCase()));
         const idMatch = tpl.idIncludes?.some(k => id.includes(k.toLowerCase()));
         if (labelMatch || idMatch) {
+          // Same: normalize MIMO label for keyword-matched providers
+          const resolvedLabel = tpl.id === "mimo" ? tpl.label : p.label;
           return {
             ...p,
+            label: resolvedLabel,
             host: tpl.host,
             type: tpl.type as any,
             models: [...tpl.models],
@@ -112,5 +119,30 @@ export function getEnhancedProviders(ctx: AppContext) {
     env: {},
   }] : [];
 
-  return [...claudeOAuthProvider, ...codexOAuthProvider, ...geminiCliProvider, ...kimiProvider, ...cursorProvider, ...copilotProvider, ...filtered];
+  // Virtual MIMO via Claude provider — appears when Claude CLI is installed AND user has a MIMO provider configured
+  const mimoClaudeTemplate = PROVIDER_REGISTRY.find(t => t.id === "mimo-claude");
+  const mimoConfigured = list.find(p => {
+    const label = p.label?.toLowerCase() || "";
+    const id = (p.id || "").toLowerCase();
+    return id.includes("mimo") || label.includes("mimo");
+  });
+  const hasMimoConfigured = !!mimoConfigured;
+  // Inherit the MIMO API key from the configured mimo provider.
+  // The key may be stored as MIMO_API_KEY or ANTHROPIC_AUTH_TOKEN depending on how
+  // the user configured it. We normalize to ANTHROPIC_AUTH_TOKEN so Claude CLI picks it up.
+  const mimoKey = mimoConfigured?.env?.["ANTHROPIC_AUTH_TOKEN"]
+    || mimoConfigured?.env?.["MIMO_API_KEY"]
+    || mimoConfigured?.env?.["ANTHROPIC_API_KEY"]
+    || "";
+  const mimoClaudeProvider = claudeDetected && hasMimoConfigured && mimoClaudeTemplate ? [{
+    id: mimoClaudeTemplate.id,
+    label: mimoClaudeTemplate.label,
+    type: mimoClaudeTemplate.type as any,
+    host: mimoClaudeTemplate.host,
+    baseUrl: mimoClaudeTemplate.baseUrl,
+    models: [...mimoClaudeTemplate.models],
+    env: mimoKey ? { ANTHROPIC_AUTH_TOKEN: mimoKey, MIMO_API_KEY: mimoKey } : {},
+  }] : [];
+
+  return [...claudeOAuthProvider, ...codexOAuthProvider, ...geminiCliProvider, ...kimiProvider, ...cursorProvider, ...copilotProvider, ...mimoClaudeProvider, ...filtered];
 }

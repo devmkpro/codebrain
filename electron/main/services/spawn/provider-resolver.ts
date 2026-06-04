@@ -139,8 +139,37 @@ export function resolveProvider(
     log.info(`[resolveProvider] copilot → agent="copilot", ${provider.models.length} models`);
   }
 
+  // ── Step 0h: mimo-claude virtual provider (MIMO via Claude Code CLI) ─────────
+  if (providerId === "mimo-claude") {
+    agent = "claude";
+    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "mimo-claude");
+    const registryModels = registryTemplate?.models ?? [];
+    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
+    // Inherit MIMO key from the configured mimo provider in the store
+    const mimoStoreProvider = ctx.providerStore.listFull().find((p: any) =>
+      (p.id || "").toLowerCase().includes("mimo") || (p.label || "").toLowerCase().includes("mimo")
+    );
+    const mimoKey = mimoStoreProvider?.env?.["ANTHROPIC_AUTH_TOKEN"]
+      || mimoStoreProvider?.env?.["MIMO_API_KEY"]
+      || mimoStoreProvider?.env?.["ANTHROPIC_API_KEY"]
+      || "";
+    const mimoBaseUrl = mimoStoreProvider?.env?.["ANTHROPIC_BASE_URL"]
+      || registryTemplate?.baseUrl
+      || "https://token-plan-sgp.xiaomimimo.com/anthropic";
+    provider = {
+      id: "mimo-claude",
+      type: "anthropic-compat",
+      host: "claude",
+      baseUrl: mimoBaseUrl,
+      tokenEnvVar: "ANTHROPIC_AUTH_TOKEN",
+      models: [...new Set([...allModels])],
+      env: mimoKey ? { ANTHROPIC_AUTH_TOKEN: mimoKey, MIMO_API_KEY: mimoKey } : {},
+    };
+    log.info(`[resolveProvider] mimo-claude → agent="claude", key=${mimoKey ? "SET" : "MISSING"}, baseUrl=${mimoBaseUrl}`);
+  }
+
   // ── Step 1: Explicit providerId ─────────────────────────────────────────────
-  const VIRTUAL_PROVIDER_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot"];
+  const VIRTUAL_PROVIDER_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot", "mimo-claude"];
   if (!provider && providerId && !VIRTUAL_PROVIDER_IDS.includes(providerId)) {
     provider = ctx.providerStore.listFull().find((p: any) => p.id === providerId) ?? null;
     if (!provider) {
@@ -342,7 +371,8 @@ export function resolveProvider(
     model = (enhanced && enhanced.length > 0 ? enhanced : provider.models)?.[0];
   }
 
-  // ── Safety: MIMO has no CLI — force openclaude ──────────────────────────────
+  // ── Safety: MIMO (mimo-compat/openclaude) has no native CLI — force openclaude ──
+  // Note: mimo-claude (anthropic-compat/claude) is intentionally allowed through.
   if (provider && agent === "claude" && provider.type === "mimo-compat") {
     log.info(`[resolveProvider] Overriding agent "claude" → "openclaude" for mimo-compat`);
     agent = "openclaude";
