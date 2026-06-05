@@ -14,24 +14,40 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.21",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add native Chrome CDP browser control with auto-detection"
+      }
+    ]
+  },
+  {
     "version": "1.8.20",
     "date": "junho 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "migrate all CLI agents (Claude, Kimi, Gemini, Codex, Cursor) to Streamable HTTP transport"
+        "text": "update MCP transport to Streamable HTTP and enhance workspace configuration handling"
+      }
+    ]
+  },
+  {
+    "version": "1.8.19",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "remove API proxy/cost tracker, fix MIMO/Cursor/MCP for all agents"
       },
       {
         "kind": "feat",
-        "text": "auto-sync global CLI configs (Kimi, Gemini, Codex) on workspace refresh"
+        "text": "enhance MCP injection logic in spawnPaneInternal function"
       },
       {
         "kind": "feat",
-        "text": "auto-spawn favorite pane on new workspace open if configured"
-      },
-      {
-        "kind": "fix",
-        "text": "Kimi config: model context sizes per model + fix default_model overwrite"
+        "text": "improve anthropic-compat spawn (MIMO/DeepSeek) and provider list UI"
       }
     ]
   },
