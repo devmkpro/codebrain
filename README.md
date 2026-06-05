@@ -26,7 +26,7 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 - **Background workers** — 7 persistent maintenance daemons (health, patterns, security, git, learning, cache, swarm)
 - **Consensus** — majority/unanimous/weighted voting + automatic leader election
 - **Priority MessageBus** — in-memory messaging with 4 priority levels, ack/retry, TTL, metrics
-- **156 MCP tools** — pane, browser, memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus, skills
+- **177 MCP tools** — pane, browser (CDP + webview), memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus, skills
 - **Skills system** — create, list, install and manage prompt templates scoped to project or globally (`~/.codebrain/skills/`); marketplace with featured skills, tag filters, and one-click install all
 - **Voice input** — push-to-talk with Groq Whisper transcription
 - **Discord Rich Presence** — shows Codebrain status in your Discord profile; Client ID configurable via Settings
@@ -161,11 +161,14 @@ Agents get these tools automatically:
 | `pane_set_role` | Assign worker/orchestrator role |
 | `todo_manager` | Manage the task sidebar |
 
-### Browser automation (46 tools)
+### Browser automation (53 tools)
+
+All tools work in **dual mode**: native Chrome via CDP (auto-detected on port 9222) or embedded Electron webview (fallback).
 
 | Tool | What it does |
 |------|-------------|
 | `browser_guide` | MANDATORY — read before any browser tool |
+| `browser_mode` | Current mode: CDP (native Chrome) or webview (embedded) |
 | **Navigation** | |
 | `browser_navigate` | Go to a URL |
 | `browser_open` | Open new browser pane |
@@ -176,6 +179,7 @@ Agents get these tools automatically:
 | `browser_get_text` | Get visible text |
 | `browser_get_accessibility_tree` | Semantic tree (roles, labels, bounds) |
 | `browser_find_by_text` | Find element by visible text |
+| `browser_find` | Natural language element search (CDP-only) |
 | `browser_get_element_info` | Full element info (bounds, attributes, role) |
 | `browser_get_url` | Current URL + title |
 | `browser_page_summary` | URL, text, links, inputs, buttons in one call |
@@ -198,6 +202,14 @@ Agents get these tools automatically:
 | `browser_type` | Type text character by character |
 | `browser_key` | Press single key (Enter, Escape, Tab…) |
 | `browser_shortcut` | Keyboard shortcut (Ctrl+A, Ctrl+Shift+I…) |
+| **Computer (CDP-only)** | |
+| `browser_computer` | Mouse/keyboard/screen actions (13 action types: left_click, right_click, double_click, middle_click, mouse_move, left_click_drag, key_press, type, scroll, screenshot, cursor_position, wait, get_screen_size) |
+| **Tabs (CDP-only)** | |
+| `browser_tabs_list` | List all open Chrome tabs |
+| `browser_tabs_create` | Create a new tab |
+| `browser_tabs_close` | Close a tab by ID |
+| **Batch (CDP-only)** | |
+| `browser_batch` | Execute multiple browser actions in a single roundtrip |
 | **Wait / assertions** | |
 | `browser_wait_for` | Wait for element to appear |
 | `browser_wait_for_text` | Wait for text to appear |
@@ -351,7 +363,7 @@ Agents get these tools automatically:
 | `skill_install` | Install a skill from the GitLab registry to `~/.codebrain/skills/` |
 | `skill_uninstall` | Remove an installed skill |
 
-**Total: 156 MCP tools**
+**Total: 177 MCP tools**
 
 ---
 
@@ -365,13 +377,15 @@ codebrain/
 │   └── styles/             Tailwind + design tokens
 ├── electron/main/          Electron main process
 ├── packages/
-│   ├── mcp/                MCP server (156 agent tools)
-│   │   ├── bridge/         Handler modules (13 files)
+│   ├── mcp/                MCP server (177 agent tools)
+│   │   ├── bridge/         Handler modules (15 files)
 │   │   │   ├── message-bus.js        Priority in-memory messaging
 │   │   │   ├── agent-scorer.js       Multi-factor agent scoring
 │   │   │   ├── pipeline-handlers.js  Fan-out/fan-in/pipeline
 │   │   │   ├── background-workers.js 7 maintenance daemons
 │   │   │   ├── consensus-handlers.js Voting + leader election
+│   │   │   ├── cdp-client.js         Chrome DevTools Protocol client
+│   │   │   ├── native-chrome-handlers.js  CDP browser commands
 │   │   │   └── ...                   pane, browser, memory, swarm, etc.
 │   │   ├── index.js        Tool registration (Zod schemas)
 │   │   └── bridge.js       Handler composition + auto-notify

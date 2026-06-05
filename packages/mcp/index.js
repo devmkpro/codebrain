@@ -1944,6 +1944,219 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
       catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );
+
+  // ══════════════════════════════════════════════════════════════════════
+  // NEW CDP-ONLY TOOLS — Native Chrome browser control
+  // These require Chrome with --remote-debugging-port=9222
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── browser_mode — Detect current browser mode (CDP vs webview) ────
+  server.tool(
+    "mcp__codebrain__browser_mode",
+    "Detect if using native Chrome (CDP) or embedded webview. Returns current browser mode, port, and connection status.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserMode()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_computer — Mouse/keyboard/screen via CDP ──────────────
+  server.tool(
+    "mcp__codebrain__browser_computer",
+    "Perform mouse, keyboard, and screen actions on the native browser via CDP. Actions: left_click, right_click, double_click, triple_click, left_click_drag, type, key, screenshot, wait, scroll, scroll_to, hover, zoom. Requires Chrome with --remote-debugging-port.",
+    {
+      action: z.enum([
+        "left_click", "right_click", "double_click", "triple_click",
+        "left_click_drag", "type", "key", "screenshot", "wait",
+        "scroll", "scroll_to", "hover", "zoom",
+      ]).describe("Action to perform"),
+      coordinate: z.array(z.number()).optional().describe("[x, y] screen coordinates"),
+      text: z.string().optional().describe("Text to type or key to press"),
+      start_coordinate: z.array(z.number()).optional().describe("Start position for drag"),
+      scroll_direction: z.enum(["up", "down", "left", "right"]).optional(),
+      scroll_amount: z.number().optional(),
+      wait_ms: z.number().optional().describe("Milliseconds to wait"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserComputer(args)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_find — Natural language element search via CDP ────────
+  server.tool(
+    "mcp__codebrain__browser_find",
+    "Find elements on the page by natural language query. Returns matching elements with coordinates and center points. Requires Chrome CDP.",
+    {
+      query: z.string().describe("Natural language query to find elements (e.g. 'Submit button', 'email input', 'navigation menu')"),
+      role: z.string().optional().describe("ARIA role filter (button, link, input, heading, etc.)"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFindNaturalLanguage(args.query, args.role)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_tabs_list — List all open Chrome tabs ─────────────────
+  server.tool(
+    "mcp__codebrain__browser_tabs_list",
+    "List all open browser tabs in the native Chrome instance. Returns tab ID, title, URL, and active status. Requires Chrome CDP.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserTabsList()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_tabs_create — Open new tab in Chrome ──────────────────
+  server.tool(
+    "mcp__codebrain__browser_tabs_create",
+    "Create a new browser tab in the native Chrome instance. Returns the new tab ID. Requires Chrome CDP.",
+    { url: z.string().optional().describe("URL to open in the new tab (default: about:blank)") },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserTabsCreate(args.url)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_tabs_close — Close a Chrome tab ───────────────────────
+  server.tool(
+    "mcp__codebrain__browser_tabs_close",
+    "Close a browser tab in the native Chrome instance by tab ID. Requires Chrome CDP.",
+    { tab_id: z.string().describe("Tab ID to close (from browser_tabs_list)") },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserTabsClose(args.tab_id)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_batch — Execute multiple browser actions in one call ──
+  server.tool(
+    "mcp__codebrain__browser_batch",
+    "Execute multiple browser tool calls sequentially in one round trip. Reduces latency for multi-step operations. Requires Chrome CDP.",
+    {
+      actions: z.array(z.object({
+        tool: z.string().describe("Tool name (e.g. 'navigate', 'click', 'fill', 'screenshot', 'computer', 'find')"),
+        input: z.object({}).passthrough().optional().describe("Tool arguments"),
+      })).describe("Array of tool actions to execute sequentially"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserBatch(args.actions)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ─── Fetch Interception Tools (CDP Fetch domain) ─────────────────────
+  // Intercept, modify, block, or mock HTTP requests in real-time.
+
+  server.tool(
+    "mcp__codebrain__browser_intercept_requests",
+    "Enable request interception via CDP Fetch domain. Pauses matching requests so they can be modified, blocked, or mocked. Requires Chrome CDP.",
+    {
+      url_patterns: z.array(z.string()).optional().describe("URL patterns to intercept (wildcards). Default: ['*'] (all)"),
+      resource_types: z.array(z.string()).optional().describe("Resource types: Document, Stylesheet, Image, Media, Font, Script, XHR, Fetch, WebSocket, etc."),
+      handle_auth: z.boolean().optional().describe("Handle auth challenges (default: false)"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserInterceptRequests(args.url_patterns, args.resource_types, args.handle_auth)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_continue_request",
+    "Continue an intercepted (paused) request. Optionally modify URL, method, headers, or POST body. Requires Chrome CDP.",
+    {
+      request_id: z.string().describe("Paused request ID"),
+      url: z.string().optional().describe("Override URL"),
+      method: z.string().optional().describe("Override HTTP method"),
+      headers: z.record(z.string()).optional().describe("Override headers"),
+      post_data: z.string().optional().describe("Override POST body"),
+    },
+    async (args) => {
+      try {
+        const overrides = {};
+        if (args.url) overrides.url = args.url;
+        if (args.method) overrides.method = args.method;
+        if (args.headers) overrides.headers = args.headers;
+        if (args.post_data !== undefined) overrides.postData = args.post_data;
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserContinueRequest(args.request_id, Object.keys(overrides).length ? overrides : undefined)) }] };
+      }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_fulfill_request",
+    "Fulfill an intercepted request with a custom mock response. Requires Chrome CDP.",
+    {
+      request_id: z.string().describe("Paused request ID"),
+      status_code: z.number().optional().describe("HTTP status (default: 200)"),
+      headers: z.record(z.string()).optional().describe("Response headers"),
+      body: z.string().optional().describe("Response body text"),
+      body_base64: z.string().optional().describe("Response body as base64"),
+    },
+    async (args) => {
+      try {
+        const response = { statusCode: args.status_code, headers: args.headers, body: args.body_base64 || args.body, isBase64: !!args.body_base64 };
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFulfillRequest(args.request_id, response)) }] };
+      }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_fail_request",
+    "Block/fail an intercepted request. Use to block ads, trackers, or specific API calls. Requires Chrome CDP.",
+    {
+      request_id: z.string().describe("Paused request ID"),
+      reason: z.enum(["Failed","Aborted","TimedOut","AccessDenied","ConnectionClosed","ConnectionReset","ConnectionRefused","ConnectionAborted","ConnectionFailed","NameNotResolved","InternetDisconnected","AddressUnreachable","BlockedByClient","BlockedByResponse"]).optional().describe("Error reason"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFailRequest(args.request_id, args.reason)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_continue_response",
+    "Continue an intercepted response (modify headers/body after server responds). Requires Chrome CDP.",
+    {
+      request_id: z.string().describe("Paused request ID"),
+      headers: z.record(z.string()).optional().describe("Modified response headers"),
+      body_base64: z.string().optional().describe("Modified response body as base64"),
+    },
+    async (args) => {
+      try {
+        const overrides = {};
+        if (args.headers) overrides.headers = args.headers;
+        if (args.body_base64) overrides.body = args.body_base64;
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserContinueResponse(args.request_id, Object.keys(overrides).length ? overrides : undefined)) }] };
+      }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_stop_intercepting",
+    "Disable request interception. Let all requests flow normally. Requires Chrome CDP.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserStopIntercepting()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_get_paused_requests",
+    "Get all paused (intercepted) requests. Returns request ID, URL, method, headers, body for each. Requires Chrome CDP.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetPausedRequests()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
 }
 
 module.exports = { createCodebrainMCPServer, registerBrowserTools };

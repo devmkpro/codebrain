@@ -6,6 +6,7 @@ const os = require("os");
 
 const { createPaneHandlers } = require("./bridge/pane-handlers.js");
 const { createBrowserHandlers } = require("./bridge/browser-handlers.js");
+const { CDPClient } = require("./bridge/cdp-client.js");
 const { createTodoHandlers } = require("./bridge/todo-handlers.js");
 const { createMemoryHandlers } = require("./bridge/memory-handlers.js");
 const { createSwarmHandlers } = require("./bridge/swarm-handlers.js");
@@ -221,6 +222,18 @@ function createMCPBridge(ptyManager, opts = {}) {
   //   idle → inject cmd → agent runs → reads messages → goes idle → inject → loop
   // Agents should call pane_read_messages proactively per their system prompt,
   // not be driven by a polling loop. Messages remain in the inbox until read.
+
+  // ── CDP Client for native Chrome control ─────────────────────────────
+  // Lazy-initialized on first browser tool call.
+  // If opts.cdpClient is already provided (from mcp.ts), use it.
+  // Otherwise create one.
+  if (!opts.cdpClient) {
+    try {
+      opts.cdpClient = new CDPClient({ log: console.log, debug: false });
+    } catch (err) {
+      console.warn("[Bridge] Could not create CDPClient:", err.message);
+    }
+  }
 
   // ── Create handler factories ─────────────────────────────────────────────
   const sharedOpts = { ...opts, paneLabels, roleMap, messageBus, agentScorer };

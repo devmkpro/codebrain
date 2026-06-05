@@ -5,13 +5,20 @@ import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
 import { refreshAllWorkspaces } from "./workspace";
 
+// CDP Client for native Chrome browser control
+const { CDPClient } = require("../../packages/mcp/bridge/cdp-client.js");
+
 export function writeMcpConfig(ctx: AppContext, info: McpServerInfo): void {
   // Delegate to refreshAllWorkspaces which handles all providers + all workspaces in one pass.
   refreshAllWorkspaces(ctx, info);
 }
 
 function buildMcpBridge(ctx: AppContext) {
+  // Create CDP client for native Chrome browser control
+  const cdpClient = new CDPClient({ log: console.log, debug: false });
+
   return {
+    cdpClient,
     spawnPaneFn: (req: { agent?: string; providerId?: string; model?: string; cwd?: string }) =>
       spawnPaneInternal(ctx, req),
     onPaneCreated: (info: { paneId: string; agent: string; cwd?: string; providerId?: string; model?: string }) => {
