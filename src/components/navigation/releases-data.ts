@@ -14,6 +14,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.8.22",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "restore claude-sonnet-4-6 to both claude providers"
+      },
+      {
+        "kind": "feat",
+        "text": "add claude-in-chrome-mcp skill with complete browser automation guide"
+      }
+    ]
+  },
+  {
     "version": "1.8.21",
     "date": "junho 2026",
     "highlights": [
