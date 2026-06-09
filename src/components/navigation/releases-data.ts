@@ -14,8 +14,34 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.9.0",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add browser_fetch_* MCP tools for HTTP scraping with TLS fingerprinting (chrome-131, firefox-133, chrome-mobile)"
+      },
+      {
+        "kind": "feat",
+        "text": "autopart-scraper skill v0.4.0 — deep network intelligence, API interception, never-Selenium-first rule"
+      },
+      {
+        "kind": "feat",
+        "text": "MCP port indicator in workspace header with click-to-copy"
+      },
+      {
+        "kind": "fix",
+        "text": "always await mcpServerReady to get latest port before spawning panes (fixes stale .mcp.json)"
+      },
+      {
+        "kind": "fix",
+        "text": "add FORBIDDEN TOOLS section in system prompt to prevent agents from using curl/Fetch instead of MCP tools"
+      }
+    ]
+  },
+  {
     "version": "1.8.22",
-    "date": "em desenvolvimento",
+    "date": "junho 2026",
     "highlights": [
       {
         "kind": "fix",
