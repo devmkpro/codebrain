@@ -848,6 +848,41 @@ function AccessModeSelector({ activeWorkspace }: { activeWorkspace: string }) {
   );
 }
 
+// ─── MCP Port Indicator ───────────────────────────────────────────────────────
+function McpPortIndicator() {
+  const [mcpPort, setMcpPort] = React.useState<number | null>(null);
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    const api = (window as any).codeBrainApp?.diagnostics;
+    if (!api) return;
+    api.snapshot().then((s: any) => {
+      if (s?.mcp?.active && s.mcp.port) setMcpPort(s.mcp.port);
+    }).catch(() => {});
+  }, []);
+
+  if (mcpPort === null) return null;
+
+  const handleClick = () => {
+    navigator.clipboard.writeText(String(mcpPort)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[9px] tracking-wider transition-all cursor-pointer
+        text-emerald-400/70 hover:text-emerald-300 hover:bg-emerald-500/[0.08]"
+      title={copied ? 'Copiado!' : `MCP rodando na porta ${mcpPort} — clique para copiar`}
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+      MCP:{mcpPort}
+    </button>
+  );
+}
+
 // ─── Workspace Header ─────────────────────────────────────────────────────────
 function WorkspaceHeader() {
   const tabs = useNavStore(s => s.tabs) as any[];
@@ -1121,6 +1156,9 @@ function WorkspaceHeader() {
           )}
 
           {activeWorkspace && <VDiv />}
+
+          {/* MCP Port Indicator */}
+          <McpPortIndicator />
 
           {/* Audio / Voice mode indicator */}
           {activeWorkspace && audioConfig && (
