@@ -218,14 +218,21 @@ export function setupClaudeIntegration(): void {
       },
     }, null, 2);
 
-    // Only write if missing or different (avoid overwriting user customizations)
+    // Only write if missing or different (avoid overwriting user customizations).
+    // CRITICAL: ~/.mcp.json must ALWAYS be stdio transport (never HTTP).
+    // HTTP config belongs in workspace .mcp.json, not the global home dir.
+    // If someone/something wrote HTTP here (e.g. stale port file), overwrite with stdio.
     let shouldWrite = true;
     if (fs.existsSync(homeMcpPath)) {
       try {
         const existing = JSON.parse(fs.readFileSync(homeMcpPath, "utf-8"));
+        const existingType = existing?.mcpServers?.codebrain?.type;
         const existingArgs = existing?.mcpServers?.codebrain?.args;
-        if (Array.isArray(existingArgs) && existingArgs[0] === stdioPath) {
+        // Skip only if already stdio with the correct binary path
+        if (existingType === "stdio" && Array.isArray(existingArgs) && existingArgs[0] === stdioPath) {
           shouldWrite = false;
+        } else if (existingType && existingType !== "stdio") {
+          log.warn(`[setup-claude] ~/.mcp.json has type "${existingType}" — fixing to stdio`);
         }
       } catch {
         // Invalid JSON — overwrite

@@ -16,6 +16,7 @@ const { createHooksHandlers } = require("./bridge/hooks-handlers.js");
 const { createSkillHandlers } = require("./bridge/skill-handlers.js");
 const { createKanbanHandlers } = require("./bridge/kanban-handlers.js");
 const { createMissionHandlers } = require("./bridge/mission-handlers.js");
+const { createFetchHandlers } = require("./bridge/fetch-handlers.js");
 
 // ── New multi-agent features ────────────────────────────────────────────────
 const { MessageBus } = require("./bridge/message-bus.js");
@@ -322,6 +323,7 @@ function createMCPBridge(ptyManager, opts = {}) {
   const expandedHooksHandlers = createExpandedHooksHandlers({ ...opts, paneLabels, roleMap });
   const kanbanHandlers = createKanbanHandlers({ ...opts });
   const missionHandlers = createMissionHandlers({ ...opts });
+  const fetchHandlers = createFetchHandlers(opts);
 
   // ── Wrap fileWrite: auto-record in shared memory + notify agents ────────
   const originalFileWrite = fileHandlers.fileWrite.bind(fileHandlers);
@@ -410,6 +412,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...expandedHooksHandlers,
     ...kanbanHandlers,
     ...missionHandlers,
+    ...fetchHandlers,
     ...agentHandlers,
     // Expose foundational instances
     messageBus,

@@ -2159,4 +2159,113 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 }
 
-module.exports = { createCodebrainMCPServer, registerBrowserTools };
+// ═══════════════════════════════════════════════════════════════════════════════
+// FETCH / SCRAPING TOOLS — HTTP requests with TLS fingerprinting
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function registerFetchTools(server, bridge) {
+
+  server.tool(
+    "mcp__codebrain__browser_fetch",
+    "Make an HTTP request with TLS fingerprinting (simulates Chrome/Firefox). Returns {status, headers, body, contentType, timing, cfBlocked}. Use this FIRST for scraping — it's faster and lighter than browser tools. If cfBlocked=true, fall back to browser_open + browser_wait_for.",
+    {
+      url: z.string().describe("URL to fetch"),
+      method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"]).default("GET").describe("HTTP method"),
+      headers: z.record(z.string()).optional().describe("Custom headers (merged with browser-realistic defaults). Set to null to remove a default header."),
+      body: z.union([z.string(), z.record(z.any())]).optional().describe("Request body (string or JSON object)"),
+      timeout_ms: z.number().default(30000).describe("Request timeout in ms"),
+      tls_profile: z.enum(["chrome-131", "chrome-mobile", "firefox-133"]).default("chrome-131").describe("TLS fingerprint profile to simulate"),
+    },
+    async ({ url, method, headers, body, timeout_ms, tls_profile }) => {
+      try {
+        const result = await bridge.browserFetch({ url, method, headers, body, timeout_ms, tls_profile });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_fetch_json",
+    "Fetch a URL and auto-parse JSON response. Shortcut for API calls. Returns parsed JSON object directly. If response is not JSON, returns warning.",
+    {
+      url: z.string().describe("URL to fetch"),
+      method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).default("GET").describe("HTTP method"),
+      headers: z.record(z.string()).optional().describe("Custom headers"),
+      body: z.union([z.string(), z.record(z.any())]).optional().describe("Request body"),
+      timeout_ms: z.number().default(30000).describe("Request timeout in ms"),
+      tls_profile: z.enum(["chrome-131", "chrome-mobile", "firefox-133"]).default("chrome-131").describe("TLS fingerprint profile"),
+    },
+    async ({ url, method, headers, body, timeout_ms, tls_profile }) => {
+      try {
+        const result = await bridge.browserFetchJson({ url, method, headers, body, timeout_ms, tls_profile });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_fetch_html",
+    "Fetch HTML from a URL with TLS fingerprinting. Strips scripts/styles, auto-truncated at 50k chars. Use for scraping — faster than browser_navigate + browser_get_html. Falls back to browser_* tools if Cloudflare is detected (cfBlocked=true in response).",
+    {
+      url: z.string().describe("URL to fetch"),
+      headers: z.record(z.string()).optional().describe("Custom headers"),
+      timeout_ms: z.number().default(30000).describe("Request timeout in ms"),
+      tls_profile: z.enum(["chrome-131", "chrome-mobile", "firefox-133"]).default("chrome-131").describe("TLS fingerprint profile"),
+    },
+    async ({ url, headers, timeout_ms, tls_profile }) => {
+      try {
+        const result = await bridge.browserFetchHtml({ url, headers, timeout_ms, tls_profile });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_fetch_batch",
+    "Fetch multiple URLs in parallel (max 10). Returns array of responses. Use for scraping multiple pages simultaneously. Each response includes status, body, timing, and cfBlocked flag.",
+    {
+      urls: z.array(z.string()).min(1).max(10).describe("Array of URLs to fetch (max 10)"),
+      method: z.enum(["GET", "POST"]).default("GET").describe("HTTP method for all requests"),
+      headers: z.record(z.string()).optional().describe("Custom headers (applied to all requests)"),
+      body: z.union([z.string(), z.record(z.any())]).optional().describe("Request body (applied to all requests)"),
+      timeout_ms: z.number().default(30000).describe("Timeout per request in ms"),
+      tls_profile: z.enum(["chrome-131", "chrome-mobile", "firefox-133"]).default("chrome-131").describe("TLS fingerprint profile"),
+      max_concurrent: z.number().default(5).describe("Max concurrent requests (default 5)"),
+    },
+    async ({ urls, method, headers, body, timeout_ms, tls_profile, max_concurrent }) => {
+      try {
+        const result = await bridge.browserFetchBatch({ urls, method, headers, body, timeout_ms, tls_profile, max_concurrent });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_fetch_cookies",
+    "Manage HTTP cookies for fetch requests. Actions: list (get all cookies), set (add a cookie), clear (remove cookies). Cookies persist across fetch calls in the same session.",
+    {
+      action: z.enum(["list", "set", "clear"]).describe("Action: list, set, or clear cookies"),
+      domain: z.string().optional().describe("Domain to scope the action to (optional for list/clear, required for set)"),
+      name: z.string().optional().describe("Cookie name (required for set)"),
+      value: z.string().optional().describe("Cookie value (for set)"),
+    },
+    async ({ action, domain, name, value }) => {
+      try {
+        const result = await bridge.browserFetchCookies({ action, domain, name, value });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+}
+
+module.exports = { createCodebrainMCPServer, registerBrowserTools, registerFetchTools };

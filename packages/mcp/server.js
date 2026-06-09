@@ -5,8 +5,13 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { randomUUID } = require("node:crypto");
-const { createCodebrainMCPServer, registerBrowserTools } = require("./index.js");
+const { createCodebrainMCPServer, registerBrowserTools, registerFetchTools } = require("./index.js");
 const { createMCPBridge } = require("./bridge.js");
+
+// ── Session tracking with activity timestamps ──
+// Prevents stale sessions from accumulating and enables health monitoring.
+const SESSION_IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const SESSION_CLEANUP_INTERVAL_MS = 30 * 1000;   // 30 seconds
 
 /**
  * Persist the active MCP port to ~/.codebrain/mcp-port so CLIs can
@@ -34,13 +39,48 @@ async function startMCPServer(ptyManager, opts = {}) {
   const bridge = createMCPBridge(ptyManager, opts);
   const mcpServer = createCodebrainMCPServer(bridge);
   registerBrowserTools(mcpServer, bridge);
+  registerFetchTools(mcpServer, bridge);
 
   // Use CJS require (not ESM import) so it works inside Electron asar in production builds
   const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
   const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
   const { isInitializeRequest } = require("@modelcontextprotocol/sdk/types.js");
 
+  // ── Tracked session registry (activity timestamps for stale cleanup) ──
   const transports = {};
+  const sessionActivity = {}; // sid → last activity Date.now()
+
+  function touchSession(sid) {
+    if (sid) sessionActivity[sid] = Date.now();
+  }
+
+  function removeSession(sid) {
+    if (sid) {
+      delete transports[sid];
+      delete sessionActivity[sid];
+    }
+  }
+
+  // Periodic cleanup: evict sessions idle for > SESSION_IDLE_TIMEOUT_MS
+  const cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const sid in sessionActivity) {
+      if (now - sessionActivity[sid] > SESSION_IDLE_TIMEOUT_MS) {
+        try { transports[sid]?.close(); } catch {}
+        removeSession(sid);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      console.log(`[MCP] Session cleanup: evicted ${cleaned} idle sessions. Active: ${Object.keys(transports).length}`);
+    }
+  }, SESSION_CLEANUP_INTERVAL_MS);
+
+  // Ensure cleanup timer doesn't prevent process exit
+  if (cleanupTimer.unref) cleanupTimer.unref();
+
+  const serverStartTime = Date.now();
 
   // Create HTTP server
   const server = http.createServer(async (req, res) => {
@@ -61,6 +101,7 @@ async function startMCPServer(ptyManager, opts = {}) {
 
         if (sessionId && transports[sessionId]) {
           transport = transports[sessionId];
+          touchSession(sessionId);
           if (!(transport instanceof StreamableHTTPServerTransport)) {
             if (!res.headersSent) {
               res.writeHead(400, { "Content-Type": "application/json" });
@@ -72,19 +113,36 @@ async function startMCPServer(ptyManager, opts = {}) {
             }
             return;
           }
+        } else if (sessionId && !transports[sessionId]) {
+          // ── Session ID provided but not found (stale session from old server) ──
+          // Return 404 with a hint so the client can re-initialize.
+          console.warn(`[MCP] Stale session ${sessionId} — client should re-initialize`);
+          if (!res.headersSent) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              jsonrpc: "2.0",
+              error: { code: -32001, message: "Session not found — server restarted. Re-initialize." },
+              id: null,
+            }));
+          }
+          return;
         } else if (!sessionId && req.method === "POST" && parsedBody && isInitializeRequest(parsedBody)) {
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (sid) => {
               transports[sid] = transport;
+              touchSession(sid);
+              console.log(`[MCP] New session initialized: ${sid}. Active: ${Object.keys(transports).length}`);
             },
           });
           transport.onclose = () => {
             const sid = transport.sessionId;
-            if (sid && transports[sid]) delete transports[sid];
+            removeSession(sid);
+            console.log(`[MCP] Session closed: ${sid}. Active: ${Object.keys(transports).length}`);
           };
           const sessionServer = createCodebrainMCPServer(bridge);
           registerBrowserTools(sessionServer, bridge);
+          registerFetchTools(sessionServer, bridge);
           await sessionServer.connect(transport);
         } else {
           if (!res.headersSent) {
@@ -97,6 +155,9 @@ async function startMCPServer(ptyManager, opts = {}) {
           }
           return;
         }
+
+        // Touch session on every successful request routing
+        touchSession(transport.sessionId);
 
         if (!res.headersSent) {
           await transport.handleRequest(req, res, parsedBody);
@@ -119,14 +180,17 @@ async function startMCPServer(ptyManager, opts = {}) {
     if (url.pathname === "/sse" && req.method === "GET") {
       const transport = new SSEServerTransport("/messages", res);
       transports[transport.sessionId] = transport;
+      touchSession(transport.sessionId);
+      console.log(`[MCP] New SSE session: ${transport.sessionId}. Active: ${Object.keys(transports).length}`);
       res.on("close", () => {
-        delete transports[transport.sessionId];
+        removeSession(transport.sessionId);
       });
       res.on("error", (err) => {
         console.warn("[MCP] SSE response error (client disconnected):", err.code || err.message);
       });
       const sessionServer = createCodebrainMCPServer(bridge);
       registerBrowserTools(sessionServer, bridge);
+      registerFetchTools(sessionServer, bridge);
       try {
         await sessionServer.connect(transport);
       } catch (err) {
@@ -153,10 +217,15 @@ async function startMCPServer(ptyManager, opts = {}) {
       return;
     }
 
-    // ── Health check ──
+    // ── Health check (with active session info) ──
     if (url.pathname === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: true, tools: getToolNames(mcpServer) }));
+      res.end(JSON.stringify({
+        ok: true,
+        tools: getToolNames(mcpServer),
+        activeSessions: Object.keys(transports).length,
+        uptime: Math.floor((Date.now() - serverStartTime) / 1000),
+      }));
       return;
     }
 
@@ -175,18 +244,22 @@ async function startMCPServer(ptyManager, opts = {}) {
           port: actualPort,
           sseUrl: `http://127.0.0.1:${actualPort}/sse`,
           streamableHttpUrl: `http://127.0.0.1:${actualPort}/mcp`,
+          activeSessions: () => Object.keys(transports).length,
           close: () => {
-            // Close all transports
-            for (const sid in transports) {
-              try { transports[sid].close(); } catch {}
-              delete transports[sid];
+            clearInterval(cleanupTimer);
+            // Close all tracked transports
+            const allSids = Object.keys(transports);
+            for (const sid of allSids) {
+              try { transports[sid]?.close(); } catch {}
             }
+            allSids.forEach(removeSession);
             server.close();
           },
         };
         console.log(`[MCP] CodeBrain MCP server listening on http://127.0.0.1:${actualPort}`);
         console.log(`[MCP]   SSE: ${info.sseUrl}`);
         console.log(`[MCP]   Streamable HTTP: ${info.streamableHttpUrl}`);
+        console.log(`[MCP]   Session idle timeout: ${SESSION_IDLE_TIMEOUT_MS / 60000}min`);
         saveMcpPort(actualPort);
         resolve(info);
       });
@@ -203,13 +276,23 @@ async function startMCPServer(ptyManager, opts = {}) {
     });
   }
 
-  // Try preferred fixed port first; if busy (dev hot-reload scenario), fall back to random port
-  return doListen(preferredPort).catch((err) => {
+  // Try preferred fixed port first; if busy (dev hot-reload), retry before falling back.
+  // Retrying the same port prevents .mcp.json from becoming stale for running agents.
+  return doListen(preferredPort).catch(async (err) => {
     if (err.code === "EADDRINUSE") {
-      console.warn(`[MCP] Port ${preferredPort} already in use (dev mode?), falling back to random port`);
-      // Remove previous error listener before re-attempting
+      console.warn(`[MCP] Port ${preferredPort} in use — retrying in 1s (old server may be shutting down)...`);
       server.removeAllListeners("error");
-      return doListen(0);
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        return await doListen(preferredPort);
+      } catch (retryErr) {
+        if (retryErr.code === "EADDRINUSE") {
+          console.warn(`[MCP] Port ${preferredPort} still in use after retry — falling back to random port`);
+          server.removeAllListeners("error");
+          return doListen(0);
+        }
+        throw retryErr;
+      }
     }
     throw err;
   });

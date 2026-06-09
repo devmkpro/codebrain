@@ -3,7 +3,7 @@ import type { AppContext, McpServerInfo } from "../context";
 import { safeSend } from "../context";
 import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
-import { refreshAllWorkspaces } from "./workspace";
+import { refreshAllWorkspaces, writeContextFiles } from "./workspace";
 
 // CDP Client for native Chrome browser control
 const { CDPClient } = require("../../packages/mcp/bridge/cdp-client.js");
@@ -69,7 +69,6 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
   const { startMCPServer } = require("../../packages/mcp/server.js");
   const bridge = buildMcpBridge(ctx);
 
-
   const tryStart = async () => {
     const promise = startMCPServer(ctx.ptyManager, bridge);
     ctx.mcpServerReady = promise;
@@ -79,6 +78,11 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
     console.log(`[MCP] Server started on port ${info.port}`);
     console.log(`[MCP] SSE: ${info.sseUrl}`);
     console.log(`[MCP] Streamable HTTP: ${info.streamableHttpUrl}`);
+
+    // Notify active panes about MCP server (re)start so they can re-initialize.
+    // This is a best-effort hint — agents that lost MCP context will see the message
+    // and can attempt to re-read their .mcp.json (which now has the correct port).
+    notifyActivePanesMcpRestart(ctx, info);
   };
 
   try {
@@ -94,5 +98,29 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
         console.error("[MCP] Retry also failed:", err2);
       }
     }, 2000);
+  }
+}
+
+/**
+ * Send a silent hint to all active PTY panes about the MCP server port.
+ * This helps agents that lost MCP context (e.g. after server restart)
+ * to re-initialize their MCP connection.
+ *
+ * Uses writeSilent() so the message doesn't appear in the terminal output.
+ */
+function notifyActivePanesMcpRestart(ctx: AppContext, info: McpServerInfo): void {
+  try {
+    const panes = ctx.ptyManager?.list?.() ?? [];
+    if (panes.length === 0) return;
+
+    const hint = `\n[MCP] Server restarted on port ${info.port}. If MCP tools are unavailable, re-initialize your MCP connection.\n`;
+    for (const pane of panes) {
+      try {
+        ctx.ptyManager.writeSilent(pane.paneId, hint);
+      } catch {}
+    }
+    console.log(`[MCP] Notified ${panes.length} active panes about restart`);
+  } catch (err) {
+    console.warn("[MCP] Failed to notify panes about restart:", err);
   }
 }
