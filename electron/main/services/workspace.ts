@@ -188,6 +188,37 @@ Query the MCP server at ${httpUrl} using Streamable HTTP transport.
     console.warn("[refreshAllWorkspaces] Failed to update ~/.openclaude.json:", err);
   }
 
+  // ── Claude Code: ~/.claude.json (per-project MCP config) ──
+  // Claude Code reads from ~/.claude.json → projects[cwd].mcpServers
+  // in addition to .mcp.json in CWD. Updating here ensures Claude Code
+  // agents always find the MCP server after a restart/port change.
+  try {
+    const claudeJsonPath = path.join(os.homedir(), ".claude.json");
+    let claudeJson: Record<string, any> = {};
+    try { claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, "utf-8")); } catch {}
+    if (!claudeJson.projects) claudeJson.projects = {};
+    let updated = 0;
+    for (const wsPath of wsSet) {
+      const projectKey = wsPath.replace(/\\/g, "/");
+      if (!claudeJson.projects[projectKey]) claudeJson.projects[projectKey] = {};
+      if (!claudeJson.projects[projectKey].mcpServers) claudeJson.projects[projectKey].mcpServers = {};
+      const existing = claudeJson.projects[projectKey].mcpServers.codebrain;
+      if (!existing || existing.url !== httpUrl) {
+        claudeJson.projects[projectKey].mcpServers.codebrain = {
+          type: "streamable-http",
+          url: httpUrl,
+        };
+        updated++;
+      }
+    }
+    if (updated > 0) {
+      fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2), "utf-8");
+      console.log(`[refreshAllWorkspaces] Updated ~/.claude.json for ${updated} project(s)`);
+    }
+  } catch (err) {
+    console.warn("[refreshAllWorkspaces] Failed to update ~/.claude.json:", err);
+  }
+
   // ── Global CLI agent configs (one-time per refresh) ──
   // Update ~/.kimi/config.toml, ~/.gemini/settings.json, ~/.codex/config.toml
   // so ALL agents auto-connect to Codebrain MCP with correct transport.
