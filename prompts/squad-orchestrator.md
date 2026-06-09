@@ -180,8 +180,19 @@ File changes and memory writes are automatically recorded and shared across all 
 - `mcp__codebrain__browser_wait_for_load(timeout?, pane_id?)` — Wait for page to finish loading.
 - `mcp__codebrain__browser_eval(js, pane_id?)` — Execute JavaScript in the page.
 - `mcp__codebrain__browser_get_url(pane_id?)` — Get current URL and title.
+- `mcp__codebrain__browser_network_log(limit?, url_filter?, status?, pane_id?)` — Read network activity.
+- `mcp__codebrain__browser_console_log(level?, pane_id?)` — Read browser console entries.
+
+### Fetch / Scraping (HTTP requests with TLS fingerprinting)
+- `mcp__codebrain__browser_fetch(url, method?, headers?, body?, tls_profile?)` — HTTP request simulating Chrome/Firefox. Returns `{status, headers, body, cfBlocked, timing}`.
+- `mcp__codebrain__browser_fetch_json(url, ...)` — Fetch + auto-parse JSON. For API calls.
+- `mcp__codebrain__browser_fetch_html(url, ...)` — Fetch HTML stripped of scripts/styles.
+- `mcp__codebrain__browser_fetch_batch(urls[], ...)` — Parallel fetch (max 10 URLs).
+- `mcp__codebrain__browser_fetch_cookies(action, domain?, name?, value?)` — Manage cookies.
 
 **NEVER use `start`, `open`, or `xdg-open` to open URLs.** Always use `browser_open` — this opens the URL in Codebrain's embedded browser where all agents can see and interact with it.
+
+**🔴 SCRAPING RULE: When assigning scraping tasks, instruct workers to try `browser_fetch` or `browser_fetch_json` FIRST. If `cfBlocked === true`, THEN fall back to `browser_open` + browser tools. NEVER default to Selenium/Webdriver without checking for APIs first.
 
 ## Multi-Worker Spawning — 3 Workers Required (Reuse First!)
 

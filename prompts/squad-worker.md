@@ -87,6 +87,17 @@ If you detect that another agent changed something you depend on (via memory), *
 - `mcp__codebrain__browser_wait_for_load(timeout?, pane_id?)` — Wait for page load.
 - `mcp__codebrain__browser_eval(js, pane_id?)` — Execute JS in page.
 - `mcp__codebrain__browser_get_url(pane_id?)` — Get current URL + title.
+- `mcp__codebrain__browser_network_log(limit?, url_filter?, status?, pane_id?)` — Read captured network activity (fetch, XHR, WebSocket).
+- `mcp__codebrain__browser_console_log(level?, pane_id?)` — Read browser console entries.
+
+### Fetch / Scraping (HTTP requests with TLS fingerprinting — USE BEFORE browser for scraping)
+- `mcp__codebrain__browser_fetch(url, method?, headers?, body?, tls_profile?)` — HTTP request simulating Chrome/Firefox. Returns `{status, headers, body, cfBlocked, timing}`. Use FIRST for scraping — faster than browser.
+- `mcp__codebrain__browser_fetch_json(url, ...)` — Fetch + auto-parse JSON. For API calls.
+- `mcp__codebrain__browser_fetch_html(url, ...)` — Fetch HTML stripped of scripts/styles. For scraping.
+- `mcp__codebrain__browser_fetch_batch(urls[], ...)` — Parallel fetch (max 10 URLs). For lists.
+- `mcp__codebrain__browser_fetch_cookies(action, domain?, name?, value?)` — Manage cookies (list/set/clear).
+
+**🔴 SCRAPING RULE: ALWAYS try `browser_fetch` or `browser_fetch_json` FIRST.** If `cfBlocked === true`, THEN fall back to `browser_open` + `browser_wait_for`.
 
 **NEVER use `start`, `open`, `xdg-open` to open URLs.** ALWAYS use `browser_open`.
 

@@ -65,6 +65,15 @@ When another agent sends you a message, you see a yellow notification in the ter
 - `mcp__codebrain__browser_screenshot()` / `mcp__codebrain__browser_wait_for(selector)`
 - `mcp__codebrain__browser_console_log()` / `mcp__codebrain__browser_network_log()`
 
+### Fetch / Scraping (HTTP with TLS fingerprinting — USE FIRST for scraping)
+- `mcp__codebrain__browser_fetch(url)` — HTTP request simulating Chrome. Returns `{status, body, cfBlocked}`.
+- `mcp__codebrain__browser_fetch_json(url)` — Fetch + auto-parse JSON.
+- `mcp__codebrain__browser_fetch_html(url)` — Fetch HTML stripped of scripts/styles.
+- `mcp__codebrain__browser_fetch_batch(urls[])` — Parallel fetch (max 10 URLs).
+- `mcp__codebrain__browser_fetch_cookies(action, domain?)` — Manage cookies.
+
+**🔴 SCRAPING RULE: ALWAYS try `browser_fetch` FIRST. If `cfBlocked === true`, fall back to `browser_open` + `browser_wait_for`.
+
 ## Behavior
 
 1. **Check Messages**: Start by calling `mcp__codebrain__pane_read_messages(YOUR_PANE_ID)`.

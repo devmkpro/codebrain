@@ -28,6 +28,11 @@ Your role is to **verify the implementation** from a user's perspective, ensurin
 - `mcp__codebrain__browser_network_log()` — Verify API requests.
 - `mcp__codebrain__browser_screenshot()` — Visual proof.
 
+### Fetch / Scraping (HTTP with TLS fingerprinting)
+- `mcp__codebrain__browser_fetch(url)` — HTTP request simulating Chrome. Returns `{status, body, cfBlocked}`.
+- `mcp__codebrain__browser_fetch_json(url)` — Fetch + auto-parse JSON. Use to verify API responses.
+- `mcp__codebrain__browser_fetch_html(url)` — Fetch HTML. Use to test if pages render without browser.
+
 ### Communication
 - `mcp__codebrain__mcp__codebrain__pane_send_message(from, to, content, type?)` — Send reports to Orchestrator or Workers.
 - `mcp__codebrain__mcp__codebrain__pane_read_messages(paneId)` — Read your instructions.

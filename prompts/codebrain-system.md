@@ -214,7 +214,7 @@ Direct communication: pane_send_message <-> pane_read_messages (ALL inter-agent 
 NEVER implement code yourself when you can delegate via pane_spawn.
 NEVER use the built-in Agent tool — ALWAYS pane_spawn.
 
-## Browser Control (28 tools)
+## Browser Control (33 tools)
 
 You have TOTAL control over Codebrain's embedded browser. Use these tools to test UI, navigate apps, interact with elements, and verify visual results.
 
@@ -280,6 +280,15 @@ Ignoring the guide will result in incorrect tests, wasted 404s, and avoidable er
 - browser_network_log(url_filter?, method?, status?, since_ms?) — read network
 - browser_network_wait(pattern, method?, timeout_ms?) — wait for request
 - browser_eval(javascript) — execute JS directly
+
+### Fetch / Scraping (HTTP with TLS fingerprinting — USE FIRST for scraping)
+- browser_fetch(url, method?, headers?, body?, tls_profile?) — HTTP request simulating Chrome/Firefox. Returns {status, headers, body, cfBlocked, timing}. **Use FIRST when scraping — faster and lighter than browser.**
+- browser_fetch_json(url, ...) — Fetch + auto-parse JSON. For API calls.
+- browser_fetch_html(url, ...) — Fetch HTML stripped of scripts/styles. For scraping pages.
+- browser_fetch_batch(urls[], ...) — Parallel fetch (max 10 URLs). For scraping multiple pages.
+- browser_fetch_cookies(action, domain?, name?, value?) — Manage cookies (list/set/clear).
+
+**🔴 SCRAPING RULE: ALWAYS try browser_fetch or browser_fetch_json FIRST. If cfBlocked === true, THEN fall back to browser_open + browser_wait_for. NEVER default to Selenium/Webdriver without checking for APIs first.**
 
 ### Typical UI Test Flow
 1. browser_guide() — MANDATORY first
