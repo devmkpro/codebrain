@@ -74,9 +74,14 @@ export async function spawnPaneInternal(
     const { nanoid } = await import("nanoid");
     const paneId = config.paneId ?? nanoid();
 
-    // Wait for MCP server — ALL agents need it. Do this once, up front.
-    if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
-      try { await ctx.mcpServerReady; } catch {}
+    // Wait for MCP server — ALL agents need it.
+    // Always await mcpServerReady to get the LATEST port (server may have restarted
+    // with a different port since the last spawn).
+    if (ctx.mcpServerReady) {
+      try {
+        const latestInfo = await ctx.mcpServerReady;
+        if (latestInfo) ctx.mcpServerInfo = latestInfo;
+      } catch {}
     }
 
     // MCP config — write .mcp.json to the project CWD so Claude auto-discovers it.
