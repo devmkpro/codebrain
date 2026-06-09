@@ -588,13 +588,40 @@ export class PtyManager extends EventEmitter {
     if (!state) return;
 
     // Split text and newline to avoid race condition on large inputs
+    let textToWrite = data;
+    let trailingCr = false;
     if (data.endsWith('\r')) {
-      const text = data.slice(0, -1);
-      (state.pty as any).write(text);
-      // Using a small timeout to allow the PTY to process the text before the "Enter"
-      setTimeout(() => (state.pty as any).write('\r'), 50);
+      textToWrite = data.slice(0, -1);
+      trailingCr = true;
+    }
+
+    // ── Chunked write for large pastes ──
+    // ConPTY named pipe buffer is ~4-64KB; shell input buffer is ~8KB (cmd.exe).
+    // Sending large text as one write causes silent truncation.
+    // Split into small chunks with delays so the PTY can process each one.
+    const CHUNK_SIZE = 2048;
+    const CHUNK_DELAY_MS = 15;
+
+    if (textToWrite.length <= CHUNK_SIZE) {
+      // Small write — send directly (no chunking needed)
+      (state.pty as any).write(textToWrite);
+      if (trailingCr) {
+        setTimeout(() => (state.pty as any).write('\r'), 50);
+      }
     } else {
-      (state.pty as any).write(data);
+      // Large write — chunk with delays to prevent ConPTY buffer overflow
+      const chunks: string[] = [];
+      for (let i = 0; i < textToWrite.length; i += CHUNK_SIZE) {
+        chunks.push(textToWrite.slice(i, i + CHUNK_SIZE));
+      }
+      let delay = 0;
+      for (const chunk of chunks) {
+        setTimeout(() => (state.pty as any).write(chunk), delay);
+        delay += CHUNK_DELAY_MS;
+      }
+      if (trailingCr) {
+        setTimeout(() => (state.pty as any).write('\r'), delay + 50);
+      }
     }
   }
 

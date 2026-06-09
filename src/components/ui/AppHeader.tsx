@@ -350,14 +350,9 @@ const MODEL_PRICES: Record<string, { i: number; o: number }> = {
   "anthropic/claude-3.5-sonnet": { i: 3.0, o: 15.0 }, "anthropic/claude-sonnet-4": { i: 3.0, o: 15.0 },
   "anthropic/claude-opus-4": { i: 15.0, o: 75.0 }, "anthropic/claude-opus-4.8": { i: 5.0, o: 25.0 },
   "anthropic/claude-opus-4.7": { i: 5.0, o: 25.0 },
-  "google/gemini-2.5-pro": { i: 1.25, o: 10.0 }, "google/gemini-2.5-flash": { i: 0.3, o: 2.5 },
-  "google/gemini-2.0-flash": { i: 0.1, o: 0.4 },
   "openai/gpt-4o": { i: 2.5, o: 10.0 }, "openai/gpt-4.1": { i: 2.0, o: 8.0 },
   "openai/o3": { i: 2.0, o: 8.0 }, "openai/o4-mini": { i: 1.1, o: 4.4 },
-  // Gemini (via API)
-  "gemini-2.5-pro": { i: 1.25, o: 10.0 }, "gemini-2.5-flash": { i: 0.3, o: 2.5 },
-  "gemini-2.5-flash-lite": { i: 0.1, o: 0.4 },
-  "gemini-2.0-flash": { i: 0.1, o: 0.4 }, "gemini-2.0-flash-lite": { i: 0.075, o: 0.3 },
+  // Gemini 3+ (via API) — Gemini 2.x deprecated
   "gemini-3.5-flash": { i: 1.5, o: 9.0 }, "gemini-3.1-pro-preview": { i: 2.0, o: 12.0 },
   "gemini-3.1-flash-lite": { i: 0.25, o: 1.5 }, "gemini-3-flash-preview": { i: 0.5, o: 3.0 },
   // MIMO
