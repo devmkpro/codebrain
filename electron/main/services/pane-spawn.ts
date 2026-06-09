@@ -143,6 +143,29 @@ export async function spawnPaneInternal(
         log.warn("[spawnPaneInternal] Failed to write .mcp.json to cwd, skipping MCP config:", e);
       }
 
+      // ── Also write MCP config to ~/.claude.json for Claude Code CLI ──
+      // Claude Code reads from ~/.claude.json → projects[cwd].mcpServers
+      // in addition to .mcp.json in CWD. Ensures MCP is found after restart.
+      if (isClaudeCompatible) {
+        try {
+          const claudeJsonPath = path.join(os.homedir(), ".claude.json");
+          let claudeJson: Record<string, any> = {};
+          try { claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, "utf-8")); } catch {}
+          if (!claudeJson.projects) claudeJson.projects = {};
+          const projectKey = cwd.replace(/\\/g, "/");
+          if (!claudeJson.projects[projectKey]) claudeJson.projects[projectKey] = {};
+          if (!claudeJson.projects[projectKey].mcpServers) claudeJson.projects[projectKey].mcpServers = {};
+          claudeJson.projects[projectKey].mcpServers.codebrain = {
+            type: "streamable-http",
+            url: ctx.mcpServerInfo.streamableHttpUrl,
+          };
+          fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2), "utf-8");
+          log.info(`[spawnPaneInternal] Updated ~/.claude.json project MCP for ${projectKey}`);
+        } catch (e) {
+          log.warn("[spawnPaneInternal] Failed to update ~/.claude.json MCP config:", e);
+        }
+      }
+
       // ── Also write MCP config to ~/.openclaude.json for OpenClaude CLI ──
       // OpenClaude CLI does NOT read .mcp.json from CWD — it reads from
       // ~/.openclaude.json → projects[cwd].mcpServers with "type": "http".
