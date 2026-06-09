@@ -137,6 +137,32 @@ export async function spawnPaneInternal(
       } catch (e) {
         log.warn("[spawnPaneInternal] Failed to write .mcp.json to cwd, skipping MCP config:", e);
       }
+
+      // ── Also write MCP config to ~/.openclaude.json for OpenClaude CLI ──
+      // OpenClaude CLI does NOT read .mcp.json from CWD — it reads from
+      // ~/.openclaude.json → projects[cwd].mcpServers with "type": "http".
+      // Without this, OpenClaude agents never discover the Codebrain MCP server.
+      if (agent === "openclaude") {
+        try {
+          const openClaudeConfigPath = path.join(os.homedir(), ".openclaude.json");
+          let openClaudeConfig: Record<string, any> = {};
+          try { openClaudeConfig = JSON.parse(fs.readFileSync(openClaudeConfigPath, "utf-8")); } catch {}
+          if (!openClaudeConfig.projects) openClaudeConfig.projects = {};
+          // OpenClaude uses forward-slash paths as keys
+          const projectKey = cwd.replace(/\\/g, "/");
+          if (!openClaudeConfig.projects[projectKey]) openClaudeConfig.projects[projectKey] = {};
+          if (!openClaudeConfig.projects[projectKey].mcpServers) openClaudeConfig.projects[projectKey].mcpServers = {};
+          // Add codebrain server (OpenClaude uses "type": "http", not "streamable-http")
+          openClaudeConfig.projects[projectKey].mcpServers.codebrain = {
+            type: "http",
+            url: ctx.mcpServerInfo.streamableHttpUrl,
+          };
+          fs.writeFileSync(openClaudeConfigPath, JSON.stringify(openClaudeConfig, null, 2), "utf-8");
+          log.info(`[spawnPaneInternal] Updated ~/.openclaude.json project MCP for ${projectKey}`);
+        } catch (e) {
+          log.warn("[spawnPaneInternal] Failed to update ~/.openclaude.json MCP config:", e);
+        }
+      }
     }
 
     // System prompt injection (delegated to prompt-builder module)

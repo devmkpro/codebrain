@@ -309,8 +309,8 @@ function readBody(req) {
 
 function getToolNames(mcpServer) {
   try {
-    // McpServer stores registered tools internally
-    const tools = mcpServer._tools || mcpServer.tools || {};
+    // McpServer stores registered tools in _registeredTools (MCP SDK v1.x)
+    const tools = mcpServer._registeredTools || mcpServer._tools || mcpServer.tools || {};
     return Object.keys(tools);
   } catch {
     return [];

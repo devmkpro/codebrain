@@ -157,6 +157,37 @@ Query the MCP server at ${httpUrl} using Streamable HTTP transport.
     }
   }
 
+  // ── OpenClaude: ~/.openclaude.json (per-project MCP config) ──
+  // OpenClaude CLI reads MCP config from ~/.openclaude.json → projects[cwd].mcpServers
+  // NOT from .mcp.json in CWD. Must be updated on every MCP restart so all workspaces
+  // point to the correct port.
+  try {
+    const openClaudeConfigPath = path.join(os.homedir(), ".openclaude.json");
+    let openClaudeConfig: Record<string, any> = {};
+    try { openClaudeConfig = JSON.parse(fs.readFileSync(openClaudeConfigPath, "utf-8")); } catch {}
+    if (!openClaudeConfig.projects) openClaudeConfig.projects = {};
+    let updated = 0;
+    for (const wsPath of wsSet) {
+      const projectKey = wsPath.replace(/\\/g, "/");
+      if (!openClaudeConfig.projects[projectKey]) openClaudeConfig.projects[projectKey] = {};
+      if (!openClaudeConfig.projects[projectKey].mcpServers) openClaudeConfig.projects[projectKey].mcpServers = {};
+      const existing = openClaudeConfig.projects[projectKey].mcpServers.codebrain;
+      if (!existing || existing.url !== httpUrl) {
+        openClaudeConfig.projects[projectKey].mcpServers.codebrain = {
+          type: "http",
+          url: httpUrl,
+        };
+        updated++;
+      }
+    }
+    if (updated > 0) {
+      fs.writeFileSync(openClaudeConfigPath, JSON.stringify(openClaudeConfig, null, 2), "utf-8");
+      console.log(`[refreshAllWorkspaces] Updated ~/.openclaude.json for ${updated} project(s)`);
+    }
+  } catch (err) {
+    console.warn("[refreshAllWorkspaces] Failed to update ~/.openclaude.json:", err);
+  }
+
   // ── Global CLI agent configs (one-time per refresh) ──
   // Update ~/.kimi/config.toml, ~/.gemini/settings.json, ~/.codex/config.toml
   // so ALL agents auto-connect to Codebrain MCP with correct transport.
