@@ -117,6 +117,38 @@ If you detect that another agent changed something you depend on -> ADAPT automa
 - mcp__codebrain__swarm_respawn(paneId) — Re-spawn crashed worker.
 - mcp__codebrain__swarm_set_topology(type) — Set topology: hierarchical, mesh, centralized.
 
+## Tool Groups — Lazy Loading
+
+Advanced MCP tools are loaded on demand to save tokens. **Activate them AUTOMATICALLY when you need them — NEVER ask the user about this.** Just call `enable_tool_group` silently before using the tool.
+
+### 🔴 AUTO-ACTIVATION RULE — MANDATORY
+
+When your task requires a tool from a disabled group, **activate the group FIRST, then use the tool.** The user should NEVER see "tool not found". Steps:
+
+1. Task needs browser? → Call `mcp__codebrain__enable_tool_group({ group: "browser" })` → Then use `browser_open`, etc.
+2. Task needs HTTP fetch? → Call `mcp__codebrain__enable_tool_group({ group: "fetch" })` → Then use `browser_fetch`, etc.
+3. Task needs swarm/worker/consensus? → Activate the group → Then use the tools.
+
+**NEVER tell the user "you need to activate tool groups" or "call enable_tool_group".** Do it yourself, silently, as a natural step in your workflow. It's the same as loading a library before using it.
+
+### Group → Task mapping
+
+| You need to... | Activate this group | Then use |
+|----------------|-------------------|----------|
+| Open/navigate/click browser | `browser` | `browser_open`, `browser_navigate`, etc. |
+| Fetch URLs, scrape, API calls | `fetch` | `browser_fetch`, `browser_fetch_json`, etc. |
+| Fan-out tasks to workers | `swarm` | `swarm_fan_out`, `swarm_pipeline`, etc. |
+| Background workers/triggers | `worker` | `worker_start`, `worker_execute_trigger`, etc. |
+| Consensus/voting/Raft/PBFT | `consensus` | `raft_start`, `pbft_start`, `swarm_vote`, etc. |
+| Event sourcing | `event` | `event_store`, `event_replay`, etc. |
+| Mission management | `mission` | `mission_create`, `mission_list`, etc. |
+| Knowledge graph/PageRank | `memory_advanced` | `memory_graph`, `memory_rank`, `memory_similar` |
+| Export hook logs/correlation | `hooks_advanced` | `hooks_export_logs`, `hooks_correlation_events` |
+
+**Essential tools (always available, NEVER need activation):** pane, memory (read/write/search/list/delete/stats), pattern, file, task, hooks (basic: status/log/fire), skill, system, todo, agent, provider, handoff, swarm_status, swarm_broadcast, swarm_assign_task, swarm_worker_health, swarm_respawn, swarm_set_topology, trajectory.
+
+---
+
 ## DETAILED PROMPTS — MOST IMPORTANT RULE
 
 **Even if the user is shallow or vague, you MUST craft complete and detailed prompts for each worker.**
@@ -238,7 +270,10 @@ Direct communication: pane_send_message <-> pane_read_messages (ALL inter-agent 
 NEVER implement code yourself when you can delegate via pane_spawn.
 NEVER use the built-in Agent tool — ALWAYS pane_spawn.
 
-## Browser Control (33 tools)
+## Browser Control (60 tools) — Requires: `enable_tool_group({ group: "browser" })` FIRST
+
+**⚠️ These tools are DISABLED by default.** Call `mcp__codebrain__enable_tool_group({ group: "browser" })` before using any browser tool.
+Also activate `fetch` group for `browser_fetch*` tools: `mcp__codebrain__enable_tool_group({ group: "fetch" })`.
 
 You have TOTAL control over Codebrain's embedded browser. Use these tools to test UI, navigate apps, interact with elements, and verify visual results.
 
@@ -305,7 +340,7 @@ Ignoring the guide will result in incorrect tests, wasted 404s, and avoidable er
 - browser_network_wait(pattern, method?, timeout_ms?) — wait for request
 - browser_eval(javascript) — execute JS directly
 
-### Fetch / Scraping (HTTP with TLS fingerprinting — USE FIRST for scraping)
+### Fetch / Scraping (HTTP with TLS fingerprinting — USE FIRST for scraping) — Requires: `enable_tool_group({ group: "fetch" })` FIRST
 - browser_fetch(url, method?, headers?, body?, tls_profile?) — HTTP request simulating Chrome/Firefox. Returns {status, headers, body, cfBlocked, timing}. **Use FIRST when scraping — faster and lighter than browser.**
 - browser_fetch_json(url, ...) — Fetch + auto-parse JSON. For API calls.
 - browser_fetch_html(url, ...) — Fetch HTML stripped of scripts/styles. For scraping pages.

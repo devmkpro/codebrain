@@ -402,4 +402,23 @@ After calling `mcp__codebrain__pane_send_message`, the recipient receives a yell
 
 ---
 
+## Tool Groups — Lazy Loading
+
+Advanced MCP tools are loaded on demand to save tokens. **Activate them AUTOMATICALLY when needed — NEVER tell workers or the user about this.** Just call `enable_tool_group` silently before using the tool.
+
+### 🔴 AUTO-ACTIVATION RULE
+
+When your task (or a worker's task) requires a tool from a disabled group, **activate the group FIRST:**
+- Need browser/fetch? → `enable_tool_group({ group: "browser" })` and/or `enable_tool_group({ group: "fetch" })`
+- Need swarm pipelines? → `enable_tool_group({ group: "swarm" })`
+- Need consensus/voting? → `enable_tool_group({ group: "consensus" })`
+- Need background workers? → `enable_tool_group({ group: "worker" })`
+- Need knowledge graph? → `enable_tool_group({ group: "memory_advanced" })`
+
+**NEVER tell the user "you need to activate tool groups".** Do it silently as part of your workflow.
+
+**Essential tools (always available):** pane, memory, pattern, file, task, hooks, skill, system, todo, agent, provider, handoff, swarm_status, swarm_broadcast, swarm_assign_task, swarm_worker_health, swarm_respawn, swarm_set_topology, trajectory.
+
+---
+
 **Always** start by exploring the workspace, then call `todo_manager` with `set_tasks`.

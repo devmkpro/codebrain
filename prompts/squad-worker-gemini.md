@@ -56,7 +56,7 @@ When another agent sends you a message, you see a yellow notification in the ter
 
 **🔴 ALL AGENTS SHARE THE SAME MEMORY. Before starting: search memory for "file-changed", "changes", "api", "schema". When you change something significant, write it to memory IMMEDIATELY. If you detect another agent changed something you depend on, ADAPT AUTOMATICALLY.**
 
-### Browser Control
+### Browser Control — Requires: `enable_tool_group({ group: "browser" })`
 - `mcp__codebrain__browser_guide()` — **READ THIS FIRST**.
 - `mcp__codebrain__browser_open(url)` — Open a NEW browser pane.
 - `mcp__codebrain__browser_navigate(url)` — Navigate to URL.
@@ -65,7 +65,7 @@ When another agent sends you a message, you see a yellow notification in the ter
 - `mcp__codebrain__browser_screenshot()` / `mcp__codebrain__browser_wait_for(selector)`
 - `mcp__codebrain__browser_console_log()` / `mcp__codebrain__browser_network_log()`
 
-### Fetch / Scraping (HTTP with TLS fingerprinting — USE FIRST for scraping)
+### Fetch / Scraping (HTTP with TLS fingerprinting — USE FIRST for scraping) — Requires: `enable_tool_group({ group: "fetch" })`
 - `mcp__codebrain__browser_fetch(url)` — HTTP request simulating Chrome. Returns `{status, body, cfBlocked}`.
 - `mcp__codebrain__browser_fetch_json(url)` — Fetch + auto-parse JSON.
 - `mcp__codebrain__browser_fetch_html(url)` — Fetch HTML stripped of scripts/styles.
@@ -123,6 +123,23 @@ Before creating any pattern, you MUST:
 ### ABSOLUTE RULE:
 **NEVER create .md files to store knowledge. ALWAYS use `pattern_write` and `memory_write`.**
 **MCP tools ensure ALL agents have access — .md files stay isolated.**
+
+---
+
+## Tool Groups — Lazy Loading
+
+Some MCP tools are loaded on demand. **Activate them AUTOMATICALLY when needed — NEVER mention this to the user.** Just call `enable_tool_group` silently.
+
+### 🔴 AUTO-ACTIVATION RULE
+
+If your task requires a tool from a disabled group, activate it first:
+- Need browser? → `enable_tool_group({ group: "browser" })`
+- Need fetch/scraping? → `enable_tool_group({ group: "fetch" })`
+- Need knowledge graph? → `enable_tool_group({ group: "memory_advanced" })`
+
+**NEVER tell the user "tool not found" or "you need to activate".** Just activate and proceed.
+
+**Essential tools (always available):** pane, memory (read/write/search/list), pattern, file, task, hooks (basic), skill, system, todo, agent, provider, handoff, trajectory.
 
 ---
 

@@ -38,8 +38,8 @@ function saveMcpPort(port) {
 async function startMCPServer(ptyManager, opts = {}) {
   const bridge = createMCPBridge(ptyManager, opts);
   const mcpServer = createCodebrainMCPServer(bridge);
-  registerBrowserTools(mcpServer, bridge);
-  registerFetchTools(mcpServer, bridge);
+  // Browser + Fetch tools are now lazy-loaded via enable_tool_group meta-tool
+  // to reduce per-request token cost (~62% savings for non-browser sessions)
 
   // Use CJS require (not ESM import) so it works inside Electron asar in production builds
   const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
@@ -141,8 +141,7 @@ async function startMCPServer(ptyManager, opts = {}) {
             console.log(`[MCP] Session closed: ${sid}. Active: ${Object.keys(transports).length}`);
           };
           const sessionServer = createCodebrainMCPServer(bridge);
-          registerBrowserTools(sessionServer, bridge);
-          registerFetchTools(sessionServer, bridge);
+          // Browser + Fetch tools lazy-loaded via enable_tool_group
           await sessionServer.connect(transport);
         } else {
           if (!res.headersSent) {
@@ -189,8 +188,7 @@ async function startMCPServer(ptyManager, opts = {}) {
         console.warn("[MCP] SSE response error (client disconnected):", err.code || err.message);
       });
       const sessionServer = createCodebrainMCPServer(bridge);
-      registerBrowserTools(sessionServer, bridge);
-      registerFetchTools(sessionServer, bridge);
+      // Browser + Fetch tools lazy-loaded via enable_tool_group
       try {
         await sessionServer.connect(transport);
       } catch (err) {
@@ -219,10 +217,13 @@ async function startMCPServer(ptyManager, opts = {}) {
 
     // ── Health check (with active session info) ──
     if (url.pathname === "/health") {
+      const toolInfo = getToolStats(mcpServer);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         ok: true,
-        tools: getToolNames(mcpServer),
+        tools: toolInfo.names,
+        toolsEnabled: toolInfo.enabled,
+        toolsTotal: toolInfo.total,
         activeSessions: Object.keys(transports).length,
         uptime: Math.floor((Date.now() - serverStartTime) / 1000),
       }));
@@ -309,11 +310,23 @@ function readBody(req) {
 
 function getToolNames(mcpServer) {
   try {
-    // McpServer stores registered tools in _registeredTools (MCP SDK v1.x)
     const tools = mcpServer._registeredTools || mcpServer._tools || mcpServer.tools || {};
     return Object.keys(tools);
   } catch {
     return [];
+  }
+}
+
+function getToolStats(mcpServer) {
+  try {
+    const tools = mcpServer._registeredTools || mcpServer._tools || mcpServer.tools || {};
+    const allNames = Object.keys(tools);
+    const enabledNames = Object.entries(tools)
+      .filter(([, t]) => t.enabled !== false)
+      .map(([name]) => name);
+    return { names: enabledNames, enabled: enabledNames.length, total: allNames.length };
+  } catch {
+    return { names: [], enabled: 0, total: 0 };
   }
 }
 

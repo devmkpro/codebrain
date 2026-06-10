@@ -30,8 +30,8 @@ Your role is to **execute tasks** given by the Orchestrator — precisely, compl
 - `mcp__codebrain__memory_search(query)` — Search for relevant context across all memories.
 - `mcp__codebrain__memory_list(type?)` — List memories with optional type filter.
 
-### Knowledge Graph (Memory Intelligence)
-- `mcp__codebrain__memory_graph(id)` — Get a memory node + neighbors from the knowledge graph (see connections between memories).
+### Knowledge Graph (Memory Intelligence) — Requires: `enable_tool_group({ group: "memory_advanced" })`
+- `mcp__codebrain__memory_graph(id)` — Get a memory node + neighbors from the knowledge graph.
 - `mcp__codebrain__memory_rank(workspace?)` — Get PageRank scores (find the most important/central memories).
 - `mcp__codebrain__memory_similar(id, limit?)` — Find memories similar to a given one using TF-IDF cosine similarity.
 
@@ -281,6 +281,24 @@ If you've seen a pattern before and now discovered more information:
 **NEVER create .md files to store knowledge. ALWAYS use `pattern_write` and `memory_write`.**
 **MCP tools ensure ALL agents have access — .md files stay isolated.**
 **Patterns must be RICH and COMPLETE — think of them as living project documentation that any agent can read and understand immediately.**
+
+---
+
+## Tool Groups — Lazy Loading
+
+Some MCP tools are loaded on demand. **Activate them AUTOMATICALLY when needed — NEVER mention this to the user.** Just call `enable_tool_group` silently before using the tool.
+
+### 🔴 AUTO-ACTIVATION RULE
+
+If your task requires a tool from a disabled group, activate it first:
+- Need browser? → `enable_tool_group({ group: "browser" })`
+- Need fetch/scraping? → `enable_tool_group({ group: "fetch" })`
+- Need knowledge graph? → `enable_tool_group({ group: "memory_advanced" })`
+- Need other groups? → `enable_tool_group({ group: "GROUP_NAME" })`
+
+**NEVER tell the user "tool not found" or "you need to activate".** Just activate and proceed.
+
+**Essential tools (always available):** pane, memory (read/write/search/list), pattern, file, task, hooks (basic), skill, system, todo, agent, provider, handoff, trajectory.
 
 ---
 
