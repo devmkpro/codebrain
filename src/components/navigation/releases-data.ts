@@ -14,28 +14,42 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.9.0",
+    "version": "1.9.1",
     "date": "junho 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "add browser_fetch_* MCP tools for HTTP scraping with TLS fingerprinting (chrome-131, firefox-133, chrome-mobile)"
-      },
+        "text": "MCP tool lazy loading — 57 essential + 122 on-demand (62% token savings)"
+      }
+    ]
+  },
+  {
+    "version": "1.9.0",
+    "date": "junho 2026",
+    "highlights": [
       {
-        "kind": "feat",
-        "text": "autopart-scraper skill v0.4.0 — deep network intelligence, API interception, never-Selenium-first rule"
-      },
-      {
-        "kind": "feat",
-        "text": "MCP port indicator in workspace header with click-to-copy"
+        "kind": "fix",
+        "text": "update"
       },
       {
         "kind": "fix",
-        "text": "always await mcpServerReady to get latest port before spawning panes (fixes stale .mcp.json)"
+        "text": "always await mcpServerReady to get latest port before spawning panes"
       },
       {
         "kind": "fix",
-        "text": "add FORBIDDEN TOOLS section in system prompt to prevent agents from using curl/Fetch instead of MCP tools"
+        "text": "resolve MCP context loss for OpenClaude agents"
+      },
+      {
+        "kind": "feat",
+        "text": "add MCP port indicator in workspace header"
+      },
+      {
+        "kind": "fix",
+        "text": "add explicit FORBIDDEN TOOLS section to prevent agents from using curl/Fetch instead of MCP tools"
+      },
+      {
+        "kind": "feat",
+        "text": "add browser_fetch_* MCP tools for HTTP scraping with TLS fingerprinting"
       }
     ]
   },
