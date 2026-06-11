@@ -39,9 +39,9 @@ export function startApiServer(port: number = 3000): Server {
 /**
  * Stops the local API server
  */
-export function stopApiServer() {
+export function stopApiServer(callback?: () => void): void {
   if (server) {
-    server.close();
+    server.close(callback);
     server = null;
     console.log('[API] Server stopped');
   }
