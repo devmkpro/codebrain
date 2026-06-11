@@ -22,8 +22,8 @@ app.get('/api/health', (_req, res) => {
  * Starts the local API server
  * @param port The port to listen on (defaults to 3001)
  */
-export function startApiServer(port: number = 3001) {
-  if (server) return;
+export function startApiServer(port: number = 3001): Server {
+  if (server) return server;
 
   server = app.listen(port, () => {
     console.log(`[API] Codebrain server running on http://localhost:${port}`);
@@ -32,6 +32,8 @@ export function startApiServer(port: number = 3001) {
   server.on('error', (err) => {
     console.error('[API] Server error:', err);
   });
+
+  return server;
 }
 
 /**
