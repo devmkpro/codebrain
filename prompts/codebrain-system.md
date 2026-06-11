@@ -138,6 +138,7 @@ When your task requires a tool from a disabled group, **activate the group FIRST
 |----------------|-------------------|----------|
 | Open/navigate/click browser | `browser` | `browser_open`, `browser_navigate`, etc. |
 | Fetch URLs, scrape, API calls | `fetch` | `browser_fetch`, `browser_fetch_json`, etc. |
+| Review MRs/PRs (GitHub/GitLab) | `mr` | `mr_setup`, `mr_list`, `mr_detail`, `mr_review`, `mr_comment` |
 | Fan-out tasks to workers | `swarm` | `swarm_fan_out`, `swarm_pipeline`, etc. |
 | Background workers/triggers | `worker` | `worker_start`, `worker_execute_trigger`, etc. |
 | Consensus/voting/Raft/PBFT | `consensus` | `raft_start`, `pbft_start`, `swarm_vote`, etc. |

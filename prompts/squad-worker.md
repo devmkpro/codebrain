@@ -101,6 +101,15 @@ If you detect that another agent changed something you depend on (via memory), *
 
 **NEVER use `start`, `open`, `xdg-open` to open URLs.** ALWAYS use `browser_open`.
 
+### MR / PR Review — Requires: `enable_tool_group({ group: "mr" })`
+- `mcp__codebrain__mr_setup()` — Diagnóstico: verifica CLI (`gh`/`glab`), auth, SSH/HTTPS, e retorna instruções de instalação.
+- `mcp__codebrain__mr_list({ state?, author?, labels?, limit? })` — Lista MRs/PRs do repositório remoto.
+- `mcp__codebrain__mr_detail({ mr_number })` — Detalhe completo: diff, commits, reviewers, status.
+- `mcp__codebrain__mr_review({ mr_number })` — Review automático do diff com análise heurística (segurança, bugs, performance, estilo).
+- `mcp__codebrain__mr_comment({ mr_number, body, file?, line? })` — Comenta em MR/PR. Assinatura automática: "🧠 *Posted by Codebrain AI Review*".
+
+**🔴 MR RULE: Sempre use `mr_*` tools para revisar MRs/PRs. NUNCA use `curl`, `gh api`, ou fetch direto.**
+
 **NEVER guess routes** (/login, /dashboard, etc). Navigate to the root, read the DOM, and follow the real links. Use only ONE browser pane.
 
 ## ⚠️ INTER-AGENT COMMUNICATION — MOST IMPORTANT RULE
@@ -293,6 +302,7 @@ Some MCP tools are loaded on demand. **Activate them AUTOMATICALLY when needed �
 If your task requires a tool from a disabled group, activate it first:
 - Need browser? → `enable_tool_group({ group: "browser" })`
 - Need fetch/scraping? → `enable_tool_group({ group: "fetch" })`
+- Need MR/PR review? → `enable_tool_group({ group: "mr" })`
 - Need knowledge graph? → `enable_tool_group({ group: "memory_advanced" })`
 - Need other groups? → `enable_tool_group({ group: "GROUP_NAME" })`
 
