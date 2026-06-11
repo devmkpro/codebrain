@@ -215,8 +215,20 @@ export function DashboardPage() {
   const pendingTasks = tasks.filter((t: any) => t.status !== 'done');
 
   // Group panes by workspace
-  const panesWithWs = (panes as any[]).filter(p => p.workspacePath);
-  const orphanPanes = (panes as any[]).filter(p => !p.workspacePath);
+  // Track which panes have already been assigned to a workspace
+  const assignedPaneIds = new Set<string>();
+
+  // First pass: mark panes that will be assigned to tabs
+  for (const tab of tabs) {
+    for (const p of panes) {
+      if (p.workspacePath === tab.workspacePath ||
+          (p.cwd && tab.workspacePath && p.cwd.startsWith(tab.workspacePath))) {
+        assignedPaneIds.add(p.id);
+      }
+    }
+  }
+
+  const orphanPanes = (panes as any[]).filter(p => !assignedPaneIds.has(p.id));
 
   return (
     <div className="flex-1 flex overflow-hidden">
