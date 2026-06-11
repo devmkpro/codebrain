@@ -113,6 +113,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     messageBus,
     getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
     dataDir: opts.dataDir || path.join(os.homedir(), ".codebrain"),
+    spawnPaneFn: opts.spawnPaneFn,
   });
 
 

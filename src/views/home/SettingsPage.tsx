@@ -242,6 +242,8 @@ export function SettingsPage() {
   const [tutorialOpen, setTutorialOpen] = useState<{ gitlab: boolean; github: boolean }>({ gitlab: false, github: false });
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [mrAutoReview, setMrAutoReview] = useState(false);
+  const [mrReviewProvider, setMrReviewProvider] = useState('');
+  const [mrReviewModel, setMrReviewModel] = useState('');
   const { detectedWorkspaces, loading: mrLoading, fetchAllowed, toggleWorkspace, allowedWorkspaces } = useMrReviewStore();
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
@@ -387,6 +389,8 @@ export function SettingsPage() {
         if (cfg?.mr_auto_review) setMrAutoReview(true);
         if (cfg?.gitlab_bot_token) setGitlabBotToken(cfg.gitlab_bot_token);
         if (cfg?.github_bot_token) setGithubBotToken(cfg.github_bot_token);
+        if (cfg?.mr_review_provider) setMrReviewProvider(cfg.mr_review_provider);
+        if (cfg?.mr_review_model) setMrReviewModel(cfg.mr_review_model);
       })
       .catch(() => {});
     // Load detected repos for permission toggles
@@ -1837,6 +1841,66 @@ export function SettingsPage() {
                 }}
               />
             </div>
+
+            {/* ── Review Model / Provider ─────────────────────────────────── */}
+            {mrAutoReview && (
+              <div className="mt-2 p-3 rounded-lg bg-white/[0.02] border border-white/5 space-y-2">
+                <p className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                  <Cpu size={12} className="text-violet-400" />
+                  Modelo para Review
+                </p>
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  Escolha qual modelo de IA será usado para analisar os diffs e gerar comentários de review.
+                </p>
+                <div className="flex gap-2">
+                  <select
+                    value={mrReviewProvider}
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      setMrReviewProvider(val);
+                      setMrReviewModel(''); // Reset model when provider changes
+                      try {
+                        await (window as any).codeBrainApp?.appConfig?.set?.({ mr_review_provider: val, mr_review_model: '' });
+                      } catch {}
+                    }}
+                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono focus:outline-none focus:border-violet-500/30 appearance-none cursor-pointer"
+                  >
+                    <option value="">Provider...</option>
+                    {providers.map((p: any) => (
+                      <option key={p.id} value={p.id}>{p.label || p.id}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={mrReviewModel}
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      setMrReviewModel(val);
+                      try {
+                        await (window as any).codeBrainApp?.appConfig?.set?.({ mr_review_model: val });
+                      } catch {}
+                    }}
+                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono focus:outline-none focus:border-violet-500/30 appearance-none cursor-pointer"
+                  >
+                    <option value="">Modelo...</option>
+                    {(providers.find((p: any) => p.id === mrReviewProvider)?.models ?? []).map((m: string) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                {mrReviewProvider && mrReviewModel && (
+                  <p className="text-[10px] text-emerald-400/70 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    {providers.find((p: any) => p.id === mrReviewProvider)?.label || mrReviewProvider} → {mrReviewModel}
+                  </p>
+                )}
+                {!mrReviewProvider && (
+                  <p className="text-[10px] text-amber-500/60 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    Configure um modelo para que o review funcione.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* ── Per-Workspace Repo Permissions ─────────────────────────── */}
             <div className="mt-3 space-y-2">

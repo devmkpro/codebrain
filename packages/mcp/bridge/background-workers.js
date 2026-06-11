@@ -560,6 +560,22 @@ class WorkerManager {
     worker.lastRun = Date.now();
     const startTime = Date.now();
 
+    const finalize = (result) => {
+      const duration = Date.now() - startTime;
+      this._addMetric(name, { duration, success: true, timestamp: Date.now(), summary: result?.summary || "ok" });
+      worker.state = result;
+      worker.running = false;
+      this._saveState();
+    };
+
+    const onError = (err) => {
+      const duration = Date.now() - startTime;
+      this._addAlert("warning", `Worker ${name} failed: ${err.message}`, name);
+      this._addMetric(name, { duration, success: false, error: err.message, timestamp: Date.now() });
+      worker.running = false;
+      this._saveState();
+    };
+
     try {
       let result;
       switch (name) {
@@ -575,16 +591,14 @@ class WorkerManager {
         default: result = { message: "no implementation" };
       }
 
-      const duration = Date.now() - startTime;
-      this._addMetric(name, { duration, success: true, timestamp: Date.now(), summary: result.summary || "ok" });
-      worker.state = result;
+      // Handle async workers (mr_poll returns Promise when LLM is configured)
+      if (result && typeof result.then === "function") {
+        result.then(finalize).catch(onError);
+      } else {
+        finalize(result);
+      }
     } catch (err) {
-      const duration = Date.now() - startTime;
-      this._addAlert("warning", `Worker ${name} failed: ${err.message}`, name);
-      this._addMetric(name, { duration, success: false, error: err.message, timestamp: Date.now() });
-    } finally {
-      worker.running = false;
-      this._saveState();
+      onError(err);
     }
   }
 
@@ -1060,6 +1074,142 @@ class WorkerManager {
    * MR Auto-Review Poll Worker.
    * Checks for new/updated MRs and posts automated reviews.
    */
+  /**
+   * Wait for a pane to become idle (no output for ~3s).
+   * Returns a Promise that resolves when the pane is idle or timeout is reached.
+   */
+  _waitForPaneIdle(paneId, timeoutMs = 180000) {
+    return new Promise((resolve) => {
+      const ptyManager = this.opts.ptyManager;
+      if (!ptyManager) return resolve({ idle: true, timedOut: true, noManager: true });
+
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (!resolved) { resolved = true; resolve({ idle: true, timedOut: true }); }
+      }, timeoutMs);
+
+      const onIdle = ({ paneId: pid }) => {
+        if (pid === paneId && !resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          ptyManager.off("idle", onIdle);
+          resolve({ idle: true, timedOut: false });
+        }
+      };
+      ptyManager.on("idle", onIdle);
+    });
+  }
+
+  /**
+   * Post-process MR: record as reviewed, emit notification, fire hook.
+   */
+  _postReviewActions(mr, mrId, workspacePath, provider, store, emitNotification) {
+    const mrUrl = mr.html_url || mr.web_url || `MR !${mrId}`;
+    store.recordReviewedMr({
+      workspace: workspacePath,
+      mr_id: mrId,
+      mr_url: mrUrl,
+      provider: provider || "unknown",
+      mr_title: mr.title || "Untitled",
+      mr_updated_at: mr.updated_at || mr.updatedAt || null,
+    });
+    if (emitNotification) {
+      emitNotification({
+        type: "mr_auto_review",
+        title: `MR !${mrId} revisado automaticamente`,
+        body: `Review postado: ${mr.title || "MR"}`,
+        level: "success",
+        mr_id: mrId,
+        mr_url: mrUrl,
+        provider: provider || "unknown",
+      });
+    }
+    if (this.opts.hooksManager) {
+      try { this.opts.hooksManager.fire("task_completed", { type: "mr_auto_review", mrId, workspace: workspacePath }); } catch { /* */ }
+    }
+  }
+
+  /**
+   * LLM-based review: spawns a pane with the configured model, passes the diff,
+   * waits for idle, then posts the agent's analysis as a comment.
+   * Returns a Promise.
+   */
+  async _llmReview(mr, mrId, detailRes, workspacePath, config, store, emitNotification) {
+    const spawnFn = this.opts.spawnPaneFn;
+    const ptyManager = this.opts.ptyManager;
+    if (!spawnFn || !ptyManager) {
+      return { ok: false, error: "spawnPaneFn or ptyManager not available" };
+    }
+
+    const provider = config.mr_review_provider;
+    const model = config.mr_review_model;
+
+    // Truncate diff to avoid exceeding context limits (~8K chars)
+    const diff = (detailRes.diff || "").slice(0, 8000);
+    const title = mr.title || detailRes.title || "Untitled";
+    const sourceBranch = mr.source_branch || detailRes.source_branch || "?";
+    const targetBranch = mr.target_branch || detailRes.target_branch || "?";
+
+    const prompt = [
+      `You are a code reviewer. Analyze the following MR diff and post your findings as a comment.`,
+      `Use the mcp__codebrain__mr_comment tool to post your review.`,
+      ``,
+      `MR !${mrId}: ${title}`,
+      `Branch: ${sourceBranch} → ${targetBranch}`,
+      `Workspace: ${workspacePath}`,
+      ``,
+      `Rules:`,
+      `- Focus on bugs, security issues, performance, and code quality`,
+      `- Be concise — max 10 findings`,
+      `- Use markdown formatting`,
+      `- If no issues found, say "✅ LGTM — no issues found"`,
+      `- After posting the comment, your task is DONE. Do not ask questions.`,
+      ``,
+      `---DIFF---`,
+      diff,
+    ].join("\n");
+
+    try {
+      // 1. Spawn review pane (spawnPaneInternal handles provider resolution + env)
+      const spawnResult = await spawnFn({
+        providerId: provider,
+        model,
+        cwd: workspacePath,
+      });
+
+      if (!spawnResult?.ok || !spawnResult?.paneId) {
+        return { ok: false, error: `spawn failed: ${spawnResult?.error || "unknown"}` };
+      }
+
+      const reviewPaneId = spawnResult.paneId;
+
+      // 2. Write the review prompt (text first, then \r to submit — avoids race on large pastes)
+      ptyManager.write(reviewPaneId, prompt);
+      setTimeout(() => ptyManager.write(reviewPaneId, "\r"), 500); // submit
+
+      // 3. Wait for idle (agent finishes analyzing + posting)
+      await this._waitForPaneIdle(reviewPaneId, 180000); // 3 min timeout
+
+      // 4. Record + notify + cleanup
+      this._postReviewActions(mr, mrId, workspacePath, detailRes.provider || mr.provider, store, emitNotification);
+
+      // 5. Close the review pane after a brief delay
+      setTimeout(() => {
+        try { ptyManager.kill(reviewPaneId); } catch {}
+      }, 5000);
+
+      return { ok: true, paneId: reviewPaneId, method: "llm" };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Main MR polling worker. Runs periodically (every 5 min) and on-demand.
+   * If mr_review_model is configured → uses LLM to review diffs.
+   * Otherwise → falls back to static regex analysis.
+   * Returns a Promise (async) when LLM mode is active.
+   */
   _mrPoll() {
     const store = this.opts.memoryStore;
     const mrHandlers = this.opts.mrHandlers;
@@ -1074,136 +1224,74 @@ class WorkerManager {
     if (!mrHandlers) return { summary: "no mrHandlers", skipped: true };
     if (!store) return { summary: "no memoryStore", skipped: true };
 
-    // Check allowed workspaces — only review repos the user explicitly permitted
+    // Check allowed workspaces
     const allowedWorkspaces = config?.mr_allowed_workspaces;
     if (!Array.isArray(allowedWorkspaces) || allowedWorkspaces.length === 0) {
       return { summary: "no allowed workspaces", skipped: true };
     }
 
-    // Get all workspaces to check — iterate over allowed list
     const workspacePath = this.opts.getCurrentWorkspacePath?.();
     if (!workspacePath) return { summary: "no workspace", skipped: true };
-
-    // Only proceed if current workspace is in allowed list
     if (!allowedWorkspaces.includes(workspacePath)) {
       return { summary: `workspace not allowed: ${workspacePath}`, skipped: true };
     }
 
-    const results = { workspace: workspacePath, total: 0, new: 0, reviewed: 0, skipped: 0, errors: [] };
+    // LLM model is required — no model = no review
+    const useLLM = !!(config.mr_review_provider && config.mr_review_model);
+    if (!useLLM) return { summary: "no review model configured (mr_review_provider + mr_review_model required)", skipped: true };
+
+    const results = { workspace: workspacePath, total: 0, reviewed: 0, skipped: 0, errors: [] };
 
     try {
-      // List open MRs for the current workspace
       const listResult = mrHandlers.mrList({ cwd: workspacePath, state: "open", limit: 20 });
 
-      // mrList may be async (returns Promise) or sync
-      const processList = (listRes) => {
+      const processList = async (listRes) => {
         if (!listRes?.ok || !listRes.mrs) return { summary: `mrList failed: ${listRes?.error || "unknown"}` };
-
         results.total = listRes.mrs.length;
 
         for (const mr of listRes.mrs) {
           const mrId = mr.id || mr.number || mr.iid;
           if (!mrId) { results.skipped++; continue; }
 
-          // Check if already reviewed
           const checked = store.isMrReviewed({ workspace: workspacePath, mr_id: mrId });
           if (checked?.reviewed) { results.skipped++; continue; }
 
-          // New MR — review it
           try {
             const detail = mrHandlers.mrDetail({ cwd: workspacePath, id: String(mrId), include_diff: true });
-            const processDetail = (detailRes) => {
-              if (!detailRes?.ok) {
-                results.errors.push(`MR !${mrId}: detail failed`);
-                return;
-              }
+            const detailRes = detail && typeof detail.then === "function" ? await detail : detail;
 
-              // mrReview does static analysis of the diff (no LLM needed)
-              let reviewBody = `## Auto-Review by Codebrain\n\n`;
-              reviewBody += `**MR:** !${mrId} — ${mr.title || detailRes.title || "Untitled"}\n`;
+            if (!detailRes?.ok) {
+              results.errors.push(`MR !${mrId}: detail failed`);
+              continue;
+            }
 
-              if (detailRes.diff && detailRes.diff.length > 0) {
-                // Simple heuristic analysis on the diff
-                const diffLines = detailRes.diff.split("\n");
-                const added = diffLines.filter(l => l.startsWith("+") && !l.startsWith("+++")).length;
-                const removed = diffLines.filter(l => l.startsWith("-") && !l.startsWith("---")).length;
-                reviewBody += `**Changes:** +${added} / -${removed} lines\n\n`;
-
-                // Check for common issues
-                const issues = [];
-                const fullDiff = detailRes.diff;
-                if (/console\.log\(/i.test(fullDiff)) issues.push("⚠️ `console.log` found in diff");
-                if (/TODO|FIXME|HACK|XXX/i.test(fullDiff)) issues.push("📝 TODO/FIXME comment found");
-                if (/password|secret|api_key|token\s*=/i.test(fullDiff)) issues.push("🔒 Potential secret in code");
-                if (/eval\(|Function\(|child_process/i.test(fullDiff)) issues.push("🚨 Potentially dangerous function call");
-                if (added > 500) issues.push(`📦 Large PR (${added} added lines) — consider breaking it down`);
-
-                if (issues.length > 0) {
-                  reviewBody += "### Findings\n" + issues.join("\n") + "\n";
-                } else {
-                  reviewBody += "✅ No issues found in the diff.\n";
-                }
-              } else {
-                reviewBody += "No diff available for analysis.\n";
-              }
-
-              // Post the review comment
-              const commentResult = mrHandlers.mrComment({
-                cwd: workspacePath,
-                id: String(mrId),
-                body: reviewBody,
-              });
-
-              // Record as reviewed
-              const mrUrl = mr.html_url || mr.web_url || `MR !${mrId}`;
-              store.recordReviewedMr({
-                workspace: workspacePath,
-                mr_id: mrId,
-                mr_url: mrUrl,
-                provider: detailRes.provider || mr.provider || "unknown",
-                mr_title: mr.title || "Untitled",
-                mr_updated_at: mr.updated_at || mr.updatedAt || null,
-              });
-
-              // Emit notification
-              if (emitNotification) {
-                emitNotification({
-                  type: "mr_auto_review",
-                  title: `MR !${mrId} revisado automaticamente`,
-                  body: `Review postado em: ${mr.title || "MR"}`,
-                  level: "success",
-                  mr_id: mrId,
-                  mr_url: mrUrl,
-                  provider: detailRes.provider || mr.provider || "unknown",
-                });
-              }
-
-              // Fire hook
-              if (this.opts.hooksManager) {
-                try { this.opts.hooksManager.fire("task_completed", { type: "mr_auto_review", mrId, workspace: workspacePath }); } catch { /* */ }
-              }
-
+            // LLM-based review: spawn agent pane with configured model
+            const reviewResult = await this._llmReview(mr, mrId, detailRes, workspacePath, config, store, emitNotification);
+            if (reviewResult.ok) {
               results.reviewed++;
-            };
-
-            // Handle async detail
-            if (detail && typeof detail.then === "function") {
-              return detail.then(processDetail);
             } else {
-              processDetail(detail);
+              results.errors.push(`MR !${mrId}: review failed: ${reviewResult.error}`);
             }
           } catch (err) {
             results.errors.push(`MR !${mrId}: ${err.message}`);
           }
         }
+
+        results.summary = `reviewed ${results.reviewed}/${results.total} MRs (llm)`;
+        if (results.errors.length > 0) results.summary += `, ${results.errors.length} errors`;
         return results;
       };
 
       // Handle async list
       if (listResult && typeof listResult.then === "function") {
-        return listResult.then(processList);
+        return listResult.then(processList).catch(err => ({ summary: `mr_poll error: ${err.message}`, error: err.message }));
       } else {
-        return processList(listResult);
+        const listRes = processList(listResult);
+        // processList may return a Promise (when useLLM=true)
+        if (listRes && typeof listRes.then === "function") {
+          return listRes.catch(err => ({ summary: `mr_poll error: ${err.message}`, error: err.message }));
+        }
+        return listRes;
       }
     } catch (err) {
       return { summary: `mr_poll error: ${err.message}`, error: err.message };

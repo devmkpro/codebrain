@@ -840,7 +840,9 @@ function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
 function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
   const { reviewing, activeWorkspaces, allowedWorkspaces, triggerReview, fetchStatus } = useMrReviewStore();
   const [showMenu, setShowMenu] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = React.useState({ top: 0, right: 0 });
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
 
   // Poll status every 10s
   React.useEffect(() => {
@@ -852,7 +854,11 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
   // Close on outside click
   React.useEffect(() => {
     if (!showMenu) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setShowMenu(false); };
+    const h = (e: MouseEvent) => {
+      if (btnRef.current?.contains(e.target as Node)) return;
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setShowMenu(false);
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [showMenu]);
@@ -866,25 +872,41 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
     : reviewing
       ? 'text-amber-400/60'
       : isAllowed
-        ? 'text-emerald-400/60'
-        : 'text-slate-600';
+        ? 'text-emerald-400/70'
+        : 'text-slate-500 hover:text-slate-400';
 
   const bgClass = isReviewing
     ? 'bg-amber-500/10'
     : 'hover:bg-white/[0.04]';
 
+  const [triggering, setTriggering] = React.useState(false);
+
+  const handleToggle = () => {
+    if (!showMenu && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setShowMenu(v => !v);
+  };
+
   const handleTrigger = async () => {
-    if (!activeWorkspace || !isAllowed) return;
+    if (!activeWorkspace) return;
+    setTriggering(true);
     setShowMenu(false);
-    await triggerReview(activeWorkspace);
+    try {
+      await triggerReview(activeWorkspace);
+    } finally {
+      setTimeout(() => setTriggering(false), 2000);
+    }
   };
 
   return (
-    <div ref={ref} className="relative h-full">
+    <div className="flex items-stretch h-full">
       <button
-        onClick={() => setShowMenu(v => !v)}
+        ref={btnRef}
+        onClick={handleToggle}
         className={`flex items-center gap-1.5 px-2 h-full text-[11px] transition-all focus:outline-none cursor-pointer ${iconClass} ${bgClass}`}
-        title={isReviewing ? 'Revisando MRs...' : isAllowed ? 'MR Review — clique para opções' : 'MR Review — não permitido neste workspace'}
+        title={isReviewing ? 'Revisando MRs...' : isAllowed ? 'MR Review — clique para opções' : 'MR Review'}
       >
         <GitPullRequest size={15} strokeWidth={1.5} />
         {isReviewing && (
@@ -892,7 +914,11 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
         )}
       </button>
       {showMenu && (
-        <div className="absolute right-0 top-full mt-1 z-[9999] bg-[#0c0c14]/95 border border-white/10 rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden backdrop-blur-md w-56">
+        <div
+          ref={menuRef}
+          className="fixed z-[10000] bg-[#0c0c14]/95 border border-white/10 rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden backdrop-blur-md w-56"
+          style={{ top: menuPos.top, right: menuPos.right }}
+        >
           <div className="px-3 py-2.5 border-b border-white/5">
             <p className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">MR Review</p>
             <p className="font-mono text-[11px] text-slate-300">
@@ -911,20 +937,24 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
               </div>
             </div>
           )}
-          {isAllowed && activeWorkspace && (
+          {activeWorkspace && (
             <button
               onClick={handleTrigger}
-              disabled={isReviewing}
-              className="w-full text-left px-3 py-2.5 font-mono text-[11px] text-slate-400 hover:text-amber-300 hover:bg-amber-500/5 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isReviewing || triggering}
+              className={`w-full text-left px-3 py-2.5 font-mono text-[11px] transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                isAllowed
+                  ? 'text-slate-400 hover:text-amber-300 hover:bg-amber-500/5'
+                  : 'text-slate-500 hover:text-amber-300 hover:bg-amber-500/5'
+              }`}
             >
-              <GitPullRequest size={11} className="text-amber-400/60" />
-              {isReviewing ? 'Revisando agora...' : 'Revisar agora'}
+              <GitPullRequest size={11} className={isReviewing || triggering ? 'text-amber-400 animate-pulse' : 'text-amber-400/60'} />
+              {isReviewing ? 'Revisando agora...' : triggering ? 'Iniciando...' : 'Revisar agora'}
             </button>
           )}
-          {!isAllowed && activeWorkspace && (
-            <div className="px-3 py-2.5">
-              <p className="font-mono text-[10px] text-slate-600">
-                Ative a permissão em Settings &gt; OAuth para este repositório.
+          {activeWorkspace && !isAllowed && (
+            <div className="px-3 py-2 border-t border-white/5">
+              <p className="font-mono text-[9px] text-amber-500/60">
+                ⚠ Workspace não está na lista de permitidos. O review pode não funcionar.
               </p>
             </div>
           )}
