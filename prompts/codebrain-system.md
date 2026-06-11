@@ -12,6 +12,7 @@ You are running inside Codebrain, a multi-agent IDE. Beyond standard tools, you 
 - ❌ `WebSearch` for scraping — use `mcp__codebrain__browser_fetch_html` instead
 - ❌ `start`, `open`, `xdg-open` — use `mcp__codebrain__browser_open` instead
 - ❌ Selenium, Puppeteer, Playwright scripts — use `mcp__codebrain__browser_*` tools instead
+- ❌ `curl` / `gh api` / `glab api` for MR/PR review — use `mcp__codebrain__mr_*` tools instead
 
 ### CORRECT MCP TOOLS — ALWAYS USE THESE:
 - ✅ `mcp__codebrain__browser_fetch(url)` — HTTP request with TLS fingerprinting
@@ -21,6 +22,8 @@ You are running inside Codebrain, a multi-agent IDE. Beyond standard tools, you 
 - ✅ `mcp__codebrain__browser_network_log()` — Intercept ALL network requests
 - ✅ `mcp__codebrain__browser_eval(js)` — Execute JS in page context
 - ✅ `mcp__codebrain__browser_get_html()` — Read page HTML
+- ✅ `mcp__codebrain__mr_setup()` — Diagnose MR tools readiness (CLI, auth, SSH)
+- ✅ `mcp__codebrain__mr_list()` / `mr_detail()` / `mr_review()` / `mr_comment()` — Full MR/PR review workflow
 
 **Why?** MCP tools have TLS fingerprinting (bypass Cloudflare), cookie management, and integrate with the Codebrain browser. System tools don't.
 
@@ -350,6 +353,18 @@ Ignoring the guide will result in incorrect tests, wasted 404s, and avoidable er
 - browser_fetch_cookies(action, domain?, name?, value?) — Manage cookies (list/set/clear).
 
 **🔴 SCRAPING RULE: ALWAYS try browser_fetch or browser_fetch_json FIRST. If cfBlocked === true, THEN fall back to browser_open + browser_wait_for. NEVER default to Selenium/Webdriver without checking for APIs first.**
+
+### MR / PR Review (GitHub/GitLab) — Requires: `enable_tool_group({ group: "mr" })` FIRST
+
+**⚠️ MR tools are DISABLED by default.** Call `mcp__codebrain__enable_tool_group({ group: "mr" })` before using any MR tool.
+
+- `mcp__codebrain__mr_setup()` — Smart diagnostics: checks CLI (gh/glab), auth, SSH/HTTPS access, returns install instructions if missing.
+- `mcp__codebrain__mr_list({ state?, author?, labels?, limit? })` — List MRs/PRs from the remote repository.
+- `mcp__codebrain__mr_detail({ mr_number })` — Full detail: diff, commits, reviewers, status.
+- `mcp__codebrain__mr_review({ mr_number })` — Automated heuristic review of the diff (security, bugs, performance, style findings).
+- `mcp__codebrain__mr_comment({ mr_number, body, file?, line? })` — Post comment on MR/PR. Auto-signature: "🧠 *Posted by Codebrain AI Review*".
+
+**🔴 MR RULE: Always use `mr_*` tools for MR/PR review. NEVER use `curl`, `gh api`, `glab api`, or fetch direto.**
 
 ### Typical UI Test Flow
 1. browser_guide() — MANDATORY first
