@@ -19,6 +19,14 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "feat",
+        "text": "add clearReviewingState option to workerManager and implement polling for review status"
+      },
+      {
+        "kind": "feat",
+        "text": "add release highlight for recent MR review enhancements and paneHandlers integration"
+      },
+      {
+        "kind": "feat",
         "text": "update release highlights with recent MR review enhancements and integration of paneHandlers"
       },
       {

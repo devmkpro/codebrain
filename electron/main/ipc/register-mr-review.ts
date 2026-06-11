@@ -139,20 +139,35 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
    * Includes debounce to prevent rapid re-triggering.
    */
   ipcMain.handle("mr_review:trigger", async (_event, args: { workspace: string }) => {
-    console.log(`[mr_review:trigger] IPC handler called with args:`, JSON.stringify(args));
     try {
       const ws = args?.workspace;
       if (!ws) {
-        console.error(`[mr_review:trigger] ERROR: workspace is required, got:`, args);
         return { ok: false, error: "workspace is required" };
       }
 
-      // Debounce: prevent triggering again within 30s
+      // Fix #1: Validate workspace is a real git repo before proceeding
+      if (!isGitRepoWithRemote(ws)) {
+        return { ok: false, error: "Workspace is not a valid git repository with a remote" };
+      }
+
+      // Poll for _triggerMrPoll first, BEFORE setting any state (Fix #4: debounce race)
+      let triggerFn = (ctx as any)._triggerMrPoll;
+      if (typeof triggerFn !== 'function') {
+        for (let i = 0; i < 30; i++) {
+          await new Promise(r => setTimeout(r, 500));
+          triggerFn = (ctx as any)._triggerMrPoll;
+          if (typeof triggerFn === 'function') break;
+        }
+      }
+      if (typeof triggerFn !== 'function') {
+        return { ok: false, error: "MCP server not ready. Try again in a few seconds." };
+      }
+
+      // Debounce: only after confirming trigger is available (Fix #4)
       const now = Date.now();
       const lastTrigger: number = (ctx as any)._mrReviewLastTrigger ?? 0;
       if (now - lastTrigger < 30_000) {
         const remaining = Math.ceil((30_000 - (now - lastTrigger)) / 1000);
-        console.warn(`[mr_review:trigger] DEBOUNCED: last trigger was ${Math.round((now - lastTrigger) / 1000)}s ago`);
         return { ok: false, error: `Review já foi disparado há ${Math.round((now - lastTrigger) / 1000)}s. Aguarde ${remaining}s.` };
       }
       (ctx as any)._mrReviewLastTrigger = now;
@@ -163,45 +178,17 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
       activeWs.add(ws);
       (ctx as any)._mrReviewActiveWorkspaces = activeWs;
 
-      // Direct call to bridge worker — no event bus needed
-      // Poll for _triggerMrPoll (set synchronously during createMCPBridge in startMCPServer).
-      // Don't rely on mcpServerReady promise — it resolves when HTTP server starts listening,
-      // but _triggerMrPoll is available much earlier (during bridge creation).
-      let triggerFn = (ctx as any)._triggerMrPoll;
-      if (typeof triggerFn !== 'function') {
-        console.log(`[mr_review:trigger] _triggerMrPoll not ready, polling up to 15s...`);
-        for (let i = 0; i < 30; i++) {
-          await new Promise(r => setTimeout(r, 500));
-          triggerFn = (ctx as any)._triggerMrPoll;
-          if (typeof triggerFn === 'function') {
-            console.log(`[mr_review:trigger] _triggerMrPoll became available after ${(i + 1) * 500}ms`);
-            break;
-          }
-        }
-      }
-      if (typeof triggerFn === 'function') {
-        console.log(`[mr_review:trigger] Calling _triggerMrPoll() directly`);
-        const result = triggerFn();
-        console.log(`[mr_review:trigger] _triggerMrPoll result:`, JSON.stringify(result));
+      const result = triggerFn();
 
-        // Auto-clear reviewing state after 120s (safety net in case worker doesn't)
-        setTimeout(() => {
-          activeWs.delete(ws);
-          if (activeWs.size === 0) (ctx as any)._mrReviewActive = false;
-        }, 120_000);
-
-        console.log(`[mr_review:trigger] SUCCESS: returning ok=true`);
-        return { ok: true, message: `Review triggered for ${ws}` };
-      } else {
-        // Reset debounce so user can retry after MCP finishes starting
-        (ctx as any)._mrReviewLastTrigger = lastTrigger;
-        (ctx as any)._mrReviewActive = false;
+      // Auto-clear reviewing state after 120s (safety net)
+      setTimeout(() => {
         activeWs.delete(ws);
-        console.error(`[mr_review:trigger] ERROR: _triggerMrPoll not registered even after MCP wait!`);
-        return { ok: false, error: "MCP server not ready — _triggerMrPoll not registered. Try again in a few seconds." };
-      }
+        if (activeWs.size === 0) (ctx as any)._mrReviewActive = false;
+      }, 120_000);
+
+      return { ok: true, message: `Review triggered for ${ws}` };
     } catch (err: any) {
-      console.error(`[mr_review:trigger] CRASHED:`, err);
+      // Fix #2: Always clear active state on any failure
       (ctx as any)._mrReviewActive = false;
       (ctx as any)._mrReviewActiveWorkspaces = new Set();
       return { ok: false, error: err.message };

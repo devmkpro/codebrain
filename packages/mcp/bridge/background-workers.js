@@ -1145,27 +1145,32 @@ class WorkerManager {
     const provider = config.mr_review_provider;
     const model = config.mr_review_model;
 
+    // detailRes has shape { ok, provider, mr: { diff, title, branch, ... } }
+    const mrData = detailRes.mr || detailRes;
     // Truncate diff to avoid exceeding context limits (~8K chars)
-    const diff = (detailRes.diff || "").slice(0, 8000);
-    const title = mr.title || detailRes.title || "Untitled";
-    const sourceBranch = mr.source_branch || detailRes.source_branch || "?";
-    const targetBranch = mr.target_branch || detailRes.target_branch || "?";
+    const diff = (mrData.diff || detailRes.diff || "").slice(0, 8000);
+    const title = mr.title || mrData.title || "Untitled";
+    const sourceBranch = mr.source_branch || mrData.branch || mrData.source_branch || "?";
+    const targetBranch = mr.target_branch || mrData.base_branch || mrData.target_branch || "?";
 
     const prompt = [
-      `You are a code reviewer. Analyze the following MR diff and output your review.`,
-      `DO NOT use any tools. Just output your review as plain text.`,
-      `Your output will be automatically posted as a comment on the MR.`,
+      `You are a code reviewer. Review the following MR diff and post your findings as a comment on the MR.`,
+      ``,
+      `STEPS:`,
+      `1. First, call mcp__codebrain__enable_tool_group with group "mr" to enable MR tools`,
+      `2. Analyze the diff below`,
+      `3. Call mcp__codebrain__mr_comment with cwd="${workspacePath}", id="${mrId}", and your review as body`,
       ``,
       `MR !${mrId}: ${title}`,
       `Branch: ${sourceBranch} → ${targetBranch}`,
       ``,
-      `Rules:`,
+      `Review rules:`,
       `- Focus on bugs, security issues, performance, and code quality`,
       `- Be concise — max 10 findings`,
       `- Use markdown formatting`,
       `- Start with "## Codebrain AI Review"`,
-      `- If no issues found, say "## Codebrain AI Review\n\n✅ LGTM — no issues found"`,
-      `- Do NOT ask questions, do NOT use tools, just output the review text`,
+      `- If no issues found, post "## Codebrain AI Review\\n\\n✅ LGTM — no issues found"`,
+      `- After posting the comment, your task is DONE. Do not ask questions.`,
       ``,
       `---DIFF---`,
       diff,
@@ -1214,53 +1219,8 @@ class WorkerManager {
       // 4. Wait for idle (agent finishes analyzing)
       await this._waitForPaneIdle(reviewPaneId, 180000); // 3 min timeout
 
-      // 5. Read the agent's output and post as MR comment
-      const output = ptyManager.read(reviewPaneId, 500);
-      const outputText = output.join("\n");
-
-      // Extract the review text (look for "## Codebrain AI Review" marker)
-      let reviewBody = "";
-      const markerIdx = outputText.indexOf("## Codebrain AI Review");
-      if (markerIdx >= 0) {
-        reviewBody = outputText.slice(markerIdx).trim();
-      } else {
-        // Fallback: use everything after the diff marker or last substantial block
-        const lines = output.filter(l => l.trim().length > 0 && !l.includes("---DIFF---"));
-        // Take the last N lines that look like review output (after the agent processes)
-        const reviewLines = [];
-        let collecting = false;
-        for (const line of lines) {
-          // Skip CLI chrome (banner, prompt chars, tool calls)
-          const clean = line.replace(/[\x00-\x1f\x7f-\x9f]/g, "").trim();
-          if (clean.length > 5 && !clean.startsWith(">") && !clean.startsWith("$")) {
-            collecting = true;
-            reviewLines.push(clean);
-          }
-        }
-        reviewBody = reviewLines.length > 0
-          ? "## Codebrain AI Review\n\n" + reviewLines.join("\n")
-          : "";
-      }
-
-      if (reviewBody.length > 20) {
-        // Post the review as MR comment
-        const mrHandlers = this.opts.mrHandlers;
-        if (mrHandlers?.mrComment) {
-          console.log(`[mr_poll] Posting review comment (${reviewBody.length} chars) on MR !${mrId}`);
-          try {
-            const commentResult = await mrHandlers.mrComment({
-              cwd: workspacePath,
-              id: String(mrId),
-              body: reviewBody,
-            });
-            console.log(`[mr_poll] Comment posted: ok=${commentResult?.ok}, error=${commentResult?.error || "none"}`);
-          } catch (err) {
-            console.error(`[mr_poll] Failed to post comment:`, err.message);
-          }
-        }
-      } else {
-        console.warn(`[mr_poll] Review output too short (${reviewBody.length} chars), not posting`);
-      }
+      // 5. Agent posts the comment via MCP tool (mr_comment).
+      // Just record + notify + cleanup.
 
       // 6. Record + notify + cleanup
       this._postReviewActions(mr, mrId, workspacePath, detailRes.provider || mr.provider, store, emitNotification);
