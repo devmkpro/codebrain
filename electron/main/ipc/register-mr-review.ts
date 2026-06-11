@@ -63,6 +63,7 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
         activeWorkspaces,
         allowedWorkspaces: allowed,
         autoReview,
+        hasReviewModel: !!(config.mr_review_provider && config.mr_review_model),
       };
     } catch (err: any) {
       return { ok: false, error: err.message };
@@ -135,11 +136,26 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
 
   /**
    * mr_review:trigger — manually trigger review for a specific workspace
+   * Includes debounce to prevent rapid re-triggering.
    */
   ipcMain.handle("mr_review:trigger", async (_event, args: { workspace: string }) => {
+    console.log(`[mr_review:trigger] IPC handler called with args:`, JSON.stringify(args));
     try {
-      const ws = args.workspace;
-      if (!ws) return { ok: false, error: "workspace is required" };
+      const ws = args?.workspace;
+      if (!ws) {
+        console.error(`[mr_review:trigger] ERROR: workspace is required, got:`, args);
+        return { ok: false, error: "workspace is required" };
+      }
+
+      // Debounce: prevent triggering again within 30s
+      const now = Date.now();
+      const lastTrigger: number = (ctx as any)._mrReviewLastTrigger ?? 0;
+      if (now - lastTrigger < 30_000) {
+        const remaining = Math.ceil((30_000 - (now - lastTrigger)) / 1000);
+        console.warn(`[mr_review:trigger] DEBOUNCED: last trigger was ${Math.round((now - lastTrigger) / 1000)}s ago`);
+        return { ok: false, error: `Review já foi disparado há ${Math.round((now - lastTrigger) / 1000)}s. Aguarde ${remaining}s.` };
+      }
+      (ctx as any)._mrReviewLastTrigger = now;
 
       // Set active flag for UI indicator
       (ctx as any)._mrReviewActive = true;
@@ -147,17 +163,27 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
       activeWs.add(ws);
       (ctx as any)._mrReviewActiveWorkspaces = activeWs;
 
-      // Emit event to bridge.js which runs the mr_poll worker on demand
-      ctx.hooksManager?.emit?.("mr_review:trigger", { workspace: ws });
+      // Direct call to bridge worker — no event bus needed
+      const triggerFn = (ctx as any)._triggerMrPoll;
+      console.log(`[mr_review:trigger] _triggerMrPoll exists:`, typeof triggerFn);
+      if (typeof triggerFn === 'function') {
+        console.log(`[mr_review:trigger] Calling _triggerMrPoll() directly`);
+        const result = triggerFn();
+        console.log(`[mr_review:trigger] _triggerMrPoll result:`, JSON.stringify(result));
+      } else {
+        console.error(`[mr_review:trigger] ERROR: _triggerMrPoll not registered! Bridge may not have started yet.`);
+      }
 
-      // Auto-clear reviewing state after 60s (safety net in case worker doesn't)
+      // Auto-clear reviewing state after 120s (safety net in case worker doesn't)
       setTimeout(() => {
         activeWs.delete(ws);
         if (activeWs.size === 0) (ctx as any)._mrReviewActive = false;
-      }, 60_000);
+      }, 120_000);
 
+      console.log(`[mr_review:trigger] SUCCESS: returning ok=true`);
       return { ok: true, message: `Review triggered for ${ws}` };
     } catch (err: any) {
+      console.error(`[mr_review:trigger] CRASHED:`, err);
       (ctx as any)._mrReviewActive = false;
       (ctx as any)._mrReviewActiveWorkspaces = new Set();
       return { ok: false, error: err.message };

@@ -838,7 +838,7 @@ function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
 
 // ─── MR Review Indicator ────────────────────────────────────────────────────
 function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
-  const { reviewing, activeWorkspaces, allowedWorkspaces, triggerReview, fetchStatus } = useMrReviewStore();
+  const { reviewing, activeWorkspaces, allowedWorkspaces, hasReviewModel, triggerReview, fetchStatus } = useMrReviewStore();
   const [showMenu, setShowMenu] = React.useState(false);
   const [menuPos, setMenuPos] = React.useState({ top: 0, right: 0 });
   const btnRef = React.useRef<HTMLButtonElement>(null);
@@ -906,7 +906,7 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
         ref={btnRef}
         onClick={handleToggle}
         className={`flex items-center gap-1.5 px-2 h-full text-[11px] transition-all focus:outline-none cursor-pointer ${iconClass} ${bgClass}`}
-        title={isReviewing ? 'Revisando MRs...' : isAllowed ? 'MR Review — clique para opções' : 'MR Review'}
+        title={isReviewing ? 'Revisando MRs...' : !hasReviewModel ? 'MR Review — configure um modelo em Settings' : isAllowed ? 'MR Review — clique para opções' : 'MR Review'}
       >
         <GitPullRequest size={15} strokeWidth={1.5} />
         {isReviewing && (
@@ -937,7 +937,7 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
               </div>
             </div>
           )}
-          {activeWorkspace && (
+          {activeWorkspace && hasReviewModel && (
             <button
               onClick={handleTrigger}
               disabled={isReviewing || triggering}
@@ -951,10 +951,10 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
               {isReviewing ? 'Revisando agora...' : triggering ? 'Iniciando...' : 'Revisar agora'}
             </button>
           )}
-          {activeWorkspace && !isAllowed && (
-            <div className="px-3 py-2 border-t border-white/5">
-              <p className="font-mono text-[9px] text-amber-500/60">
-                ⚠ Workspace não está na lista de permitidos. O review pode não funcionar.
+          {activeWorkspace && !hasReviewModel && (
+            <div className="px-3 py-2.5">
+              <p className="font-mono text-[10px] text-slate-600">
+                Configure um modelo de review em Settings &gt; OAuth.
               </p>
             </div>
           )}

@@ -63,6 +63,8 @@ function buildMcpBridge(ctx: AppContext) {
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
     hooksManager: ctx.hooksManager,
+    // Direct trigger callback — bridge.js registers its trigger function here
+    setMrPollTrigger: (fn: () => any) => { (ctx as any)._triggerMrPoll = fn; },
     configStore: ctx.configStore, // For notification settings
     workspaceConfigStore: ctx.workspaceConfigStore, // For workspace access mode sandbox
     updateContextFiles: (wsPath: string) => writeContextFiles(ctx, wsPath),

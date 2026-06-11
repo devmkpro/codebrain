@@ -552,9 +552,10 @@ class WorkerManager {
 
   // ─── Worker Implementations ───
 
-  _runWorker(name) {
+  _runWorker(name, opts) {
     const worker = this.workers.get(name);
-    if (!worker || worker.running) return;
+    if (!worker) { console.log(`[_runWorker] SKIP: worker "${name}" not found`); return; }
+    if (worker.running) { console.log(`[_runWorker] SKIP: worker "${name}" already running`); return; }
 
     worker.running = true;
     worker.lastRun = Date.now();
@@ -587,7 +588,7 @@ class WorkerManager {
         case "cache": result = this._cleanCache(); break;
         case "swarm": result = this._swarmMonitor(); break;
         case "heartbeat": result = this._cacheHeartbeat(); break;
-        case "mr_poll": result = this._mrPoll(); break;
+        case "mr_poll": result = this._mrPoll(opts); break;
         default: result = { message: "no implementation" };
       }
 
@@ -1170,30 +1171,49 @@ class WorkerManager {
     ].join("\n");
 
     try {
-      // 1. Spawn review pane (spawnPaneInternal handles provider resolution + env)
+      // 1. Spawn review pane
+      // NOTE: agent is NOT passed — resolveProvider will determine it from providerId.
+      // For MIMO: resolveProvider finds provider in store → type=mimo-compat → agent=openclaude
+      console.log(`[mr_poll] Spawning review pane: providerId=${provider}, model=${model}, cwd=${workspacePath}`);
       const spawnResult = await spawnFn({
         providerId: provider,
         model,
         cwd: workspacePath,
       });
 
+      console.log(`[mr_poll] Spawn result:`, JSON.stringify(spawnResult));
       if (!spawnResult?.ok || !spawnResult?.paneId) {
         return { ok: false, error: `spawn failed: ${spawnResult?.error || "unknown"}` };
       }
 
       const reviewPaneId = spawnResult.paneId;
 
-      // 2. Write the review prompt (text first, then \r to submit — avoids race on large pastes)
-      ptyManager.write(reviewPaneId, prompt);
-      setTimeout(() => ptyManager.write(reviewPaneId, "\r"), 500); // submit
+      // 2. Wait for CLI readiness — use output-based detection instead of fixed delay.
+      // When the CLI produces its first output (banner/prompt), it's ready for input.
+      // Fallback to 8s timeout if no output detected (some CLIs are silent on startup).
+      await this._waitForCliReady(reviewPaneId, 8000);
 
-      // 3. Wait for idle (agent finishes analyzing + posting)
+      // 3. Write the review prompt silently (no echo in terminal), then submit with \r.
+      // writeSilent avoids the prompt appearing in the UI terminal.
+      // Split into two writes: prompt text first, then submit character after 500ms gap.
+      ptyManager.writeSilent(reviewPaneId, prompt);
+      await new Promise(r => setTimeout(r, 500));
+      ptyManager.writeSilent(reviewPaneId, "\r");
+
+      // 4. Wait for idle (agent finishes analyzing + posting)
       await this._waitForPaneIdle(reviewPaneId, 180000); // 3 min timeout
 
-      // 4. Record + notify + cleanup
+      // Check if pane exited prematurely (exitCode != null means process died)
+      const paneInfo = ptyManager.get?.(reviewPaneId) || ptyManager.list?.().find(p => p.paneId === reviewPaneId);
+      if (paneInfo?.exitCode != null && paneInfo.exitCode !== 0) {
+        console.error(`[mr_poll] Review pane exited prematurely with code ${paneInfo.exitCode}`);
+        return { ok: false, error: `review pane exited with code ${paneInfo.exitCode}` };
+      }
+
+      // 5. Record + notify + cleanup
       this._postReviewActions(mr, mrId, workspacePath, detailRes.provider || mr.provider, store, emitNotification);
 
-      // 5. Close the review pane after a brief delay
+      // 6. Close the review pane after a brief delay
       setTimeout(() => {
         try { ptyManager.kill(reviewPaneId); } catch {}
       }, 5000);
@@ -1205,95 +1225,151 @@ class WorkerManager {
   }
 
   /**
+   * Wait for a CLI pane to produce its first output (signal it's ready for input).
+   * Falls back to a fixed timeout if no output is detected.
+   */
+  _waitForCliReady(paneId, timeoutMs = 8000) {
+    return new Promise((resolve) => {
+      const ptyManager = this.opts.ptyManager;
+      if (!ptyManager) return resolve({ ready: true, noManager: true });
+
+      let resolved = false;
+
+      // Listen for output on this specific pane
+      // ptyManager emits "output" with (paneId, data) signature
+      const onOutput = (pid, data) => {
+        if (pid === paneId && !resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          ptyManager.off("output", onOutput);
+          resolve({ ready: true, detected: true });
+        }
+      };
+
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          ptyManager.off("output", onOutput);
+          resolve({ ready: true, timedOut: true });
+        }
+      }, timeoutMs);
+
+      ptyManager.on("output", onOutput);
+    });
+  }
+
+  /**
    * Main MR polling worker. Runs periodically (every 5 min) and on-demand.
    * If mr_review_model is configured → uses LLM to review diffs.
    * Otherwise → falls back to static regex analysis.
    * Returns a Promise (async) when LLM mode is active.
    */
-  _mrPoll() {
+  _mrPoll(opts) {
+    const force = opts?.force === true;
     const store = this.opts.memoryStore;
     const mrHandlers = this.opts.mrHandlers;
     const emitNotification = this.opts.emitNotification;
     const configStore = this.opts.configStore;
 
-    // Check if auto-review is enabled
-    if (!configStore) return { summary: "no configStore", skipped: true };
+    console.log(`[mr_poll] Called with force=${force}`);
+
+    // Check if auto-review is enabled (force bypasses this for manual triggers)
+    if (!configStore) { console.log(`[mr_poll] SKIP: no configStore`); return { summary: "no configStore", skipped: true }; }
     const config = configStore.get?.();
-    if (!config?.mr_auto_review) return { summary: "auto-review disabled", skipped: true };
+    console.log(`[mr_poll] Config: mr_auto_review=${config?.mr_auto_review}, mr_review_provider=${config?.mr_review_provider}, mr_review_model=${config?.mr_review_model}`);
+    if (!force && !config?.mr_auto_review) { console.log(`[mr_poll] SKIP: auto-review disabled (force=${force})`); return { summary: "auto-review disabled", skipped: true }; }
 
-    if (!mrHandlers) return { summary: "no mrHandlers", skipped: true };
-    if (!store) return { summary: "no memoryStore", skipped: true };
+    if (!mrHandlers) { console.log(`[mr_poll] SKIP: no mrHandlers`); return { summary: "no mrHandlers", skipped: true }; }
+    if (!store) { console.log(`[mr_poll] SKIP: no memoryStore`); return { summary: "no memoryStore", skipped: true }; }
 
-    // Check allowed workspaces
+    // Check allowed workspaces — iterate ALL, not just current
     const allowedWorkspaces = config?.mr_allowed_workspaces;
     if (!Array.isArray(allowedWorkspaces) || allowedWorkspaces.length === 0) {
+      console.log(`[mr_poll] SKIP: no allowed workspaces`);
       return { summary: "no allowed workspaces", skipped: true };
-    }
-
-    const workspacePath = this.opts.getCurrentWorkspacePath?.();
-    if (!workspacePath) return { summary: "no workspace", skipped: true };
-    if (!allowedWorkspaces.includes(workspacePath)) {
-      return { summary: `workspace not allowed: ${workspacePath}`, skipped: true };
     }
 
     // LLM model is required — no model = no review
     const useLLM = !!(config.mr_review_provider && config.mr_review_model);
-    if (!useLLM) return { summary: "no review model configured (mr_review_provider + mr_review_model required)", skipped: true };
+    if (!useLLM) { console.log(`[mr_poll] SKIP: no review model configured`); return { summary: "no review model configured (mr_review_provider + mr_review_model required)", skipped: true }; }
 
-    const results = { workspace: workspacePath, total: 0, reviewed: 0, skipped: 0, errors: [] };
+    console.log(`[mr_poll] Review config: provider=${config.mr_review_provider}, model=${config.mr_review_model}, auto=${config.mr_auto_review}, force=${force}`);
+    console.log(`[mr_poll] Allowed workspaces:`, JSON.stringify(allowedWorkspaces));
+
+    const results = { total: 0, reviewed: 0, skipped: 0, errors: [] };
 
     try {
-      const listResult = mrHandlers.mrList({ cwd: workspacePath, state: "open", limit: 20 });
+      // Process ALL allowed workspaces
+      for (const wsPath of allowedWorkspaces) {
+        console.log(`[mr_poll] Scanning workspace: ${wsPath}`);
+        let listResult;
+        try {
+          listResult = mrHandlers.mrList({ cwd: wsPath, state: "open", limit: 20 });
+        } catch (err) {
+          console.error(`[mr_poll] mrList exception for ${wsPath}:`, err.message);
+          results.errors.push(`${wsPath}: mrList failed: ${err.message}`);
+          continue;
+        }
 
-      const processList = async (listRes) => {
-        if (!listRes?.ok || !listRes.mrs) return { summary: `mrList failed: ${listRes?.error || "unknown"}` };
-        results.total = listRes.mrs.length;
+        // mrList is async — await if needed
+        const listRes = listResult && typeof listResult.then === "function" ? await listResult : listResult;
+        console.log(`[mr_poll] mrList for ${wsPath}: ok=${listRes?.ok}, count=${listRes?.mrs?.length ?? "n/a"}, error=${listRes?.error || "none"}`);
+
+        if (!listRes?.ok || !listRes.mrs || listRes.mrs.length === 0) {
+          if (!listRes?.ok) results.errors.push(`${wsPath}: mrList failed: ${listRes?.error || "unknown"}`);
+          continue;
+        }
+
+        results.total += listRes.mrs.length;
 
         for (const mr of listRes.mrs) {
           const mrId = mr.id || mr.number || mr.iid;
           if (!mrId) { results.skipped++; continue; }
 
-          const checked = store.isMrReviewed({ workspace: workspacePath, mr_id: mrId });
-          if (checked?.reviewed) { results.skipped++; continue; }
+          // Skip already-reviewed MRs (unless force=true from manual trigger)
+          if (!force) {
+            const checked = store.isMrReviewed({ workspace: wsPath, mr_id: mrId });
+            if (checked?.reviewed) {
+              console.log(`[mr_poll] MR !${mrId} already reviewed — skipping`);
+              results.skipped++;
+              continue;
+            }
+          }
 
+          console.log(`[mr_poll] Processing MR !${mrId}: "${mr.title || "?"}" in ${wsPath}`);
           try {
-            const detail = mrHandlers.mrDetail({ cwd: workspacePath, id: String(mrId), include_diff: true });
+            const detail = mrHandlers.mrDetail({ cwd: wsPath, id: String(mrId), include_diff: true });
             const detailRes = detail && typeof detail.then === "function" ? await detail : detail;
 
             if (!detailRes?.ok) {
+              console.error(`[mr_poll] MR !${mrId} detail failed: ${detailRes?.error}`);
               results.errors.push(`MR !${mrId}: detail failed`);
               continue;
             }
 
-            // LLM-based review: spawn agent pane with configured model
-            const reviewResult = await this._llmReview(mr, mrId, detailRes, workspacePath, config, store, emitNotification);
+            // LLM-based review: spawn agent pane in the GIT REPO workspace
+            console.log(`[mr_poll] Spawning LLM review for MR !${mrId} in workspace ${wsPath}...`);
+            const reviewResult = await this._llmReview(mr, mrId, detailRes, wsPath, config, store, emitNotification);
+            console.log(`[mr_poll] MR !${mrId} review result: ok=${reviewResult?.ok}, error=${reviewResult?.error || "none"}`);
             if (reviewResult.ok) {
               results.reviewed++;
             } else {
               results.errors.push(`MR !${mrId}: review failed: ${reviewResult.error}`);
             }
           } catch (err) {
+            console.error(`[mr_poll] MR !${mrId} exception:`, err.message);
             results.errors.push(`MR !${mrId}: ${err.message}`);
           }
         }
-
-        results.summary = `reviewed ${results.reviewed}/${results.total} MRs (llm)`;
-        if (results.errors.length > 0) results.summary += `, ${results.errors.length} errors`;
-        return results;
-      };
-
-      // Handle async list
-      if (listResult && typeof listResult.then === "function") {
-        return listResult.then(processList).catch(err => ({ summary: `mr_poll error: ${err.message}`, error: err.message }));
-      } else {
-        const listRes = processList(listResult);
-        // processList may return a Promise (when useLLM=true)
-        if (listRes && typeof listRes.then === "function") {
-          return listRes.catch(err => ({ summary: `mr_poll error: ${err.message}`, error: err.message }));
-        }
-        return listRes;
       }
+
+      results.summary = `reviewed ${results.reviewed}/${results.total} MRs (llm)`;
+      if (results.skipped > 0) results.summary += `, ${results.skipped} skipped`;
+      if (results.errors.length > 0) results.summary += `, ${results.errors.length} errors`;
+      console.log(`[mr_poll] Done: ${results.summary}`);
+      return results;
     } catch (err) {
+      console.error(`[mr_poll] Top-level error:`, err.message);
       return { summary: `mr_poll error: ${err.message}`, error: err.message };
     } finally {
       // Clear reviewing state (for IPC trigger UI indicator)
@@ -1306,12 +1382,23 @@ class WorkerManager {
   /**
    * Run a worker on demand (outside its normal interval).
    * Used by IPC trigger handlers (e.g. mr_review:trigger).
+   * Includes cooldown protection to prevent rapid re-triggering.
    */
   triggerWorker(name) {
     const worker = this.workers.get(name);
     if (!worker) return { ok: false, error: `worker ${name} not found` };
-    if (worker.running) return { ok: false, error: `worker ${name} already running` };
-    this._runWorker(name);
+    if (worker.running) {
+      console.log(`[triggerWorker] Worker ${name} stuck in running state — force resetting`);
+      worker.running = false;
+    }
+    // Cooldown: prevent rapid re-triggering (min 30s between manual triggers)
+    const now = Date.now();
+    if (worker.lastRun && (now - worker.lastRun) < 30000) {
+      const remaining = Math.ceil((30000 - (now - worker.lastRun)) / 1000);
+      return { ok: false, error: `worker ${name} was triggered ${Math.round((now - worker.lastRun) / 1000)}s ago — wait ${remaining}s` };
+    }
+    console.log(`[triggerWorker] Triggering ${name} on demand`);
+    this._runWorker(name, { force: true });
     return { ok: true };
   }
 
