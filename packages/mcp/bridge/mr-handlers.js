@@ -7,7 +7,7 @@
  * Auto-detects the provider from the git remote origin URL.
  */
 
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -19,6 +19,7 @@ const COMMENT_SIGNATURE = "\n\n---\n🧠 *Posted by Codebrain AI Review*";
 // ═══════════════════════════════════════════════════════════════════════════
 
 const _cliPathCache = {};
+let _systemPathCache = null; // Cache Windows system PATH to avoid repeated PowerShell spawns
 
 function resolveCliPath(cli) {
   if (_cliPathCache[cli]) return _cliPathCache[cli];
@@ -30,15 +31,17 @@ function resolveCliPath(cli) {
   // 1) Try where/which with FULL system PATH (not just inherited)
   try {
     if (isWin) {
-      // Refresh PATH from registry — Electron may have stale PATH
-      const sysPath = execSync(
-        'powershell -NoProfile -Command "[System.Environment]::GetEnvironmentVariable(\'PATH\',\'Machine\')+\';\'+[System.Environment]::GetEnvironmentVariable(\'PATH\',\'User\')"',
-        { encoding: "utf-8", timeout: 8000, stdio: ["pipe", "pipe", "pipe"] }
-      ).trim();
+      // Refresh PATH from registry — cached to avoid 2-4s PowerShell spawn per CLI
+      if (!_systemPathCache) {
+        _systemPathCache = execSync(
+          'powershell -NoProfile -Command "[System.Environment]::GetEnvironmentVariable(\'PATH\',\'Machine\')+\';\'+[System.Environment]::GetEnvironmentVariable(\'PATH\',\'User\')"',
+          { encoding: "utf-8", timeout: 8000, stdio: ["pipe", "pipe", "pipe"] }
+        ).trim();
+      }
       const found = execSync(`where ${cli}`, {
         encoding: "utf-8", timeout: 5000,
         stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, PATH: sysPath },
+        env: { ...process.env, PATH: _systemPathCache },
       }).trim().split(/\r?\n/)[0];
       if (found && fs.existsSync(found)) { _cliPathCache[cli] = found; return found; }
     } else {
@@ -168,7 +171,8 @@ function checkCliInstalled(cli) {
  */
 function checkCliAuth(cli) {
   const fullPath = resolveCliPath(cli);
-  const cmd = fullPath ? (fullPath.includes(" ") ? `"${fullPath}"` : fullPath) : cli;
+  if (!fullPath) return { authenticated: false, account: null, installed: false };
+  const cmd = fullPath.includes(" ") ? `"${fullPath}"` : fullPath;
   try {
     const output = execSync(`${cmd} auth status`, {
       encoding: "utf-8",
@@ -200,9 +204,9 @@ function checkCliAuth(cli) {
  */
 function checkSshAccess(host) {
   try {
-    const output = execSync(`ssh -T git@${host} -o ConnectTimeout=10 -o StrictHostKeyChecking=no`, {
+    const output = execSync(`ssh -T git@${host} -o ConnectTimeout=5 -o StrictHostKeyChecking=no`, {
       encoding: "utf-8",
-      timeout: 15000,
+      timeout: 8000,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
     // GitHub: "Hi <user>! You've successfully authenticated..."
@@ -434,33 +438,34 @@ function runCliJson(cmd, cwd) {
 
 /**
  * Guard: check if CLI is ready before running MR commands.
- * Returns null if ready, or a friendly error response if not.
+ * Returns { ok: true, gitInfo } if ready, or { ok: false, error, ... } if not.
+ * Callers can reuse gitInfo to avoid redundant detectGitProvider calls.
  * @param {string} cwd
- * @returns {null | { ok: false, error: string, setup_needed: true, diagnostic: object }}
+ * @returns {{ ok: true, gitInfo: object } | { ok: false, error: string, setup_needed: true }}
  */
 function ensureCliReady(cwd) {
   try {
-    const info = detectGitProvider(cwd);
-    const cliCheck = checkCliInstalled(info.cli);
+    const gitInfo = detectGitProvider(cwd);
+    const cliCheck = checkCliInstalled(gitInfo.cli);
     if (!cliCheck.installed) {
-      const install = getInstallInstructions(info.cli);
+      const install = getInstallInstructions(gitInfo.cli);
       return {
         ok: false,
-        error: `${info.cli} CLI not found. Run mr_setup to diagnose and fix.`,
+        error: `${gitInfo.cli} CLI not found. Run mr_setup to diagnose and fix.`,
         setup_needed: true,
         quick_fix: install.recommended,
       };
     }
-    const authCheck = checkCliAuth(info.cli);
+    const authCheck = checkCliAuth(gitInfo.cli);
     if (!authCheck.authenticated) {
       return {
         ok: false,
-        error: `${info.cli} CLI not authenticated. Run: ${info.cli} auth login`,
+        error: `${gitInfo.cli} CLI not authenticated. Run: ${gitInfo.cli} auth login`,
         setup_needed: true,
-        quick_fix: `${info.cli} auth login`,
+        quick_fix: `${gitInfo.cli} auth login`,
       };
     }
-    return null; // Ready
+    return { ok: true, gitInfo };
   } catch (err) {
     return {
       ok: false,
@@ -486,12 +491,12 @@ function createMRHandlers() {
     async mrList({ cwd, state = "open", limit = 20 }) {
       if (!cwd) return { ok: false, error: "cwd (workspace path) is required" };
 
-      // Guard: ensure CLI is ready
-      const notReady = ensureCliReady(cwd);
-      if (notReady) return notReady;
+      // Guard: ensure CLI is ready (reuses gitInfo to avoid double-call)
+      const guard = ensureCliReady(cwd);
+      if (!guard.ok) return guard;
 
       try {
-        const { provider, cli } = detectGitProvider(cwd);
+        const { provider, cli } = guard.gitInfo;
 
         if (cli === "gh") {
           const ghState = state === "open" ? "open" : state === "closed" ? "closed" : "all";
@@ -511,11 +516,8 @@ function createMRHandlers() {
         }
 
         // GitLab (glab) — no --state flag; uses --closed, --merged, --all
-        const glabStateFlag = state === "open" ? "" : state === "closed" ? "--closed" : "--all";
-        const data = runCliJson(
-          `glab mr list ${glabStateFlag} --per-page ${limit} -F json`.replace(/\s+/g, " ").trim(),
-          cwd
-        );
+        const glabCmd = ["glab", "mr", "list", state === "open" ? "" : state === "closed" ? "--closed" : "--all", `--per-page ${limit}`, "-F json"].filter(Boolean).join(" ");
+        const data = runCliJson(glabCmd, cwd);
         const mrs = (Array.isArray(data) ? data : []).map((mr) => ({
           id: mr.iid || mr.id,
           title: mr.title,
@@ -537,12 +539,12 @@ function createMRHandlers() {
       if (!cwd) return { ok: false, error: "cwd (workspace path) is required" };
       if (id === undefined || id === null) return { ok: false, error: "id (MR/PR number) is required" };
 
-      // Guard: ensure CLI is ready
-      const notReady = ensureCliReady(cwd);
-      if (notReady) return notReady;
+      // Guard: ensure CLI is ready (reuses gitInfo to avoid double-call)
+      const guard = ensureCliReady(cwd);
+      if (!guard.ok) return guard;
 
       try {
-        const { provider, cli } = detectGitProvider(cwd);
+        const { provider, cli } = guard.gitInfo;
 
         if (cli === "gh") {
           const pr = runCliJson(
@@ -650,9 +652,9 @@ function createMRHandlers() {
       if (id === undefined || id === null) return { ok: false, error: "id (MR/PR number) is required" };
       if (!body) return { ok: false, error: "body (comment text) is required" };
 
-      // Guard: ensure CLI is ready
-      const notReady = ensureCliReady(cwd);
-      if (notReady) return notReady;
+      // Guard: ensure CLI is ready (reuses gitInfo to avoid double-call)
+      const guard = ensureCliReady(cwd);
+      if (!guard.ok) return guard;
 
       // Append signature so readers know the comment was generated by AI
       const signedBody = body + COMMENT_SIGNATURE;
@@ -663,7 +665,7 @@ function createMRHandlers() {
 
       try {
         fs.writeFileSync(tmpFile, signedBody, "utf-8");
-        const { provider, cli } = detectGitProvider(cwd);
+        const { provider, cli } = guard.gitInfo;
 
         if (cli === "gh") {
           if (file && line) {
@@ -676,10 +678,9 @@ function createMRHandlers() {
               return { ok: true, provider, comment_url: commentUrl, inline: false, message: "Could not get commit SHA for inline comment; posted as general comment" };
             }
 
-            // Use gh api to post inline comment (body from file)
-            const escapedBody = signedBody.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+            // Build payload — JSON.stringify handles escaping, no manual escaping needed
             const payload = JSON.stringify({
-              body: escapedBody,
+              body: signedBody,
               commit_id: commitSha,
               path: file,
               line: parseInt(line, 10),
@@ -687,14 +688,17 @@ function createMRHandlers() {
             });
 
             try {
-              const result = runCli(
-                `gh api repos/{owner}/{repo}/pulls/${id}/reviews --method POST --input -`,
-                cwd
-              );
+              // Pass payload as stdin to gh api --input -
+              const cliPath = resolveCliPath("gh") || "gh";
+              const ghBin = cliPath.includes(" ") ? `"${cliPath}"` : cliPath;
+              const result = execSync(
+                `${ghBin} api repos/{owner}/{repo}/pulls/${id}/reviews --method POST --input -`,
+                { cwd, input: payload, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }
+              ).trim();
               return { ok: true, provider, inline: true, file, line };
             } catch {
               // Fallback: try general comment if inline fails
-              const result = runCli(`gh pr comment ${id} --body "${escapedBody}"`, cwd);
+              const result = runCli(`gh pr comment ${id} --body-file "${tmpFile}"`, cwd);
               const commentUrl = result.match(/(https:\/\/[^\s]+)/)?.[1] || null;
               return { ok: true, provider, comment_url: commentUrl, inline: false, message: "Inline comment failed; posted as general comment" };
             }
@@ -707,11 +711,35 @@ function createMRHandlers() {
         }
 
         // GitLab (glab) — use execFileSync to pass body as arg without shell escaping
-        const { execFileSync } = require("child_process");
         const glabPath = resolveCliPath("glab") || "glab";
-        const args = ["mr", "note", "create", String(id), "--resolvable=false", "-m", signedBody];
-        if (file) { args.push("--file", file); }
-        if (line) { args.push("--line", String(line)); }
+        const args = ["mr", "note", "create", String(id), "-m", signedBody];
+        // --resolvable=false conflicts with --file, so only add when no inline target
+        if (!file) { args.push("--resolvable=false"); }
+        if (file && line) {
+          // Inline comments on GitLab require the Discussions API
+          const discussionsPayload = JSON.stringify({
+            body: signedBody,
+            position: {
+              position_type: "text",
+              new_path: file,
+              new_line: parseInt(line, 10),
+            },
+          });
+          try {
+            const glabBin = glabPath.includes(" ") ? `"${glabPath}"` : glabPath;
+            const result = execSync(
+              `${glabBin} api projects/:id/merge_requests/${id}/discussions --method POST --input -`,
+              { cwd, input: discussionsPayload, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }
+            ).trim();
+            return { ok: true, provider, inline: true, file, line };
+          } catch {
+            // Fallback to general note if inline fails
+            const result = execFileSync(glabPath, args, {
+              cwd, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"],
+            }).trim();
+            return { ok: true, provider, inline: false, message: "Inline comment failed on GitLab; posted as general note" };
+          }
+        }
         const result = execFileSync(glabPath, args, {
           cwd, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"],
         }).trim();
