@@ -21,6 +21,8 @@ import { useWhatsNewStore } from "../stores/whats-new-store";
 import { CliInstallModal } from "../components/modals/CliInstallModal";
 import { CliSetupBanner } from "../components/modals/CliSetupBanner";
 import { DetachedPaneView } from "../components/terminal/DetachedPaneView";
+import { MrFixModal } from "../components/ui/MrFixModal";
+import { useMrReviewStore } from "../stores/mr-review-store";
 
 // Detect detached pane mode from URL search params
 const _urlParams = new URLSearchParams(window.location.search);
@@ -285,6 +287,10 @@ export function App() {
       }
     }).catch(() => {});
   }, []);
+  // Listen for MR review findings from main process (auto-fix modal)
+  React.useEffect(() => {
+    return useMrReviewStore.getState().listenForFindings();
+  }, []);
   const closeWhatsNew = React.useCallback(() => {
     whatsNewDismiss(LATEST_RELEASE_VERSION);
   }, []);
@@ -418,6 +424,7 @@ export function App() {
           onClose={() => setCliMissing(false)}
           onInstalled={() => setCliMissing(false)}
         />
+        <MrFixModal />
         {showCliSetup && !cliMissing && (
           <CliSetupBanner
             cliStatuses={cliStatuses}

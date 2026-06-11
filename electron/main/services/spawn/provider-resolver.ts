@@ -145,17 +145,21 @@ export function resolveProvider(
     const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "mimo-claude");
     const registryModels = registryTemplate?.models ?? [];
     const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
-    // Inherit MIMO key from the configured mimo provider in the store
+    // Inherit MIMO key from the configured mimo provider in the store.
+    // The main MIMO provider (mimo-compat/openclaude) stores the key as OPENAI_API_KEY
+    // or ANTHROPIC_AUTH_TOKEN. We check ALL possible locations.
     const mimoStoreProvider = ctx.providerStore.listFull().find((p: any) =>
       (p.id || "").toLowerCase().includes("mimo") || (p.label || "").toLowerCase().includes("mimo")
     );
     const mimoKey = mimoStoreProvider?.env?.["ANTHROPIC_AUTH_TOKEN"]
       || mimoStoreProvider?.env?.["MIMO_API_KEY"]
       || mimoStoreProvider?.env?.["ANTHROPIC_API_KEY"]
+      || mimoStoreProvider?.env?.["OPENAI_API_KEY"]  // MIMO openclaude adapter stores key here
+      || (mimoStoreProvider as any)?.apiKey  // direct property fallback
       || "";
     const mimoBaseUrl = mimoStoreProvider?.env?.["ANTHROPIC_BASE_URL"]
       || registryTemplate?.baseUrl
-      || "https://token-plan-sgp.xiaomimimo.com/anthropic";
+      || "https://token-plan-ams.xiaomimimo.com/anthropic"; // AMS cluster (user's region)
     provider = {
       id: "mimo-claude",
       type: "anthropic-compat",
@@ -166,6 +170,10 @@ export function resolveProvider(
       env: mimoKey ? { ANTHROPIC_AUTH_TOKEN: mimoKey, MIMO_API_KEY: mimoKey } : {},
     };
     log.info(`[resolveProvider] mimo-claude → agent="claude", key=${mimoKey ? "SET" : "MISSING"}, baseUrl=${mimoBaseUrl}`);
+    if (!mimoKey) {
+      log.warn(`[resolveProvider] mimo-claude: NO API KEY FOUND in mimo store provider! Check provider env vars.`);
+      log.warn(`[resolveProvider] mimo store provider env keys: ${Object.keys(mimoStoreProvider?.env || {}).join(", ") || "none"}`);
+    }
   }
 
   // ── Step 1: Explicit providerId ─────────────────────────────────────────────

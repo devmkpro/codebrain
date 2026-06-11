@@ -54,13 +54,48 @@ function buildMcpBridge(ctx: AppContext) {
       });
     },
     getCurrentWorkspacePath: () => ctx.currentWorkspacePath,
+    setCurrentWorkspacePath: (ws: string) => { ctx.currentWorkspacePath = ws; },
+    clearReviewingState: () => {
+      (ctx as any)._mrReviewActive = false;
+      (ctx as any)._mrReviewActiveWorkspaces = new Set();
+    },
+    sendFindings: (data: { mrId: number; workspace: string; findings: string[]; summary: string; title: string; sourceBranch: string; targetBranch: string }) => {
+      safeSend(ctx, "mr_review:findings", data);
+    },
     memoryStore: ctx.memoryStore,
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
     hooksManager: ctx.hooksManager,
+    // Direct trigger callback — bridge.js registers its trigger function here
+    setMrPollTrigger: (fn: (opts?: { workspace?: string }) => any) => { (ctx as any)._triggerMrPoll = fn; },
     configStore: ctx.configStore, // For notification settings
     workspaceConfigStore: ctx.workspaceConfigStore, // For workspace access mode sandbox
     updateContextFiles: (wsPath: string) => writeContextFiles(ctx, wsPath),
+    getOAuthToken: async (provider: "github" | "gitlab") => {
+      try {
+        const { getOAuthToken } = require("./oauth");
+        return await getOAuthToken(ctx, provider);
+      } catch (err) {
+        console.error("[OAuth] getOAuthToken failed:", err);
+        return null;
+      }
+    },
+    getBotToken: (provider: "github" | "gitlab") => {
+      try {
+        const config = ctx.configStore?.get?.() || {};
+        const key = provider === "gitlab" ? "gitlab_bot_token" : "github_bot_token";
+        return config[key] || null;
+      } catch {
+        return null;
+      }
+    },
+    emitNotification: (data: { type: string; title: string; body?: string; level?: string; mr_id?: number; mr_url?: string; provider?: string }) => {
+      try {
+        const store = ctx.memoryStore;
+        if (!store) return;
+        store.createNotification(data);
+      } catch {}
+    },
     roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };
 }
@@ -69,33 +104,43 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
   const { startMCPServer } = require("../../packages/mcp/server.js");
   const bridge = buildMcpBridge(ctx);
 
+  // _triggerMrPoll is set synchronously inside createMCPBridge (called by startMCPServer).
+  // But startMCPServer also starts the HTTP server (async). We need mcpServerReady to
+  // resolve once the server is listening so pane-spawn can get the port.
+  // Use a deferred promise that resolves after the HTTP server starts.
+  let resolveReady: (info: McpServerInfo) => void;
+  let rejectReady: (err: any) => void;
+  ctx.mcpServerReady = new Promise<McpServerInfo>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  console.log(`[MCP] mcpServerReady deferred promise created, _triggerMrPoll set:`, typeof (ctx as any)._triggerMrPoll);
+
   const tryStart = async () => {
-    const promise = startMCPServer(ctx.ptyManager, bridge);
-    ctx.mcpServerReady = promise;
-    const info: McpServerInfo = await promise;
+    const info: McpServerInfo = await startMCPServer(ctx.ptyManager, bridge);
     ctx.mcpServerInfo = info;
     writeMcpConfig(ctx, info);
     console.log(`[MCP] Server started on port ${info.port}`);
     console.log(`[MCP] SSE: ${info.sseUrl}`);
     console.log(`[MCP] Streamable HTTP: ${info.streamableHttpUrl}`);
-
-    // Notify active panes about MCP server (re)start so they can re-initialize.
-    // This is a best-effort hint — agents that lost MCP context will see the message
-    // and can attempt to re-read their .mcp.json (which now has the correct port).
     notifyActivePanesMcpRestart(ctx, info);
+    return info;
   };
 
   try {
-    await tryStart();
+    const info = await tryStart();
+    resolveReady!(info);
   } catch (err) {
     console.error("[MCP] Failed to start server:", err);
     setTimeout(async () => {
       console.log("[MCP] Retrying server start...");
       try {
-        await tryStart();
+        const info = await tryStart();
+        resolveReady!(info);
         console.log(`[MCP] Server started on retry`);
       } catch (err2) {
         console.error("[MCP] Retry also failed:", err2);
+        rejectReady!(err2);
       }
     }, 2000);
   }

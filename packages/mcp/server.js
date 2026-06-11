@@ -277,23 +277,32 @@ async function startMCPServer(ptyManager, opts = {}) {
     });
   }
 
-  // Try preferred fixed port first; if busy (dev hot-reload), retry before falling back.
-  // Retrying the same port prevents .mcp.json from becoming stale for running agents.
+  // Try preferred fixed port first; if busy, close + retry with next ports, then fallback to random.
   return doListen(preferredPort).catch(async (err) => {
     if (err.code === "EADDRINUSE") {
-      console.warn(`[MCP] Port ${preferredPort} in use — retrying in 1s (old server may be shutting down)...`);
+      console.warn(`[MCP] Port ${preferredPort} in use — trying next ports...`);
+      // Must close server before re-listening after EADDRINUSE
+      try { server.close(); } catch {}
       server.removeAllListeners("error");
-      await new Promise(r => setTimeout(r, 1000));
-      try {
-        return await doListen(preferredPort);
-      } catch (retryErr) {
-        if (retryErr.code === "EADDRINUSE") {
-          console.warn(`[MCP] Port ${preferredPort} still in use after retry — falling back to random port`);
-          server.removeAllListeners("error");
-          return doListen(0);
+      await new Promise(r => setTimeout(r, 500));
+
+      // Try a few sequential ports before falling back to random
+      const portsToTry = [preferredPort + 1, preferredPort + 2, preferredPort + 3, 0];
+      for (const port of portsToTry) {
+        try {
+          console.log(`[MCP] Trying port ${port === 0 ? "random" : port}...`);
+          return await doListen(port);
+        } catch (retryErr) {
+          if (retryErr.code === "EADDRINUSE") {
+            console.warn(`[MCP] Port ${port} also in use`);
+            try { server.close(); } catch {}
+            server.removeAllListeners("error");
+            continue;
+          }
+          throw retryErr;
         }
-        throw retryErr;
       }
+      throw new Error("All MCP ports exhausted");
     }
     throw err;
   });

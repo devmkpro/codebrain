@@ -1,5 +1,6 @@
 import React from "react";
 import { RELEASES } from "./releases-data";
+import { useRouter } from "../../lib/router";
 
 // ─── Icons (inline SVGs to avoid external deps) ─────────────────────────────
 
@@ -62,6 +63,29 @@ function CheckCircleIcon({ size = 14, className = "" }: { size?: number; classNa
   );
 }
 
+function BotIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <circle cx="12" cy="5" r="2" />
+      <path d="M12 7v4" />
+      <line x1="8" y1="16" x2="8" y2="16" />
+      <line x1="16" y1="16" x2="16" y2="16" />
+    </svg>
+  );
+}
+
+function GearIcon({ size = 14, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+    </svg>
+  );
+}
+
 // ─── Typewriter animation hook ───────────────────────────────────────────────
 
 function useTypewriter(text: string, speed = 40, delay = 0, active = true) {
@@ -93,6 +117,8 @@ const EMOJI_CHECKMARK = String.fromCodePoint(0x2713);
 const EMOJI_BRAIN = String.fromCodePoint(0x1F9E0);
 const EMOJI_LABEL = String.fromCodePoint(0x1F3F7, 0xFE0F);
 const EMOJI_NOTE = String.fromCodePoint(0x1F4DD);
+const EMOJI_ROBOT = String.fromCodePoint(0x1F916);
+const EMOJI_PERSON = String.fromCodePoint(0x1F464);
 const EN_DASH = String.fromCodePoint(0x2014);
 const LDQUO = String.fromCodePoint(0x201C);
 const RDQUO = String.fromCodePoint(0x201D);
@@ -179,7 +205,12 @@ export function WhatsNewModal({
   currentVersion?: string | null;
 }) {
   const [visible, setVisible] = React.useState(false);
-  const [phase, setPhase] = React.useState(0); // 0=enter, 1=content, 2=features, 3=cta
+  const [phase, setPhase] = React.useState(0); // 0=enter, 1=demos, 2=tag+features, 3=bot, 4=cta
+  const { navigate } = useRouter();
+
+  const goToSettings = React.useCallback(() => {
+    navigate("/settings");
+  }, [navigate]);
 
   React.useEffect(() => {
     if (!open) {
@@ -192,8 +223,9 @@ export function WhatsNewModal({
     // Stagger content phases — slower for readability
     const t1 = setTimeout(() => setPhase(1), 500);
     const t2 = setTimeout(() => setPhase(2), 4500);
-    const t3 = setTimeout(() => setPhase(3), 6000);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    const t3 = setTimeout(() => setPhase(3), 7000);
+    const t4 = setTimeout(() => setPhase(4), 9000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
   }, [open]);
 
   React.useEffect(() => {
@@ -432,12 +464,122 @@ export function WhatsNewModal({
             />
           </div>
 
+          {/* ── Review Bot section ───────────────────────────── */}
+          <div
+            className="rounded-xl overflow-hidden relative"
+            style={{
+              background: "linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.04))",
+              border: "1px solid rgba(99,102,241,0.15)",
+              opacity: phase >= 3 ? 1 : 0,
+              transform: phase >= 3 ? "translateY(0)" : "translateY(8px)",
+              transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            {/* Gradient border glow */}
+            <div
+              className="absolute inset-0 rounded-xl pointer-events-none"
+              style={{
+                background: "linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.06))",
+              }}
+            />
+            <div className="relative p-4 space-y-4">
+              {/* Header */}
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15))",
+                    border: "1px solid rgba(99,102,241,0.2)",
+                  }}
+                >
+                  <BotIcon size={16} className="text-indigo-400" />
+                </div>
+                <div>
+                  <span className="font-mono text-[11px] font-bold text-indigo-300 block">
+                    Review Bot &#8212; Coment&#225;rios como Bot
+                  </span>
+                  <span className="font-mono text-[9px] text-indigo-400/60 uppercase tracking-widest">
+                    Dedicado ao projeto
+                  </span>
+                </div>
+              </div>
+
+              {/* Description */}
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                O Codebrain pode comentar nos seus MRs/PRs como um bot dedicado, em vez de usar sua conta pessoal.
+                Configure uma vez e todos os reviews aparecer&#227;o como &quot;Codebrain Review Bot&quot;.
+              </p>
+
+              {/* Before / After comparison */}
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* BEFORE */}
+                <div className="rounded-lg border border-white/[0.06] bg-[#0a0a12] p-3 space-y-1.5">
+                  <span className="font-mono text-[9px] text-gray-600 uppercase tracking-widest">Antes</span>
+                  <div className="flex items-start gap-2">
+                    <span className="text-[11px] shrink-0">{EMOJI_PERSON}</span>
+                    <div className="space-y-0.5 min-w-0">
+                      <span className="font-mono text-[10px] text-slate-400 block truncate">MK comentou:</span>
+                      <span className="font-mono text-[10px] text-gray-500 block truncate">
+                        &quot;Poss&#237;vel bug na linha 42&quot;
+                      </span>
+                    </div>
+                  </div>
+                  <p className="font-mono text-[9px] text-gray-600 italic">
+                    Parece que VOC&#202; escreveu
+                  </p>
+                </div>
+
+                {/* AFTER */}
+                <div
+                  className="rounded-lg p-3 space-y-1.5"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.05))",
+                    border: "1px solid rgba(99,102,241,0.12)",
+                  }}
+                >
+                  <span className="font-mono text-[9px] text-indigo-400/70 uppercase tracking-widest">Depois</span>
+                  <div className="flex items-start gap-2">
+                    <span className="text-[11px] shrink-0">{EMOJI_ROBOT}</span>
+                    <div className="space-y-0.5 min-w-0">
+                      <span className="font-mono text-[10px] text-indigo-300 font-semibold block truncate">
+                        Codebrain Bot comentou:
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400 block truncate">
+                        &quot;Poss&#237;vel bug na linha 42&quot;
+                      </span>
+                    </div>
+                  </div>
+                  <p className="font-mono text-[9px] text-indigo-400/50 italic">
+                    Identidade pr&#243;pria do bot
+                  </p>
+                </div>
+              </div>
+
+              {/* CTA button to settings */}
+              <button
+                onClick={() => {
+                  onClose();
+                  goToSettings();
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-mono text-[11px] font-medium cursor-pointer transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]"
+                style={{
+                  background: "linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.1))",
+                  border: "1px solid rgba(99,102,241,0.2)",
+                  color: "#a5b4fc",
+                }}
+              >
+                <GearIcon size={13} className="text-indigo-400" />
+                Configurar Review Bot
+              </button>
+            </div>
+          </div>
+
           {/* ── CTA ─────────────────────────────────────────── */}
           <div
             className="text-center space-y-4 pt-1"
             style={{
-              opacity: phase >= 3 ? 1 : 0,
-              transform: phase >= 3 ? "translateY(0)" : "translateY(6px)",
+              opacity: phase >= 4 ? 1 : 0,
+              transform: phase >= 4 ? "translateY(0)" : "translateY(6px)",
               transition: "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
             }}
           >

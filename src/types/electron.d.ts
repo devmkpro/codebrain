@@ -248,6 +248,24 @@ export interface CostSummaryData {
   byAgent: Record<string, CostModelSummary>;
 }
 
+export interface OAuthStatus {
+  github: { connected: boolean; account?: string };
+  gitlab: { connected: boolean; account?: string };
+}
+
+export interface StoredNotification {
+  id: string;
+  type: string;
+  title: string;
+  body?: string;
+  level: string;
+  mr_id?: number;
+  mr_url?: string;
+  provider?: string;
+  read: boolean;
+  created_at: number;
+}
+
 export interface CostBudget {
   dailyLimit: number;
   monthlyLimit: number;
@@ -524,6 +542,27 @@ export interface CodebrainApp {
     reset: (opts?: { workspace?: string }) => Promise<{ ok: boolean; cleared?: { sessions: number; alerts: number; budgets: number } }>;
     setModelCost: (opts: { model: string; inputCost: number; outputCost: number }) => Promise<{ ok: boolean; error?: string }>;
     deleteModelCost: (opts: { model: string }) => Promise<{ ok: boolean; error?: string }>;
+  };
+  oauth: {
+    status: () => Promise<{ ok: boolean; data?: OAuthStatus; error?: string }>;
+    connect: (args: { provider: "github" | "gitlab"; clientId?: string; clientSecret?: string }) => Promise<{ ok: boolean; account?: string; userCode?: string; verificationUri?: string; error?: string }>;
+    disconnect: (args: { provider: "github" | "gitlab" }) => Promise<{ ok: boolean; error?: string }>;
+  };
+  notifications: {
+    list: (opts?: { limit?: number }) => Promise<{ ok: boolean; notifications?: StoredNotification[]; count?: number; error?: string }>;
+    count: () => Promise<{ ok: boolean; count?: number; error?: string }>;
+    markRead: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
+    markAllRead: () => Promise<{ ok: boolean; error?: string }>;
+    dismiss: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
+    clear: () => Promise<{ ok: boolean; error?: string }>;
+  };
+  mrReview: {
+    status: () => Promise<{ ok: boolean; reviewing?: boolean; activeWorkspaces?: string[]; allowedWorkspaces?: string[]; autoReview?: boolean; error?: string }>;
+    allowed: () => Promise<{ ok: boolean; workspaces?: Array<{ path: string; name: string; allowed: boolean }>; error?: string }>;
+    setAllowed: (args: { workspaces: string[] }) => Promise<{ ok: boolean; error?: string }>;
+    trigger: (args: { workspace: string }) => Promise<{ ok: boolean; message?: string; error?: string }>;
+    applyFixes: (args: { workspace: string; mrId: number; findings: string; sourceBranch?: string }) => Promise<{ ok: boolean; paneId?: string; error?: string }>;
+    onFindings: (cb: (data: { mrId: number; workspace: string; findings: string[]; summary: string; title: string; sourceBranch: string; targetBranch: string }) => void) => () => void;
   };
   notify: (title: string, body: string) => void;
   log: {

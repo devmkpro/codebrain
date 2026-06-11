@@ -1,7 +1,12 @@
 import React from 'react';
-import { Bell, X, CheckCheck, Trash2, Info, CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Bell, X, CheckCheck, Trash2, Info, CheckCircle, AlertTriangle, AlertCircle, ExternalLink, Globe } from 'lucide-react';
 import { useNotificationsStore } from '../../stores/notifications-store';
 import type { NotifLevel } from '../../stores/notifications-store';
+
+const PROVIDER_ICON: Record<string, React.ReactNode> = {
+  gitlab: <Globe size={10} className="text-orange-400" />,
+  github: <Globe size={10} className="text-slate-300" />,
+};
 
 function timeSince(ms: number): string {
   const diff = Date.now() - ms;
@@ -31,8 +36,16 @@ export function NotificationsBell() {
   const [open, setOpen] = React.useState(false);
   const [anchor, setAnchor] = React.useState<{ top: number; right: number } | null>(null);
   const unread = useNotificationsStore(s => s.unreadCount);
+  const fetchFromDB = useNotificationsStore(s => s.fetchFromDB);
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   const panelRef  = React.useRef<HTMLDivElement>(null);
+
+  // Fetch persisted notifications from SQLite on mount + poll every 30s
+  React.useEffect(() => {
+    fetchFromDB();
+    const interval = setInterval(() => { fetchFromDB(); }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchFromDB]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -162,11 +175,24 @@ const NotificationsPanel = React.forwardRef<HTMLDivElement, { onClose: () => voi
                   {/* content */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[10px] font-bold text-slate-200 truncate">{n.title}</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {n.provider && PROVIDER_ICON[n.provider]}
+                        <span className="font-mono text-[10px] font-bold text-slate-200 truncate">{n.title}</span>
+                      </div>
                       <span className="shrink-0 font-mono text-[9px] text-slate-700 tabular-nums">{timeSince(n.at)}</span>
                     </div>
                     {n.body && (
                       <p className="mt-0.5 font-mono text-[10px] text-slate-500 leading-relaxed line-clamp-2">{n.body}</p>
+                    )}
+                    {n.mr_url && (
+                      <a
+                        href={n.mr_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[9px] font-mono text-indigo-400 hover:text-indigo-300 hover:underline transition-colors"
+                      >
+                        <ExternalLink size={8} /> Abrir MR
+                      </a>
                     )}
                   </div>
 

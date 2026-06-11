@@ -82,6 +82,7 @@ function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType,
  * @param {Object} opts
  */
 function createMCPBridge(ptyManager, opts = {}) {
+  console.log(`[bridge] createMCPBridge called, setMrPollTrigger present:`, typeof opts.setMrPollTrigger === 'function');
   const paneLabels = new Map();
   const roleMap = new Map();
 
@@ -113,6 +114,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     messageBus,
     getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
     dataDir: opts.dataDir || path.join(os.homedir(), ".codebrain"),
+    spawnPaneFn: opts.spawnPaneFn,
   });
 
 
@@ -325,7 +327,30 @@ function createMCPBridge(ptyManager, opts = {}) {
   const kanbanHandlers = createKanbanHandlers({ ...opts });
   const missionHandlers = createMissionHandlers({ ...opts });
   const fetchHandlers = createFetchHandlers(opts);
-  const mrHandlers = createMRHandlers();
+  const mrHandlers = createMRHandlers({
+    getOAuthToken: opts.getOAuthToken,
+    getBotToken: opts.getBotToken,
+    emitNotification: opts.emitNotification,
+  });
+
+  // Wire mrHandlers + configStore + paneHandlers into WorkerManager for mr_poll worker
+  workerManager.opts.mrHandlers = mrHandlers;
+  workerManager.opts.configStore = opts.configStore;
+  workerManager.opts.emitNotification = opts.emitNotification;
+  workerManager.opts.paneHandlers = paneHandlers;
+  workerManager.opts.clearReviewingState = opts.clearReviewingState;
+  workerManager.opts.sendFindings = opts.sendFindings;
+
+  // Expose direct trigger function for IPC handler (bypasses HooksManager event bus)
+  if (opts.setMrPollTrigger) {
+    opts.setMrPollTrigger((triggerOpts) => {
+      console.log(`[bridge] triggerMrPoll called directly, workspace:`, triggerOpts?.workspace ?? 'all');
+      const result = workerManager.triggerWorker("mr_poll", triggerOpts);
+      console.log(`[bridge] triggerWorker result:`, JSON.stringify(result));
+      return result;
+    });
+    console.log(`[bridge] mr_poll trigger function registered on ctx`);
+  }
 
   // ── Wrap fileWrite: auto-record in shared memory + notify agents ────────
   const originalFileWrite = fileHandlers.fileWrite.bind(fileHandlers);

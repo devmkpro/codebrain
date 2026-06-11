@@ -341,6 +341,35 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     },
   },
 
+  oauth: {
+    status: () => ipcRenderer.invoke("oauth:status"),
+    connect: (args: { provider: "github" | "gitlab"; clientId?: string; clientSecret?: string }) => ipcRenderer.invoke("oauth:connect", args),
+    disconnect: (args: { provider: "github" | "gitlab" }) => ipcRenderer.invoke("oauth:disconnect", args),
+  },
+
+  notifications: {
+    list: (opts?: { limit?: number }) => ipcRenderer.invoke("notifications:list", opts),
+    count: () => ipcRenderer.invoke("notifications:count"),
+    markRead: (args: { id: string }) => ipcRenderer.invoke("notifications:mark-read", args),
+    markAllRead: () => ipcRenderer.invoke("notifications:mark-all-read"),
+    dismiss: (args: { id: string }) => ipcRenderer.invoke("notifications:dismiss", args),
+    clear: () => ipcRenderer.invoke("notifications:clear"),
+  },
+
+  mrReview: {
+    status: () => ipcRenderer.invoke("mr_review:status"),
+    allowed: () => ipcRenderer.invoke("mr_review:allowed"),
+    setAllowed: (args: { workspaces: string[] }) => ipcRenderer.invoke("mr_review:set-allowed", args),
+    trigger: (args: { workspace: string }) => ipcRenderer.invoke("mr_review:trigger", args),
+    applyFixes: (args: { workspace: string; mrId: number; findings: string; sourceBranch?: string }) =>
+      ipcRenderer.invoke("mr_review:apply-fixes", args),
+    onFindings: (cb: (data: { mrId: number; workspace: string; findings: any[]; summary: string }) => void) => {
+      const handler = (_e: any, data: any) => cb(data);
+      ipcRenderer.on("mr_review:findings", handler);
+      return () => ipcRenderer.removeListener("mr_review:findings", handler);
+    },
+  },
+
   notify: (title: string, body: string) => ipcRenderer.send("notify", title, body),
 
   memory: {

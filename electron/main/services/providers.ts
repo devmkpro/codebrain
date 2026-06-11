@@ -128,11 +128,13 @@ export function getEnhancedProviders(ctx: AppContext) {
   });
   const hasMimoConfigured = !!mimoConfigured;
   // Inherit the MIMO API key from the configured mimo provider.
-  // The key may be stored as MIMO_API_KEY or ANTHROPIC_AUTH_TOKEN depending on how
-  // the user configured it. We normalize to ANTHROPIC_AUTH_TOKEN so Claude CLI picks it up.
+  // The key may be stored in various env var names depending on the provider adapter
+  // (MIMO uses openai-compat → OPENAI_API_KEY, or mimo-compat → MIMO_API_KEY/ANTHROPIC_AUTH_TOKEN).
+  // We check ALL possible locations to ensure the key is found.
   const mimoKey = mimoConfigured?.env?.["ANTHROPIC_AUTH_TOKEN"]
     || mimoConfigured?.env?.["MIMO_API_KEY"]
     || mimoConfigured?.env?.["ANTHROPIC_API_KEY"]
+    || mimoConfigured?.env?.["OPENAI_API_KEY"]  // MIMO openclaude adapter stores key here
     || "";
   // Inherit baseUrl from the user's configured MIMO provider (ANTHROPIC_BASE_URL),
   // falling back to the template default. This ensures the correct regional endpoint

@@ -285,6 +285,42 @@ function createMemoryStore(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_missions_workspace ON missions(workspace);
   `);
 
+  // ── Notifications Table ─────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id          TEXT PRIMARY KEY,
+      type        TEXT NOT NULL,
+      title       TEXT NOT NULL,
+      body        TEXT,
+      level       TEXT NOT NULL DEFAULT 'info',
+      mr_id       INTEGER,
+      mr_url      TEXT,
+      provider    TEXT,
+      read        INTEGER NOT NULL DEFAULT 0,
+      created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
+    CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+    CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);
+  `);
+
+  // ── Reviewed MRs Table (auto-review tracking) ──────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reviewed_mrs (
+      id            TEXT PRIMARY KEY,
+      workspace     TEXT NOT NULL,
+      mr_id         INTEGER NOT NULL,
+      mr_url        TEXT,
+      provider      TEXT,
+      mr_title      TEXT,
+      mr_updated_at TEXT,
+      reviewed_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(workspace, mr_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_reviewed_mrs_workspace ON reviewed_mrs(workspace);
+    CREATE INDEX IF NOT EXISTS idx_reviewed_mrs_reviewed ON reviewed_mrs(reviewed_at DESC);
+  `);
+
   // Migration: ensure agents.pane_id has UNIQUE constraint (table may pre-exist without it)
   try {
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_pane_unique ON agents(pane_id)`);
@@ -452,6 +488,30 @@ function createMemoryStore(dbPath) {
       ORDER BY created_at DESC LIMIT @limit
     `),
     markMessageRead: db.prepare(`UPDATE agent_messages SET read = 1 WHERE id = ?`),
+    // Notifications
+    insertNotification: db.prepare(`
+      INSERT INTO notifications (id, type, title, body, level, mr_id, mr_url, provider, read)
+      VALUES (@id, @type, @title, @body, @level, @mr_id, @mr_url, @provider, 0)
+    `),
+    listNotifications: db.prepare(`
+      SELECT * FROM notifications ORDER BY created_at DESC LIMIT @limit
+    `),
+    unreadNotificationCount: db.prepare(`SELECT COUNT(*) as count FROM notifications WHERE read = 0`),
+    markNotificationRead: db.prepare(`UPDATE notifications SET read = 1 WHERE id = ?`),
+    markAllNotificationsRead: db.prepare(`UPDATE notifications SET read = 1 WHERE read = 0`),
+    deleteNotification: db.prepare(`DELETE FROM notifications WHERE id = ?`),
+    clearNotifications: db.prepare(`DELETE FROM notifications`),
+    // Reviewed MRs
+    insertReviewedMr: db.prepare(`
+      INSERT INTO reviewed_mrs (id, workspace, mr_id, mr_url, provider, mr_title, mr_updated_at)
+      VALUES (@id, @workspace, @mr_id, @mr_url, @provider, @mr_title, @mr_updated_at)
+      ON CONFLICT(workspace, mr_id) DO UPDATE SET
+        mr_updated_at = excluded.mr_updated_at,
+        mr_title = excluded.mr_title,
+        reviewed_at = unixepoch()
+    `),
+    isMrReviewed: db.prepare(`SELECT mr_updated_at, reviewed_at FROM reviewed_mrs WHERE workspace = ? AND mr_id = ?`),
+    listReviewedMrs: db.prepare(`SELECT * FROM reviewed_mrs WHERE workspace = ? ORDER BY reviewed_at DESC LIMIT ?`),
   };
 
   // ── ID Generator ──────────────────────────────────────────────────────────
@@ -1406,6 +1466,114 @@ function createMemoryStore(dbPath) {
       const res = db.prepare("DELETE FROM missions WHERE id = ?").run(id);
       return { ok: true, deleted: res.changes > 0 };
     },
+
+    // ── Notifications ─────────────────────────────────────────────────────────
+
+    /**
+     * Create a new notification.
+     * @param {{ type: string, title: string, body?: string, level?: string, mr_id?: number, mr_url?: string, provider?: string }} opts
+     * @returns {{ ok: boolean, id: string }}
+     */
+    createNotification({ type, title, body, level, mr_id, mr_url, provider }) {
+      if (!type || !title) return { ok: false, error: "type and title are required" };
+      const id = genId();
+      stmts.insertNotification.run({
+        id, type, title, body: body || null, level: level || "info",
+        mr_id: mr_id || null, mr_url: mr_url || null, provider: provider || null,
+      });
+      return { ok: true, id };
+    },
+
+    /**
+     * List notifications, most recent first.
+     * @param {{ limit?: number }} opts
+     */
+    listNotifications({ limit = 50 } = {}) {
+      const rows = stmts.listNotifications.all({ limit });
+      return { ok: true, notifications: rows, count: rows.length };
+    },
+
+    /**
+     * Get unread notification count.
+     */
+    unreadNotificationCount() {
+      const row = stmts.unreadNotificationCount.get();
+      return { ok: true, count: row ? row.count : 0 };
+    },
+
+    /**
+     * Mark a notification as read.
+     * @param {{ id: string }} opts
+     */
+    markNotificationRead({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      stmts.markNotificationRead.run(id);
+      return { ok: true };
+    },
+
+    /**
+     * Mark all notifications as read.
+     */
+    markAllNotificationsRead() {
+      stmts.markAllNotificationsRead.run();
+      return { ok: true };
+    },
+
+    /**
+     * Delete a notification.
+     * @param {{ id: string }} opts
+     */
+    deleteNotification({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      stmts.deleteNotification.run(id);
+      return { ok: true };
+    },
+
+    /**
+     * Clear all notifications.
+     */
+    clearNotifications() {
+      stmts.clearNotifications.run();
+      return { ok: true };
+    },
+
+    // ── Reviewed MRs (auto-review tracking) ──────────────────────────────
+
+    /**
+     * Record that an MR was reviewed.
+     */
+    recordReviewedMr({ workspace, mr_id, mr_url, provider, mr_title, mr_updated_at }) {
+      if (!workspace || !mr_id) return { ok: false, error: "workspace and mr_id are required" };
+      const id = genId();
+      stmts.insertReviewedMr.run({
+        id, workspace, mr_id, mr_url: mr_url || null,
+        provider: provider || null, mr_title: mr_title || null,
+        mr_updated_at: mr_updated_at || null,
+      });
+      return { ok: true, id };
+    },
+
+    /**
+     * Check if an MR has already been reviewed in a workspace.
+     */
+    isMrReviewed({ workspace, mr_id }) {
+      const row = stmts.isMrReviewed.get(workspace, mr_id);
+      return { ok: true, reviewed: !!row, mr_updated_at: row?.mr_updated_at || null };
+    },
+
+    /**
+     * List reviewed MRs for a workspace.
+     */
+    listReviewedMrs({ workspace, limit = 50 } = {}) {
+      const rows = stmts.listReviewedMrs.all(workspace, limit);
+      return { ok: true, mrs: rows };
+    },
+
+    /**
+     * Get the raw better-sqlite3 Database instance.
+     * Used by services that need direct SQL access (e.g., OAuth token storage).
+     */
+    get db() { return db; },
 
     /**
      * Close the database connection.
