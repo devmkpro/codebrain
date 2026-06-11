@@ -1336,14 +1336,25 @@ class WorkerManager {
           const mrId = mr.id || mr.number || mr.iid;
           if (!mrId) { results.skipped++; continue; }
 
-          // Skip already-reviewed MRs (unless force=true from manual trigger)
-          if (!force) {
-            const checked = store.isMrReviewed({ workspace: wsPath, mr_id: mrId });
-            if (checked?.reviewed) {
-              console.log(`[mr_poll] MR !${mrId} already reviewed — skipping`);
+          // Skip MRs that haven't changed since last review.
+          // Compare mr.updated_at with the stored mr_updated_at from the last review.
+          // force=true (manual trigger) still skips if no changes detected.
+          const checked = store.isMrReviewed({ workspace: wsPath, mr_id: mrId });
+          if (checked?.reviewed) {
+            const mrUpdatedAt = mr.updated_at || mr.updatedAt || mr.updated || "";
+            const lastReviewedAt = checked.mr_updated_at || "";
+            if (mrUpdatedAt && lastReviewedAt && mrUpdatedAt === lastReviewedAt) {
+              console.log(`[mr_poll] MR !${mrId} unchanged since last review (${lastReviewedAt}) — skipping`);
               results.skipped++;
               continue;
             }
+            if (!force && !mrUpdatedAt) {
+              // No updated_at available and not forced — skip to be safe
+              console.log(`[mr_poll] MR !${mrId} already reviewed (no updated_at to compare) — skipping`);
+              results.skipped++;
+              continue;
+            }
+            console.log(`[mr_poll] MR !${mrId} has new changes: ${lastReviewedAt} → ${mrUpdatedAt}`);
           }
 
           console.log(`[mr_poll] Processing MR !${mrId}: "${mr.title || "?"}" in ${wsPath}`);

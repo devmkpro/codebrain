@@ -102,37 +102,27 @@ export const useMrReviewStore = create<MrReviewState>((set, get) => ({
   },
 
   triggerReview: async (workspace: string) => {
-    console.log('[mrReviewStore] triggerReview called for workspace:', workspace);
     try {
       const mrApi = api();
-      console.log('[mrReviewStore] mrApi available:', !!mrApi, mrApi ? Object.keys(mrApi) : 'null');
-      if (!mrApi) {
-        console.error('[mrReviewStore] ERROR: window.codeBrainApp.mrReview is undefined! Preload not loaded.');
-        return;
-      }
+      if (!mrApi) return;
       set(s => ({
         reviewing: true,
         activeWorkspaces: [...s.activeWorkspaces, workspace],
       }));
-      console.log('[mrReviewStore] Calling mrApi.trigger({ workspace:', workspace, '})');
       const res = await mrApi.trigger({ workspace });
-      console.log('[mrReviewStore] mrApi.trigger response:', JSON.stringify(res));
       if (res && !res.ok) {
-        // Debounce or other error — undo reviewing state
-        console.warn('[mrReviewStore] trigger error:', res.error);
         set(s => ({
           reviewing: false,
           activeWorkspaces: s.activeWorkspaces.filter(w => w !== workspace),
         }));
         return;
       }
-      // Poll status after a delay to update
       setTimeout(async () => {
         const { fetchStatus } = get();
         await fetchStatus();
       }, 5000);
     } catch (err) {
-      console.error('[mrReviewStore] triggerReview CRASHED:', err);
+      console.error('[mrReviewStore] triggerReview error:', err);
     }
   },
 }));

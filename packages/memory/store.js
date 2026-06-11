@@ -503,10 +503,14 @@ function createMemoryStore(dbPath) {
     clearNotifications: db.prepare(`DELETE FROM notifications`),
     // Reviewed MRs
     insertReviewedMr: db.prepare(`
-      INSERT OR IGNORE INTO reviewed_mrs (id, workspace, mr_id, mr_url, provider, mr_title, mr_updated_at)
+      INSERT INTO reviewed_mrs (id, workspace, mr_id, mr_url, provider, mr_title, mr_updated_at)
       VALUES (@id, @workspace, @mr_id, @mr_url, @provider, @mr_title, @mr_updated_at)
+      ON CONFLICT(workspace, mr_id) DO UPDATE SET
+        mr_updated_at = excluded.mr_updated_at,
+        mr_title = excluded.mr_title,
+        reviewed_at = unixepoch()
     `),
-    isMrReviewed: db.prepare(`SELECT 1 FROM reviewed_mrs WHERE workspace = ? AND mr_id = ?`),
+    isMrReviewed: db.prepare(`SELECT mr_updated_at, reviewed_at FROM reviewed_mrs WHERE workspace = ? AND mr_id = ?`),
     listReviewedMrs: db.prepare(`SELECT * FROM reviewed_mrs WHERE workspace = ? ORDER BY reviewed_at DESC LIMIT ?`),
   };
 
@@ -1554,7 +1558,7 @@ function createMemoryStore(dbPath) {
      */
     isMrReviewed({ workspace, mr_id }) {
       const row = stmts.isMrReviewed.get(workspace, mr_id);
-      return { ok: true, reviewed: !!row };
+      return { ok: true, reviewed: !!row, mr_updated_at: row?.mr_updated_at || null };
     },
 
     /**
