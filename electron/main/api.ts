@@ -42,7 +42,8 @@ export function startApiServer(port: number = 3000): Server {
 export async function stopApiServer(): Promise<void> {
   if (server) {
     return new Promise((resolve) => {
-      server!.close(() => {
+      server!.close((err) => {
+        if (err) console.error('[API] Error closing server:', err);
         server = null;
         console.log('[API] Server stopped');
         resolve();
