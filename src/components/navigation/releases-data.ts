@@ -14,6 +14,44 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.9.2",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "Remove dead Tokens (24h) and Logs page (never implemented)"
+      },
+      {
+        "kind": "feat",
+        "text": "Center HomeHeader nav with 3-column grid layout"
+      },
+      {
+        "kind": "feat",
+        "text": "Auto-purge deleted workspaces from recents list"
+      },
+      {
+        "kind": "fix",
+        "text": "Fix terminal text disappearing on fontSize/zoom changes"
+      },
+      {
+        "kind": "fix",
+        "text": "Fix auto-detect spawning PTYs on every Dashboard mount"
+      },
+      {
+        "kind": "fix",
+        "text": "Remove WorkspaceView auto-spawn (favoritePane/autoSpawnSquad)"
+      },
+      {
+        "kind": "fix",
+        "text": "Fix MCP pane_spawn going to wrong workspace (smart cwd fallback)"
+      },
+      {
+        "kind": "feat",
+        "text": "Add close button to orphan panes + Fechar tudo button"
+      }
+    ]
+  },
+  {
     "version": "1.9.1",
     "date": "junho 2026",
     "highlights": [
