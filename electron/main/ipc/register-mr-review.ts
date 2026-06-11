@@ -167,16 +167,10 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
       // Wait for MCP server (and bridge.js) to finish loading if still starting up
       let triggerFn = (ctx as any)._triggerMrPoll;
       if (typeof triggerFn !== 'function') {
-        // If mcpServerReady is not yet set (very early startup), poll for it briefly
-        if (!ctx.mcpServerReady) {
-          console.log(`[mr_review:trigger] mcpServerReady is null, waiting up to 10s for MCP to start...`);
-          for (let i = 0; i < 20; i++) {
-            await new Promise(r => setTimeout(r, 500));
-            if (ctx.mcpServerReady) break;
-          }
-        }
+        // mcpServerReady is a deferred promise set synchronously in startMcpServer.
+        // Await it to ensure bridge.js has finished creating the trigger function.
         if (ctx.mcpServerReady) {
-          console.log(`[mr_review:trigger] _triggerMrPoll not ready yet, waiting for MCP server...`);
+          console.log(`[mr_review:trigger] _triggerMrPoll not ready, awaiting mcpServerReady...`);
           try {
             await ctx.mcpServerReady;
             triggerFn = (ctx as any)._triggerMrPoll;
@@ -185,7 +179,8 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
             console.error(`[mr_review:trigger] MCP server failed to start:`, err);
           }
         } else {
-          console.error(`[mr_review:trigger] mcpServerReady never became available after 10s`);
+          // mcpServerReady should always be set, but just in case:
+          console.error(`[mr_review:trigger] mcpServerReady is null — startMcpServer not called yet`);
         }
       }
       if (typeof triggerFn === 'function') {

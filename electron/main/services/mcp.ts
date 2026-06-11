@@ -98,13 +98,21 @@ function buildMcpBridge(ctx: AppContext) {
 }
 
 export async function startMcpServer(ctx: AppContext): Promise<void> {
+  // Create a deferred promise so mcpServerReady is ALWAYS set before any async work.
+  // This ensures IPC handlers can await it even if startMCPServer hasn't been called yet.
+  let resolveReady: (info: McpServerInfo) => void;
+  let rejectReady: (err: any) => void;
+  ctx.mcpServerReady = new Promise<McpServerInfo>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  console.log(`[MCP] mcpServerReady promise created (deferred)`);
+
   const { startMCPServer } = require("../../packages/mcp/server.js");
   const bridge = buildMcpBridge(ctx);
 
   const tryStart = async () => {
-    const promise = startMCPServer(ctx.ptyManager, bridge);
-    ctx.mcpServerReady = promise;
-    const info: McpServerInfo = await promise;
+    const info: McpServerInfo = await startMCPServer(ctx.ptyManager, bridge);
     ctx.mcpServerInfo = info;
     writeMcpConfig(ctx, info);
     console.log(`[MCP] Server started on port ${info.port}`);
@@ -112,22 +120,24 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
     console.log(`[MCP] Streamable HTTP: ${info.streamableHttpUrl}`);
 
     // Notify active panes about MCP server (re)start so they can re-initialize.
-    // This is a best-effort hint — agents that lost MCP context will see the message
-    // and can attempt to re-read their .mcp.json (which now has the correct port).
     notifyActivePanesMcpRestart(ctx, info);
+    return info;
   };
 
   try {
-    await tryStart();
+    const info = await tryStart();
+    resolveReady!(info);
   } catch (err) {
     console.error("[MCP] Failed to start server:", err);
     setTimeout(async () => {
       console.log("[MCP] Retrying server start...");
       try {
-        await tryStart();
+        const info = await tryStart();
+        resolveReady!(info);
         console.log(`[MCP] Server started on retry`);
       } catch (err2) {
         console.error("[MCP] Retry also failed:", err2);
+        rejectReady!(err2);
       }
     }, 2000);
   }

@@ -19,6 +19,10 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "feat",
+        "text": "enhance MR review trigger with MCP server readiness check and update release highlights"
+      },
+      {
+        "kind": "feat",
         "text": "Implement manual MR review trigger with debounce and workspace permissions"
       },
       {
