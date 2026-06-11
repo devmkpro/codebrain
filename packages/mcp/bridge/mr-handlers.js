@@ -9,6 +9,8 @@
 
 const { execSync } = require("child_process");
 
+const COMMENT_SIGNATURE = "\n\n---\n🧠 *Posted by Codebrain AI Review*";
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
