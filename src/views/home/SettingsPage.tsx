@@ -5,7 +5,8 @@ import {
   AlertTriangle, CheckCircle2, Info, Save,
   RotateCcw, Download, Trash2, RefreshCw, Shield,
   Type, Monitor, Plus, X, Variable, Gamepad2, Bell,
-  Mic, Cloud, Cpu,
+  Mic, Cloud, Cpu, Link, Copy, Check, ExternalLink,
+  Globe, Lock,
 } from 'lucide-react';
 import {
   useTerminalSettings,
@@ -18,7 +19,7 @@ import {
 import { useProvidersStore } from '../../stores/providers-store';
 import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'voice' | 'notifications' | 'discord' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -227,6 +228,14 @@ export function SettingsPage() {
   const [kimiCliStatus,    setKimiCliStatus]    = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [cursorCliStatus,  setCursorCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [copilotCliStatus, setCopilotCliStatus] = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [oauthStatus, setOauthStatus] = useState<{ github: { connected: boolean; account?: string }; gitlab: { connected: boolean; account?: string } } | null>(null);
+  const [oauthBusy, setOauthBusy] = useState<string | null>(null); // 'github' | 'gitlab' | null
+  const [oauthError, setOauthError] = useState<string | null>(null);
+  const [gitlabClientId, setGitlabClientId] = useState('');
+  const [gitlabClientSecret, setGitlabClientSecret] = useState('');
+  const [githubClientId, setGithubClientId] = useState('');
+  const [tutorialOpen, setTutorialOpen] = useState<{ gitlab: boolean; github: boolean }>({ gitlab: false, github: false });
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
   // Voice / BrainVoice
@@ -361,6 +370,10 @@ export function SettingsPage() {
         setDiscordConnected(s?.connected ?? false);
       })
       .catch(() => {});
+    // Load OAuth status
+    (window as any).codeBrainApp?.oauth?.status?.()
+      .then((r: any) => { if (r?.ok && r.data) setOauthStatus(r.data); })
+      .catch(() => {});
   }, []);
 
   const toggleSection = (s: Section) => setOpen(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
@@ -412,6 +425,54 @@ export function SettingsPage() {
     } catch {} finally { setCliBusy(false); }
   };
 
+  // ── OAuth handlers ──────────────────────────────────────────────────────
+  const handleOAuthConnect = async (provider: 'github' | 'gitlab') => {
+    setOauthBusy(provider);
+    setOauthError(null);
+    try {
+      let args: any = { provider };
+      if (provider === 'gitlab') {
+        if (!gitlabClientId.trim()) { setOauthError('Preencha o Client ID do GitLab'); setOauthBusy(null); return; }
+        args.clientId = gitlabClientId.trim();
+        if (gitlabClientSecret.trim()) args.clientSecret = gitlabClientSecret.trim();
+      } else {
+        if (!githubClientId.trim()) { setOauthError('Preencha o Client ID do GitHub'); setOauthBusy(null); return; }
+        args.clientId = githubClientId.trim();
+      }
+      const res = await (window as any).codeBrainApp?.oauth?.connect?.(args);
+      if (!res?.ok) { setOauthError(res?.error || `Falha ao conectar ${provider}`); return; }
+      // GitHub Device Flow — show user code
+      if (res.userCode && res.verificationUri) {
+        window.open(`${res.verificationUri}?user_code=${res.userCode}`, '_blank');
+        setOauthError(null);
+      }
+      // Refresh status
+      const s = await (window as any).codeBrainApp?.oauth?.status?.();
+      if (s?.ok && s.data) setOauthStatus(s.data);
+    } catch (err: any) {
+      setOauthError(err?.message || `Erro ao conectar ${provider}`);
+    } finally {
+      setOauthBusy(null);
+    }
+  };
+
+  const handleOAuthDisconnect = async (provider: 'github' | 'gitlab') => {
+    setOauthBusy(provider);
+    try {
+      await (window as any).codeBrainApp?.oauth?.disconnect?.({ provider });
+      const s = await (window as any).codeBrainApp?.oauth?.status?.();
+      if (s?.ok && s.data) setOauthStatus(s.data);
+    } catch {} finally { setOauthBusy(null); }
+  };
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch {}
+  };
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Left nav */}
@@ -426,6 +487,7 @@ export function SettingsPage() {
           { id: 'skill'          as Section, icon: <Download size={12} />, label: 'Skill & CLI' },
           { id: 'notifications'  as Section, icon: <Bell size={12} />,     label: 'Notificações' },
           { id: 'discord'        as Section, icon: <Gamepad2 size={12} />, label: 'Discord'   },
+          { id: 'oauth'          as Section, icon: <Link size={12} />,     label: 'Review Bot' },
           { id: 'advanced'       as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
         ] as const).map(({ id, icon, label }) => (
           <button key={id} onClick={() => toggleSection(id)}
@@ -1264,6 +1326,402 @@ export function SettingsPage() {
             </button>
 
             {discordMsg && <p className="text-[10px] text-slate-400 mt-1">{discordMsg}</p>}
+          </SectionCard>
+
+          {/* ── Review Bot (OAuth) ──────────────────────────────────────── */}
+          <SectionCard id="oauth" icon={<Link size={13} />} title="Review Bot" badge="OAuth" active={open.includes('oauth')} onToggle={toggleSection}>
+            <p className="text-[10px] text-slate-500 leading-relaxed mb-3">
+              Conecte sua conta do GitLab ou GitHub como um <strong className="text-slate-300">bot de review</strong>.
+              Os comentários de MR/PR aparecerão no nome do aplicativo (ex: "Codebrain Review Bot"), não no seu usuário pessoal.
+            </p>
+
+            {/* Status badges */}
+            <div className="flex gap-3 mb-4">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+                <Globe size={12} className="text-orange-400" />
+                <span className="text-[10px] text-slate-400">GitLab:</span>
+                <div className={`w-2 h-2 rounded-full ${oauthStatus?.gitlab?.connected ? 'bg-emerald-400' : 'bg-red-500/60'}`} />
+                <span className={`text-[10px] font-medium ${oauthStatus?.gitlab?.connected ? 'text-emerald-400' : 'text-slate-600'}`}>
+                  {oauthStatus?.gitlab?.connected ? `Conectado${oauthStatus.gitlab.account ? ' — ' + oauthStatus.gitlab.account : ''}` : 'Não conectado'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+                <Globe size={12} className="text-slate-300" />
+                <span className="text-[10px] text-slate-400">GitHub:</span>
+                <div className={`w-2 h-2 rounded-full ${oauthStatus?.github?.connected ? 'bg-emerald-400' : 'bg-red-500/60'}`} />
+                <span className={`text-[10px] font-medium ${oauthStatus?.github?.connected ? 'text-emerald-400' : 'text-slate-600'}`}>
+                  {oauthStatus?.github?.connected ? `Conectado${oauthStatus.github.account ? ' — ' + oauthStatus.github.account : ''}` : 'Não conectado'}
+                </span>
+              </div>
+            </div>
+
+            {oauthError && (
+              <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 mb-3">
+                <p className="text-[10px] text-red-400 flex items-center gap-1.5"><AlertTriangle size={10} /> {oauthError}</p>
+              </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════
+               GITLAB TUTORIAL
+            ═══════════════════════════════════════════════════════════ */}
+            <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 overflow-hidden mb-4">
+              <button
+                onClick={() => setTutorialOpen(p => ({ ...p, gitlab: !p.gitlab }))}
+                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-orange-500/10 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Globe size={13} className="text-orange-400" />
+                  <span className="text-[11px] font-bold text-orange-300">Tutorial — GitLab OAuth App</span>
+                </div>
+                {tutorialOpen.gitlab
+                  ? <ChevronDown size={13} className="text-orange-400" />
+                  : <ChevronRight size={13} className="text-orange-400" />}
+              </button>
+
+              {tutorialOpen.gitlab && (
+                <div className="px-3 pb-3 space-y-3 border-t border-orange-500/10">
+                  <p className="text-[10px] text-slate-500 leading-relaxed mt-2">
+                    Siga os passos abaixo para criar um OAuth Application no GitLab. Leva menos de 2 minutos.
+                  </p>
+
+                  {/* Step 1 */}
+                  <div className="flex gap-2.5">
+                    <div className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[9px] font-bold text-orange-300">1</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-slate-300">Abra a página de Applications do GitLab</p>
+                      <p className="text-[10px] text-slate-500">
+                        Clique no link abaixo ou copie e cole no navegador:
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href="https://gitlab.com/-/user_settings/applications"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-orange-500/15 border border-orange-500/25 text-orange-300 text-[10px] font-mono hover:bg-orange-500/25 transition-colors"
+                        >
+                          <ExternalLink size={10} /> gitlab.com/-/user_settings/applications
+                        </a>
+                        <button
+                          onClick={() => copyToClipboard('https://gitlab.com/-/user_settings/applications', 'gitlab-url')}
+                          className="p-1.5 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                          title="Copiar URL"
+                        >
+                          {copiedField === 'gitlab-url'
+                            ? <Check size={10} className="text-emerald-400" />
+                            : <Copy size={10} className="text-slate-500" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="flex gap-2.5">
+                    <div className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[9px] font-bold text-orange-300">2</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-slate-300">Clique em <span className="text-orange-300">"Add new application"</span></p>
+                      <p className="text-[10px] text-slate-500">
+                        Fica no canto superior direito da página.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="flex gap-2.5">
+                    <div className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[9px] font-bold text-orange-300">3</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-slate-300">Preencha o formulário</p>
+                      <div className="p-2.5 rounded-md bg-black/20 border border-white/5 space-y-2">
+                        <div className="flex items-start gap-2">
+                          <span className="text-[9px] font-mono text-orange-400 w-24 shrink-0 pt-0.5">Name</span>
+                          <span className="text-[10px] text-slate-400">Qualquer nome, ex: <code className="text-orange-300 bg-orange-500/10 px-1 rounded">Codebrain Review Bot</code></span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-[9px] font-mono text-orange-400 w-24 shrink-0 pt-0.5">Redirect URI</span>
+                          <div className="flex items-center gap-1.5">
+                            <code className="text-[10px] text-orange-300 bg-orange-500/10 px-1.5 py-0.5 rounded font-mono">http://localhost:19876/callback</code>
+                            <button
+                              onClick={() => copyToClipboard('http://localhost:19876/callback', 'gitlab-redirect')}
+                              className="p-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                              title="Copiar Redirect URI"
+                            >
+                              {copiedField === 'gitlab-redirect'
+                                ? <Check size={9} className="text-emerald-400" />
+                                : <Copy size={9} className="text-slate-500" />}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-[9px] font-mono text-orange-400 w-24 shrink-0 pt-0.5">Confidential</span>
+                          <span className="text-[10px] text-slate-400">Marque <code className="text-orange-300 bg-orange-500/10 px-1 rounded">✓ Yes</code> (é uma aplicação server-side)</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-[9px] font-mono text-orange-400 w-24 shrink-0 pt-0.5">Scopes</span>
+                          <span className="text-[10px] text-slate-400">Marque <code className="text-orange-300 bg-orange-500/10 px-1 rounded">api</code> (acesso completo à API para criar notas em MRs)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className="flex gap-2.5">
+                    <div className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[9px] font-bold text-orange-300">4</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-slate-300">Clique em <span className="text-orange-300">"Save application"</span></p>
+                      <p className="text-[10px] text-slate-500">
+                        O GitLab mostrará o <strong className="text-slate-300">Application ID</strong> e o <strong className="text-slate-300">Secret</strong>.
+                        Copie ambos e cole nos campos abaixo.
+                      </p>
+                      <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
+                        <AlertTriangle size={10} className="text-amber-400 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-amber-400">O <strong>Secret</strong> só aparece uma vez! Salve-o agora ou terá que gerar um novo.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* GitLab input fields */}
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Globe size={12} className="text-orange-400" />
+                <span className="text-[10px] font-bold text-orange-300 uppercase tracking-widest">GitLab</span>
+                {oauthStatus?.gitlab?.connected && (
+                  <span className="text-[9px] text-emerald-400 ml-auto">✓ Conectado</span>
+                )}
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Application ID</label>
+                <input
+                  type="text"
+                  value={gitlabClientId}
+                  onChange={e => { setGitlabClientId(e.target.value); setOauthError(null); }}
+                  placeholder="Ex: 1a2b3c4d5e6f..."
+                  className="mt-1 w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-orange-500/50"
+                  disabled={oauthStatus?.gitlab?.connected}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Secret</label>
+                <input
+                  type="password"
+                  value={gitlabClientSecret}
+                  onChange={e => { setGitlabClientSecret(e.target.value); setOauthError(null); }}
+                  placeholder="Ex: glpat-xxxxxxxxxxxxxxxxxxxx"
+                  className="mt-1 w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-orange-500/50"
+                  disabled={oauthStatus?.gitlab?.connected}
+                />
+              </div>
+              <div className="flex gap-2">
+                {!oauthStatus?.gitlab?.connected ? (
+                  <button
+                    onClick={() => handleOAuthConnect('gitlab')}
+                    disabled={oauthBusy === 'gitlab'}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600/20 border border-orange-500/30 text-orange-300 text-[10px] font-bold uppercase tracking-widest hover:bg-orange-600/30 disabled:opacity-50 transition-all"
+                  >
+                    <Lock size={10} />
+                    {oauthBusy === 'gitlab' ? 'Conectando...' : 'Conectar GitLab'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleOAuthDisconnect('gitlab')}
+                    disabled={oauthBusy === 'gitlab'}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600/15 border border-red-500/25 text-red-400 text-[10px] font-bold uppercase tracking-widest hover:bg-red-600/25 disabled:opacity-50 transition-all"
+                  >
+                    <X size={10} /> Desconectar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-white/5 my-4" />
+
+            {/* ═══════════════════════════════════════════════════════════
+               GITHUB TUTORIAL
+            ═══════════════════════════════════════════════════════════ */}
+            <div className="rounded-lg border border-slate-500/20 bg-slate-500/5 overflow-hidden mb-4">
+              <button
+                onClick={() => setTutorialOpen(p => ({ ...p, github: !p.github }))}
+                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-500/10 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Globe size={13} className="text-slate-300" />
+                  <span className="text-[11px] font-bold text-slate-300">Tutorial — GitHub OAuth App</span>
+                </div>
+                {tutorialOpen.github
+                  ? <ChevronDown size={13} className="text-slate-400" />
+                  : <ChevronRight size={13} className="text-slate-400" />}
+              </button>
+
+              {tutorialOpen.github && (
+                <div className="px-3 pb-3 space-y-3 border-t border-slate-500/10">
+                  <p className="text-[10px] text-slate-500 leading-relaxed mt-2">
+                    Siga os passos abaixo para criar um OAuth App no GitHub. Leva menos de 2 minutos.
+                  </p>
+
+                  {/* Step 1 */}
+                  <div className="flex gap-2.5">
+                    <div className="w-5 h-5 rounded-full bg-slate-500/20 border border-slate-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[9px] font-bold text-slate-300">1</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-slate-300">Abra a página de criação de OAuth App</p>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href="https://github.com/settings/apps/new"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-500/15 border border-slate-500/25 text-slate-300 text-[10px] font-mono hover:bg-slate-500/25 transition-colors"
+                        >
+                          <ExternalLink size={10} /> github.com/settings/apps/new
+                        </a>
+                        <button
+                          onClick={() => copyToClipboard('https://github.com/settings/apps/new', 'github-url')}
+                          className="p-1.5 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                          title="Copiar URL"
+                        >
+                          {copiedField === 'github-url'
+                            ? <Check size={10} className="text-emerald-400" />
+                            : <Copy size={10} className="text-slate-500" />}
+                        </button>
+                      </div>
+                      <p className="text-[9px] text-slate-600">Vá em Settings → Developer settings → OAuth Apps → New OAuth App</p>
+                    </div>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="flex gap-2.5">
+                    <div className="w-5 h-5 rounded-full bg-slate-500/20 border border-slate-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[9px] font-bold text-slate-300">2</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-slate-300">Preencha o formulário</p>
+                      <div className="p-2.5 rounded-md bg-black/20 border border-white/5 space-y-2">
+                        <div className="flex items-start gap-2">
+                          <span className="text-[9px] font-mono text-slate-400 w-32 shrink-0 pt-0.5">Application name</span>
+                          <span className="text-[10px] text-slate-400">Qualquer nome, ex: <code className="text-slate-300 bg-slate-500/10 px-1 rounded">Codebrain Review Bot</code></span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-[9px] font-mono text-slate-400 w-32 shrink-0 pt-0.5">Homepage URL</span>
+                          <div className="flex items-center gap-1.5">
+                            <code className="text-[10px] text-slate-300 bg-slate-500/10 px-1.5 py-0.5 rounded font-mono">https://github.com</code>
+                            <button
+                              onClick={() => copyToClipboard('https://github.com', 'github-homepage')}
+                              className="p-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                              title="Copiar"
+                            >
+                              {copiedField === 'github-homepage'
+                                ? <Check size={9} className="text-emerald-400" />
+                                : <Copy size={9} className="text-slate-500" />}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-[9px] font-mono text-slate-400 w-32 shrink-0 pt-0.5">Authorization callback URL</span>
+                          <div className="flex items-center gap-1.5">
+                            <code className="text-[10px] text-slate-300 bg-slate-500/10 px-1.5 py-0.5 rounded font-mono">http://localhost:19876/callback</code>
+                            <button
+                              onClick={() => copyToClipboard('http://localhost:19876/callback', 'github-callback')}
+                              className="p-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                              title="Copiar Redirect URI"
+                            >
+                              {copiedField === 'github-callback'
+                                ? <Check size={9} className="text-emerald-400" />
+                                : <Copy size={9} className="text-slate-500" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="flex gap-2.5">
+                    <div className="w-5 h-5 rounded-full bg-slate-500/20 border border-slate-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[9px] font-bold text-slate-300">3</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-slate-300">Clique em <span className="text-slate-200">"Register application"</span></p>
+                      <p className="text-[10px] text-slate-500">
+                        Na próxima página, copie o <strong className="text-slate-300">Client ID</strong>.
+                        Clique em <strong className="text-slate-300">"Generate a new client secret"</strong> e copie o secret.
+                      </p>
+                      <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
+                        <AlertTriangle size={10} className="text-amber-400 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-amber-400">O <strong>Client Secret</strong> só aparece uma vez! Salve-o agora.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 flex items-start gap-2">
+                    <Info size={10} className="text-indigo-400 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-indigo-300">
+                      O GitHub usa <strong>Device Flow</strong>: ao conectar, uma janela do navegador abrirá pedindo autorização.
+                      Você verá um código para confirmar no site do GitHub.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* GitHub input fields */}
+            <div className="space-y-2 mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Globe size={12} className="text-slate-300" />
+                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">GitHub</span>
+                {oauthStatus?.github?.connected && (
+                  <span className="text-[9px] text-emerald-400 ml-auto">✓ Conectado</span>
+                )}
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Client ID</label>
+                <input
+                  type="text"
+                  value={githubClientId}
+                  onChange={e => { setGithubClientId(e.target.value); setOauthError(null); }}
+                  placeholder="Ex: Iv1.abc123def456..."
+                  className="mt-1 w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-slate-400/30"
+                  disabled={oauthStatus?.github?.connected}
+                />
+              </div>
+              <div className="flex gap-2">
+                {!oauthStatus?.github?.connected ? (
+                  <button
+                    onClick={() => handleOAuthConnect('github')}
+                    disabled={oauthBusy === 'github'}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-600/20 border border-slate-500/30 text-slate-300 text-[10px] font-bold uppercase tracking-widest hover:bg-slate-600/30 disabled:opacity-50 transition-all"
+                  >
+                    <Lock size={10} />
+                    {oauthBusy === 'github' ? 'Conectando...' : 'Conectar GitHub'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleOAuthDisconnect('github')}
+                    disabled={oauthBusy === 'github'}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600/15 border border-red-500/25 text-red-400 text-[10px] font-bold uppercase tracking-widest hover:bg-red-600/25 disabled:opacity-50 transition-all"
+                  >
+                    <X size={10} /> Desconectar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Info footer */}
+            <div className="p-2.5 rounded-lg bg-indigo-500/5 border border-indigo-500/15 flex items-start gap-2 mt-3">
+              <Info size={11} className="text-indigo-400 shrink-0 mt-0.5" />
+              <p className="text-[10px] text-slate-500 leading-relaxed">
+                Os tokens são criptografados com AES-256 e salvos localmente no SQLite.
+                Nenhum dado sai da sua máquina. Se desconectar, o Codebrain volta a usar o CLI (gh/glab) como fallback.
+              </p>
+            </div>
           </SectionCard>
 
           {/* ── Avançado ─────────────────────────────────────────────── */}

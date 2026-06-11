@@ -325,7 +325,7 @@ function createMCPBridge(ptyManager, opts = {}) {
   const kanbanHandlers = createKanbanHandlers({ ...opts });
   const missionHandlers = createMissionHandlers({ ...opts });
   const fetchHandlers = createFetchHandlers(opts);
-  const mrHandlers = createMRHandlers();
+  const mrHandlers = createMRHandlers({ getOAuthToken: opts.getOAuthToken });
 
   // ── Wrap fileWrite: auto-record in shared memory + notify agents ────────
   const originalFileWrite = fileHandlers.fileWrite.bind(fileHandlers);

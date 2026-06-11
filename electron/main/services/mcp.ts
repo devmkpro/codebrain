@@ -61,6 +61,12 @@ function buildMcpBridge(ctx: AppContext) {
     configStore: ctx.configStore, // For notification settings
     workspaceConfigStore: ctx.workspaceConfigStore, // For workspace access mode sandbox
     updateContextFiles: (wsPath: string) => writeContextFiles(ctx, wsPath),
+    getOAuthToken: (provider: "github" | "gitlab") => {
+      try {
+        const { getOAuthToken } = require("./oauth");
+        return getOAuthToken(ctx, provider);
+      } catch { return null; }
+    },
     roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };
 }

@@ -248,6 +248,11 @@ export interface CostSummaryData {
   byAgent: Record<string, CostModelSummary>;
 }
 
+export interface OAuthStatus {
+  github: { connected: boolean; account?: string };
+  gitlab: { connected: boolean; account?: string };
+}
+
 export interface CostBudget {
   dailyLimit: number;
   monthlyLimit: number;
@@ -524,6 +529,11 @@ export interface CodebrainApp {
     reset: (opts?: { workspace?: string }) => Promise<{ ok: boolean; cleared?: { sessions: number; alerts: number; budgets: number } }>;
     setModelCost: (opts: { model: string; inputCost: number; outputCost: number }) => Promise<{ ok: boolean; error?: string }>;
     deleteModelCost: (opts: { model: string }) => Promise<{ ok: boolean; error?: string }>;
+  };
+  oauth: {
+    status: () => Promise<{ ok: boolean; data?: OAuthStatus; error?: string }>;
+    connect: (args: { provider: "github" | "gitlab"; clientId?: string; clientSecret?: string }) => Promise<{ ok: boolean; account?: string; userCode?: string; verificationUri?: string; error?: string }>;
+    disconnect: (args: { provider: "github" | "gitlab" }) => Promise<{ ok: boolean; error?: string }>;
   };
   notify: (title: string, body: string) => void;
   log: {

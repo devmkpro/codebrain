@@ -1408,6 +1408,12 @@ function createMemoryStore(dbPath) {
     },
 
     /**
+     * Get the raw better-sqlite3 Database instance.
+     * Used by services that need direct SQL access (e.g., OAuth token storage).
+     */
+    get db() { return db; },
+
+    /**
      * Close the database connection.
      */
     close() {
