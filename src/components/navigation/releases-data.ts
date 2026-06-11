@@ -19,6 +19,10 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "feat",
+        "text": "Implement manual MR review trigger with debounce and workspace permissions"
+      },
+      {
+        "kind": "feat",
         "text": "add MR review provider and model configuration to settings page"
       },
       {

@@ -82,6 +82,7 @@ function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType,
  * @param {Object} opts
  */
 function createMCPBridge(ptyManager, opts = {}) {
+  console.log(`[bridge] createMCPBridge called, setMrPollTrigger present:`, typeof opts.setMrPollTrigger === 'function');
   const paneLabels = new Map();
   const roleMap = new Map();
 

@@ -164,24 +164,51 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
       (ctx as any)._mrReviewActiveWorkspaces = activeWs;
 
       // Direct call to bridge worker — no event bus needed
-      const triggerFn = (ctx as any)._triggerMrPoll;
-      console.log(`[mr_review:trigger] _triggerMrPoll exists:`, typeof triggerFn);
+      // Wait for MCP server (and bridge.js) to finish loading if still starting up
+      let triggerFn = (ctx as any)._triggerMrPoll;
+      if (typeof triggerFn !== 'function') {
+        // If mcpServerReady is not yet set (very early startup), poll for it briefly
+        if (!ctx.mcpServerReady) {
+          console.log(`[mr_review:trigger] mcpServerReady is null, waiting up to 10s for MCP to start...`);
+          for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 500));
+            if (ctx.mcpServerReady) break;
+          }
+        }
+        if (ctx.mcpServerReady) {
+          console.log(`[mr_review:trigger] _triggerMrPoll not ready yet, waiting for MCP server...`);
+          try {
+            await ctx.mcpServerReady;
+            triggerFn = (ctx as any)._triggerMrPoll;
+            console.log(`[mr_review:trigger] After MCP wait, _triggerMrPoll exists:`, typeof triggerFn);
+          } catch (err) {
+            console.error(`[mr_review:trigger] MCP server failed to start:`, err);
+          }
+        } else {
+          console.error(`[mr_review:trigger] mcpServerReady never became available after 10s`);
+        }
+      }
       if (typeof triggerFn === 'function') {
         console.log(`[mr_review:trigger] Calling _triggerMrPoll() directly`);
         const result = triggerFn();
         console.log(`[mr_review:trigger] _triggerMrPoll result:`, JSON.stringify(result));
+
+        // Auto-clear reviewing state after 120s (safety net in case worker doesn't)
+        setTimeout(() => {
+          activeWs.delete(ws);
+          if (activeWs.size === 0) (ctx as any)._mrReviewActive = false;
+        }, 120_000);
+
+        console.log(`[mr_review:trigger] SUCCESS: returning ok=true`);
+        return { ok: true, message: `Review triggered for ${ws}` };
       } else {
-        console.error(`[mr_review:trigger] ERROR: _triggerMrPoll not registered! Bridge may not have started yet.`);
-      }
-
-      // Auto-clear reviewing state after 120s (safety net in case worker doesn't)
-      setTimeout(() => {
+        // Reset debounce so user can retry after MCP finishes starting
+        (ctx as any)._mrReviewLastTrigger = lastTrigger;
+        (ctx as any)._mrReviewActive = false;
         activeWs.delete(ws);
-        if (activeWs.size === 0) (ctx as any)._mrReviewActive = false;
-      }, 120_000);
-
-      console.log(`[mr_review:trigger] SUCCESS: returning ok=true`);
-      return { ok: true, message: `Review triggered for ${ws}` };
+        console.error(`[mr_review:trigger] ERROR: _triggerMrPoll not registered even after MCP wait!`);
+        return { ok: false, error: "MCP server not ready — _triggerMrPoll not registered. Try again in a few seconds." };
+      }
     } catch (err: any) {
       console.error(`[mr_review:trigger] CRASHED:`, err);
       (ctx as any)._mrReviewActive = false;
