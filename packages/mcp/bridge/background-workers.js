@@ -1264,7 +1264,7 @@ class WorkerManager {
    * Otherwise → falls back to static regex analysis.
    * Returns a Promise (async) when LLM mode is active.
    */
-  _mrPoll(opts) {
+  async _mrPoll(opts) {
     const force = opts?.force === true;
     const store = this.opts.memoryStore;
     const mrHandlers = this.opts.mrHandlers;

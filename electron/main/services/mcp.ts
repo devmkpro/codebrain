@@ -98,18 +98,20 @@ function buildMcpBridge(ctx: AppContext) {
 }
 
 export async function startMcpServer(ctx: AppContext): Promise<void> {
-  // Create a deferred promise so mcpServerReady is ALWAYS set before any async work.
-  // This ensures IPC handlers can await it even if startMCPServer hasn't been called yet.
+  const { startMCPServer } = require("../../packages/mcp/server.js");
+  const bridge = buildMcpBridge(ctx);
+
+  // _triggerMrPoll is set synchronously inside createMCPBridge (called by startMCPServer).
+  // But startMCPServer also starts the HTTP server (async). We need mcpServerReady to
+  // resolve once the server is listening so pane-spawn can get the port.
+  // Use a deferred promise that resolves after the HTTP server starts.
   let resolveReady: (info: McpServerInfo) => void;
   let rejectReady: (err: any) => void;
   ctx.mcpServerReady = new Promise<McpServerInfo>((resolve, reject) => {
     resolveReady = resolve;
     rejectReady = reject;
   });
-  console.log(`[MCP] mcpServerReady promise created (deferred)`);
-
-  const { startMCPServer } = require("../../packages/mcp/server.js");
-  const bridge = buildMcpBridge(ctx);
+  console.log(`[MCP] mcpServerReady deferred promise created, _triggerMrPoll set:`, typeof (ctx as any)._triggerMrPoll);
 
   const tryStart = async () => {
     const info: McpServerInfo = await startMCPServer(ctx.ptyManager, bridge);
@@ -118,8 +120,6 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
     console.log(`[MCP] Server started on port ${info.port}`);
     console.log(`[MCP] SSE: ${info.sseUrl}`);
     console.log(`[MCP] Streamable HTTP: ${info.streamableHttpUrl}`);
-
-    // Notify active panes about MCP server (re)start so they can re-initialize.
     notifyActivePanesMcpRestart(ctx, info);
     return info;
   };
