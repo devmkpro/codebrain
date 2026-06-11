@@ -1387,7 +1387,7 @@ function createCodebrainMCPServer(bridge) {
         if (group === "mr") {
           registerMRTools(server, bridge);
           activatedGroups.add(group);
-          return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, tools_enabled: 4, message: "MR/PR Review tools activated. You can now use mr_list, mr_detail, mr_review, mr_comment." }) }] };
+          return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, tools_enabled: 5, message: "MR/PR Review tools activated. You can now use mr_setup, mr_list, mr_detail, mr_review, mr_comment." }) }] };
         }
         // Other advanced groups: just enable the already-registered tools
         const refs = advancedToolGroups[group];
@@ -1417,7 +1417,7 @@ function createCodebrainMCPServer(bridge) {
         // Browser, fetch, and MR are lazy (registered on demand)
         groups.push({ name: "browser", toolCount: 60, enabled: activatedGroups.has("browser") });
         groups.push({ name: "fetch", toolCount: 5, enabled: activatedGroups.has("fetch") });
-        groups.push({ name: "mr", toolCount: 4, enabled: activatedGroups.has("mr") });
+        groups.push({ name: "mr", toolCount: 5, enabled: activatedGroups.has("mr") });
         const totalTools = Object.keys(server._registeredTools || {}).length;
         const enabledTools = Object.values(server._registeredTools || {}).filter(t => t.enabled !== false).length;
         return { content: [{ type: "text", text: JSON.stringify({ groups, enabled: enabledTools, total: totalTools }, null, 2) }] };
@@ -2348,6 +2348,22 @@ function registerFetchTools(server, bridge) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function registerMRTools(server, bridge) {
+
+  server.tool(
+    "mcp__codebrain__mr_setup",
+    "Smart diagnostic: checks if the workspace is ready for MR/PR operations. Verifies git remote, CLI installation, authentication, and SSH/HTTPS access. Returns structured diagnosis with issues and fix instructions. Call this FIRST if mr_list/mr_detail/mr_comment return setup_needed=true.",
+    {
+      cwd: z.string().describe("Workspace path (absolute). Must be a git repository."),
+    },
+    async ({ cwd }) => {
+      try {
+        const result = await bridge.mrSetup({ cwd });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
   server.tool(
     "mcp__codebrain__mr_list",
