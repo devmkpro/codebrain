@@ -40,8 +40,12 @@ export function NotificationsBell() {
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   const panelRef  = React.useRef<HTMLDivElement>(null);
 
-  // Fetch persisted notifications from SQLite on mount
-  React.useEffect(() => { fetchFromDB(); }, [fetchFromDB]);
+  // Fetch persisted notifications from SQLite on mount + poll every 30s
+  React.useEffect(() => {
+    fetchFromDB();
+    const interval = setInterval(() => { fetchFromDB(); }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchFromDB]);
 
   React.useEffect(() => {
     if (!open) return;
