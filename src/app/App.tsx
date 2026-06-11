@@ -17,6 +17,7 @@ import { useNotificationsStore } from "../stores/notifications-store";
 // WorkspaceTabs moved into AppShell/AppHeader
 import { AppShell } from "../components/ui/AppShell";
 import { WhatsNewModal, LATEST_RELEASE_VERSION } from "../components/navigation/WhatsNewModal";
+import { useWhatsNewStore } from "../stores/whats-new-store";
 import { CliInstallModal } from "../components/modals/CliInstallModal";
 import { CliSetupBanner } from "../components/modals/CliSetupBanner";
 import { DetachedPaneView } from "../components/terminal/DetachedPaneView";
@@ -253,7 +254,10 @@ export function App() {
   const theme = useTerminalSettings(s => s.theme);
   const reducedAnimations = useTerminalSettings(s => (s as any).reducedAnimations ?? false);
   const disableBackdropBlur = useTerminalSettings(s => (s as any).disableBackdropBlur ?? false);
-  const [whatsNewOpen, setWhatsNewOpen] = React.useState(false);
+  const whatsNewShown = useWhatsNewStore(s => s.shown);
+  const whatsNewShow = useWhatsNewStore(s => s.show);
+  const whatsNewDismiss = useWhatsNewStore(s => s.dismiss);
+  const whatsNewShouldShow = useWhatsNewStore(s => s.shouldShow);
   const [appVersion, setAppVersion] = React.useState(null);
   React.useEffect(() => {
     const root2 = document.documentElement;
@@ -276,15 +280,13 @@ export function App() {
   React.useEffect(() => {
     window.codeBrainApp?.app?.version().then(v2 => {
       setAppVersion(v2);
-      const lastSeen = localStorage.getItem("codebrain.whatsNewSeen");
-      if (lastSeen !== LATEST_RELEASE_VERSION) {
-        setWhatsNewOpen(true);
+      if (whatsNewShouldShow(LATEST_RELEASE_VERSION)) {
+        whatsNewShow();
       }
     }).catch(() => {});
   }, []);
   const closeWhatsNew = React.useCallback(() => {
-    setWhatsNewOpen(false);
-    localStorage.setItem("codebrain.whatsNewSeen", LATEST_RELEASE_VERSION);
+    whatsNewDismiss(LATEST_RELEASE_VERSION);
   }, []);
   const activeWorkspacePath = activeTab?.workspacePath ?? workspace ?? undefined;
   const handleAddPane = React.useCallback(() => {
@@ -406,7 +408,7 @@ export function App() {
       <AuthGate>
         <UpdateNotificationBanner />
         <AppShell
-          whatsNewOpen={whatsNewOpen}
+          whatsNewOpen={whatsNewShown}
           closeWhatsNew={closeWhatsNew}
           appVersion={appVersion}
           workspaceToast={workspaceToast}
