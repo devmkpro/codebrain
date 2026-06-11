@@ -361,6 +361,13 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     allowed: () => ipcRenderer.invoke("mr_review:allowed"),
     setAllowed: (args: { workspaces: string[] }) => ipcRenderer.invoke("mr_review:set-allowed", args),
     trigger: (args: { workspace: string }) => ipcRenderer.invoke("mr_review:trigger", args),
+    applyFixes: (args: { workspace: string; mrId: number; findings: string }) =>
+      ipcRenderer.invoke("mr_review:apply-fixes", args),
+    onFindings: (cb: (data: { mrId: number; workspace: string; findings: any[]; summary: string }) => void) => {
+      const handler = (_e: any, data: any) => cb(data);
+      ipcRenderer.on("mr_review:findings", handler);
+      return () => ipcRenderer.removeListener("mr_review:findings", handler);
+    },
   },
 
   notify: (title: string, body: string) => ipcRenderer.send("notify", title, body),

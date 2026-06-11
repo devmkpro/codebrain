@@ -1220,17 +1220,55 @@ class WorkerManager {
       await this._waitForPaneIdle(reviewPaneId, 180000); // 3 min timeout
 
       // 5. Agent posts the comment via MCP tool (mr_comment).
-      // Just record + notify + cleanup.
+      // Read pane output to extract findings for auto-fix modal.
 
-      // 6. Record + notify + cleanup
+      // 6. Extract findings from pane output
+      let findings = [];
+      let reviewSummary = "";
+      try {
+        const paneHandlers = this.opts.paneHandlers;
+        if (paneHandlers?.readPane) {
+          const output = await paneHandlers.readPane(reviewPaneId, 500);
+          const text = Array.isArray(output?.lines) ? output.lines.join("\n") : String(output?.lines || "");
+          // Extract findings: lines starting with number+dot or bullet with severity emoji
+          const findingPatterns = /(?:^|\n)\s*(?:\d+\.\s+|\-\s+|•\s+)(?:\*\*)?(?:🔴|🟡|🟢|⚠️|❌|✅)?\s*(?:\*\*)?\s*(.+)/g;
+          let match;
+          while ((match = findingPatterns.exec(text)) !== null) {
+            const line = match[1].trim();
+            if (line.length > 10 && !line.startsWith("LGTM") && !line.startsWith("✅")) {
+              findings.push(line);
+            }
+          }
+          // Extract the full review section
+          const reviewMatch = text.match(/## Codebrain AI Review[\s\S]*?(?=\n🧠 Posted|$)/);
+          reviewSummary = reviewMatch ? reviewMatch[0].trim() : "";
+        }
+      } catch (e) {
+        console.error(`[mr_poll] Failed to extract findings:`, e.message);
+      }
+
+      // 7. Record + notify + cleanup
       this._postReviewActions(mr, mrId, workspacePath, detailRes.provider || mr.provider, store, emitNotification);
 
-      // 7. Close the review pane after a brief delay
+      // 8. Send findings to renderer for auto-fix modal (if any findings found)
+      if (findings.length > 0 && typeof this.opts.sendFindings === "function") {
+        this.opts.sendFindings({
+          mrId,
+          workspace: workspacePath,
+          findings,
+          summary: reviewSummary,
+          title: title,
+          sourceBranch,
+          targetBranch,
+        });
+      }
+
+      // 9. Close the review pane after a brief delay
       setTimeout(() => {
         try { ptyManager.kill(reviewPaneId); } catch {}
       }, 5000);
 
-      return { ok: true, paneId: reviewPaneId, method: "llm" };
+      return { ok: true, paneId: reviewPaneId, method: "llm", findings: findings.length };
     } catch (err) {
       return { ok: false, error: err.message };
     }
@@ -1278,12 +1316,13 @@ class WorkerManager {
    */
   async _mrPoll(opts) {
     const force = opts?.force === true;
+    const targetWorkspace = opts?.workspace || null; // Filter to specific workspace if provided
     const store = this.opts.memoryStore;
     const mrHandlers = this.opts.mrHandlers;
     const emitNotification = this.opts.emitNotification;
     const configStore = this.opts.configStore;
 
-    console.log(`[mr_poll] Called with force=${force}`);
+    console.log(`[mr_poll] Called with force=${force}, workspace=${targetWorkspace ?? 'all'}`);
 
     // Check if auto-review is enabled (force bypasses this for manual triggers)
     if (!configStore) { console.log(`[mr_poll] SKIP: no configStore`); return { summary: "no configStore", skipped: true }; }
@@ -1294,8 +1333,10 @@ class WorkerManager {
     if (!mrHandlers) { console.log(`[mr_poll] SKIP: no mrHandlers`); return { summary: "no mrHandlers", skipped: true }; }
     if (!store) { console.log(`[mr_poll] SKIP: no memoryStore`); return { summary: "no memoryStore", skipped: true }; }
 
-    // Check allowed workspaces — iterate ALL, not just current
-    const allowedWorkspaces = config?.mr_allowed_workspaces;
+    // Check allowed workspaces — filter to target workspace if specified
+    const allowedWorkspaces = targetWorkspace
+      ? [targetWorkspace] // Only review the requested workspace
+      : config?.mr_allowed_workspaces;
     if (!Array.isArray(allowedWorkspaces) || allowedWorkspaces.length === 0) {
       console.log(`[mr_poll] SKIP: no allowed workspaces`);
       return { summary: "no allowed workspaces", skipped: true };
@@ -1406,8 +1447,10 @@ class WorkerManager {
    * Run a worker on demand (outside its normal interval).
    * Used by IPC trigger handlers (e.g. mr_review:trigger).
    * Includes cooldown protection to prevent rapid re-triggering.
+   * @param {string} name - worker name
+   * @param {Object} [triggerOpts] - extra options passed through to the worker (e.g. { workspace })
    */
-  triggerWorker(name) {
+  triggerWorker(name, triggerOpts) {
     const worker = this.workers.get(name);
     if (!worker) return { ok: false, error: `worker ${name} not found` };
     if (worker.running) {
@@ -1420,8 +1463,8 @@ class WorkerManager {
       const remaining = Math.ceil((30000 - (now - worker.lastRun)) / 1000);
       return { ok: false, error: `worker ${name} was triggered ${Math.round((now - worker.lastRun) / 1000)}s ago — wait ${remaining}s` };
     }
-    console.log(`[triggerWorker] Triggering ${name} on demand`);
-    this._runWorker(name, { force: true });
+    console.log(`[triggerWorker] Triggering ${name} on demand, opts:`, JSON.stringify(triggerOpts));
+    this._runWorker(name, { force: true, ...triggerOpts });
     return { ok: true };
   }
 

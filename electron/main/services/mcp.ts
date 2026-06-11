@@ -59,12 +59,15 @@ function buildMcpBridge(ctx: AppContext) {
       (ctx as any)._mrReviewActive = false;
       (ctx as any)._mrReviewActiveWorkspaces = new Set();
     },
+    sendFindings: (data: { mrId: number; workspace: string; findings: string[]; summary: string; title: string; sourceBranch: string; targetBranch: string }) => {
+      safeSend(ctx, "mr_review:findings", data);
+    },
     memoryStore: ctx.memoryStore,
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
     hooksManager: ctx.hooksManager,
     // Direct trigger callback — bridge.js registers its trigger function here
-    setMrPollTrigger: (fn: () => any) => { (ctx as any)._triggerMrPoll = fn; },
+    setMrPollTrigger: (fn: (opts?: { workspace?: string }) => any) => { (ctx as any)._triggerMrPoll = fn; },
     configStore: ctx.configStore, // For notification settings
     workspaceConfigStore: ctx.workspaceConfigStore, // For workspace access mode sandbox
     updateContextFiles: (wsPath: string) => writeContextFiles(ctx, wsPath),

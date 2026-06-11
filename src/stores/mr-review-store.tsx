@@ -6,6 +6,16 @@ export interface DetectedWorkspace {
   allowed: boolean;
 }
 
+export interface MrReviewFindings {
+  mrId: number;
+  workspace: string;
+  findings: string[];
+  summary: string;
+  title: string;
+  sourceBranch: string;
+  targetBranch: string;
+}
+
 interface MrReviewState {
   reviewing: boolean;
   activeWorkspaces: string[];
@@ -14,6 +24,12 @@ interface MrReviewState {
   hasReviewModel: boolean;
   detectedWorkspaces: DetectedWorkspace[];
   loading: boolean;
+  /** Findings from last review — triggers auto-fix modal */
+  pendingFindings: MrReviewFindings | null;
+  /** Whether the auto-fix modal is visible */
+  showFixModal: boolean;
+  /** Whether auto-fix is in progress */
+  fixing: boolean;
 
   /** Fetch current review status from main process */
   fetchStatus: () => Promise<void>;
@@ -25,6 +41,12 @@ interface MrReviewState {
   toggleWorkspace: (workspacePath: string) => Promise<void>;
   /** Trigger manual review for a workspace */
   triggerReview: (workspace: string) => Promise<void>;
+  /** Dismiss the auto-fix modal */
+  dismissFindings: () => void;
+  /** Apply auto-fixes for pending findings */
+  applyFixes: () => Promise<void>;
+  /** Listen for findings from main process */
+  listenForFindings: () => () => void;
 }
 
 const api = () => (window as any).codeBrainApp?.mrReview;
@@ -37,6 +59,9 @@ export const useMrReviewStore = create<MrReviewState>((set, get) => ({
   hasReviewModel: false,
   detectedWorkspaces: [],
   loading: false,
+  pendingFindings: null,
+  showFixModal: false,
+  fixing: false,
 
   fetchStatus: async () => {
     try {
@@ -131,5 +156,41 @@ export const useMrReviewStore = create<MrReviewState>((set, get) => ({
     } catch (err) {
       console.error('[mrReviewStore] triggerReview error:', err);
     }
+  },
+
+  dismissFindings: () => {
+    set({ pendingFindings: null, showFixModal: false });
+  },
+
+  applyFixes: async () => {
+    const { pendingFindings } = get();
+    if (!pendingFindings) return;
+    try {
+      const mrApi = api();
+      if (!mrApi) return;
+      set({ fixing: true });
+      const res = await mrApi.applyFixes({
+        workspace: pendingFindings.workspace,
+        mrId: pendingFindings.mrId,
+        findings: pendingFindings.findings.join("\n"),
+      });
+      if (res?.ok) {
+        set({ showFixModal: false, pendingFindings: null, fixing: false });
+      } else {
+        set({ fixing: false });
+      }
+    } catch {
+      set({ fixing: false });
+    }
+  },
+
+  listenForFindings: () => {
+    const mrApi = api();
+    if (!mrApi?.onFindings) return () => {};
+    return mrApi.onFindings((data) => {
+      if (data?.findings?.length > 0) {
+        set({ pendingFindings: data as MrReviewFindings, showFixModal: true });
+      }
+    });
   },
 }));

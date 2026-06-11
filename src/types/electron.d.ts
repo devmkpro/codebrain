@@ -561,6 +561,8 @@ export interface CodebrainApp {
     allowed: () => Promise<{ ok: boolean; workspaces?: Array<{ path: string; name: string; allowed: boolean }>; error?: string }>;
     setAllowed: (args: { workspaces: string[] }) => Promise<{ ok: boolean; error?: string }>;
     trigger: (args: { workspace: string }) => Promise<{ ok: boolean; message?: string; error?: string }>;
+    applyFixes: (args: { workspace: string; mrId: number; findings: string }) => Promise<{ ok: boolean; paneId?: string; error?: string }>;
+    onFindings: (cb: (data: { mrId: number; workspace: string; findings: string[]; summary: string; title: string; sourceBranch: string; targetBranch: string }) => void) => () => void;
   };
   notify: (title: string, body: string) => void;
   log: {

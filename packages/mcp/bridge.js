@@ -339,12 +339,13 @@ function createMCPBridge(ptyManager, opts = {}) {
   workerManager.opts.emitNotification = opts.emitNotification;
   workerManager.opts.paneHandlers = paneHandlers;
   workerManager.opts.clearReviewingState = opts.clearReviewingState;
+  workerManager.opts.sendFindings = opts.sendFindings;
 
   // Expose direct trigger function for IPC handler (bypasses HooksManager event bus)
   if (opts.setMrPollTrigger) {
-    opts.setMrPollTrigger(() => {
-      console.log(`[bridge] triggerMrPoll called directly`);
-      const result = workerManager.triggerWorker("mr_poll");
+    opts.setMrPollTrigger((triggerOpts) => {
+      console.log(`[bridge] triggerMrPoll called directly, workspace:`, triggerOpts?.workspace ?? 'all');
+      const result = workerManager.triggerWorker("mr_poll", triggerOpts);
       console.log(`[bridge] triggerWorker result:`, JSON.stringify(result));
       return result;
     });

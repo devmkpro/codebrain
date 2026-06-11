@@ -4,17 +4,42 @@ import * as path from "path";
 import type { AppContext } from "../context";
 
 /**
+ * Resolve the .git directory path — handles both regular repos and worktrees.
+ * For worktrees, .git is a file containing "gitdir: <path>".
+ */
+function resolveGitDir(dir: string): string | null {
+  try {
+    const gitPath = path.join(dir, ".git");
+    if (!fs.existsSync(gitPath)) return null;
+    const stat = fs.statSync(gitPath);
+    if (stat.isDirectory()) return gitPath;
+    // Worktree: .git is a file with "gitdir: <absolute-path>"
+    const content = fs.readFileSync(gitPath, "utf-8").trim();
+    const match = content.match(/^gitdir:\s*(.+)$/m);
+    if (match) {
+      const worktreeGitDir = path.resolve(dir, match[1].trim());
+      if (fs.existsSync(worktreeGitDir)) return worktreeGitDir;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Detect if a directory is a git repo with a remote (eligible for MR review).
+ * Handles both regular repos and worktrees.
  */
 function isGitRepoWithRemote(dir: string): boolean {
   try {
-    const gitDir = path.join(dir, ".git");
-    if (!fs.existsSync(gitDir)) return false;
-    // Check for remote via config file
-    const configPath = fs.statSync(gitDir).isDirectory()
-      ? path.join(gitDir, "config")
-      : null;
-    if (configPath && fs.existsSync(configPath)) {
+    const gitDir = resolveGitDir(dir);
+    if (!gitDir) return false;
+    // For worktrees, config lives in the parent repo's common dir
+    const commonDir = fs.existsSync(path.join(gitDir, "commondir"))
+      ? path.join(gitDir, fs.readFileSync(path.join(gitDir, "commondir"), "utf-8").trim())
+      : gitDir;
+    const configPath = path.join(commonDir, "config");
+    if (fs.existsSync(configPath)) {
       const content = fs.readFileSync(configPath, "utf-8");
       return /\[remote\s+"origin"\]/.test(content);
     }
@@ -26,14 +51,17 @@ function isGitRepoWithRemote(dir: string): boolean {
 
 /**
  * Get repo name from git remote URL.
+ * Handles both regular repos and worktrees.
  */
 function getRepoName(dir: string): string | null {
   try {
-    const gitDir = path.join(dir, ".git");
-    const configPath = fs.statSync(gitDir).isDirectory()
-      ? path.join(gitDir, "config")
-      : null;
-    if (!configPath || !fs.existsSync(configPath)) return null;
+    const gitDir = resolveGitDir(dir);
+    if (!gitDir) return path.basename(dir);
+    const commonDir = fs.existsSync(path.join(gitDir, "commondir"))
+      ? path.join(gitDir, fs.readFileSync(path.join(gitDir, "commondir"), "utf-8").trim())
+      : gitDir;
+    const configPath = path.join(commonDir, "config");
+    if (!fs.existsSync(configPath)) return path.basename(dir);
     const content = fs.readFileSync(configPath, "utf-8");
     const match = content.match(/url\s*=\s*(?:https?:\/\/[^/]+\/|git@[^:]+:)(.+?)(?:\.git)?$/m);
     return match ? match[1].replace(/\.git$/, "") : path.basename(dir);
@@ -54,8 +82,8 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
 
       // Check if mr_poll worker is currently running
       const reviewing = !!(ctx as any)._mrReviewActive;
-      const activeWsSet: Set<string> = (ctx as any)._mrReviewActiveWorkspaces;
-      const activeWorkspaces: string[] = activeWsSet ? [...activeWsSet] : [];
+      const activeWsSet: Set<string> = (ctx as any)._mrReviewActiveWorkspaces ?? new Set();
+      const activeWorkspaces: string[] = [...activeWsSet];
 
       return {
         ok: true,
@@ -97,7 +125,9 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
             if (ws && typeof ws === "string") wsSet.add(ws);
           }
         }
-      } catch {}
+      } catch (err: unknown) {
+        console.warn("[mr_review:allowed] Failed to read recent workspaces file:", err instanceof Error ? err.message : err);
+      }
 
       // Filter to only git repos with remotes
       const detected: Array<{ path: string; name: string; allowed: boolean }> = [];
@@ -136,7 +166,7 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
 
   /**
    * mr_review:trigger — manually trigger review for a specific workspace
-   * Includes debounce to prevent rapid re-triggering.
+   * Per-workspace debounce (30s) to prevent rapid re-triggering.
    */
   ipcMain.handle("mr_review:trigger", async (_event, args: { workspace: string }) => {
     try {
@@ -145,13 +175,13 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
         return { ok: false, error: "workspace is required" };
       }
 
-      // Fix #1: Validate workspace is a real git repo before proceeding
+      // Validate workspace is a real git repo before proceeding
       if (!isGitRepoWithRemote(ws)) {
         return { ok: false, error: "Workspace is not a valid git repository with a remote" };
       }
 
-      // Poll for _triggerMrPoll first, BEFORE setting any state (Fix #4: debounce race)
-      let triggerFn = (ctx as any)._triggerMrPoll;
+      // Poll for _triggerMrPoll first, BEFORE setting any state
+      let triggerFn: ((opts?: { workspace?: string }) => any) | undefined = (ctx as any)._triggerMrPoll;
       if (typeof triggerFn !== 'function') {
         for (let i = 0; i < 30; i++) {
           await new Promise(r => setTimeout(r, 500));
@@ -163,14 +193,16 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
         return { ok: false, error: "MCP server not ready. Try again in a few seconds." };
       }
 
-      // Debounce: only after confirming trigger is available (Fix #4)
+      // Per-workspace debounce: Map<string, number> keyed by workspace path
       const now = Date.now();
-      const lastTrigger: number = (ctx as any)._mrReviewLastTrigger ?? 0;
+      const triggerMap: Map<string, number> = (ctx as any)._mrReviewLastTriggerMap ?? new Map();
+      (ctx as any)._mrReviewLastTriggerMap = triggerMap;
+      const lastTrigger: number = triggerMap.get(ws) ?? 0;
       if (now - lastTrigger < 30_000) {
         const remaining = Math.ceil((30_000 - (now - lastTrigger)) / 1000);
         return { ok: false, error: `Review já foi disparado há ${Math.round((now - lastTrigger) / 1000)}s. Aguarde ${remaining}s.` };
       }
-      (ctx as any)._mrReviewLastTrigger = now;
+      triggerMap.set(ws, now);
 
       // Set active flag for UI indicator
       (ctx as any)._mrReviewActive = true;
@@ -178,7 +210,16 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
       activeWs.add(ws);
       (ctx as any)._mrReviewActiveWorkspaces = activeWs;
 
-      const result = triggerFn();
+      // Fire-and-forget: do NOT await the trigger — it waits for pane idle (up to 3 min)
+      // which would block the IPC response and freeze the renderer.
+      const result = triggerFn({ workspace: ws });
+      if (result && typeof result.then === "function") {
+        result.catch((triggerErr: unknown) => {
+          console.error("[mr_review:trigger] triggerFn failed:", triggerErr);
+          activeWs.delete(ws);
+          if (activeWs.size === 0) (ctx as any)._mrReviewActive = false;
+        });
+      }
 
       // Auto-clear reviewing state after 120s (safety net)
       setTimeout(() => {
@@ -188,9 +229,78 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
 
       return { ok: true, message: `Review triggered for ${ws}` };
     } catch (err: any) {
-      // Fix #2: Always clear active state on any failure
+      // Always clear active state on any failure
       (ctx as any)._mrReviewActive = false;
       (ctx as any)._mrReviewActiveWorkspaces = new Set();
+      return { ok: false, error: err.message };
+    }
+  });
+
+  /**
+   * mr_review:apply-fixes — spawn an agent to auto-fix review findings
+   */
+  ipcMain.handle("mr_review:apply-fixes", async (_event, args: { workspace: string; mrId: number; findings: string }) => {
+    try {
+      const { workspace, mrId, findings } = args;
+      if (!workspace || !findings) {
+        return { ok: false, error: "workspace and findings are required" };
+      }
+
+      // Use the configured review provider/model
+      const config = ctx.configStore?.get?.() || {};
+      const provider = config.mr_review_provider as string;
+      const model = config.mr_review_model as string;
+      if (!provider || !model) {
+        return { ok: false, error: "No review model configured" };
+      }
+
+      // Import spawnPaneInternal
+      const { spawnPaneInternal } = await import("../services/pane-spawn");
+
+      const spawnResult = await spawnPaneInternal(ctx, {
+        providerId: provider,
+        model,
+        cwd: workspace,
+      });
+
+      if (!spawnResult?.ok || !spawnResult?.paneId) {
+        return { ok: false, error: `Failed to spawn fix agent: ${spawnResult?.error || "unknown"}` };
+      }
+
+      const fixPaneId = spawnResult.paneId;
+
+      // Wait for CLI readiness
+      await new Promise(r => setTimeout(r, 5000));
+
+      // Write the fix prompt
+      const fixPrompt = [
+        `You are a code fixer. Apply the following review findings to the codebase.`,
+        ``,
+        `MR !${mrId} — Workspace: ${workspace}`,
+        ``,
+        `FINDINGS TO FIX:`,
+        findings,
+        ``,
+        `INSTRUCTIONS:`,
+        `1. Read each finding carefully`,
+        `2. Locate the relevant files in the codebase`,
+        `3. Apply minimal, targeted fixes for each finding`,
+        `4. Do NOT change anything unrelated to the findings`,
+        `5. After applying all fixes, summarize what you changed`,
+        `6. Do NOT commit — just apply the code changes`,
+      ].join("\n");
+
+      const ptyManager = ctx.ptyManager;
+      if (ptyManager) {
+        // Sanitize newlines for readline
+        const sanitized = fixPrompt.replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/\r/g, "");
+        ptyManager.writeSilent(fixPaneId, sanitized);
+        await new Promise(r => setTimeout(r, Math.min(3000, 100 + sanitized.length * 0.5)));
+        ptyManager.write(fixPaneId, "\r");
+      }
+
+      return { ok: true, paneId: fixPaneId };
+    } catch (err: any) {
       return { ok: false, error: err.message };
     }
   });
