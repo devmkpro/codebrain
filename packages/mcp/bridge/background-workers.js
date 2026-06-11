@@ -1152,19 +1152,20 @@ class WorkerManager {
     const targetBranch = mr.target_branch || detailRes.target_branch || "?";
 
     const prompt = [
-      `You are a code reviewer. Analyze the following MR diff and post your findings as a comment.`,
-      `Use the mcp__codebrain__mr_comment tool to post your review.`,
+      `You are a code reviewer. Analyze the following MR diff and output your review.`,
+      `DO NOT use any tools. Just output your review as plain text.`,
+      `Your output will be automatically posted as a comment on the MR.`,
       ``,
       `MR !${mrId}: ${title}`,
       `Branch: ${sourceBranch} → ${targetBranch}`,
-      `Workspace: ${workspacePath}`,
       ``,
       `Rules:`,
       `- Focus on bugs, security issues, performance, and code quality`,
       `- Be concise — max 10 findings`,
       `- Use markdown formatting`,
-      `- If no issues found, say "✅ LGTM — no issues found"`,
-      `- After posting the comment, your task is DONE. Do not ask questions.`,
+      `- Start with "## Codebrain AI Review"`,
+      `- If no issues found, say "## Codebrain AI Review\n\n✅ LGTM — no issues found"`,
+      `- Do NOT ask questions, do NOT use tools, just output the review text`,
       ``,
       `---DIFF---`,
       diff,
@@ -1210,20 +1211,61 @@ class WorkerManager {
         ptyManager.write(reviewPaneId, "\r");
       }
 
-      // 4. Wait for idle (agent finishes analyzing + posting)
+      // 4. Wait for idle (agent finishes analyzing)
       await this._waitForPaneIdle(reviewPaneId, 180000); // 3 min timeout
 
-      // Check if pane exited prematurely (exitCode != null means process died)
-      const paneInfo = ptyManager.get?.(reviewPaneId) || ptyManager.list?.().find(p => p.paneId === reviewPaneId);
-      if (paneInfo?.exitCode != null && paneInfo.exitCode !== 0) {
-        console.error(`[mr_poll] Review pane exited prematurely with code ${paneInfo.exitCode}`);
-        return { ok: false, error: `review pane exited with code ${paneInfo.exitCode}` };
+      // 5. Read the agent's output and post as MR comment
+      const output = ptyManager.read(reviewPaneId, 500);
+      const outputText = output.join("\n");
+
+      // Extract the review text (look for "## Codebrain AI Review" marker)
+      let reviewBody = "";
+      const markerIdx = outputText.indexOf("## Codebrain AI Review");
+      if (markerIdx >= 0) {
+        reviewBody = outputText.slice(markerIdx).trim();
+      } else {
+        // Fallback: use everything after the diff marker or last substantial block
+        const lines = output.filter(l => l.trim().length > 0 && !l.includes("---DIFF---"));
+        // Take the last N lines that look like review output (after the agent processes)
+        const reviewLines = [];
+        let collecting = false;
+        for (const line of lines) {
+          // Skip CLI chrome (banner, prompt chars, tool calls)
+          const clean = line.replace(/[\x00-\x1f\x7f-\x9f]/g, "").trim();
+          if (clean.length > 5 && !clean.startsWith(">") && !clean.startsWith("$")) {
+            collecting = true;
+            reviewLines.push(clean);
+          }
+        }
+        reviewBody = reviewLines.length > 0
+          ? "## Codebrain AI Review\n\n" + reviewLines.join("\n")
+          : "";
       }
 
-      // 5. Record + notify + cleanup
+      if (reviewBody.length > 20) {
+        // Post the review as MR comment
+        const mrHandlers = this.opts.mrHandlers;
+        if (mrHandlers?.mrComment) {
+          console.log(`[mr_poll] Posting review comment (${reviewBody.length} chars) on MR !${mrId}`);
+          try {
+            const commentResult = await mrHandlers.mrComment({
+              cwd: workspacePath,
+              id: String(mrId),
+              body: reviewBody,
+            });
+            console.log(`[mr_poll] Comment posted: ok=${commentResult?.ok}, error=${commentResult?.error || "none"}`);
+          } catch (err) {
+            console.error(`[mr_poll] Failed to post comment:`, err.message);
+          }
+        }
+      } else {
+        console.warn(`[mr_poll] Review output too short (${reviewBody.length} chars), not posting`);
+      }
+
+      // 6. Record + notify + cleanup
       this._postReviewActions(mr, mrId, workspacePath, detailRes.provider || mr.provider, store, emitNotification);
 
-      // 6. Close the review pane after a brief delay
+      // 7. Close the review pane after a brief delay
       setTimeout(() => {
         try { ptyManager.kill(reviewPaneId); } catch {}
       }, 5000);

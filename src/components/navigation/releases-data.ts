@@ -19,6 +19,14 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "feat",
+        "text": "enhance MR review logic to skip unchanged MRs and update reviewed MRs in the store"
+      },
+      {
+        "kind": "feat",
+        "text": "integrate paneHandlers into WorkerManager and enhance prompt writing logic"
+      },
+      {
+        "kind": "feat",
         "text": "enhance MCP server readiness handling and improve port retry logic"
       },
       {
