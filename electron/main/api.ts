@@ -20,9 +20,9 @@ app.get('/api/health', (_req, res) => {
 
 /**
  * Starts the local API server
- * @param port The port to listen on (defaults to 3001)
+ * @param port The port to listen on (defaults to 3000)
  */
-export function startApiServer(port: number = 3001): Server {
+export function startApiServer(port: number = 3000): Server {
   if (server) return server;
 
   server = app.listen(port, () => {
