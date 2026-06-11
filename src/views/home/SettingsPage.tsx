@@ -1792,13 +1792,25 @@ export function SettingsPage() {
                   />
                   <button
                     onClick={async () => {
+                      setBotTokenSaving('github');
+                      setBotTokenSaved(null);
                       try {
                         await (window as any).codeBrainApp?.appConfig?.set?.({ github_bot_token: githubBotToken.trim() });
+                        setBotTokenSaved('github');
+                        setTimeout(() => setBotTokenSaved(null), 2000);
                       } catch {}
+                      setBotTokenSaving(null);
                     }}
-                    className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-bold uppercase tracking-widest hover:bg-amber-500/20 transition-all"
+                    disabled={botTokenSaving === 'github'}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
+                      botTokenSaved === 'github'
+                        ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
+                        : botTokenSaving === 'github'
+                        ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400 animate-pulse'
+                        : 'bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20'
+                    }`}
                   >
-                    Salvar
+                    {botTokenSaved === 'github' ? '✓ Salvo' : botTokenSaving === 'github' ? 'Salvando...' : 'Salvar'}
                   </button>
                 </div>
               </div>
