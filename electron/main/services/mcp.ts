@@ -67,6 +67,13 @@ function buildMcpBridge(ctx: AppContext) {
         return getOAuthToken(ctx, provider);
       } catch { return null; }
     },
+    emitNotification: (data: { type: string; title: string; body?: string; level?: string; mr_id?: number; mr_url?: string; provider?: string }) => {
+      try {
+        const store = ctx.memoryStore;
+        if (!store) return;
+        store.createNotification(data);
+      } catch {}
+    },
     roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };
 }

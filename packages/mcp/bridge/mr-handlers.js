@@ -682,7 +682,10 @@ function createMRHandlers(opts = {}) {
                     headers: { Authorization: `Bearer ${botToken}`, Accept: "application/vnd.github.v3+json", "Content-Type": "application/json", "User-Agent": "Codebrain-ReviewBot" },
                     body: JSON.stringify({ body: signedBody, commit_id: commitSha, path: file, line: parseInt(line, 10), side: "RIGHT", event: "COMMENT" }),
                   });
-                  if (reviewRes.ok) return { ok: true, provider, inline: true, file, line, via: "oauth-bot" };
+                  if (reviewRes.ok) {
+                    if (opts.emitNotification) opts.emitNotification({ type: "mr_review", title: `Review inline no ${provider === "github" ? "PR" : "MR"} !${id}`, body: `Comentário em ${file}:${line}`, level: "success", mr_id: parseInt(id, 10), mr_url: mrUrl, provider });
+                    return { ok: true, provider, inline: true, file, line, via: "oauth-bot" };
+                  }
                 }
                 // Inline failed → fall through to general comment
               }
@@ -694,6 +697,7 @@ function createMRHandlers(opts = {}) {
               });
               if (commentRes.ok) {
                 const data = await commentRes.json();
+                if (opts.emitNotification) opts.emitNotification({ type: "mr_review", title: `Review postado no PR !${id}`, body: `Comentário geral via GitHub bot`, level: "success", mr_id: parseInt(id, 10), mr_url: mrUrl, provider });
                 return { ok: true, provider, comment_url: data.html_url || null, via: "oauth-bot" };
               }
             }
@@ -708,7 +712,11 @@ function createMRHandlers(opts = {}) {
                   headers: { "PRIVATE-TOKEN": botToken, "Content-Type": "application/json" },
                   body: JSON.stringify({ body: signedBody, position: { position_type: "text", new_path: file, new_line: parseInt(line, 10) } }),
                 });
-                if (discRes.ok) return { ok: true, provider, inline: true, file, line, via: "oauth-bot" };
+                if (discRes.ok) {
+                  const mrUrl = `https://gitlab.com/${repo}/-/merge_requests/${id}`;
+                  if (opts.emitNotification) opts.emitNotification({ type: "mr_review", title: `Review postado no MR !${id}`, body: `Comentário inline em ${file}:${line} via GitLab bot`, level: "success", mr_id: parseInt(id, 10), mr_url: mrUrl, provider });
+                  return { ok: true, provider, inline: true, file, line, via: "oauth-bot" };
+                }
               }
               // General note
               const noteRes = await fetch(`https://gitlab.com/api/v4/projects/${encodedRepo}/merge_requests/${id}/notes`, {
@@ -716,7 +724,11 @@ function createMRHandlers(opts = {}) {
                 headers: { "PRIVATE-TOKEN": botToken, "Content-Type": "application/json" },
                 body: JSON.stringify({ body: signedBody }),
               });
-              if (noteRes.ok) return { ok: true, provider, message: "Comment posted via OAuth bot", via: "oauth-bot" };
+              if (noteRes.ok) {
+                const mrUrl = `https://gitlab.com/${repo}/-/merge_requests/${id}`;
+                if (opts.emitNotification) opts.emitNotification({ type: "mr_review", title: `Review postado no MR !${id}`, body: `Comentário geral via GitLab bot`, level: "success", mr_id: parseInt(id, 10), mr_url: mrUrl, provider });
+                return { ok: true, provider, message: "Comment posted via OAuth bot", via: "oauth-bot" };
+              }
             }
           } catch (botErr) {
             // OAuth bot path failed → fall through to CLI
@@ -731,6 +743,7 @@ function createMRHandlers(opts = {}) {
       try {
         fs.writeFileSync(tmpFile, signedBody, "utf-8");
         const { provider, cli } = guard.gitInfo;
+        let cliResult;
 
         if (cli === "gh") {
           if (file && line) {
@@ -740,75 +753,72 @@ function createMRHandlers(opts = {}) {
             if (!commitSha) {
               const result = runCli(`gh pr comment ${id} --body-file "${tmpFile}"`, cwd);
               const commentUrl = result.match(/(https:\/\/[^\s]+)/)?.[1] || null;
-              return { ok: true, provider, comment_url: commentUrl, inline: false, message: "Could not get commit SHA for inline comment; posted as general comment" };
+              cliResult = { ok: true, provider, comment_url: commentUrl, inline: false, message: "Could not get commit SHA for inline comment; posted as general comment" };
+            } else {
+              const payload = JSON.stringify({
+                body: signedBody,
+                commit_id: commitSha,
+                path: file,
+                line: parseInt(line, 10),
+                side: "RIGHT",
+              });
+              try {
+                const cliPath = resolveCliPath("gh") || "gh";
+                const ghBin = cliPath.includes(" ") ? `"${cliPath}"` : cliPath;
+                execSync(
+                  `${ghBin} api repos/{owner}/{repo}/pulls/${id}/reviews --method POST --input -`,
+                  { cwd, input: payload, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }
+                ).trim();
+                cliResult = { ok: true, provider, inline: true, file, line };
+              } catch {
+                const result = runCli(`gh pr comment ${id} --body-file "${tmpFile}"`, cwd);
+                const commentUrl = result.match(/(https:\/\/[^\s]+)/)?.[1] || null;
+                cliResult = { ok: true, provider, comment_url: commentUrl, inline: false, message: "Inline comment failed; posted as general comment" };
+              }
             }
-
-            // Build payload — JSON.stringify handles escaping, no manual escaping needed
-            const payload = JSON.stringify({
+          } else {
+            const result = runCli(`gh pr comment ${id} --body-file "${tmpFile}"`, cwd);
+            const commentUrl = result.match(/(https:\/\/[^\s]+)/)?.[1] || null;
+            cliResult = { ok: true, provider, comment_url: commentUrl };
+          }
+        } else {
+          // GitLab (glab) — use execFileSync to pass body as arg without shell escaping
+          const glabPath = resolveCliPath("glab") || "glab";
+          const args = ["mr", "note", "create", String(id), "-m", signedBody];
+          if (!file) { args.push("--resolvable=false"); }
+          if (file && line) {
+            const discussionsPayload = JSON.stringify({
               body: signedBody,
-              commit_id: commitSha,
-              path: file,
-              line: parseInt(line, 10),
-              side: "RIGHT",
+              position: { position_type: "text", new_path: file, new_line: parseInt(line, 10) },
             });
-
             try {
-              // Pass payload as stdin to gh api --input -
-              const cliPath = resolveCliPath("gh") || "gh";
-              const ghBin = cliPath.includes(" ") ? `"${cliPath}"` : cliPath;
-              const result = execSync(
-                `${ghBin} api repos/{owner}/{repo}/pulls/${id}/reviews --method POST --input -`,
-                { cwd, input: payload, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }
+              const glabBin = glabPath.includes(" ") ? `"${glabPath}"` : glabPath;
+              execSync(
+                `${glabBin} api projects/:id/merge_requests/${id}/discussions --method POST --input -`,
+                { cwd, input: discussionsPayload, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }
               ).trim();
-              return { ok: true, provider, inline: true, file, line };
+              cliResult = { ok: true, provider, inline: true, file, line };
             } catch {
-              // Fallback: try general comment if inline fails
-              const result = runCli(`gh pr comment ${id} --body-file "${tmpFile}"`, cwd);
-              const commentUrl = result.match(/(https:\/\/[^\s]+)/)?.[1] || null;
-              return { ok: true, provider, comment_url: commentUrl, inline: false, message: "Inline comment failed; posted as general comment" };
+              execFileSync(glabPath, args, { cwd, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+              cliResult = { ok: true, provider, inline: false, message: "Inline comment failed on GitLab; posted as general note" };
             }
-          }
-
-          // Regular comment via temp file
-          const result = runCli(`gh pr comment ${id} --body-file "${tmpFile}"`, cwd);
-          const commentUrl = result.match(/(https:\/\/[^\s]+)/)?.[1] || null;
-          return { ok: true, provider, comment_url: commentUrl };
-        }
-
-        // GitLab (glab) — use execFileSync to pass body as arg without shell escaping
-        const glabPath = resolveCliPath("glab") || "glab";
-        const args = ["mr", "note", "create", String(id), "-m", signedBody];
-        // --resolvable=false conflicts with --file, so only add when no inline target
-        if (!file) { args.push("--resolvable=false"); }
-        if (file && line) {
-          // Inline comments on GitLab require the Discussions API
-          const discussionsPayload = JSON.stringify({
-            body: signedBody,
-            position: {
-              position_type: "text",
-              new_path: file,
-              new_line: parseInt(line, 10),
-            },
-          });
-          try {
-            const glabBin = glabPath.includes(" ") ? `"${glabPath}"` : glabPath;
-            const result = execSync(
-              `${glabBin} api projects/:id/merge_requests/${id}/discussions --method POST --input -`,
-              { cwd, input: discussionsPayload, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }
-            ).trim();
-            return { ok: true, provider, inline: true, file, line };
-          } catch {
-            // Fallback to general note if inline fails
-            const result = execFileSync(glabPath, args, {
-              cwd, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"],
-            }).trim();
-            return { ok: true, provider, inline: false, message: "Inline comment failed on GitLab; posted as general note" };
+          } else {
+            execFileSync(glabPath, args, { cwd, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+            cliResult = { ok: true, provider, message: "Comment posted" };
           }
         }
-        const result = execFileSync(glabPath, args, {
-          cwd, encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"],
-        }).trim();
-        return { ok: true, provider, message: "Comment posted" };
+
+        // Emit notification for CLI-fallback success (OAuth bot paths emit above)
+        if (cliResult?.ok && opts.emitNotification) {
+          const mrUrl = cliResult.provider === "gitlab"
+            ? `https://gitlab.com/${repo}/-/merge_requests/${id}`
+            : `https://github.com/${repo}/pull/${id}`;
+          const bodyLabel = cliResult.inline
+            ? `Comentário inline em ${file}:${line} via CLI`
+            : `Comentário geral via CLI`;
+          opts.emitNotification({ type: "mr_review", title: `Review postado no ${cliResult.provider === "gitlab" ? "MR" : "PR"} !${id}`, body: bodyLabel, level: "success", mr_id: parseInt(id, 10), mr_url: mrUrl, provider: cliResult.provider });
+        }
+        return cliResult;
       } catch (err) {
         return { ok: false, error: err.message };
       } finally {

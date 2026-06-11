@@ -12,6 +12,7 @@ import { registerMiscHandlers } from "./register-misc";
 import { registerMemoryIpc } from "./register-memory";
 import { registerDiscordHandlers } from "./register-discord";
 import { registerOAuthHandlers } from "./register-oauth";
+import { registerNotificationHandlers } from "./register-notifications";
 
 export function registerAllIpcHandlers(ctx: AppContext): void {
   registerAppHandlers(ctx);
@@ -27,4 +28,5 @@ export function registerAllIpcHandlers(ctx: AppContext): void {
   registerMemoryIpc(ctx);
   registerDiscordHandlers(ctx);
   registerOAuthHandlers(ctx);
+  registerNotificationHandlers(ctx);
 }

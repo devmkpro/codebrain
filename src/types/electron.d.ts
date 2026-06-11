@@ -253,6 +253,19 @@ export interface OAuthStatus {
   gitlab: { connected: boolean; account?: string };
 }
 
+export interface StoredNotification {
+  id: string;
+  type: string;
+  title: string;
+  body?: string;
+  level: string;
+  mr_id?: number;
+  mr_url?: string;
+  provider?: string;
+  read: boolean;
+  created_at: number;
+}
+
 export interface CostBudget {
   dailyLimit: number;
   monthlyLimit: number;
@@ -534,6 +547,14 @@ export interface CodebrainApp {
     status: () => Promise<{ ok: boolean; data?: OAuthStatus; error?: string }>;
     connect: (args: { provider: "github" | "gitlab"; clientId?: string; clientSecret?: string }) => Promise<{ ok: boolean; account?: string; userCode?: string; verificationUri?: string; error?: string }>;
     disconnect: (args: { provider: "github" | "gitlab" }) => Promise<{ ok: boolean; error?: string }>;
+  };
+  notifications: {
+    list: (opts?: { limit?: number }) => Promise<{ ok: boolean; notifications?: StoredNotification[]; count?: number; error?: string }>;
+    count: () => Promise<{ ok: boolean; count?: number; error?: string }>;
+    markRead: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
+    markAllRead: () => Promise<{ ok: boolean; error?: string }>;
+    dismiss: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
+    clear: () => Promise<{ ok: boolean; error?: string }>;
   };
   notify: (title: string, body: string) => void;
   log: {

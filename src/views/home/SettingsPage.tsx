@@ -236,6 +236,7 @@ export function SettingsPage() {
   const [githubClientId, setGithubClientId] = useState('');
   const [tutorialOpen, setTutorialOpen] = useState<{ gitlab: boolean; github: boolean }>({ gitlab: false, github: false });
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [mrAutoReview, setMrAutoReview] = useState(false);
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
   // Voice / BrainVoice
@@ -373,6 +374,10 @@ export function SettingsPage() {
     // Load OAuth status
     (window as any).codeBrainApp?.oauth?.status?.()
       .then((r: any) => { if (r?.ok && r.data) setOauthStatus(r.data); })
+      .catch(() => {});
+    // Load auto-review config
+    (window as any).codeBrainApp?.appConfig?.get?.()
+      .then((cfg: any) => { if (cfg?.mr_auto_review) setMrAutoReview(true); })
       .catch(() => {});
   }, []);
 
@@ -1712,6 +1717,28 @@ export function SettingsPage() {
                   </button>
                 )}
               </div>
+            </div>
+
+            <div className="border-t border-white/5 my-4" />
+
+            {/* ── Auto-Review Toggle ─────────────────────────────────────── */}
+            <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5">
+              <div className="space-y-0.5">
+                <p className="text-[11px] font-bold text-slate-300">Review Automático de MRs</p>
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  Quando ativado, o Codebrain revisa automaticamente novos MRs e posta comentários.
+                  Quando desativado, só revisa quando você pedir explicitamente.
+                </p>
+              </div>
+              <Toggle
+                enabled={mrAutoReview}
+                onChange={async (v) => {
+                  setMrAutoReview(v);
+                  try {
+                    await (window as any).codeBrainApp?.appConfig?.set?.({ mr_auto_review: v });
+                  } catch {}
+                }}
+              />
             </div>
 
             {/* Info footer */}
