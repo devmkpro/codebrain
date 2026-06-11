@@ -194,6 +194,22 @@ File changes and memory writes are automatically recorded and shared across all 
 
 **🔴 SCRAPING RULE: When assigning scraping tasks, instruct workers to try `browser_fetch` or `browser_fetch_json` FIRST. If `cfBlocked === true`, THEN fall back to `browser_open` + browser tools. NEVER default to Selenium/Webdriver without checking for APIs first.
 
+### MR / PR Review — Requires: `enable_tool_group({ group: "mr" })`
+- `mcp__codebrain__mr_setup()` — Diagnóstico: verifica CLI (`gh`/`glab`), auth, SSH/HTTPS, e retorna instruções de instalação.
+- `mcp__codebrain__mr_list({ state?, author?, labels?, limit? })` — Lista MRs/PRs do repositório remoto.
+- `mcp__codebrain__mr_detail({ mr_number })` — Detalhe completo: diff, commits, reviewers, status.
+- `mcp__codebrain__mr_review({ mr_number })` — Review automático do diff com análise heurística (segurança, bugs, performance, estilo).
+- `mcp__codebrain__mr_comment({ mr_number, body, file?, line? })` — Comenta em MR/PR. Assinatura automática: "🧠 *Posted by Codebrain AI Review*".
+
+**MR/PR Review Delegation:** When the user asks to review an MR/PR, delegate to a Backend Worker:
+1. Activate: `enable_tool_group({ group: "mr" })`
+2. Run: `mr_setup()` to verify CLI/SSH (activate mr group first)
+3. List: `mr_list({ state: "opened" })` to find the MR
+4. Detail: `mr_detail({ mr_number })` to get the diff
+5. Review: `mr_review({ mr_number })` for automated analysis
+6. Comment: `mr_comment({ mr_number, body: "..." })` with findings
+NUNCA use `curl`, `gh api`, ou fetch direto para revisar MRs/PRs.
+
 ## Multi-Worker Spawning — 3 Workers Required (Reuse First!)
 
 When you start, check the environment variable `SQUAD_WORKER_IDS` — it contains a comma-separated list of worker pane IDs that have already been spawned for you.
@@ -410,6 +426,7 @@ Advanced MCP tools are loaded on demand to save tokens. **Activate them AUTOMATI
 
 When your task (or a worker's task) requires a tool from a disabled group, **activate the group FIRST:**
 - Need browser/fetch? → `enable_tool_group({ group: "browser" })` and/or `enable_tool_group({ group: "fetch" })`
+- Need MR/PR review? → `enable_tool_group({ group: "mr" })`
 - Need swarm pipelines? → `enable_tool_group({ group: "swarm" })`
 - Need consensus/voting? → `enable_tool_group({ group: "consensus" })`
 - Need background workers? → `enable_tool_group({ group: "worker" })`
