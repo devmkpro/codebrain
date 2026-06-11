@@ -83,15 +83,13 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   },
 
   dismiss: (id) => {
-    set(s => {
-      const notif = s.notifications.find(n => n.id === id);
-      return {
-        notifications: s.notifications.filter(n => n.id !== id),
-        unreadCount: notif && !notif.read ? Math.max(0, s.unreadCount - 1) : s.unreadCount,
-      };
-    });
-    // If it has a dbId, also delete from DB
+    // Read notif BEFORE removing from state — get() after set() would miss it
     const notif = get().notifications.find(n => n.id === id);
+    set(s => ({
+      notifications: s.notifications.filter(n => n.id !== id),
+      unreadCount: notif && !notif.read ? Math.max(0, s.unreadCount - 1) : s.unreadCount,
+    }));
+    // If it has a dbId, also delete from DB
     if (notif?.dbId) {
       try { api()?.dismiss?.({ id: notif.dbId }); } catch {}
     }

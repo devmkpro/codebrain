@@ -327,6 +327,7 @@ function createMCPBridge(ptyManager, opts = {}) {
   const fetchHandlers = createFetchHandlers(opts);
   const mrHandlers = createMRHandlers({
     getOAuthToken: opts.getOAuthToken,
+    getBotToken: opts.getBotToken,
     emitNotification: opts.emitNotification,
   });
 
@@ -334,6 +335,22 @@ function createMCPBridge(ptyManager, opts = {}) {
   workerManager.opts.mrHandlers = mrHandlers;
   workerManager.opts.configStore = opts.configStore;
   workerManager.opts.emitNotification = opts.emitNotification;
+
+  // Listen for manual review trigger from IPC → run mr_poll worker on demand
+  if (opts.hooksManager) {
+    opts.hooksManager.on("mr_review:trigger", (data) => {
+      if (data?.workspace) {
+        // Temporarily set current workspace for the poll
+        const prevWs = opts.getCurrentWorkspacePath?.();
+        if (opts.setCurrentWorkspacePath) opts.setCurrentWorkspacePath(data.workspace);
+        workerManager.triggerWorker("mr_poll");
+        // Restore previous workspace after a tick
+        if (prevWs && opts.setCurrentWorkspacePath) {
+          setTimeout(() => opts.setCurrentWorkspacePath(prevWs), 100);
+        }
+      }
+    });
+  }
 
   // ── Wrap fileWrite: auto-record in shared memory + notify agents ────────
   const originalFileWrite = fileHandlers.fileWrite.bind(fileHandlers);

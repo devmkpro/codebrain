@@ -556,6 +556,12 @@ export interface CodebrainApp {
     dismiss: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
     clear: () => Promise<{ ok: boolean; error?: string }>;
   };
+  mrReview: {
+    status: () => Promise<{ ok: boolean; reviewing?: boolean; activeWorkspaces?: string[]; allowedWorkspaces?: string[]; autoReview?: boolean; error?: string }>;
+    allowed: () => Promise<{ ok: boolean; workspaces?: Array<{ path: string; name: string; allowed: boolean }>; error?: string }>;
+    setAllowed: (args: { workspaces: string[] }) => Promise<{ ok: boolean; error?: string }>;
+    trigger: (args: { workspace: string }) => Promise<{ ok: boolean; message?: string; error?: string }>;
+  };
   notify: (title: string, body: string) => void;
   log: {
     list: (opts?: Record<string, unknown>) => Promise<LogEntry[]>;

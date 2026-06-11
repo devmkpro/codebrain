@@ -356,6 +356,13 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     clear: () => ipcRenderer.invoke("notifications:clear"),
   },
 
+  mrReview: {
+    status: () => ipcRenderer.invoke("mr_review:status"),
+    allowed: () => ipcRenderer.invoke("mr_review:allowed"),
+    setAllowed: (args: { workspaces: string[] }) => ipcRenderer.invoke("mr_review:set-allowed", args),
+    trigger: (args: { workspace: string }) => ipcRenderer.invoke("mr_review:trigger", args),
+  },
+
   notify: (title: string, body: string) => ipcRenderer.send("notify", title, body),
 
   memory: {

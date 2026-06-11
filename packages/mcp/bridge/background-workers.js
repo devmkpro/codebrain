@@ -1074,8 +1074,20 @@ class WorkerManager {
     if (!mrHandlers) return { summary: "no mrHandlers", skipped: true };
     if (!store) return { summary: "no memoryStore", skipped: true };
 
+    // Check allowed workspaces — only review repos the user explicitly permitted
+    const allowedWorkspaces = config?.mr_allowed_workspaces;
+    if (!Array.isArray(allowedWorkspaces) || allowedWorkspaces.length === 0) {
+      return { summary: "no allowed workspaces", skipped: true };
+    }
+
+    // Get all workspaces to check — iterate over allowed list
     const workspacePath = this.opts.getCurrentWorkspacePath?.();
     if (!workspacePath) return { summary: "no workspace", skipped: true };
+
+    // Only proceed if current workspace is in allowed list
+    if (!allowedWorkspaces.includes(workspacePath)) {
+      return { summary: `workspace not allowed: ${workspacePath}`, skipped: true };
+    }
 
     const results = { workspace: workspacePath, total: 0, new: 0, reviewed: 0, skipped: 0, errors: [] };
 
@@ -1195,7 +1207,24 @@ class WorkerManager {
       }
     } catch (err) {
       return { summary: `mr_poll error: ${err.message}`, error: err.message };
+    } finally {
+      // Clear reviewing state (for IPC trigger UI indicator)
+      if (typeof this.opts.clearReviewingState === "function") {
+        this.opts.clearReviewingState();
+      }
     }
+  }
+
+  /**
+   * Run a worker on demand (outside its normal interval).
+   * Used by IPC trigger handlers (e.g. mr_review:trigger).
+   */
+  triggerWorker(name) {
+    const worker = this.workers.get(name);
+    if (!worker) return { ok: false, error: `worker ${name} not found` };
+    if (worker.running) return { ok: false, error: `worker ${name} already running` };
+    this._runWorker(name);
+    return { ok: true };
   }
 
   close() {

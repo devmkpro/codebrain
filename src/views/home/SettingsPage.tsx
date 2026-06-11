@@ -6,7 +6,7 @@ import {
   RotateCcw, Download, Trash2, RefreshCw, Shield,
   Type, Monitor, Plus, X, Variable, Gamepad2, Bell,
   Mic, Cloud, Cpu, Link, Copy, Check, ExternalLink,
-  Globe, Lock,
+  Globe, Lock, GitPullRequest, FolderGit2,
 } from 'lucide-react';
 import {
   useTerminalSettings,
@@ -18,6 +18,7 @@ import {
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
 import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
+import { useMrReviewStore } from '../../stores/mr-review-store';
 
 type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'advanced';
 
@@ -234,9 +235,14 @@ export function SettingsPage() {
   const [gitlabClientId, setGitlabClientId] = useState('');
   const [gitlabClientSecret, setGitlabClientSecret] = useState('');
   const [githubClientId, setGithubClientId] = useState('');
+  const [gitlabBotToken, setGitlabBotToken] = useState('');
+  const [githubBotToken, setGithubBotToken] = useState('');
+  const [botTokenSaving, setBotTokenSaving] = useState<string | null>(null); // 'gitlab' | 'github' | null
+  const [botTokenSaved, setBotTokenSaved] = useState<string | null>(null);    // 'gitlab' | 'github' | null
   const [tutorialOpen, setTutorialOpen] = useState<{ gitlab: boolean; github: boolean }>({ gitlab: false, github: false });
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [mrAutoReview, setMrAutoReview] = useState(false);
+  const { detectedWorkspaces, loading: mrLoading, fetchAllowed, toggleWorkspace, allowedWorkspaces } = useMrReviewStore();
   const [skillBusy,   setSkillBusy]   = useState(false);
   const [cliBusy,     setCliBusy]     = useState(false);
   // Voice / BrainVoice
@@ -377,8 +383,14 @@ export function SettingsPage() {
       .catch(() => {});
     // Load auto-review config
     (window as any).codeBrainApp?.appConfig?.get?.()
-      .then((cfg: any) => { if (cfg?.mr_auto_review) setMrAutoReview(true); })
+      .then((cfg: any) => {
+        if (cfg?.mr_auto_review) setMrAutoReview(true);
+        if (cfg?.gitlab_bot_token) setGitlabBotToken(cfg.gitlab_bot_token);
+        if (cfg?.github_bot_token) setGithubBotToken(cfg.github_bot_token);
+      })
       .catch(() => {});
+    // Load detected repos for permission toggles
+    fetchAllowed();
   }, []);
 
   const toggleSection = (s: Section) => setOpen(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
@@ -1449,9 +1461,9 @@ export function SettingsPage() {
                         <div className="flex items-start gap-2">
                           <span className="text-[9px] font-mono text-orange-400 w-24 shrink-0 pt-0.5">Redirect URI</span>
                           <div className="flex items-center gap-1.5">
-                            <code className="text-[10px] text-orange-300 bg-orange-500/10 px-1.5 py-0.5 rounded font-mono">http://localhost:19876/callback</code>
+                            <code className="text-[10px] text-orange-300 bg-orange-500/10 px-1.5 py-0.5 rounded font-mono">http://127.0.0.1:19876/callback</code>
                             <button
-                              onClick={() => copyToClipboard('http://localhost:19876/callback', 'gitlab-redirect')}
+                              onClick={() => copyToClipboard('http://127.0.0.1:19876/callback', 'gitlab-redirect')}
                               className="p-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
                               title="Copiar Redirect URI"
                             >
@@ -1632,9 +1644,9 @@ export function SettingsPage() {
                         <div className="flex items-start gap-2">
                           <span className="text-[9px] font-mono text-slate-400 w-32 shrink-0 pt-0.5">Authorization callback URL</span>
                           <div className="flex items-center gap-1.5">
-                            <code className="text-[10px] text-slate-300 bg-slate-500/10 px-1.5 py-0.5 rounded font-mono">http://localhost:19876/callback</code>
+                            <code className="text-[10px] text-slate-300 bg-slate-500/10 px-1.5 py-0.5 rounded font-mono">http://127.0.0.1:19876/callback</code>
                             <button
-                              onClick={() => copyToClipboard('http://localhost:19876/callback', 'github-callback')}
+                              onClick={() => copyToClipboard('http://127.0.0.1:19876/callback', 'github-callback')}
                               className="p-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
                               title="Copiar Redirect URI"
                             >
@@ -1657,12 +1669,8 @@ export function SettingsPage() {
                       <p className="text-[10px] font-bold text-slate-300">Clique em <span className="text-slate-200">"Register application"</span></p>
                       <p className="text-[10px] text-slate-500">
                         Na próxima página, copie o <strong className="text-slate-300">Client ID</strong>.
-                        Clique em <strong className="text-slate-300">"Generate a new client secret"</strong> e copie o secret.
+                        O GitHub usa <strong className="text-slate-300">Device Flow</strong>, então não é necessário gerar um Client Secret.
                       </p>
-                      <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
-                        <AlertTriangle size={10} className="text-amber-400 shrink-0 mt-0.5" />
-                        <p className="text-[10px] text-amber-400">O <strong>Client Secret</strong> só aparece uma vez! Salve-o agora.</p>
-                      </div>
                     </div>
                   </div>
 
@@ -1721,6 +1729,83 @@ export function SettingsPage() {
 
             <div className="border-t border-white/5 my-4" />
 
+            {/* ── Bot Token (PAT) for Review Comments ─────────────────────── */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Lock size={12} className="text-amber-400" />
+                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Token do Bot (para comentários)</span>
+              </div>
+              <p className="text-[10px] text-slate-500 leading-relaxed">
+                Para que os comentários de review apareçam como <strong className="text-slate-300">@codebrain-bot</strong> em vez do seu nome,
+                cole um <strong className="text-slate-300">Project Access Token</strong> com role <strong className="text-slate-300">Owner</strong> ou <strong className="text-slate-300">Maintainer</strong> abaixo.
+              </p>
+              <p className="text-[10px] text-slate-600">
+                GitLab: Project → Settings → Access Tokens → Role: <strong className="text-slate-400">Owner</strong> → Scopes: <strong className="text-slate-400">api</strong>
+              </p>
+
+              {/* GitLab Bot Token */}
+              <div>
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">GitLab Bot Token</label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="password"
+                    value={gitlabBotToken}
+                    onChange={e => setGitlabBotToken(e.target.value)}
+                    placeholder="glpat-xxxxxxxxxxxxxxxxxxxx (Project Access Token)"
+                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500/30"
+                  />
+                  <button
+                    onClick={async () => {
+                      setBotTokenSaving('gitlab');
+                      setBotTokenSaved(null);
+                      try {
+                        await (window as any).codeBrainApp?.appConfig?.set?.({ gitlab_bot_token: gitlabBotToken.trim() });
+                        setBotTokenSaved('gitlab');
+                        setTimeout(() => setBotTokenSaved(null), 2000);
+                      } catch {}
+                      setBotTokenSaving(null);
+                    }}
+                    disabled={botTokenSaving === 'gitlab'}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
+                      botTokenSaved === 'gitlab'
+                        ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
+                        : botTokenSaving === 'gitlab'
+                        ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400 animate-pulse'
+                        : 'bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20'
+                    }`}
+                  >
+                    {botTokenSaved === 'gitlab' ? '✓ Salvo' : botTokenSaving === 'gitlab' ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
+              </div>
+
+              {/* GitHub Bot Token */}
+              <div>
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">GitHub Bot Token</label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="password"
+                    value={githubBotToken}
+                    onChange={e => setGithubBotToken(e.target.value)}
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500/30"
+                  />
+                  <button
+                    onClick={async () => {
+                      try {
+                        await (window as any).codeBrainApp?.appConfig?.set?.({ github_bot_token: githubBotToken.trim() });
+                      } catch {}
+                    }}
+                    className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-bold uppercase tracking-widest hover:bg-amber-500/20 transition-all"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-white/5 my-4" />
+
             {/* ── Auto-Review Toggle ─────────────────────────────────────── */}
             <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5">
               <div className="space-y-0.5">
@@ -1739,6 +1824,74 @@ export function SettingsPage() {
                   } catch {}
                 }}
               />
+            </div>
+
+            {/* ── Per-Workspace Repo Permissions ─────────────────────────── */}
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                  <FolderGit2 size={12} className="text-emerald-400" />
+                  Repositórios Permitidos
+                </p>
+                <button
+                  onClick={() => fetchAllowed()}
+                  disabled={mrLoading}
+                  className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1"
+                >
+                  <RefreshCw size={10} className={mrLoading ? 'animate-spin' : ''} />
+                  Detectar
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500 leading-relaxed">
+                Por padrão, nenhum repositório é permitido. Ative apenas os que deseja que o Codebrain revise automaticamente.
+              </p>
+
+              {mrLoading && detectedWorkspaces.length === 0 ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-white/[0.02] border border-white/5">
+                  <RefreshCw size={12} className="text-slate-500 animate-spin" />
+                  <span className="text-[10px] text-slate-500">Detectando repositórios git...</span>
+                </div>
+              ) : detectedWorkspaces.length === 0 ? (
+                <div className="p-3 rounded-lg bg-white/[0.02] border border-white/5 text-center">
+                  <FolderGit2 size={16} className="text-slate-600 mx-auto mb-1" />
+                  <p className="text-[10px] text-slate-500">Nenhum repositório git detectado.</p>
+                  <p className="text-[10px] text-slate-600">Abra um workspace com repositório git e clique em Detectar.</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {detectedWorkspaces.map((ws) => {
+                    const isAllowed = allowedWorkspaces.includes(ws.path);
+                    return (
+                      <div
+                        key={ws.path}
+                        className={`flex items-center justify-between gap-3 p-2.5 rounded-lg border transition-all ${
+                          isAllowed
+                            ? 'bg-emerald-500/5 border-emerald-500/20'
+                            : 'bg-white/[0.02] border-white/5 hover:border-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                            isAllowed ? 'bg-emerald-500/15' : 'bg-slate-600/20'
+                          }`}>
+                            <GitPullRequest size={13} className={isAllowed ? 'text-emerald-400' : 'text-slate-500'} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className={`text-[11px] font-semibold truncate ${isAllowed ? 'text-emerald-300' : 'text-slate-400'}`}>
+                              {ws.name}
+                            </p>
+                            <p className="text-[9px] text-slate-600 truncate">{ws.path}</p>
+                          </div>
+                        </div>
+                        <Toggle
+                          enabled={isAllowed}
+                          onChange={() => toggleWorkspace(ws.path)}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Info footer */}

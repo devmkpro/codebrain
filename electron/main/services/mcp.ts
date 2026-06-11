@@ -54,6 +54,11 @@ function buildMcpBridge(ctx: AppContext) {
       });
     },
     getCurrentWorkspacePath: () => ctx.currentWorkspacePath,
+    setCurrentWorkspacePath: (ws: string) => { ctx.currentWorkspacePath = ws; },
+    clearReviewingState: () => {
+      (ctx as any)._mrReviewActive = false;
+      (ctx as any)._mrReviewActiveWorkspaces = new Set();
+    },
     memoryStore: ctx.memoryStore,
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
@@ -61,11 +66,23 @@ function buildMcpBridge(ctx: AppContext) {
     configStore: ctx.configStore, // For notification settings
     workspaceConfigStore: ctx.workspaceConfigStore, // For workspace access mode sandbox
     updateContextFiles: (wsPath: string) => writeContextFiles(ctx, wsPath),
-    getOAuthToken: (provider: "github" | "gitlab") => {
+    getOAuthToken: async (provider: "github" | "gitlab") => {
       try {
         const { getOAuthToken } = require("./oauth");
-        return getOAuthToken(ctx, provider);
-      } catch { return null; }
+        return await getOAuthToken(ctx, provider);
+      } catch (err) {
+        console.error("[OAuth] getOAuthToken failed:", err);
+        return null;
+      }
+    },
+    getBotToken: (provider: "github" | "gitlab") => {
+      try {
+        const config = ctx.configStore?.get?.() || {};
+        const key = provider === "gitlab" ? "gitlab_bot_token" : "github_bot_token";
+        return config[key] || null;
+      } catch {
+        return null;
+      }
     },
     emitNotification: (data: { type: string; title: string; body?: string; level?: string; mr_id?: number; mr_url?: string; provider?: string }) => {
       try {

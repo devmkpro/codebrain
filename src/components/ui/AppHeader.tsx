@@ -6,6 +6,7 @@ import {
   ChevronRight, ChevronDown, Home, Mic, MicOff, Volume2,
   Shield, Lock, Unlock, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, History,
   Bell, Search, Download, FileJson, UserCircle2,
+  GitPullRequest,
 } from 'lucide-react';
 import { Logo } from '../auth/Logo';
 import { Link, useRouter } from '../../lib/router';
@@ -30,6 +31,7 @@ import { DiagnosticsModal } from '../diagnostics/DiagnosticsModal';
 import { MissionsMenu } from './MissionsMenu';
 import { NotificationsBell } from './NotificationsPanel';
 import { useNotificationsStore } from '../../stores/notifications-store';
+import { useMrReviewStore } from '../../stores/mr-review-store';
 import { notify } from '../../lib/notify';
 import { PerfHUD } from './PerfHUD';
 import { LibreWizard } from '../squads/LibreWizard';
@@ -834,6 +836,112 @@ function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
   );
 }
 
+// ─── MR Review Indicator ────────────────────────────────────────────────────
+function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
+  const { reviewing, activeWorkspaces, allowedWorkspaces, triggerReview, fetchStatus } = useMrReviewStore();
+  const [showMenu, setShowMenu] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  // Poll status every 10s
+  React.useEffect(() => {
+    fetchStatus();
+    const id = setInterval(fetchStatus, 10000);
+    return () => clearInterval(id);
+  }, [fetchStatus]);
+
+  // Close on outside click
+  React.useEffect(() => {
+    if (!showMenu) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setShowMenu(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [showMenu]);
+
+  const isAllowed = activeWorkspace ? allowedWorkspaces.includes(activeWorkspace) : false;
+  const isReviewing = reviewing && (activeWorkspace ? activeWorkspaces.includes(activeWorkspace) : activeWorkspaces.length > 0);
+
+  // Icon color logic
+  const iconClass = isReviewing
+    ? 'text-amber-400 animate-pulse'
+    : reviewing
+      ? 'text-amber-400/60'
+      : isAllowed
+        ? 'text-emerald-400/60'
+        : 'text-slate-600';
+
+  const bgClass = isReviewing
+    ? 'bg-amber-500/10'
+    : 'hover:bg-white/[0.04]';
+
+  const handleTrigger = async () => {
+    if (!activeWorkspace || !isAllowed) return;
+    setShowMenu(false);
+    await triggerReview(activeWorkspace);
+  };
+
+  return (
+    <div ref={ref} className="relative h-full">
+      <button
+        onClick={() => setShowMenu(v => !v)}
+        className={`flex items-center gap-1.5 px-2 h-full text-[11px] transition-all focus:outline-none cursor-pointer ${iconClass} ${bgClass}`}
+        title={isReviewing ? 'Revisando MRs...' : isAllowed ? 'MR Review — clique para opções' : 'MR Review — não permitido neste workspace'}
+      >
+        <GitPullRequest size={15} strokeWidth={1.5} />
+        {isReviewing && (
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+        )}
+      </button>
+      {showMenu && (
+        <div className="absolute right-0 top-full mt-1 z-[9999] bg-[#0c0c14]/95 border border-white/10 rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden backdrop-blur-md w-56">
+          <div className="px-3 py-2.5 border-b border-white/5">
+            <p className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">MR Review</p>
+            <p className="font-mono text-[11px] text-slate-300">
+              {isReviewing ? 'Revisando MRs...' : reviewing ? 'Review ativo em outro workspace' : 'Ocioso'}
+            </p>
+          </div>
+          {activeWorkspace && (
+            <div className="px-3 py-2 border-b border-white/5">
+              <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Workspace</p>
+              <p className="font-mono text-[10px] text-slate-400 truncate">{activeWorkspace.split(/[/\\]/).pop()}</p>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${isAllowed ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                <span className={`font-mono text-[9px] ${isAllowed ? 'text-emerald-400' : 'text-slate-600'}`}>
+                  {isAllowed ? 'Permitido' : 'Não permitido'}
+                </span>
+              </div>
+            </div>
+          )}
+          {isAllowed && activeWorkspace && (
+            <button
+              onClick={handleTrigger}
+              disabled={isReviewing}
+              className="w-full text-left px-3 py-2.5 font-mono text-[11px] text-slate-400 hover:text-amber-300 hover:bg-amber-500/5 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <GitPullRequest size={11} className="text-amber-400/60" />
+              {isReviewing ? 'Revisando agora...' : 'Revisar agora'}
+            </button>
+          )}
+          {!isAllowed && activeWorkspace && (
+            <div className="px-3 py-2.5">
+              <p className="font-mono text-[10px] text-slate-600">
+                Ative a permissão em Settings &gt; OAuth para este repositório.
+              </p>
+            </div>
+          )}
+          {reviewing && activeWorkspaces.length > 0 && (
+            <div className="px-3 py-2 border-t border-white/5">
+              <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Ativos</p>
+              {activeWorkspaces.map(ws => (
+                <p key={ws} className="font-mono text-[10px] text-amber-400/80 truncate">{ws.split(/[/\\]/).pop()}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Workspace Access Mode Selector ──────────────────────────────────────────
 const ACCESS_OPTIONS = [
   { id: "write_external", label: "R/W Externo", desc: "Ler e editar dentro e fora do workspace", Icon: Unlock },
@@ -1244,6 +1352,9 @@ function WorkspaceHeader() {
 
           {/* MCP Port Indicator */}
           <McpPortIndicator />
+
+          {/* MR Review Indicator */}
+          <MrReviewIndicator activeWorkspace={activeWorkspace} />
 
           {/* Audio / Voice mode indicator */}
           {activeWorkspace && audioConfig && (

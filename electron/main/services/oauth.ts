@@ -58,20 +58,27 @@ function ensureOAuthTable(memoryStore: any): void {
         created_at    INTEGER DEFAULT (unixepoch())
       )
     `);
+    // Migrate: add client credentials columns if missing (needed for token refresh)
+    try {
+      memoryStore.db.exec(`ALTER TABLE oauth_tokens ADD COLUMN client_id TEXT`);
+    } catch { /* column already exists */ }
+    try {
+      memoryStore.db.exec(`ALTER TABLE oauth_tokens ADD COLUMN client_secret TEXT`);
+    } catch { /* column already exists */ }
   } catch {
     // Table may already exist
   }
 }
 
-function saveToken(memoryStore: any, provider: string, accessToken: string, refreshToken: string | null, account: string | null, expiresAt: number | null): void {
+function saveToken(memoryStore: any, provider: string, accessToken: string, refreshToken: string | null, account: string | null, expiresAt: number | null, clientId?: string | null, clientSecret?: string | null): void {
   ensureOAuthTable(memoryStore);
   memoryStore.db.prepare(`
-    INSERT OR REPLACE INTO oauth_tokens (provider, access_token, refresh_token, account, expires_at, created_at)
-    VALUES (?, ?, ?, ?, ?, unixepoch())
-  `).run(provider, encrypt(accessToken), refreshToken ? encrypt(refreshToken) : null, account, expiresAt);
+    INSERT OR REPLACE INTO oauth_tokens (provider, access_token, refresh_token, account, expires_at, created_at, client_id, client_secret)
+    VALUES (?, ?, ?, ?, ?, unixepoch(), ?, ?)
+  `).run(provider, encrypt(accessToken), refreshToken ? encrypt(refreshToken) : null, account, expiresAt, clientId || null, clientSecret ? encrypt(clientSecret) : null);
 }
 
-function getToken(memoryStore: any, provider: string): { access_token: string; refresh_token: string | null; account: string | null; expires_at: number | null } | null {
+function getToken(memoryStore: any, provider: string): { access_token: string; refresh_token: string | null; account: string | null; expires_at: number | null; client_id: string | null; client_secret: string | null } | null {
   ensureOAuthTable(memoryStore);
   const row = memoryStore.db.prepare("SELECT * FROM oauth_tokens WHERE provider = ?").get(provider);
   if (!row) return null;
@@ -81,6 +88,8 @@ function getToken(memoryStore: any, provider: string): { access_token: string; r
       refresh_token: row.refresh_token ? decrypt(row.refresh_token) : null,
       account: row.account,
       expires_at: row.expires_at,
+      client_id: row.client_id || null,
+      client_secret: row.client_secret ? decrypt(row.client_secret) : null,
     };
   } catch {
     return null;
@@ -111,15 +120,18 @@ export function getOAuthStatus(ctx: AppContext): OAuthStatus {
 
 // ── Get OAuth token for use in MR handlers ──────────────────────────────────
 
-export function getOAuthToken(ctx: AppContext, provider: "github" | "gitlab"): string | null {
+export async function getOAuthToken(ctx: AppContext, provider: "github" | "gitlab"): Promise<string | null> {
   const tokenData = getToken(ctx.memoryStore, provider);
   if (!tokenData) return null;
   // Check expiry
   if (tokenData.expires_at && tokenData.expires_at < Date.now() / 1000) {
     // Token expired — try refresh for GitLab
-    if (provider === "gitlab" && tokenData.refresh_token) {
-      // Refresh happens async; return null for now
-      return null;
+    if (provider === "gitlab" && tokenData.refresh_token && tokenData.client_id && tokenData.client_secret) {
+      const refreshed = await refreshGitLabTokenDirect(ctx.memoryStore, tokenData);
+      if (refreshed) {
+        const fresh = getToken(ctx.memoryStore, provider);
+        return fresh?.access_token || null;
+      }
     }
     deleteToken(ctx.memoryStore, provider);
     return null;
@@ -136,7 +148,8 @@ export async function connectGitLab(ctx: AppContext, config: { clientId: string;
   }
 
   const port = 19876; // Fixed port for OAuth callback
-  const redirectUri = `http://localhost:${port}/callback`;
+  const redirectUri = `http://127.0.0.1:${port}/callback`;
+  const state = crypto.randomBytes(16).toString("hex");
 
   return new Promise((resolve) => {
     let server: http.Server | null = null;
@@ -156,6 +169,16 @@ export async function connectGitLab(ctx: AppContext, config: { clientId: string;
       if (url.pathname === "/callback") {
         const code = url.searchParams.get("code");
         const error = url.searchParams.get("error");
+        const returnedState = url.searchParams.get("state");
+
+        // CSRF protection: validate state parameter
+        if (returnedState !== state) {
+          res.writeHead(403, { "Content-Type": "text/html" });
+          res.end("<h2>Invalid state</h2><p>Possible CSRF attack. Please try again.</p>");
+          cleanup();
+          if (!resolved) { resolved = true; resolve({ ok: false, error: "OAuth state mismatch — possible CSRF attack" }); }
+          return;
+        }
 
         if (error) {
           res.writeHead(400, { "Content-Type": "text/html" });
@@ -209,7 +232,7 @@ export async function connectGitLab(ctx: AppContext, config: { clientId: string;
           const expiresAt = tokenData.created_at && tokenData.expires_in
             ? tokenData.created_at + tokenData.expires_in
             : null;
-          saveToken(ctx.memoryStore, "gitlab", tokenData.access_token, tokenData.refresh_token || null, account, expiresAt);
+          saveToken(ctx.memoryStore, "gitlab", tokenData.access_token, tokenData.refresh_token || null, account, expiresAt, clientId, clientSecret);
 
           res.writeHead(200, { "Content-Type": "text/html" });
           res.end(`
@@ -251,6 +274,7 @@ export async function connectGitLab(ctx: AppContext, config: { clientId: string;
       authUrl.searchParams.set("redirect_uri", redirectUri);
       authUrl.searchParams.set("response_type", "code");
       authUrl.searchParams.set("scope", "api");
+      authUrl.searchParams.set("state", state);
       shell.openExternal(authUrl.toString());
     });
 
@@ -367,20 +391,16 @@ export function disconnectOAuth(ctx: AppContext, provider: "github" | "gitlab"):
   deleteToken(ctx.memoryStore, provider);
 }
 
-// ── Refresh GitLab token ────────────────────────────────────────────────────
+// ── Refresh GitLab token (internal helper using stored credentials) ─────────
 
-export async function refreshGitLabToken(ctx: AppContext, config: { clientId: string; clientSecret: string }): Promise<boolean> {
-  const ms = ctx.memoryStore;
-  const tokenData = getToken(ms, "gitlab");
-  if (!tokenData?.refresh_token) return false;
-
+async function refreshGitLabTokenDirect(memoryStore: any, tokenData: { refresh_token: string; client_id: string; client_secret: string; account: string | null }): Promise<boolean> {
   try {
     const res = await fetch("https://gitlab.com/oauth/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
+        client_id: tokenData.client_id,
+        client_secret: tokenData.client_secret,
         refresh_token: tokenData.refresh_token,
         grant_type: "refresh_token",
       }),
@@ -392,9 +412,24 @@ export async function refreshGitLabToken(ctx: AppContext, config: { clientId: st
     const expiresAt = data.created_at && data.expires_in
       ? data.created_at + data.expires_in
       : null;
-    saveToken(ms, "gitlab", data.access_token, data.refresh_token || null, tokenData.account, expiresAt);
+    saveToken(memoryStore, "gitlab", data.access_token, data.refresh_token || null, tokenData.account, expiresAt, tokenData.client_id, tokenData.client_secret);
     return true;
   } catch {
     return false;
   }
+}
+
+// ── Refresh GitLab token (public API — used by callers with config) ─────────
+
+export async function refreshGitLabToken(ctx: AppContext, config: { clientId: string; clientSecret: string }): Promise<boolean> {
+  const ms = ctx.memoryStore;
+  const tokenData = getToken(ms, "gitlab");
+  if (!tokenData?.refresh_token) return false;
+
+  return refreshGitLabTokenDirect(ms, {
+    refresh_token: tokenData.refresh_token,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    account: tokenData.account,
+  });
 }
