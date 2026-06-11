@@ -19,6 +19,10 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "feat",
+        "text": "enhance MCP server readiness handling and improve port retry logic"
+      },
+      {
+        "kind": "feat",
         "text": "enhance MCP server readiness handling and update release highlights"
       },
       {

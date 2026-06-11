@@ -333,10 +333,11 @@ function createMCPBridge(ptyManager, opts = {}) {
     emitNotification: opts.emitNotification,
   });
 
-  // Wire mrHandlers + configStore into WorkerManager for mr_poll worker
+  // Wire mrHandlers + configStore + paneHandlers into WorkerManager for mr_poll worker
   workerManager.opts.mrHandlers = mrHandlers;
   workerManager.opts.configStore = opts.configStore;
   workerManager.opts.emitNotification = opts.emitNotification;
+  workerManager.opts.paneHandlers = paneHandlers;
 
   // Expose direct trigger function for IPC handler (bypasses HooksManager event bus)
   if (opts.setMrPollTrigger) {

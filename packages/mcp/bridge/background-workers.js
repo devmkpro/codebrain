@@ -1193,12 +1193,22 @@ class WorkerManager {
       // Fallback to 8s timeout if no output detected (some CLIs are silent on startup).
       await this._waitForCliReady(reviewPaneId, 8000);
 
-      // 3. Write the review prompt silently (no echo in terminal), then submit with \r.
-      // writeSilent avoids the prompt appearing in the UI terminal.
-      // Split into two writes: prompt text first, then submit character after 500ms gap.
-      ptyManager.writeSilent(reviewPaneId, prompt);
-      await new Promise(r => setTimeout(r, 500));
-      ptyManager.writeSilent(reviewPaneId, "\r");
+      // 3. Write the review prompt using paneHandlers.writePane (sanitizes newlines,
+      // delays Enter based on text length). Direct writeSilent breaks because \n in
+      // the diff is interpreted as Enter by readline, fragmenting the prompt.
+      const paneHandlers = this.opts.paneHandlers;
+      if (paneHandlers?.writePane) {
+        console.log(`[mr_poll] Writing prompt via paneHandlers.writePane (${prompt.length} chars)`);
+        await paneHandlers.writePane(reviewPaneId, prompt, true);
+      } else {
+        // Fallback: sanitize manually + writeSilent
+        console.log(`[mr_poll] Writing prompt via writeSilent fallback (${prompt.length} chars)`);
+        const sanitized = prompt.replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/\r/g, "");
+        ptyManager.writeSilent(reviewPaneId, sanitized);
+        const delay = Math.min(3000, Math.max(100, 100 + sanitized.length * 0.5));
+        await new Promise(r => setTimeout(r, delay));
+        ptyManager.write(reviewPaneId, "\r");
+      }
 
       // 4. Wait for idle (agent finishes analyzing + posting)
       await this._waitForPaneIdle(reviewPaneId, 180000); // 3 min timeout
