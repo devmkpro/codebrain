@@ -1,6 +1,6 @@
-/**
+﻿/**
  * MissionsMenu — dropdown de missões no menu superior do Codebrain.
- * Baseado fielmente no WorkspaceTabs do Overclock (menu Missions).
+ * Baseado fielmente no WorkspaceTabs do (menu Missions).
  */
 import React from 'react';
 import { FolderTree, Plus, X, ChevronDown } from 'lucide-react';

@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+﻿import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import log from "electron-log/main.js";
@@ -330,7 +330,7 @@ export async function spawnPaneInternal(
           // override to avoid format mismatch. Users should use OpenAI-format models.
         }
       } else if (isAnthropicCompat) {
-        // ── Overclock pattern (2026-06-04) ───────────────────────────────────
+        // ── spawn pattern (2026-06-04) ───────────────────────────────────
         // Claude CLI reads ANTHROPIC_AUTH_TOKEN as bearer token, ANTHROPIC_BASE_URL
         // to route to non-Anthropic providers (MIMO, DeepSeek, Fireworks, etc).
         // The user stores the key as ANTHROPIC_AUTH_TOKEN in provider env.
@@ -523,7 +523,7 @@ export async function spawnPaneInternal(
         env["OPENAI_API_KEY"] = cursorKey;
       }
 
-      // Sandbox disabled for bypassPermissions (Overclock pattern)
+      // Sandbox disabled for bypassPermissions
       if (!args.includes("--sandbox")) {
         args.push("--sandbox", "disabled");
       }
@@ -632,11 +632,11 @@ export async function spawnPaneInternal(
     // ── Codex CLI branch (NOT Claude-compatible) ───────────────────────────────
     // All config via CLI -c flags (short values) + model_instructions_file (path).
     // NO CODEX_HOME override — uses real ~/.codex/ with user's auth tokens.
-    // Pattern reverse-engineered from Overclock app (2026-05-30).
+    // Pattern reverse-engineered from the app (2026-05-30).
     if (isCodex) {
       const tomlStr = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
-      // Sandbox + approval (Overclock bypassPermissions pattern)
+      // Sandbox + approval
       if (!args.includes("--sandbox") && !args.includes("--ask-for-approval")) {
         args.push("--sandbox", "danger-full-access", "--ask-for-approval", "never");
       }
@@ -686,8 +686,8 @@ export async function spawnPaneInternal(
     }
 
     // ── Gemini CLI branch (native gemini binary, NOT OpenClaude) ──────────────
-    // Pattern reverse-engineered from Overclock (2026-05-30).
-    // Key differences from Overclock:
+    // Pattern for Gemini CLI spawn.
+    // Key implementation notes:
     //   1. GEMINI_CLI_NO_RELAUNCH=true prevents CLI from restarting on settings.json change
     //   2. GEMINI_CLI_TRUST_WORKSPACE=true auto-trusts workspace for MCP
     //   3. Atomic write (tmp + rename) for settings.json
@@ -703,14 +703,14 @@ export async function spawnPaneInternal(
         args.push("-m", model);
       }
 
-      // ── CRITICAL env vars (Overclock pattern) ───────────────────────────────
+      // ── CRITICAL env vars ───────────────────────────────
       // Without GEMINI_CLI_NO_RELAUNCH, Gemini CLI restarts when it detects
       // settings.json change (our MCP write), losing the config.
       // Without GEMINI_CLI_TRUST_WORKSPACE, CLI blocks on trust prompt.
       env["GEMINI_CLI_NO_RELAUNCH"] = "true";
       env["GEMINI_CLI_TRUST_WORKSPACE"] = "true";
 
-      // MCP config → .gemini/settings.json (Overclock pattern with atomic write)
+      // MCP config → .gemini/settings.json (spawn pattern with atomic write)
       // Wait for MCP server if not yet ready (race condition: Gemini spawned before MCP boots)
       if (!ctx.mcpServerInfo && ctx.mcpServerReady) {
         try { await ctx.mcpServerReady; } catch {}
@@ -733,7 +733,7 @@ export async function spawnPaneInternal(
               trust: true,
             },
           };
-          // Atomic write: write to tmp file, then rename (Overclock pattern)
+          // Atomic write: write to tmp file, then rename
           fs.mkdirSync(geminiDir, { recursive: true });
           const tmpPath = `${settingsPath}.${process.pid}.${Date.now()}.tmp`;
           fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");

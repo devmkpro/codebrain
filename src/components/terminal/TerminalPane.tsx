@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { X$1 } from "../../stores/providers-store";
 import { usePushToTalk, spawnedPaneIds, openWebLink } from "../../stores/voice-store";
 import { xtermExports, addonFitExports, L } from "../../lib/xterm-exports";
@@ -578,7 +578,7 @@ export function TerminalPane({
       )}
     </AnimatePresence>
 
-      {/* ── Pane Header (Overclock-style) ─────────────────────────────────── */}
+      {/* ── Pane Header ─────────────────────────────────── */}
       <div className="relative flex min-h-7 items-center overflow-hidden bg-black/50 border-b border-white/5 py-1.5 pl-3 pr-16 select-none shrink-0 cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("application/x-codebrain-pane", pane.id);

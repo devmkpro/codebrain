@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+﻿import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import type { AppContext, McpServerInfo } from "../context";
@@ -295,7 +295,7 @@ Query the MCP server at ${httpUrl} using Streamable HTTP transport.
  * Remove any leftover codebrain MCP entry from ~/.codex/config.toml.
  * Called on startup to clean up stale entries from previous sessions
  * (e.g. if the app crashed without running before-quit cleanup).
- * The MCP is injected via -c flag at spawn time instead (Overclock pattern).
+ * The MCP is injected via -c flag at spawn time instead.
  */
 export function clearCodexGlobalConfig(): void {
   try {

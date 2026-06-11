@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,7 +67,7 @@ export function PaneTokenBadge({ paneId, isRunning }: PaneTokenBadgeProps) {
       }
     }
 
-    // Poll every 1200ms (matching Overclock's cadence)
+    // Poll every 1200ms (matching cadence)
     poll();
     intervalRef.current = setInterval(poll, 1200);
 

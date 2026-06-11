@@ -1,4 +1,4 @@
-import { EventEmitter } from "node:events";
+﻿import { EventEmitter } from "node:events";
 import { execSync } from "node:child_process";
 import * as nodefs from "node:fs";
 import * as nodeos from "node:os";
@@ -244,7 +244,7 @@ function which(binary: string): string | null {
   return null;
 }
 
-// ── Windows helpers (ported from Overclock pattern) ───────────────────────────
+// ── Windows helpers (ported from spawn pattern) ───────────────────────────
 
 /**
  * Quote a single argument for use inside a cmd.exe double-quoted string.

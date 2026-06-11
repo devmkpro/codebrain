@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Electron Main Process — Entry Point
  *
  * Bootstrap only: creates window, registers IPC handlers, wires up PTY events,
@@ -95,7 +95,7 @@ app.whenReady().then(async () => {
   autoInstallBundledSkills();
 
   // Clean up any stale codebrain MCP entry in ~/.codex/config.toml from a previous
-  // crashed session. MCP is injected via -c flag at spawn time (Overclock pattern),
+  // crashed session. MCP is injected via -c flag at spawn time,
   // never via config.toml — so any leftover entry there causes Codex to error on startup.
   clearCodexGlobalConfig();
 

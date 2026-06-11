@@ -1,7 +1,7 @@
-/**
+﻿/**
  * Discord Rich Presence integration.
  * Shows "Codebrain" in the user's Discord profile whenever the app is open.
- * Pattern reverse-engineered from Overclock (2026-05-30).
+ * Pattern implemented 2026-05-30.
  *
  * Uses @xhayper/discord-rpc (not the deprecated discord-rpc).
  * Errors are handled silently — Discord may not be running.

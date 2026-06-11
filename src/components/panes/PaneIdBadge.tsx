@@ -1,7 +1,7 @@
-import React from "react";
+﻿import React from "react";
 import { Copy, Check } from "lucide-react";
 
-// PaneIdBadge — shows truncated pane ID, copies to clipboard on click (Overclock-style)
+// PaneIdBadge — shows truncated pane ID, copies to clipboard on click
 export function PaneIdBadge({ paneId }: { paneId: string }) {
   const [copied, setCopied] = React.useState(false);
 

@@ -1,4 +1,4 @@
-import type { AppContext } from "../context";
+﻿import type { AppContext } from "../context";
 import { PROVIDER_REGISTRY } from "./constants";
 
 export function getEnhancedProviders(ctx: AppContext) {
@@ -153,7 +153,7 @@ export function getEnhancedProviders(ctx: AppContext) {
   return [...claudeOAuthProvider, ...codexOAuthProvider, ...geminiCliProvider, ...kimiProvider, ...cursorProvider, ...copilotProvider, ...mimoClaudeProvider, ...filtered];
 }
 
-// ─── Dynamic model discovery (Overclock-style) ──────────────────────────────
+// ─── Dynamic model discovery ──────────────────────────────
 
 const NON_CHAT_KEYWORDS = ['embed', 'embedding', 'tts', 'whisper', 'speech', 'rerank', 'audio', 'moderation', 'transcri'];
 

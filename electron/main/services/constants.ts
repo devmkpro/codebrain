@@ -1,4 +1,4 @@
-import * as path from "node:path";
+﻿import * as path from "node:path";
 import * as os from "node:os";
 
 export const GLOBAL_DIR = path.join(os.homedir(), ".codebrain");
@@ -43,7 +43,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     type: "anthropic-compat",
     host: "claude",
     baseUrl: "https://token-plan-ams.xiaomimimo.com/anthropic",
-    tokenEnvVar: "ANTHROPIC_AUTH_TOKEN", // Overclock pattern: Claude CLI reads ANTHROPIC_AUTH_TOKEN directly
+    tokenEnvVar: "ANTHROPIC_AUTH_TOKEN", // spawn pattern: Claude CLI reads ANTHROPIC_AUTH_TOKEN directly
     models: ["mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2-flash"],
     labelIncludes: ["mimo"],
     idIncludes: ["mimo-claude"],
@@ -208,7 +208,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     tokenEnvVar: "OPENAI_API_KEY",
     models: [],
   },
-  // ── New CLI agents (Overclock parity) ────────────────────────────────
+  // ── New CLI agents (feature parity) ────────────────────────────────
   {
     id: "kimi",
     label: "Kimi",

@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { useProvidersStore } from "../../stores/providers-store";
 
 // Shorten model name: "claude-sonnet-4-6" → "sonnet-4-6", "anthropic/claude-3.5-sonnet" → "claude-3.5-sonnet"
@@ -8,7 +8,7 @@ function modelShortName(model: string): string {
   return parts.length > 1 ? parts[parts.length - 1] : normalized;
 }
 
-// ProviderBadge — shows short model name in a bordered pill (Overclock-style)
+// ProviderBadge — shows short model name in a bordered pill
 export function ProviderBadge({ providerId, model, agent }: { providerId?: string; model?: string; agent?: string }) {
   const providers = useProvidersStore(s => s.providers);
   const provider = providerId ? providers.find(p => p.id === providerId) : agent ? providers.find(p => p.host === agent) : null;
