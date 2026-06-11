@@ -173,6 +173,7 @@ export const useMrReviewStore = create<MrReviewState>((set, get) => ({
         workspace: pendingFindings.workspace,
         mrId: pendingFindings.mrId,
         findings: pendingFindings.findings.join("\n"),
+        sourceBranch: pendingFindings.sourceBranch,
       });
       if (res?.ok) {
         set({ showFixModal: false, pendingFindings: null, fixing: false });

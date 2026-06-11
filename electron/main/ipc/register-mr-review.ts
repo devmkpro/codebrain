@@ -257,9 +257,9 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
   /**
    * mr_review:apply-fixes — spawn an agent to auto-fix review findings
    */
-  ipcMain.handle("mr_review:apply-fixes", async (_event, args: { workspace: string; mrId: number; findings: string }) => {
+  ipcMain.handle("mr_review:apply-fixes", async (_event, args: { workspace: string; mrId: number; findings: string; sourceBranch?: string }) => {
     try {
-      const { workspace, mrId, findings } = args;
+      const { workspace, mrId, findings, sourceBranch } = args;
       if (!workspace || !findings) {
         return { ok: false, error: "workspace and findings are required" };
       }
@@ -290,22 +290,33 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
       // Wait for CLI readiness
       await new Promise(r => setTimeout(r, 5000));
 
+      // Build branch safety instructions
+      const branchGuard = sourceBranch
+        ? `BEFORE doing anything, run: git checkout ${sourceBranch} — You MUST be on this branch. If checkout fails, STOP and report the error. NEVER push to any branch other than "${sourceBranch}".`
+        : `BEFORE doing anything, run: git branch --show-current — Confirm you are on the MR source branch. NEVER push to master/main.`;
+
       // Write the fix prompt
       const fixPrompt = [
         `You are a code fixer. Apply the following review findings to the codebase.`,
         ``,
         `MR !${mrId} — Workspace: ${workspace}`,
+        sourceBranch ? `Source branch: ${sourceBranch}` : ``,
+        ``,
+        `CRITICAL BRANCH SAFETY:`,
+        branchGuard,
         ``,
         `FINDINGS TO FIX:`,
         findings,
         ``,
         `INSTRUCTIONS:`,
-        `1. Read each finding carefully`,
-        `2. Locate the relevant files in the codebase`,
-        `3. Apply minimal, targeted fixes for each finding`,
-        `4. Do NOT change anything unrelated to the findings`,
-        `5. After applying all fixes, summarize what you changed`,
-        `6. Do NOT commit — just apply the code changes`,
+        `1. First, verify you are on the correct branch (see CRITICAL BRANCH SAFETY above)`,
+        `2. Read each finding carefully`,
+        `3. Locate the relevant files in the codebase`,
+        `4. Apply minimal, targeted fixes for each finding`,
+        `5. Do NOT change anything unrelated to the findings`,
+        `6. After applying all fixes, commit with message "fix: apply MR !${mrId} review findings"`,
+        `7. Do NOT run git push — the user will push when ready`,
+        `8. NEVER checkout, push to, or modify master/main branch`,
       ].join("\n");
 
       const ptyManager = ctx.ptyManager;
