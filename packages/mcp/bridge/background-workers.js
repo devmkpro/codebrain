@@ -171,6 +171,9 @@ class WorkerManager {
     this.triggerHistory = [];
     this.maxTriggerHistory = 200;
 
+    // Per-workspace cooldown for triggerWorker (prevents blocking unrelated repos)
+    this._lastTriggerByWorkspace = new Map();
+
     // Cache heartbeat state
     this._lastCacheHeartbeat = null;
     this._cacheHeartbeatHits = 0;
@@ -1457,12 +1460,16 @@ class WorkerManager {
       console.log(`[triggerWorker] Worker ${name} stuck in running state — force resetting`);
       worker.running = false;
     }
-    // Cooldown: prevent rapid re-triggering (min 30s between manual triggers)
+    // Per-workspace cooldown: prevent rapid re-triggering for the SAME workspace
+    // (min 30s between manual triggers per workspace, but different workspaces are independent)
     const now = Date.now();
-    if (worker.lastRun && (now - worker.lastRun) < 30000) {
-      const remaining = Math.ceil((30000 - (now - worker.lastRun)) / 1000);
-      return { ok: false, error: `worker ${name} was triggered ${Math.round((now - worker.lastRun) / 1000)}s ago — wait ${remaining}s` };
+    const workspace = triggerOpts?.workspace || "__global__";
+    const lastTrigger = this._lastTriggerByWorkspace.get(workspace) || 0;
+    if (now - lastTrigger < 30000) {
+      const remaining = Math.ceil((30000 - (now - lastTrigger)) / 1000);
+      return { ok: false, error: `workspace ${workspace} was triggered ${Math.round((now - lastTrigger) / 1000)}s ago — wait ${remaining}s` };
     }
+    this._lastTriggerByWorkspace.set(workspace, now);
     console.log(`[triggerWorker] Triggering ${name} on demand, opts:`, JSON.stringify(triggerOpts));
     this._runWorker(name, { force: true, ...triggerOpts });
     return { ok: true };

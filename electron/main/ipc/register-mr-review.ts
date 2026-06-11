@@ -1,24 +1,30 @@
 import { ipcMain } from "electron";
 import * as fs from "fs";
+import { stat, readFile, existsSync } from "fs";
+import { promisify } from "util";
 import * as path from "path";
 import type { AppContext } from "../context";
+
+const statAsync = promisify(stat);
+const readFileAsync = promisify(readFile);
 
 /**
  * Resolve the .git directory path — handles both regular repos and worktrees.
  * For worktrees, .git is a file containing "gitdir: <path>".
+ * Uses async fs to avoid blocking the Electron main process.
  */
-function resolveGitDir(dir: string): string | null {
+async function resolveGitDir(dir: string): Promise<string | null> {
   try {
     const gitPath = path.join(dir, ".git");
-    if (!fs.existsSync(gitPath)) return null;
-    const stat = fs.statSync(gitPath);
-    if (stat.isDirectory()) return gitPath;
+    if (!existsSync(gitPath)) return null;
+    const st = await statAsync(gitPath);
+    if (st.isDirectory()) return gitPath;
     // Worktree: .git is a file with "gitdir: <absolute-path>"
-    const content = fs.readFileSync(gitPath, "utf-8").trim();
+    const content = (await readFileAsync(gitPath, "utf-8")).trim();
     const match = content.match(/^gitdir:\s*(.+)$/m);
     if (match) {
       const worktreeGitDir = path.resolve(dir, match[1].trim());
-      if (fs.existsSync(worktreeGitDir)) return worktreeGitDir;
+      if (existsSync(worktreeGitDir)) return worktreeGitDir;
     }
     return null;
   } catch {
@@ -29,18 +35,20 @@ function resolveGitDir(dir: string): string | null {
 /**
  * Detect if a directory is a git repo with a remote (eligible for MR review).
  * Handles both regular repos and worktrees.
+ * Uses async fs to avoid blocking the Electron main process.
  */
-function isGitRepoWithRemote(dir: string): boolean {
+async function isGitRepoWithRemote(dir: string): Promise<boolean> {
   try {
-    const gitDir = resolveGitDir(dir);
+    const gitDir = await resolveGitDir(dir);
     if (!gitDir) return false;
     // For worktrees, config lives in the parent repo's common dir
-    const commonDir = fs.existsSync(path.join(gitDir, "commondir"))
-      ? path.join(gitDir, fs.readFileSync(path.join(gitDir, "commondir"), "utf-8").trim())
+    const commonDirPath = path.join(gitDir, "commondir");
+    const commonDir = existsSync(commonDirPath)
+      ? path.join(gitDir, (await readFileAsync(commonDirPath, "utf-8")).trim())
       : gitDir;
     const configPath = path.join(commonDir, "config");
-    if (fs.existsSync(configPath)) {
-      const content = fs.readFileSync(configPath, "utf-8");
+    if (existsSync(configPath)) {
+      const content = await readFileAsync(configPath, "utf-8");
       return /\[remote\s+"origin"\]/.test(content);
     }
     return false;
@@ -52,17 +60,19 @@ function isGitRepoWithRemote(dir: string): boolean {
 /**
  * Get repo name from git remote URL.
  * Handles both regular repos and worktrees.
+ * Uses async fs to avoid blocking the Electron main process.
  */
-function getRepoName(dir: string): string | null {
+async function getRepoName(dir: string): Promise<string | null> {
   try {
-    const gitDir = resolveGitDir(dir);
+    const gitDir = await resolveGitDir(dir);
     if (!gitDir) return path.basename(dir);
-    const commonDir = fs.existsSync(path.join(gitDir, "commondir"))
-      ? path.join(gitDir, fs.readFileSync(path.join(gitDir, "commondir"), "utf-8").trim())
+    const commonDirPath = path.join(gitDir, "commondir");
+    const commonDir = existsSync(commonDirPath)
+      ? path.join(gitDir, (await readFileAsync(commonDirPath, "utf-8")).trim())
       : gitDir;
     const configPath = path.join(commonDir, "config");
-    if (!fs.existsSync(configPath)) return path.basename(dir);
-    const content = fs.readFileSync(configPath, "utf-8");
+    if (!existsSync(configPath)) return path.basename(dir);
+    const content = await readFileAsync(configPath, "utf-8");
     const match = content.match(/url\s*=\s*(?:https?:\/\/[^/]+\/|git@[^:]+:)(.+?)(?:\.git)?$/m);
     return match ? match[1].replace(/\.git$/, "") : path.basename(dir);
   } catch {
@@ -129,15 +139,15 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
         console.warn("[mr_review:allowed] Failed to read recent workspaces file:", err instanceof Error ? err.message : err);
       }
 
-      // Filter to only git repos with remotes
+      // Filter to only git repos with remotes (async to avoid blocking main process)
       const detected: Array<{ path: string; name: string; allowed: boolean }> = [];
       for (const ws of wsSet) {
         if (!ws || !fs.existsSync(ws)) continue;
-        if (!isGitRepoWithRemote(ws)) continue;
+        if (!(await isGitRepoWithRemote(ws))) continue;
         // Deduplicate (normalize paths)
         const normalized = path.resolve(ws);
         if (detected.find(d => path.resolve(d.path) === normalized)) continue;
-        const repoName = getRepoName(ws);
+        const repoName = await getRepoName(ws);
         detected.push({
           path: ws,
           name: repoName || path.basename(ws),
@@ -176,17 +186,25 @@ export function registerMrReviewHandlers(ctx: AppContext): void {
       }
 
       // Validate workspace is a real git repo before proceeding
-      if (!isGitRepoWithRemote(ws)) {
+      if (!(await isGitRepoWithRemote(ws))) {
         return { ok: false, error: "Workspace is not a valid git repository with a remote" };
       }
 
-      // Poll for _triggerMrPoll first, BEFORE setting any state
+      // Wait for MCP server readiness via mcpServerReady promise instead of busy-wait polling.
+      // _triggerMrPoll is set synchronously inside createMCPBridge (before HTTP server starts),
+      // so once mcpServerReady resolves, the trigger is guaranteed to be available.
       let triggerFn: ((opts?: { workspace?: string }) => any) | undefined = (ctx as any)._triggerMrPoll;
       if (typeof triggerFn !== 'function') {
-        for (let i = 0; i < 30; i++) {
-          await new Promise(r => setTimeout(r, 500));
+        if (ctx.mcpServerReady) {
+          try {
+            await Promise.race([
+              ctx.mcpServerReady,
+              new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+            ]);
+          } catch {
+            // Timeout or startup error — fall through to check one more time
+          }
           triggerFn = (ctx as any)._triggerMrPoll;
-          if (typeof triggerFn === 'function') break;
         }
       }
       if (typeof triggerFn !== 'function') {
