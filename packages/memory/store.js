@@ -304,6 +304,23 @@ function createMemoryStore(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);
   `);
 
+  // ── Reviewed MRs Table (auto-review tracking) ──────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reviewed_mrs (
+      id            TEXT PRIMARY KEY,
+      workspace     TEXT NOT NULL,
+      mr_id         INTEGER NOT NULL,
+      mr_url        TEXT,
+      provider      TEXT,
+      mr_title      TEXT,
+      mr_updated_at TEXT,
+      reviewed_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(workspace, mr_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_reviewed_mrs_workspace ON reviewed_mrs(workspace);
+    CREATE INDEX IF NOT EXISTS idx_reviewed_mrs_reviewed ON reviewed_mrs(reviewed_at DESC);
+  `);
+
   // Migration: ensure agents.pane_id has UNIQUE constraint (table may pre-exist without it)
   try {
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_pane_unique ON agents(pane_id)`);
@@ -484,6 +501,13 @@ function createMemoryStore(dbPath) {
     markAllNotificationsRead: db.prepare(`UPDATE notifications SET read = 1 WHERE read = 0`),
     deleteNotification: db.prepare(`DELETE FROM notifications WHERE id = ?`),
     clearNotifications: db.prepare(`DELETE FROM notifications`),
+    // Reviewed MRs
+    insertReviewedMr: db.prepare(`
+      INSERT OR IGNORE INTO reviewed_mrs (id, workspace, mr_id, mr_url, provider, mr_title, mr_updated_at)
+      VALUES (@id, @workspace, @mr_id, @mr_url, @provider, @mr_title, @mr_updated_at)
+    `),
+    isMrReviewed: db.prepare(`SELECT 1 FROM reviewed_mrs WHERE workspace = ? AND mr_id = ?`),
+    listReviewedMrs: db.prepare(`SELECT * FROM reviewed_mrs WHERE workspace = ? ORDER BY reviewed_at DESC LIMIT ?`),
   };
 
   // ── ID Generator ──────────────────────────────────────────────────────────
@@ -1507,6 +1531,38 @@ function createMemoryStore(dbPath) {
     clearNotifications() {
       stmts.clearNotifications.run();
       return { ok: true };
+    },
+
+    // ── Reviewed MRs (auto-review tracking) ──────────────────────────────
+
+    /**
+     * Record that an MR was reviewed.
+     */
+    recordReviewedMr({ workspace, mr_id, mr_url, provider, mr_title, mr_updated_at }) {
+      if (!workspace || !mr_id) return { ok: false, error: "workspace and mr_id are required" };
+      const id = genId();
+      stmts.insertReviewedMr.run({
+        id, workspace, mr_id, mr_url: mr_url || null,
+        provider: provider || null, mr_title: mr_title || null,
+        mr_updated_at: mr_updated_at || null,
+      });
+      return { ok: true, id };
+    },
+
+    /**
+     * Check if an MR has already been reviewed in a workspace.
+     */
+    isMrReviewed({ workspace, mr_id }) {
+      const row = stmts.isMrReviewed.get(workspace, mr_id);
+      return { ok: true, reviewed: !!row };
+    },
+
+    /**
+     * List reviewed MRs for a workspace.
+     */
+    listReviewedMrs({ workspace, limit = 50 } = {}) {
+      const rows = stmts.listReviewedMrs.all(workspace, limit);
+      return { ok: true, mrs: rows };
     },
 
     /**

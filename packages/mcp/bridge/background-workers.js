@@ -31,6 +31,7 @@ const WORKER_DEFINITIONS = [
   { name: "cache",     intervalMs: 60 * 60 * 1000,   description: "Clean expired messages and stale cache entries", priority: "background" },
   { name: "swarm",     intervalMs: 1 * 60 * 1000,    description: "Monitor swarm health and detect stalled workers", priority: "high" },
   { name: "heartbeat", intervalMs: CACHE_HEARTBEAT_INTERVAL, description: "Cache-aware heartbeat for prompt cache optimization (270s)", priority: "background" },
+  { name: "mr_poll",   intervalMs: 5 * 60 * 1000,    description: "Auto-review new MRs when mr_auto_review is enabled", priority: "normal" },
 ];
 
 // ─── On-Demand Trigger Definitions (12 triggers) ───
@@ -570,6 +571,7 @@ class WorkerManager {
         case "cache": result = this._cleanCache(); break;
         case "swarm": result = this._swarmMonitor(); break;
         case "heartbeat": result = this._cacheHeartbeat(); break;
+        case "mr_poll": result = this._mrPoll(); break;
         default: result = { message: "no implementation" };
       }
 
@@ -1052,6 +1054,148 @@ class WorkerManager {
       }
       fs.writeFileSync(this.statePath, JSON.stringify(data, null, 2), "utf-8");
     } catch (e) { /* */ }
+  }
+
+  /**
+   * MR Auto-Review Poll Worker.
+   * Checks for new/updated MRs and posts automated reviews.
+   */
+  _mrPoll() {
+    const store = this.opts.memoryStore;
+    const mrHandlers = this.opts.mrHandlers;
+    const emitNotification = this.opts.emitNotification;
+    const configStore = this.opts.configStore;
+
+    // Check if auto-review is enabled
+    if (!configStore) return { summary: "no configStore", skipped: true };
+    const config = configStore.get?.();
+    if (!config?.mr_auto_review) return { summary: "auto-review disabled", skipped: true };
+
+    if (!mrHandlers) return { summary: "no mrHandlers", skipped: true };
+    if (!store) return { summary: "no memoryStore", skipped: true };
+
+    const workspacePath = this.opts.getCurrentWorkspacePath?.();
+    if (!workspacePath) return { summary: "no workspace", skipped: true };
+
+    const results = { workspace: workspacePath, total: 0, new: 0, reviewed: 0, skipped: 0, errors: [] };
+
+    try {
+      // List open MRs for the current workspace
+      const listResult = mrHandlers.mrList({ cwd: workspacePath, state: "open", limit: 20 });
+
+      // mrList may be async (returns Promise) or sync
+      const processList = (listRes) => {
+        if (!listRes?.ok || !listRes.mrs) return { summary: `mrList failed: ${listRes?.error || "unknown"}` };
+
+        results.total = listRes.mrs.length;
+
+        for (const mr of listRes.mrs) {
+          const mrId = mr.id || mr.number || mr.iid;
+          if (!mrId) { results.skipped++; continue; }
+
+          // Check if already reviewed
+          const checked = store.isMrReviewed({ workspace: workspacePath, mr_id: mrId });
+          if (checked?.reviewed) { results.skipped++; continue; }
+
+          // New MR — review it
+          try {
+            const detail = mrHandlers.mrDetail({ cwd: workspacePath, id: String(mrId), include_diff: true });
+            const processDetail = (detailRes) => {
+              if (!detailRes?.ok) {
+                results.errors.push(`MR !${mrId}: detail failed`);
+                return;
+              }
+
+              // mrReview does static analysis of the diff (no LLM needed)
+              let reviewBody = `## Auto-Review by Codebrain\n\n`;
+              reviewBody += `**MR:** !${mrId} — ${mr.title || detailRes.title || "Untitled"}\n`;
+
+              if (detailRes.diff && detailRes.diff.length > 0) {
+                // Simple heuristic analysis on the diff
+                const diffLines = detailRes.diff.split("\n");
+                const added = diffLines.filter(l => l.startsWith("+") && !l.startsWith("+++")).length;
+                const removed = diffLines.filter(l => l.startsWith("-") && !l.startsWith("---")).length;
+                reviewBody += `**Changes:** +${added} / -${removed} lines\n\n`;
+
+                // Check for common issues
+                const issues = [];
+                const fullDiff = detailRes.diff;
+                if (/console\.log\(/i.test(fullDiff)) issues.push("⚠️ `console.log` found in diff");
+                if (/TODO|FIXME|HACK|XXX/i.test(fullDiff)) issues.push("📝 TODO/FIXME comment found");
+                if (/password|secret|api_key|token\s*=/i.test(fullDiff)) issues.push("🔒 Potential secret in code");
+                if (/eval\(|Function\(|child_process/i.test(fullDiff)) issues.push("🚨 Potentially dangerous function call");
+                if (added > 500) issues.push(`📦 Large PR (${added} added lines) — consider breaking it down`);
+
+                if (issues.length > 0) {
+                  reviewBody += "### Findings\n" + issues.join("\n") + "\n";
+                } else {
+                  reviewBody += "✅ No issues found in the diff.\n";
+                }
+              } else {
+                reviewBody += "No diff available for analysis.\n";
+              }
+
+              // Post the review comment
+              const commentResult = mrHandlers.mrComment({
+                cwd: workspacePath,
+                id: String(mrId),
+                body: reviewBody,
+              });
+
+              // Record as reviewed
+              const mrUrl = mr.html_url || mr.web_url || `MR !${mrId}`;
+              store.recordReviewedMr({
+                workspace: workspacePath,
+                mr_id: mrId,
+                mr_url: mrUrl,
+                provider: detailRes.provider || mr.provider || "unknown",
+                mr_title: mr.title || "Untitled",
+                mr_updated_at: mr.updated_at || mr.updatedAt || null,
+              });
+
+              // Emit notification
+              if (emitNotification) {
+                emitNotification({
+                  type: "mr_auto_review",
+                  title: `MR !${mrId} revisado automaticamente`,
+                  body: `Review postado em: ${mr.title || "MR"}`,
+                  level: "success",
+                  mr_id: mrId,
+                  mr_url: mrUrl,
+                  provider: detailRes.provider || mr.provider || "unknown",
+                });
+              }
+
+              // Fire hook
+              if (this.opts.hooksManager) {
+                try { this.opts.hooksManager.fire("task_completed", { type: "mr_auto_review", mrId, workspace: workspacePath }); } catch { /* */ }
+              }
+
+              results.reviewed++;
+            };
+
+            // Handle async detail
+            if (detail && typeof detail.then === "function") {
+              return detail.then(processDetail);
+            } else {
+              processDetail(detail);
+            }
+          } catch (err) {
+            results.errors.push(`MR !${mrId}: ${err.message}`);
+          }
+        }
+        return results;
+      };
+
+      // Handle async list
+      if (listResult && typeof listResult.then === "function") {
+        return listResult.then(processList);
+      } else {
+        return processList(listResult);
+      }
+    } catch (err) {
+      return { summary: `mr_poll error: ${err.message}`, error: err.message };
+    }
   }
 
   close() {

@@ -330,6 +330,11 @@ function createMCPBridge(ptyManager, opts = {}) {
     emitNotification: opts.emitNotification,
   });
 
+  // Wire mrHandlers + configStore into WorkerManager for mr_poll worker
+  workerManager.opts.mrHandlers = mrHandlers;
+  workerManager.opts.configStore = opts.configStore;
+  workerManager.opts.emitNotification = opts.emitNotification;
+
   // ── Wrap fileWrite: auto-record in shared memory + notify agents ────────
   const originalFileWrite = fileHandlers.fileWrite.bind(fileHandlers);
   fileHandlers.fileWrite = async function wrappedFileWrite(args) {
