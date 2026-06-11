@@ -4,37 +4,44 @@ import { Server } from 'http';
 const app = express();
 let server: Server | null = null;
 
+// Middleware
+app.use(express.json());
+
 /**
  * GET /api/health
- * Returns a simple status object to verify the API server is running.
+ * Standard health check endpoint for monitoring the local API server status.
  */
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  });
 });
 
 /**
- * Starts the internal HTTP server for the main process.
- * @param port The port to bind the server to (default 3000).
- * @returns The Server instance.
+ * Starts the local API server
+ * @param port The port to listen on (defaults to 3001)
  */
-export function startApiServer(port: number = 3000): Server {
-  if (server) return server;
+export function startApiServer(port: number = 3001) {
+  if (server) return;
 
   server = app.listen(port, () => {
-    console.log(`[API] Internal health server listening on http://localhost:${port}/api/health`);
+    console.log(`[API] Codebrain server running on http://localhost:${port}`);
   });
 
-  return server;
+  server.on('error', (err) => {
+    console.error('[API] Server error:', err);
+  });
 }
 
 /**
- * Gracefully stops the internal API server.
+ * Stops the local API server
  */
-export function stopApiServer(): void {
+export function stopApiServer() {
   if (server) {
     server.close();
     server = null;
-    console.log('[API] Internal server stopped');
+    console.log('[API] Server stopped');
   }
 }
 
