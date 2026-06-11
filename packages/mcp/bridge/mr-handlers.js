@@ -510,10 +510,10 @@ function createMRHandlers() {
           return { ok: true, provider, count: mrs.length, mrs };
         }
 
-        // GitLab (glab)
-        const glabState = state === "open" ? "opened" : state === "closed" ? "closed" : "all";
+        // GitLab (glab) — no --state flag; uses --closed, --merged, --all
+        const glabStateFlag = state === "open" ? "" : state === "closed" ? "--closed" : "--all";
         const data = runCliJson(
-          `glab mr list --state ${glabState} --per-page ${limit} -F json`,
+          `glab mr list ${glabStateFlag} --per-page ${limit} -F json`.replace(/\s+/g, " ").trim(),
           cwd
         );
         const mrs = (Array.isArray(data) ? data : []).map((mr) => ({
