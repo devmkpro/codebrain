@@ -8,9 +8,97 @@
  */
 
 const { execSync } = require("child_process");
+const path = require("path");
+const fs = require("fs");
 const os = require("os");
 
 const COMMENT_SIGNATURE = "\n\n---\n🧠 *Posted by Codebrain AI Review*";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLI PATH RESOLUTION — find gh/glab even if not in shell PATH
+// ═══════════════════════════════════════════════════════════════════════════
+
+const _cliPathCache = {};
+
+function resolveCliPath(cli) {
+  if (_cliPathCache[cli]) return _cliPathCache[cli];
+
+  const isWin = os.platform() === "win32";
+  const ext = isWin ? ".exe" : "";
+  const bin = cli + ext;
+
+  // 1) Try where/which with FULL system PATH (not just inherited)
+  try {
+    if (isWin) {
+      // Refresh PATH from registry — Electron may have stale PATH
+      const sysPath = execSync(
+        'powershell -NoProfile -Command "[System.Environment]::GetEnvironmentVariable(\'PATH\',\'Machine\')+\';\'+[System.Environment]::GetEnvironmentVariable(\'PATH\',\'User\')"',
+        { encoding: "utf-8", timeout: 8000, stdio: ["pipe", "pipe", "pipe"] }
+      ).trim();
+      const found = execSync(`where ${cli}`, {
+        encoding: "utf-8", timeout: 5000,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, PATH: sysPath },
+      }).trim().split(/\r?\n/)[0];
+      if (found && fs.existsSync(found)) { _cliPathCache[cli] = found; return found; }
+    } else {
+      const found = execSync(`which ${cli}`, { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+      if (found) { _cliPathCache[cli] = found; return found; }
+    }
+  } catch { /* not in PATH */ }
+
+  // 2) Check common install locations per OS
+  const home = os.homedir();
+  const candidates = isWin ? [
+    path.join(home, "AppData", "Local", "Programs", cli, bin),
+    path.join(home, "AppData", "Local", "Programs", cli.toUpperCase(), bin),
+    path.join(home, "AppData", "Local", "Microsoft", "WinGet", "Links", bin),
+    path.join(home, "AppData", "Local", "Microsoft", "WinGet", "Packages", `*${cli}*`, bin),
+    `C:\\Program Files\\${cli}\\bin\\${bin}`,
+    `C:\\Program Files\\${cli}\\${bin}`,
+    `C:\\Program Files (x86)\\${cli}\\${bin}`,
+    path.join(home, "scoop", "shims", bin),
+    path.join(home, "scoop", "apps", cli, "current", bin),
+    `C:\\ProgramData\\chocolatey\\bin\\${bin}`,
+  ] : [
+    `/usr/local/bin/${cli}`,
+    `/usr/bin/${cli}`,
+    `/opt/homebrew/bin/${cli}`,
+    path.join(home, `.local/bin/${cli}`),
+    `/snap/bin/${cli}`,
+    `/home/linuxbrew/.linuxbrew/bin/${cli}`,
+    path.join(home, `.nix-profile/bin/${cli}`),
+  ];
+
+  for (const p of candidates) {
+    // Support glob-like wildcard in WinGet Packages path
+    if (p.includes("*")) {
+      try {
+        const dir = path.dirname(p);
+        const parentDir = path.dirname(dir);
+        if (fs.existsSync(parentDir)) {
+          const matches = fs.readdirSync(parentDir).filter(d => d.toLowerCase().includes(cli.toLowerCase()));
+          for (const m of matches) {
+            const full = path.join(parentDir, m, bin);
+            if (fs.existsSync(full)) { _cliPathCache[cli] = full; return full; }
+            // Check nested dirs
+            try {
+              const sub = fs.readdirSync(path.join(parentDir, m));
+              for (const s of sub) {
+                const nested = path.join(parentDir, m, s, bin);
+                if (fs.existsSync(nested)) { _cliPathCache[cli] = nested; return nested; }
+              }
+            } catch { /* skip */ }
+          }
+        }
+      } catch { /* skip */ }
+      continue;
+    }
+    try { if (fs.existsSync(p)) { _cliPathCache[cli] = p; return p; } } catch { /* skip */ }
+  }
+
+  return null; // not found
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -58,15 +146,18 @@ function detectGitProvider(cwd) {
  * @returns {{ installed: boolean, version: string|null }}
  */
 function checkCliInstalled(cli) {
+  const fullPath = resolveCliPath(cli);
+  if (!fullPath) return { installed: false, version: null, path: null };
   try {
-    const version = execSync(`${cli} --version`, {
+    const quoted = fullPath.includes(" ") ? `"${fullPath}"` : fullPath;
+    const version = execSync(`${quoted} --version`, {
       encoding: "utf-8",
       timeout: 5000,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
-    return { installed: true, version: version.split("\n")[0] };
+    return { installed: true, version: version.split("\n")[0], path: fullPath };
   } catch {
-    return { installed: false, version: null };
+    return { installed: false, version: null, path: fullPath };
   }
 }
 
@@ -76,8 +167,10 @@ function checkCliInstalled(cli) {
  * @returns {{ authenticated: boolean, account: string|null }}
  */
 function checkCliAuth(cli) {
+  const fullPath = resolveCliPath(cli);
+  const cmd = fullPath ? (fullPath.includes(" ") ? `"${fullPath}"` : fullPath) : cli;
   try {
-    const output = execSync(`${cli} auth status`, {
+    const output = execSync(`${cmd} auth status`, {
       encoding: "utf-8",
       timeout: 10000,
       stdio: ["pipe", "pipe", "pipe"],
@@ -292,8 +385,21 @@ function extractRepoSlug(url) {
  * @returns {string}
  */
 function runCli(cmd, cwd) {
+  // Replace bare "gh " or "glab " with resolved full path
+  let resolvedCmd = cmd;
+  for (const cli of ["glab", "gh"]) {
+    if (cmd.startsWith(cli + " ")) {
+      const fullPath = resolveCliPath(cli);
+      if (fullPath) {
+        const quoted = fullPath.includes(" ") ? `"${fullPath}"` : fullPath;
+        resolvedCmd = quoted + cmd.slice(cli.length);
+      }
+      break;
+    }
+  }
+
   try {
-    return execSync(cmd, {
+    return execSync(resolvedCmd, {
       cwd,
       encoding: "utf-8",
       timeout: 30000,
@@ -303,7 +409,7 @@ function runCli(cmd, cwd) {
   } catch (err) {
     const stderr = err.stderr ? err.stderr.toString().trim() : "";
     const stdout = err.stdout ? err.stdout.toString().trim() : "";
-    throw new Error(`CLI error (${cmd}): ${stderr || stdout || err.message}`);
+    throw new Error(`CLI error (${resolvedCmd}): ${stderr || stdout || err.message}`);
   }
 }
 
@@ -609,4 +715,4 @@ function createMRHandlers() {
   };
 }
 
-module.exports = { createMRHandlers, detectGitProvider, extractRepoSlug, runDiagnostics };
+module.exports = { createMRHandlers, detectGitProvider, extractRepoSlug, runDiagnostics, resolveCliPath };
