@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import { exec } from "node:child_process";
 import log from "electron-log/main.js";
 import type { PtyManager } from "../pty-manager";
 import type { AppContext } from "../context";
@@ -230,6 +231,46 @@ export class HooksManager extends EventEmitter {
       byType[e.type] = (byType[e.type] || 0) + 1;
     }
     return { totalHooks: this.hooks.size, totalEvents: this.eventLog.length, byType };
+  }
+
+  /**
+   * Feature 9: Run any registered "pre_spawn" command-hooks before a pane spawns.
+   * Hooks with a `command` field in their description are executed via child_process.exec.
+   * Errors are logged but never thrown — hooks are best-effort.
+   */
+  async runPreSpawnHooks(paneId: string, agent: string, cwd: string): Promise<void> {
+    // Collect all registered hooks whose eventType is "pre_spawn" and have a command
+    const preSpawnHooks = Array.from(this.hooks.values()).filter(
+      (h) => h.eventType === ("pre_spawn" as HookEventType) && typeof h.description === "string" && h.description.startsWith("cmd:")
+    );
+    for (const hook of preSpawnHooks) {
+      const command = hook.description!.slice(4); // strip "cmd:" prefix
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 5500);
+        exec(
+          command,
+          {
+            timeout: 5000,
+            env: {
+              ...process.env,
+              CODEBRAIN_PANE_ID: paneId,
+              CODEBRAIN_AGENT: agent,
+              CODEBRAIN_CWD: cwd,
+            },
+          },
+          (err, stdout, stderr) => {
+            clearTimeout(timer);
+            if (err) {
+              log.warn(`[hooks] pre_spawn hook failed (${command}):`, err.message);
+            } else {
+              if (stdout?.trim()) log.info("[hooks] pre_spawn stdout:", stdout.trim());
+              if (stderr?.trim()) log.warn("[hooks] pre_spawn stderr:", stderr.trim());
+            }
+            resolve();
+          }
+        );
+      });
+    }
   }
 }
 

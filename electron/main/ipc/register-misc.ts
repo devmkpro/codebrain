@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AppContext } from "../context";
 import { getEnhancedProviders } from "../services/providers";
+import { getTokenTracker } from "../services/token-tracker";
 
 /** Read MCP tool names dynamically — single source of truth is packages/mcp/index.js */
 function getMcpToolNames(): string[] {
@@ -30,30 +31,72 @@ export function registerMiscHandlers(ctx: AppContext): void {
     if (Notification.isSupported()) new Notification({ title, body }).show();
   });
 
-  ipcMain.handle("diagnostics:snapshot", () => ({
-    app: {
-      version: require("electron").app.getVersion(),
-      platform: process.platform,
-      arch: process.arch,
-      osRelease: require("os").release(),
-    },
-    workspace: { active: null },
-    providers: getEnhancedProviders(ctx),
-    backendPanes: ctx.ptyManager.list(),
-    panes: ctx.ptyManager.list(),
-    processes: [],
-    clis: ctx.cliDetector.getAll(),
-    memory: process.memoryUsage(),
-    mcp: {
-      active: !!ctx.mcpServerInfo,
-      port: ctx.mcpServerInfo?.port ?? null,
-      sseUrl: ctx.mcpServerInfo?.sseUrl ?? null,
-      streamableHttpUrl: ctx.mcpServerInfo?.streamableHttpUrl ?? null,
-      // Tool list is read dynamically from packages/mcp/index.js — never hardcode here.
-      tools: ctx.mcpServerInfo ? getMcpToolNames() : [],
-      toolCount: ctx.mcpServerInfo ? getMcpToolCount() : 0,
-    },
-  }));
+  ipcMain.handle("diagnostics:snapshot", () => {
+    const mem = process.memoryUsage();
+    const panes = ctx.ptyManager.list();
+    return {
+      app: {
+        version: require("electron").app.getVersion(),
+        platform: process.platform,
+        arch: process.arch,
+        osRelease: require("os").release(),
+      },
+      workspace: { active: null },
+      providers: getEnhancedProviders(ctx),
+      backendPanes: panes,
+      panes,
+      processes: [],
+      clis: ctx.cliDetector.getAll(),
+      memory: mem,
+      mcp: {
+        active: !!ctx.mcpServerInfo,
+        port: ctx.mcpServerInfo?.port ?? null,
+        sseUrl: ctx.mcpServerInfo?.sseUrl ?? null,
+        streamableHttpUrl: ctx.mcpServerInfo?.streamableHttpUrl ?? null,
+        tools: ctx.mcpServerInfo ? getMcpToolNames() : [],
+        toolCount: ctx.mcpServerInfo ? getMcpToolCount() : 0,
+      },
+    };
+  });
+
+  // Performance HUD snapshot — RSS + CPU per pane
+  ipcMain.handle("diagnostics:perfSnap", async () => {
+    const mem = process.memoryUsage();
+    const electronRssMB = Math.round(mem.rss / 1024 / 1024);
+    const panes = ctx.ptyManager.list();
+    // Collect per-pane process info where available
+    const paneSnaps = panes.map((p: any) => {
+      const pid = ctx.ptyManager.getPid?.(p.paneId) ?? null;
+      return {
+        paneId: p.paneId,
+        agent: p.agent ?? "agent",
+        pid,
+        rssMB: 0, // real RSS needs OS-level query per PID; approximate with 0 for now
+        cpu: 0,
+      };
+    });
+    return {
+      totalRssMB: electronRssMB,
+      electronRssMB,
+      panesRssMB: 0,
+      paneCount: panes.length,
+      panes: paneSnaps,
+    };
+  });
+
+  // Feature 8: Token tracking IPC handlers
+  ipcMain.handle("tokens:recordTokens", (_event, args: { paneId: string; input: number; output: number; cacheRead?: number; cacheWrite?: number; costUsd?: number; workspacePath?: string }) => {
+    getTokenTracker().recordTokens(args.paneId, args.input, args.output, args.cacheRead ?? 0, args.cacheWrite ?? 0, args.costUsd ?? 0, args.workspacePath ?? "");
+    return { ok: true };
+  });
+
+  ipcMain.handle("tokens:byPane", (_event, args: { paneId: string }) => {
+    return { ok: true, data: getTokenTracker().aggregateByPane(args.paneId) };
+  });
+
+  ipcMain.handle("tokens:byWorkspace", (_event, args: { workspacePath: string; sinceMs?: number }) => {
+    return { ok: true, data: getTokenTracker().aggregateByWorkspace(args.workspacePath, args.sinceMs ?? 0) };
+  });
 
   // Auth stubs
   ipcMain.handle("auth:status", async () => ({ authenticated: true, email: "" }));

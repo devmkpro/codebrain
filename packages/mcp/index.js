@@ -77,7 +77,7 @@ function createCodebrainMCPServer(bridge) {
     "mcp__codebrain__pane_spawn",
     "Open a NEW VISIBLE terminal pane in the CodeBrain workspace grid. Use this instead of your built-in background agent tool if you want the user to see the progress. Returns the paneId.",
     {
-      cwd:        z.string().optional().describe("Working directory. Defaults to current workspace."),
+      cwd:        z.string().optional().describe("Working directory for the new pane. STRONGLY RECOMMENDED — always pass your workspace path here to ensure the pane opens in the correct project. If omitted, the system guesses from active panes."),
       agent:      z.string().optional().describe("Agent binary: claude, codex, gemini, openclaude, shell. Defaults to claude."),
       providerId: z.string().optional().describe("Provider ID to use for the new pane."),
       model:      z.string().optional().describe("Model to use for the new pane."),

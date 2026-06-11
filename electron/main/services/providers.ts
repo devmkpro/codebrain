@@ -152,3 +152,257 @@ export function getEnhancedProviders(ctx: AppContext) {
 
   return [...claudeOAuthProvider, ...codexOAuthProvider, ...geminiCliProvider, ...kimiProvider, ...cursorProvider, ...copilotProvider, ...mimoClaudeProvider, ...filtered];
 }
+
+// ─── Dynamic model discovery (Overclock-style) ──────────────────────────────
+
+const NON_CHAT_KEYWORDS = ['embed', 'embedding', 'tts', 'whisper', 'speech', 'rerank', 'audio', 'moderation', 'transcri'];
+
+function isNonChatModel(id: string): boolean {
+  const parts = id.toLowerCase().split(/[-_]/);
+  return NON_CHAT_KEYWORDS.some(kw => parts.includes(kw) || id.toLowerCase().includes(kw));
+}
+
+/** Strip non-ASCII / non-printable chars from an API key before using in HTTP headers */
+function sanitizeApiKey(key: string): string {
+  // HTTP headers only allow bytes 0x00-0xFF (Latin-1). Strip anything above 0xFF
+  // and also remove common invisible unicode (zero-width, BOM, etc.)
+  return key
+    .replace(/[Ā-￿]/g, '')  // remove chars outside Latin-1
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // remove control chars except \t \n \r
+    .replace(/[\r\n]/g, '')  // remove newlines
+    .trim();
+}
+
+export async function listModelsFromEndpoint(args: {
+  baseUrl: string;
+  apiKey: string;
+  type: string;
+}): Promise<{ ok: boolean; models?: string[]; error?: string }> {
+  const { baseUrl, type } = args;
+  const apiKey = sanitizeApiKey(args.apiKey);
+  const base = baseUrl.replace(/\/$/, '');
+
+  let url: string;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  // MIMO: base URL may end with /anthropic (e.g. .../anthropic) — strip it to get the root,
+  // then use /v1/models with Bearer auth (OpenAI-compat endpoint confirmed via recon)
+  const isMimo = type === 'mimo-compat' || base.includes('xiaomimimo.com');
+  if (isMimo) {
+    const mimoRoot = base.replace(/\/anthropic$/, '');
+    url = `${mimoRoot}/v1/models`;
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  } else if (type === 'anthropic-compat') {
+    url = `${base}/v1/models`;
+    headers['x-api-key'] = apiKey;
+    headers['anthropic-version'] = '2023-06-01';
+  } else if (type === 'gemini-compat') {
+    url = `${base}/v1beta/models?key=${apiKey}`;
+  } else {
+    // OpenAI-compatible: standard /v1/models endpoint
+    url = `${base}/v1/models`;
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    let response: Response;
+    try {
+      response = await (globalThis as any).fetch(url, { headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!response.ok) return { ok: false, error: `HTTP ${response.status}: ${response.statusText}` };
+
+    const json = await response.json() as any;
+    let rawModels: Array<{ id?: string; name?: string }> = [];
+    if (Array.isArray(json)) rawModels = json;
+    else if (Array.isArray(json.data)) rawModels = json.data;
+    else if (Array.isArray(json.models)) rawModels = json.models;
+
+    const models = rawModels
+      .map((m: any) => {
+        const raw: string = m.id || m.name || '';
+        // Gemini returns "models/gemini-2.5-pro" — strip the prefix
+        return raw.startsWith('models/') ? raw.slice('models/'.length) : raw;
+      })
+      .filter((id: string) => id && !isNonChatModel(id));
+
+    return { ok: true, models };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export interface HealthCheckResult {
+  ok: boolean;
+  status: "healthy" | "degraded" | "down";
+  model?: string;
+  checks: {
+    endpoint: { ok: boolean; latencyMs?: number; httpStatus?: number };
+    models: { ok: boolean; count?: number };
+    generation: { ok: boolean; latencyMs?: number; hint?: string };
+    tools: { ok: boolean; hint?: string };
+  };
+  warnings: string[];
+  error?: string;
+}
+
+export async function healthCheckProvider(args: {
+  baseUrl: string;
+  apiKey: string;
+  type: string;
+  model?: string;
+}): Promise<HealthCheckResult> {
+  const { baseUrl, type } = args;
+  const apiKey = sanitizeApiKey(args.apiKey);
+  const base = baseUrl.replace(/\/$/, "");
+  const warnings: string[] = [];
+
+  const fetchWithTimeout = async (url: string, opts: RequestInit, timeoutMs = 8000) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await (globalThis as any).fetch(url, { ...opts, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const isMimo = type === "mimo-compat" || base.includes("xiaomimimo.com");
+  // MIMO uses OpenAI-compat /v1/* endpoints; the /anthropic suffix is only for message routing
+  const mimoRoot = isMimo ? base.replace(/\/anthropic$/, "") : base;
+  const isAnthropicType = type === "anthropic-compat";
+  const isGemini = type === "gemini-compat";
+
+  // ── Check 1: Endpoint reachability ────────────────────────────────────────
+  const endpointCheck: HealthCheckResult["checks"]["endpoint"] = { ok: false };
+  try {
+    const t0 = Date.now();
+    // MIMO: probe /v1/models (returns 401 without key, which proves it exists)
+    const probeUrl = isMimo ? `${mimoRoot}/v1/models` : base;
+    const resp = await fetchWithTimeout(probeUrl, { method: "GET" }, 5000);
+    endpointCheck.latencyMs = Date.now() - t0;
+    endpointCheck.httpStatus = resp.status;
+    // 401 = auth required but endpoint exists → ok
+    endpointCheck.ok = resp.status < 500;
+  } catch {
+    endpointCheck.ok = false;
+    warnings.push("Endpoint unreachable");
+  }
+
+  // ── Check 2: Model listing ─────────────────────────────────────────────────
+  const modelsCheck: HealthCheckResult["checks"]["models"] = { ok: false };
+  let selectedModel = args.model;
+  try {
+    const result = await listModelsFromEndpoint({ baseUrl, apiKey, type });
+    if (result.ok && result.models && result.models.length > 0) {
+      modelsCheck.ok = true;
+      modelsCheck.count = result.models.length;
+      if (!selectedModel) selectedModel = result.models[0];
+    } else {
+      warnings.push("No models returned from /models endpoint");
+    }
+  } catch {
+    warnings.push("Model listing failed");
+  }
+
+  if (!selectedModel) {
+    // Fallback model names per provider type
+    if (isMimo) {
+      selectedModel = "mimo-v2.5-pro";
+    } else if (isAnthropicType) {
+      selectedModel = "claude-haiku-4-5-20251001";
+    } else if (isGemini) {
+      selectedModel = "gemini-2.0-flash";
+    } else {
+      selectedModel = "gpt-4o-mini";
+    }
+  }
+
+  // ── Check 3: Generation ────────────────────────────────────────────────────
+  const generationCheck: HealthCheckResult["checks"]["generation"] = { ok: false };
+  try {
+    // MIMO: messages go to /anthropic/v1/messages (base already has /anthropic, so just /v1/messages)
+    // Anthropic: /v1/messages, OpenAI: /v1/chat/completions
+    const chatUrl = isMimo
+      ? `${base}/v1/messages`   // base = .../anthropic already
+      : isAnthropicType
+        ? `${base}/v1/messages`
+        : `${base}/v1/chat/completions`;
+    const body = JSON.stringify({ model: selectedModel, max_tokens: 8, messages: [{ role: "user", content: "say ok" }] });
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (isMimo || isAnthropicType) {
+      headers["x-api-key"] = apiKey;
+      headers["anthropic-version"] = "2023-06-01";
+    } else {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+    const t0 = Date.now();
+    const resp = await fetchWithTimeout(chatUrl, { method: "POST", headers, body }, 15000);
+    generationCheck.latencyMs = Date.now() - t0;
+    if (resp.ok) {
+      generationCheck.ok = true;
+    } else {
+      const txt = await resp.text().catch(() => "");
+      generationCheck.hint = `HTTP ${resp.status}: ${txt.slice(0, 120)}`;
+      warnings.push(`Generation HTTP ${resp.status}`);
+    }
+  } catch (err: unknown) {
+    generationCheck.hint = err instanceof Error ? err.message : String(err);
+    warnings.push("Generation request failed");
+  }
+
+  // ── Check 4: Tool calling ─────────────────────────────────────────────────
+  const toolsCheck: HealthCheckResult["checks"]["tools"] = { ok: false };
+  try {
+    const chatUrl = isMimo
+      ? `${base}/v1/messages`
+      : isAnthropicType
+        ? `${base}/v1/messages`
+        : `${base}/v1/chat/completions`;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (isMimo || isAnthropicType) {
+      headers["x-api-key"] = apiKey;
+      headers["anthropic-version"] = "2023-06-01";
+    } else {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+    const dummyTool = (isMimo || isAnthropicType)
+      ? { name: "get_status", description: "Get status", input_schema: { type: "object", properties: {} } }
+      : { type: "function", function: { name: "get_status", description: "Get status", parameters: { type: "object", properties: {} } } };
+    const body = JSON.stringify({ model: selectedModel, max_tokens: 8, messages: [{ role: "user", content: "use the tool" }], tools: [dummyTool] });
+    const resp = await fetchWithTimeout(chatUrl, { method: "POST", headers, body }, 15000);
+    if (resp.ok) {
+      toolsCheck.ok = true;
+    } else {
+      const txt = await resp.text().catch(() => "");
+      toolsCheck.hint = `HTTP ${resp.status}: ${txt.slice(0, 120)}`;
+      if (!txt.toLowerCase().includes("tool")) {
+        warnings.push("Provider may not support tool calling");
+      }
+    }
+  } catch (err: unknown) {
+    toolsCheck.hint = err instanceof Error ? err.message : String(err);
+    warnings.push("Tool calling check failed");
+  }
+
+  // ── Aggregate status ──────────────────────────────────────────────────────
+  const allOk = endpointCheck.ok && modelsCheck.ok && generationCheck.ok && toolsCheck.ok;
+  const coreOk = endpointCheck.ok && modelsCheck.ok;
+  const status: HealthCheckResult["status"] = allOk ? "healthy" : coreOk ? "degraded" : "down";
+
+  return {
+    ok: allOk,
+    status,
+    model: selectedModel,
+    checks: {
+      endpoint: endpointCheck,
+      models: modelsCheck,
+      generation: generationCheck,
+      tools: toolsCheck,
+    },
+    warnings,
+  };
+}

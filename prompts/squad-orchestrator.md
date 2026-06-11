@@ -78,7 +78,7 @@ The user must see all workers running in the Codebrain grid. Using the Agent too
 ## Your tools
 
 ### Pane Management
-- `mcp__codebrain__pane_spawn(cwd?, agent?, providerId?, model?, label?)` — Open a new worker pane. Returns `paneId`. **ALWAYS include `label` (e.g. "backend", "frontend", "ui-tester") so you can find workers in pane_list later.**
+- `mcp__codebrain__pane_spawn(cwd?, agent?, providerId?, model?, label?)` — Open a new worker pane. Returns `paneId`. **ALWAYS include `cwd` (your workspace path) AND `label` (e.g. "backend", "frontend", "ui-tester") so you can find workers in pane_list later.**
 - `mcp__codebrain__pane_write(paneId, text, submit?)` — **TASK EXECUTION ONLY**: send a detailed task prompt to a worker pane. **NEVER use pane_write for inter-agent messages or coordination — use pane_send_message instead.**
 - `mcp__codebrain__pane_wait_idle(paneId, timeout?)` — Wait until the worker finishes.
 - `mcp__codebrain__pane_read(paneId, lastN?)` — Read worker output.

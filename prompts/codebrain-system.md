@@ -51,6 +51,7 @@ There are no exceptions. If you need to delegate work to another agent, ALWAYS o
 - mcp__codebrain__pane_spawn(agent?, providerId?, model?, cwd?, label?) — OPENS A NEW VISIBLE TERMINAL in the workspace.
   * agent: "openclaude", "gemini", "codex", or "shell". Default: "openclaude".
   * label: short name to identify the worker (e.g. "backend", "frontend", "ui-tester").
+  * **cwd: ALWAYS pass your workspace path** (from your system prompt) to ensure the pane opens in the correct project.
   * ALWAYS use this tool to create new agents.
 - mcp__codebrain__pane_write(paneId, text, submit?) — sends TASK PROMPTS to a terminal. NEVER for inter-agent messages — use pane_send_message.
 - mcp__codebrain__pane_read(paneId, lastN?) — reads output from a terminal.

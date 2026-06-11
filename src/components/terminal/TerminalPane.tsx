@@ -71,6 +71,8 @@ import { StatusDot, shortenPath } from "../panes/StatusDot";
 import { PaneTitle } from "../panes/PaneTitle";
 import { ProviderBadge } from "../panes/ProviderBadge";
 import { PaneIdBadge } from "../panes/PaneIdBadge";
+import { PaneTokenBadge } from "../panes/PaneTokenBadge";
+import { MissionBadge } from "../panes/MissionBadge";
 import { SavedContextPanel } from "../panes/SavedContextPanel";
 export function TerminalPane({
   pane,
@@ -466,8 +468,13 @@ export function TerminalPane({
     const term = termRef.current;
     if (!term) return;
     term.options.fontSize = fontSize;
-    fitAddonRef.current?.fit();
-  }, [fontSize]);
+    try { fitAddonRef.current?.fit(); } catch {}
+    // Notify PTY of new dimensions + scroll to bottom
+    if (term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
+      window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => {});
+    }
+    term.scrollToBottom();
+  }, [fontSize, pane.id]);
   React.useEffect(() => {
     const term = termRef.current;
     if (!term) return;
@@ -477,14 +484,22 @@ export function TerminalPane({
     const term = termRef.current;
     if (!term) return;
     term.options.fontFamily = fontStack;
-    fitAddonRef.current?.fit();
-  }, [fontStack]);
+    try { fitAddonRef.current?.fit(); } catch {}
+    if (term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
+      window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => {});
+    }
+    term.scrollToBottom();
+  }, [fontStack, pane.id]);
   React.useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     term.options.lineHeight = Math.max(1, lineHeight);
-    fitAddonRef.current?.fit();
-  }, [lineHeight]);
+    try { fitAddonRef.current?.fit(); } catch {}
+    if (term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
+      window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => {});
+    }
+    term.scrollToBottom();
+  }, [lineHeight, pane.id]);
   const handleDrop = React.useCallback(async e => {
     e.preventDefault();
     setDropHover(false);
@@ -543,6 +558,17 @@ export function TerminalPane({
               <span>Colar</span>
             </button>
             <div className="h-[1px] bg-white/5 my-1" />
+            {pane.status === "hibernated" ? (
+              <button onClick={() => { window.codeBrainApp?.pty?.wake?.(pane.id); closeMenu(); }} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 transition-colors">
+                <span className="text-amber-400">⚡</span>
+                <span>Acordar Pane</span>
+              </button>
+            ) : (
+              <button onClick={() => { window.codeBrainApp?.pty?.hibernate?.(pane.id); closeMenu(); }} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-purple-400 hover:bg-purple-500/10 hover:text-purple-300 transition-colors">
+                <span className="text-purple-400">💤</span>
+                <span>Hibernar Pane</span>
+              </button>
+            )}
             <button onClick={stopTerminal} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors">
               <Square size={10} className="fill-current" />
               <span>Parar Terminal</span>
@@ -562,6 +588,8 @@ export function TerminalPane({
           <PaneTitle pane={pane} />
           <ProviderBadge providerId={pane.providerId} model={pane.model} agent={pane.agent} />
           <PaneIdBadge paneId={pane.id} />
+          <MissionBadge missionId={pane.missionId} workspacePath={pane.workspacePath ?? pane.cwd} />
+          <PaneTokenBadge paneId={pane.id} isRunning={pane.status === "running"} />
         </div>
         {/* Right-side action buttons */}
         <div className="absolute right-1.5 top-1/2 z-20 flex -translate-y-1/2 items-center gap-0.5 rounded bg-black/95 px-1 py-0.5 shadow-[0_0_8px_rgba(0,0,0,0.85)]">

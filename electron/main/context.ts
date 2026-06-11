@@ -97,6 +97,7 @@ export function createAppContext() {
     paneConfigs: new Map<string, PaneConfig>(),
     paneRegistry: new Map<string, PaneRegistryEntry>(),
     detachedPaneIds: new Set<string>(),
+    hibernatedPanes: new Map<string, PaneConfig & { hibernatedAt: number }>(),
 
     // Provider health tracking
     providerHealth: new Map<string, ProviderHealth>(),

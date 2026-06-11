@@ -5,7 +5,7 @@ import {
   ListTodo, Terminal, Globe, Users, Zap, Map, FileText,
   ChevronRight, ChevronDown, Home, Mic, MicOff, Volume2,
   Shield, Lock, Unlock, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, History,
-  Bell, Search, Download, FileJson,
+  Bell, Search, Download, FileJson, UserCircle2,
 } from 'lucide-react';
 import { Logo } from '../auth/Logo';
 import { Link, useRouter } from '../../lib/router';
@@ -25,19 +25,36 @@ import { useVoiceStore } from '../../stores/voice-store';
 import { useBrowserStore } from '../../stores/browser-store';
 import { useTerminalSettings } from '../../stores/terminal-settings-store';
 import { ProvidersModal } from '../providers/ProvidersModal';
-import { SquadModal } from '../squads/SquadModal';
+import { SquadModal, SquadWizard } from '../squads/SquadModal';
 import { DiagnosticsModal } from '../diagnostics/DiagnosticsModal';
 import { MissionsMenu } from './MissionsMenu';
 import { NotificationsBell } from './NotificationsPanel';
 import { useNotificationsStore } from '../../stores/notifications-store';
 import { notify } from '../../lib/notify';
+import { PerfHUD } from './PerfHUD';
+import { LibreWizard } from '../squads/LibreWizard';
 
 // ─── Shared modal-state hook ──────────────────────────────────────────────────
 function useModals() {
   const [showProviders, setShowProviders] = React.useState(false);
   const [providersStep, setProvidersStep] = React.useState('list');
   const [showSquad, setShowSquad] = React.useState(false);
+  const [showSquadWizard, setShowSquadWizard] = React.useState(false);
   const [showDiag, setShowDiag] = React.useState(false);
+  const [showPerfHUD, setShowPerfHUD] = React.useState(false);
+  const [showLibreWizard, setShowLibreWizard] = React.useState(false);
+
+  // Ctrl+Shift+M toggles Performance HUD
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.ctrlKey && e.shiftKey && e.key === 'M') {
+        e.preventDefault();
+        setShowPerfHUD(v => !v);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const openProviders = (step = 'list') => { setProvidersStep(step); setShowProviders(true); };
   const closeProviders = () => { setShowProviders(false); setProvidersStep('list'); };
@@ -45,7 +62,10 @@ function useModals() {
   return {
     showProviders, openProviders, closeProviders, providersStep,
     showSquad, setShowSquad,
+    showSquadWizard, setShowSquadWizard,
     showDiag, setShowDiag,
+    showPerfHUD, setShowPerfHUD,
+    showLibreWizard, setShowLibreWizard,
   };
 }
 
@@ -64,14 +84,14 @@ function IconBtn({
       className={`relative flex items-center gap-1.5 px-2 h-full text-[11px] font-mono font-bold uppercase tracking-widest transition-all focus:outline-none cursor-pointer
         ${disabled ? 'opacity-40 cursor-not-allowed' : ''}
         ${active
-          ? 'text-[#00d9ff] bg-[#00d9ff]/10'
+          ? 'text-violet-400 bg-violet-500/10'
           : danger
             ? 'text-slate-600 hover:text-red-400 hover:bg-red-500/5'
             : 'text-slate-600 hover:text-slate-300 hover:bg-white/[0.04]'}`}
     >
       {icon}
       {badge !== undefined && badge > 0 && (
-        <span className="absolute top-1.5 right-0.5 font-mono text-[9px] font-bold bg-indigo-500 text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
+        <span className="absolute top-1.5 right-0.5 font-mono text-[9px] font-bold bg-violet-500 text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
           {badge > 9 ? '9+' : badge}
         </span>
       )}
@@ -80,7 +100,7 @@ function IconBtn({
 }
 
 // ─── Divider ─────────────────────────────────────────────────────────────────
-const VDiv = () => <div className="w-px h-5 bg-white/[0.06] shrink-0 self-center" />;
+const VDiv = () => <div className="w-px h-5 bg-violet-500/10 shrink-0 self-center" />;
 
 // ─── Home Header ─────────────────────────────────────────────────────────────
 function HomeHeader() {
@@ -109,21 +129,20 @@ function HomeHeader() {
       .catch(() => { });
   }, [showAccount]);
 
-  const NAV: { label: string; href: '/' | '/workspaces' | '/logs' | '/settings' }[] = [
+  const NAV: { label: string; href: '/' | '/workspaces' | '/settings' }[] = [
     { label: 'Dashboard', href: '/' },
     { label: 'Workspaces', href: '/workspaces' },
-    { label: 'Logs', href: '/logs' },
   ];
 
   return (
     <>
 
       <header
-        className="h-14 border-b border-white/[0.04] flex items-center px-6 justify-between shrink-0 z-50 relative cb-header"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        className="h-14 border-b border-white/[0.04] grid items-center px-6 shrink-0 z-50 relative cb-header"
+        style={{ gridTemplateColumns: '1fr auto 1fr', WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         {/* Brand */}
-        <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <div className="flex items-center" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <Link href="/" className="flex items-center gap-2.5 group">
             <Logo size={22} />
             <span className="text-[14px] font-bold tracking-tight text-white">
@@ -132,11 +151,11 @@ function HomeHeader() {
           </Link>
         </div>
 
-        {/* Nav */}
+        {/* Nav — truly centered via grid middle column */}
         <nav className="hidden lg:flex items-center gap-5" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           {NAV.map(item => (
             <Link key={item.href} href={item.href}
-              className={`text-[13px] font-medium transition-colors ${route === item.href ? 'text-[#9d4edd]' : 'text-slate-400 hover:text-white'}`}
+              className={`text-[13px] font-medium transition-colors pb-0.5 border-b-2 ${route === item.href ? 'text-violet-400 border-violet-500 [text-shadow:0_0_12px_rgba(167,139,250,0.45)]' : 'text-slate-400 hover:text-white border-transparent'}`}
             >{item.label}</Link>
           ))}
           <Link href="/settings"
@@ -145,7 +164,7 @@ function HomeHeader() {
         </nav>
 
         {/* Right */}
-        <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <div className="flex items-center gap-2 justify-end" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           {/* Notification bell */}
           <NotificationsBell />
 
@@ -155,9 +174,14 @@ function HomeHeader() {
           ><Zap size={11} /> Providers</button>
 
           {/* Squad */}
-          <button onClick={() => m.setShowSquad(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-indigo-300 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all cursor-pointer"
+          <button onClick={() => m.setShowSquadWizard(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-violet-300 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all cursor-pointer"
           ><Users size={11} /> Squad</button>
+
+          {/* Libre Mode */}
+          <button onClick={() => m.setShowLibreWizard(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-700/30 text-violet-500/70 text-[10px] font-bold uppercase tracking-widest hover:text-violet-300 hover:border-violet-500/50 hover:bg-violet-500/10 transition-all cursor-pointer"
+          ><Zap size={11} /> Libre</button>
 
           {/* Back to workspace */}
           {tabs.length > 0 && (
@@ -172,7 +196,10 @@ function HomeHeader() {
             <button onClick={() => setShowAccount(v => !v)}
               className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/25 flex items-center justify-center hover:from-indigo-500/30 hover:to-violet-500/30 hover:shadow-[0_0_12px_rgba(99,102,241,0.2)] transition-all cursor-pointer"
             >
-              <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail?.slice(0, 1).toUpperCase() ?? '?'}</span>
+              {authEmail
+                ? <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail.slice(0, 1).toUpperCase()}</span>
+                : <UserCircle2 size={16} className="text-indigo-400/80" />
+              }
             </button>
             {showAccount && <AccountDropdown profile={profile} authEmail={authEmail} activeWorkspace={activeWorkspace} modals={m} onClose={() => setShowAccount(false)} />}
           </div>
@@ -233,11 +260,41 @@ function Modals({ modals: m, activeWorkspace }: { modals: ReturnType<typeof useM
     return () => document.removeEventListener('open-providers-modal', handleOpenProviders);
   }, [m]);
 
+  const addPane = usePanesStore(s => s.addPane);
+  const permMode = localStorage.getItem('codebrain.permissionMode') ?? 'bypassPermissions';
+
+  const handleLibreSpawn = React.useCallback(async (slots: any[]) => {
+    const workspace = activeWorkspace;
+    if (!workspace) return;
+    const pty = (window as any).codeBrainApp?.pty;
+    if (!pty) return;
+    const activityId = nanoid(8);
+    for (const slot of slots) {
+      for (let i = 0; i < slot.count; i++) {
+        const r = await pty.spawn({
+          agent: 'openclaude',
+          cwd: workspace,
+          activityId,
+          providerId: slot.providerId,
+          model: slot.model,
+          permissionMode: permMode,
+          role: 'worker',
+        });
+        if (r?.ok && r.paneId) {
+          addPane({ id: r.paneId, agent: 'openclaude', cwd: workspace, workspacePath: workspace, activityId, providerId: slot.providerId, model: slot.model, externallySpawned: true });
+        }
+      }
+    }
+  }, [activeWorkspace, addPane, permMode]);
+
   return (
     <>
       <ProvidersModal open={m.showProviders} initialStep={m.providersStep} onClose={m.closeProviders} />
       <SquadModal open={m.showSquad} onClose={() => m.setShowSquad(false)} onSpawn={handleSpawnSquad} />
+      <SquadWizard open={m.showSquadWizard} onClose={() => m.setShowSquadWizard(false)} onSpawn={handleSpawnSquad} />
       <DiagnosticsModal open={m.showDiag} activeWorkspace={activeWorkspace} onClose={() => m.setShowDiag(false)} />
+      <LibreWizard open={m.showLibreWizard} onClose={() => m.setShowLibreWizard(false)} onSpawn={handleLibreSpawn} activeWorkspace={activeWorkspace} />
+      <PerfHUD visible={m.showPerfHUD} />
     </>
   );
 }
@@ -373,6 +430,7 @@ function PaneMenu({
   savedPanes, snapshotBusy, onSave, onRestore, onRestorePane,
 }: any) {
   const addPane = usePanesStore(s => s.addPane);
+  const removePane = usePanesStore(s => s.removePane);
   const providers = useProvidersStore(s => s.providers) as any[];
   const detectedUrl = useBrowserStore(s => s.detectedUrl);
   const m = useModals();
@@ -629,6 +687,33 @@ function PaneMenu({
             </div>
           </>
         )}
+
+        {/* Cleanup: close stuck/booting panes */}
+        {(() => {
+          const allPanes = usePanesStore.getState().panes as any[];
+          const stuckPanes = allPanes.filter((p: any) =>
+            p.status !== "running" && p.status !== "hibernated" && p.kind !== "browser"
+          );
+          if (stuckPanes.length === 0) return null;
+          return (
+            <>
+              <p className="px-3 pt-2 pb-0.5 font-mono text-[9px] text-slate-600 uppercase tracking-widest">Limpeza</p>
+              <button
+                onClick={() => {
+                  stuckPanes.forEach((p: any) => {
+                    try { (window as any).codeBrainApp?.pty?.kill?.(p.id); } catch {}
+                    removePane(p.id);
+                  });
+                  onClose();
+                }}
+                className="w-full text-left px-3 py-2 font-mono text-[10px] text-rose-400 hover:text-rose-300 hover:bg-rose-500/5 transition-colors flex items-center gap-2"
+              >
+                <span className="text-[9px]">⊗</span>
+                Fechar {stuckPanes.length} pane{stuckPanes.length > 1 ? "s" : ""} travado{stuckPanes.length > 1 ? "s" : ""}
+              </button>
+            </>
+          );
+        })()}
       </div>
     </>
   );
@@ -1165,6 +1250,20 @@ function WorkspaceHeader() {
             <AudioIndicator audioConfig={audioConfig} audioModeBusy={audioModeBusy} onToggleMode={handleToggleAudioMode} />
           )}
 
+          {/* Libre Mode */}
+          {activeWorkspace && (
+            <>
+              <VDiv />
+              <button
+                onClick={() => m.setShowLibreWizard(true)}
+                className="px-3 flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest focus:outline-none transition-all border-l border-white/[0.06] cursor-pointer text-violet-500/60 hover:text-violet-300 hover:bg-violet-500/[0.06]"
+                title="Libre Mode — spawn N panes across providers"
+              >
+                <Zap size={12} strokeWidth={2.5} /> LIBRE
+              </button>
+            </>
+          )}
+
           {/* + PANE */}
           {activeWorkspace && (
             <div ref={paneMenuRef} className="flex items-stretch shrink-0">
@@ -1202,7 +1301,10 @@ function WorkspaceHeader() {
               title="Conta"
             >
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/25 flex items-center justify-center hover:from-indigo-500/30 hover:to-violet-500/30 hover:shadow-[0_0_10px_rgba(99,102,241,0.15)] transition-all">
-                <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail?.slice(0, 1).toUpperCase() ?? '?'}</span>
+                {authEmail
+                ? <span className="font-mono text-[9px] font-bold text-indigo-400">{authEmail.slice(0, 1).toUpperCase()}</span>
+                : <UserCircle2 size={16} className="text-indigo-400/80" />
+              }
               </div>
             </button>
             {showAccount && (

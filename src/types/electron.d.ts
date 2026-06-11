@@ -66,16 +66,6 @@ export interface ProviderTemplateField {
   options?: string[];
 }
 
-export interface TokenPayload {
-  taskId?: string;
-  workspacePath?: string;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens?: number;
-  cacheWriteTokens?: number;
-  totalTokens: number;
-}
-
 export interface SessionHistoryEntry {
   id: string;
   pane_id?: string;
@@ -323,6 +313,8 @@ export interface CodebrainApp {
     readRaw: (paneId: string, lastN?: number) => Promise<Uint8Array>;
     readRawText: (paneId: string) => Promise<string>;
     kill: (paneId: string) => Promise<void>;
+    hibernate: (paneId: string) => Promise<{ ok: boolean; error?: string }>;
+    wake: (paneId: string) => Promise<{ ok: boolean; error?: string }>;
     detach: (paneId: string) => Promise<{ ok: boolean; error?: string }>;
     list: () => Promise<PtyInfo[]>;
     resize: (paneId: string, cols: number, rows: number) => Promise<void>;
@@ -338,11 +330,6 @@ export interface CodebrainApp {
     save: (config: WorkspaceConfig) => Promise<void>;
     scan: (path: string) => Promise<FileEntry[]>;
     detect: (dir?: string) => Promise<{ path: string; autoDetected: boolean; fromRecent?: boolean; fallback?: boolean } | null>;
-  };
-  tokens: {
-    byTask: (taskId: string) => Promise<TokenPayload>;
-    byWorkspace: (sinceMs: number) => Promise<TokenPayload>;
-    onUpdated: (callback: (payload: TokenPayload) => void) => () => void;
   };
   session: {
     load: (workspacePath: string) => Promise<unknown>;
@@ -370,10 +357,19 @@ export interface CodebrainApp {
     save: (provider: Provider) => Promise<{ ok: boolean; error?: string }>;
     delete: (id: string) => Promise<{ ok: boolean; error?: string }>;
     testToken: (args: { providerId: string; token: string }) => Promise<{ ok: boolean; error?: string }>;
+    listModels: (args: { baseUrl: string; apiKey: string; type: string }) => Promise<{ ok: boolean; models?: string[]; error?: string }>;
+    healthCheck: (args: { baseUrl: string; apiKey: string; type: string; model?: string }) => Promise<{ ok: boolean; status: string; checks: Record<string, unknown>; warnings: string[]; error?: string }>;
     onUpdated: (callback: (providers: Provider[]) => void) => () => void;
   };
   diagnostics: {
     snapshot: () => Promise<DiagnosticsSnapshot>;
+    perfSnap: () => Promise<{
+      totalRssMB: number;
+      electronRssMB: number;
+      panesRssMB: number;
+      paneCount: number;
+      panes: Array<{ paneId: string; agent: string; pid: number | null; rssMB: number; cpu: number }>;
+    }>;
   };
   skill: {
     status: () => Promise<{ installed: boolean }>;

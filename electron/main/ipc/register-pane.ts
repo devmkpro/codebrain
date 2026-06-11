@@ -85,4 +85,26 @@ export function registerPaneHandlers(ctx: AppContext): void {
 
     return { ok: true };
   });
+
+  // ── Hibernate pane (kill PTY but keep config for revival) ──────────────────
+  ipcMain.handle("pty:hibernate", async (_event, paneId: string) => {
+    try {
+      const cfg = ctx.paneConfigs.get(paneId);
+      if (!cfg) return { ok: false, error: "pane not found" };
+      ctx.hibernatedPanes.set(paneId, { ...cfg, hibernatedAt: Date.now() });
+      ctx.ptyManager.kill(paneId);
+      return { ok: true };
+    } catch (err) { return { ok: false, error: String(err) }; }
+  });
+
+  // ── Wake hibernated pane (re-spawn with saved config) ──────────────────────
+  ipcMain.handle("pty:wake", async (_event, paneId: string) => {
+    try {
+      const cfg = ctx.hibernatedPanes.get(paneId);
+      if (!cfg) return { ok: false, error: "pane not hibernated" };
+      ctx.hibernatedPanes.delete(paneId);
+      await spawnPaneInternal(ctx, { ...cfg, paneId });
+      return { ok: true };
+    } catch (err) { return { ok: false, error: String(err) }; }
+  });
 }

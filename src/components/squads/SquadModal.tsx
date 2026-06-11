@@ -1,5 +1,6 @@
 ﻿import React from "react";
 import { nanoid } from "nanoid";
+import { Zap } from "lucide-react";
 import { Users, X$1, Trash2, Plus } from "../../stores/providers-store";
 
 // SquadModal
@@ -753,4 +754,188 @@ export function SettingsModal({
         </div>
       </div>
     </div>;
+}
+
+// ─── SquadWizard — 3-step squad creation wizard ──────────────────────────────
+
+const _WIZARD_STEPS = [
+  { id: 1, label: "Basic Info" },
+  { id: 2, label: "Orchestrator" },
+  { id: 3, label: "Workers" },
+];
+
+export function SquadWizard({
+  open,
+  onClose,
+  onSpawn,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSpawn?: (config: any) => void;
+}) {
+  const providers = useProvidersStore((s: any) => s.providers);
+  const [step, setStep] = React.useState(1);
+  const [name, setName] = React.useState("");
+  const [orchestrator, setOrchestrator] = React.useState<any>({});
+  const [workers, setWorkers] = React.useState<any[]>([]);
+  const tabs = useNavStore((s: any) => s.tabs) as any[];
+  const activeTabIndex = useNavStore((s: any) => s.activeTabIndex) as number;
+  const workspace: string | null =
+    tabs?.[activeTabIndex]?.workspacePath ?? tabs?.[0]?.workspacePath ?? null;
+
+  React.useEffect(() => {
+    if (open) { setStep(1); setName(""); setOrchestrator({}); setWorkers([]); }
+  }, [open]);
+
+  if (!open) return null;
+
+  const canNext =
+    step === 1 ? name.trim().length > 0
+    : step === 2 ? !!(orchestrator.providerId && orchestrator.model)
+    : workers.length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="relative w-full max-w-lg bg-[#0c0c14] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
+              <Users size={14} className="text-violet-400" />
+            </div>
+            <span className="text-sm font-semibold text-slate-200">New Squad</span>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <X$1 size={16} />
+          </button>
+        </div>
+
+        {/* Step indicators */}
+        <div className="flex items-center px-5 py-3 gap-1 border-b border-white/[0.04]">
+          {_WIZARD_STEPS.map((ws, i) => (
+            <React.Fragment key={ws.id}>
+              <button
+                onClick={() => ws.id < step ? setStep(ws.id) : undefined}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-bold uppercase tracking-wider transition-all ${
+                  step === ws.id ? "bg-violet-500/20 text-violet-400"
+                  : ws.id < step ? "text-slate-400 hover:text-slate-200 cursor-pointer"
+                  : "text-slate-600 cursor-default"
+                }`}
+              >
+                <span className="w-4 h-4 rounded-full border flex items-center justify-center text-[9px] font-bold border-current">{ws.id}</span>
+                {ws.label}
+              </button>
+              {i < _WIZARD_STEPS.length - 1 && (
+                <div className={`h-px w-5 transition-colors ${ws.id < step ? "bg-violet-500/40" : "bg-white/[0.06]"}`} />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="p-5 min-h-[180px]">
+          {step === 1 && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-mono text-slate-500 uppercase tracking-widest mb-1.5">Squad Name</label>
+                <input
+                  autoFocus
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && canNext && setStep(2)}
+                  placeholder="e.g. Feature Squad, Backend Team..."
+                  className="w-full bg-[#0A0A0B] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+                />
+              </div>
+              {workspace && (
+                <p className="text-[11px] font-mono text-slate-600 flex items-center gap-1.5">
+                  <span className="text-slate-500">📁</span>
+                  {folderLabel(workspace)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">Orchestrator LLM</p>
+              <ProviderModelSelect
+                providers={providers}
+                value={orchestrator}
+                onChange={(v: any) => setOrchestrator(v)}
+                label="Orchestrator"
+              />
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">Workers ({workers.length})</p>
+                <button
+                  onClick={() => setWorkers((w) => [...w, { id: nanoid(6), role: "worker", providerId: orchestrator.providerId, model: orchestrator.model }])}
+                  className="flex items-center gap-1 text-[11px] font-mono text-violet-400 hover:text-violet-300 transition-colors"
+                >
+                  <Plus size={12} /> Add Worker
+                </button>
+              </div>
+              {workers.length === 0 && (
+                <div className="text-center py-8 text-slate-600 text-sm">No workers yet. Add at least one.</div>
+              )}
+              {workers.map((w, i) => (
+                <div key={w.id} className="flex items-center gap-2 bg-[#0A0A0B] rounded-lg p-3 border border-white/[0.06]">
+                  <input
+                    value={w.role}
+                    onChange={(e) => setWorkers((ws) => ws.map((x, j) => j === i ? { ...x, role: e.target.value } : x))}
+                    placeholder="Role"
+                    className="w-20 bg-transparent border-b border-white/10 text-[11px] font-mono text-slate-300 focus:outline-none focus:border-violet-500/50 pb-0.5"
+                  />
+                  <div className="flex-1">
+                    <ProviderModelSelect
+                      providers={providers}
+                      value={{ providerId: w.providerId, model: w.model }}
+                      onChange={(v: any) => setWorkers((ws) => ws.map((x, j) => j === i ? { ...x, ...v } : x))}
+                      label=""
+                    />
+                  </div>
+                  <button onClick={() => setWorkers((ws) => ws.filter((_, j) => j !== i))} className="text-slate-600 hover:text-red-400 transition-colors">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-white/[0.06]">
+          <button
+            onClick={() => step > 1 ? setStep(step - 1) : onClose()}
+            className="text-[11px] font-mono text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-wider"
+          >
+            {step > 1 ? "← Back" : "Cancel"}
+          </button>
+          {step < 3 ? (
+            <button
+              onClick={() => setStep(step + 1)}
+              disabled={!canNext}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-mono font-bold uppercase tracking-wider transition-all"
+            >
+              Next →
+            </button>
+          ) : (
+            <button
+              onClick={() => { onSpawn?.({ name, orchestrator, workers, workspace }); onClose(); }}
+              disabled={!canNext}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-mono font-bold uppercase tracking-wider transition-all"
+            >
+              <Zap size={13} /> Spawn Squad
+            </button>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
 }

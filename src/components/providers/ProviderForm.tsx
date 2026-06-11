@@ -23,12 +23,33 @@ export function ProviderForm({
   };
   const [fetching, setFetching] = React.useState(false);
   const [fetchError, setFetchError] = React.useState(null);
+  const [healthChecking, setHealthChecking] = React.useState(false);
+  const [healthResult, setHealthResult] = React.useState(null);
   const isAnthropicCompat = provider.type === "anthropic-compat";
   const isMimoCompat = provider.type === "mimo-compat";
   const isOpenAICompat = provider.type === "openai-compat";
   const isGeminiCompat = provider.type === "gemini-compat";
   const tokenKey = isAnthropicCompat || isMimoCompat ? "ANTHROPIC_AUTH_TOKEN" : isGeminiCompat ? "GEMINI_API_KEY" : isOpenAICompat ? "OPENAI_API_KEY" : "TOKEN";
   const urlKey = isAnthropicCompat || isMimoCompat ? "ANTHROPIC_BASE_URL" : isGeminiCompat ? "GEMINI_BASE_URL" : isOpenAICompat ? "OPENAI_BASE_URL" : "BASE_URL";
+  const runHealthCheck = async () => {
+    const baseUrl = env[urlKey];
+    const token = env[tokenKey];
+    if (!baseUrl || !token || /^\*+$/.test(token)) return;
+    setHealthChecking(true);
+    setHealthResult(null);
+    try {
+      const result = await (window as any).codeBrainApp?.providers?.healthCheck({
+        baseUrl,
+        apiKey: token,
+        type: provider.type,
+      });
+      setHealthResult(result);
+    } catch (e) {
+      setHealthResult({ ok: false, status: "down", checks: { endpoint: { ok: false }, models: { ok: false }, generation: { ok: false }, tools: { ok: false } }, warnings: [], error: String(e) });
+    } finally {
+      setHealthChecking(false);
+    }
+  };
   const fetchModels = async () => {
     const baseUrl = env[urlKey];
     const token = env[tokenKey];
@@ -38,11 +59,22 @@ export function ProviderForm({
     }
     setFetching(true);
     setFetchError(null);
-    const ids = await fetchModelsFromEndpoint(baseUrl, token, isAnthropicCompat || isMimoCompat ? "anthropic" : isGeminiCompat ? "gemini" : "openai");
-    if (ids.length === 0) setFetchError("endpoint não retornou models");else onChange({
-      ...provider,
-      models: ids
-    });
+    try {
+      // Use IPC via main process to avoid CORS restrictions when calling external APIs
+      const result = await (window as any).codeBrainApp?.providers?.listModels({
+        baseUrl,
+        apiKey: token,
+        type: provider.type ?? (isAnthropicCompat || isMimoCompat ? "anthropic-compat" : isGeminiCompat ? "gemini-compat" : "openai-compat"),
+      });
+      const ids: string[] = result?.models ?? [];
+      if (ids.length === 0) {
+        setFetchError(result?.error ? `erro: ${result.error}` : "endpoint não retornou models");
+      } else {
+        onChange({ ...provider, models: ids });
+      }
+    } catch (err) {
+      setFetchError(`erro: ${err instanceof Error ? err.message : String(err)}`);
+    }
     setFetching(false);
   };
   const models = provider.models ?? [];
@@ -94,8 +126,14 @@ export function ProviderForm({
           ...provider,
           host: e.target.value
         })} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-gray-200 focus:outline-none focus:border-indigo-500/40 cursor-pointer">
-              <option value="openclaude">OpenClaude</option>
+              <option value="openclaude">OpenClaude (API key via env)</option>
+              <option value="claude">Claude Code (OAuth — plano oficial)</option>
             </select>
+            {(provider.host === "claude" || (!provider.host && false)) && (
+              <p className="font-mono text-[9px] text-amber-500/80 mt-1">
+                Com Claude Code, a API key é gerenciada pelo OAuth do plano — o campo acima é ignorado.
+              </p>
+            )}
           </div>
           <div>
             <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest mb-1">
@@ -116,11 +154,29 @@ export function ProviderForm({
                 <button onClick={() => setModels([...models, ""])} className="font-mono text-[10px] text-indigo-500/70 hover:text-indigo-400">
                   + adicionar model
                 </button>
-                <button onClick={fetchModels} disabled={fetching} className="font-mono text-[10px] text-gray-500 hover:text-gray-300 disabled:opacity-40">
-                  {fetching ? "fetching…" : "⤓ fetch from API"}
+                <button onClick={fetchModels} disabled={fetching} className="flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] bg-violet-900/30 border border-violet-700/40 text-violet-400 hover:bg-violet-800/40 hover:text-violet-300 disabled:opacity-40 transition-colors">
+                  {fetching ? "↻ detectando…" : "⤓ Detectar modelos"}
+                </button>
+                <button onClick={runHealthCheck} disabled={healthChecking || !env[urlKey] || !env[tokenKey]} className="flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] bg-emerald-900/30 border border-emerald-700/40 text-emerald-400 hover:bg-emerald-800/40 hover:text-emerald-300 disabled:opacity-40 transition-colors">
+                  {healthChecking ? "↻ checando…" : "⚕ Health check"}
                 </button>
               </div>
               {fetchError && <p className="font-mono text-[9px] text-red-400 mt-1">{fetchError}</p>}
+              {healthResult && <div className="mt-2 rounded border border-white/10 bg-black/40 p-2 font-mono text-[9px] space-y-1">
+                <div className={`font-semibold ${healthResult.status === "healthy" ? "text-emerald-400" : healthResult.status === "degraded" ? "text-amber-400" : "text-red-400"}`}>
+                  {healthResult.status === "healthy" ? "✓" : healthResult.status === "degraded" ? "⚠" : "✗"} {healthResult.status}
+                  {healthResult.model && <span className="text-gray-500 font-normal"> · {healthResult.model}</span>}
+                </div>
+                <div className="grid grid-cols-2 gap-x-3">
+                  {[["endpoint","Endpoint"],["models","Models"],["generation","Generation"],["tools","Tools"]].map(([k,label]) => (
+                    <span key={k} className={healthResult.checks[k]?.ok ? "text-emerald-500" : "text-red-500"}>
+                      {healthResult.checks[k]?.ok ? "✓" : "✗"} {label}
+                      {k === "endpoint" && healthResult.checks.endpoint?.latencyMs != null && <span className="text-gray-600"> {healthResult.checks.endpoint.latencyMs}ms</span>}
+                    </span>
+                  ))}
+                </div>
+                {healthResult.warnings?.length > 0 && <div className="text-amber-500">{healthResult.warnings.join(" · ")}</div>}
+              </div>}
             </div>
           </div>
         </React.Fragment>}

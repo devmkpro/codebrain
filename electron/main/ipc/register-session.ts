@@ -247,10 +247,6 @@ ${panesSummary}
   ipcMain.handle("session:load", async () => []);
   ipcMain.handle("claude:sessions", async () => []);
   ipcMain.handle("claude:summary", async () => "");
-  ipcMain.handle("log:list", async () => []);
-
-  ipcMain.handle("tokens:byTask", async () => ({}));
-  ipcMain.handle("tokens:byWorkspace", async () => ({}));
   ipcMain.handle("tasks:list", async () => ({ tasks: [] }));
 
   // ── Squad Persistence (real implementation) ────────────────────────────

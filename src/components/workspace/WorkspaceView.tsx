@@ -27,8 +27,6 @@ export function WorkspaceView({
   const zRef = React.useRef(50);
   const folderName = workspacePath.split(/[\\/]/).filter(Boolean).pop() ?? workspacePath;
   const workspacePanes = panes.filter(p => isPathWithin(workspacePath, p.cwd));
-  const [autoSpawning, setAutoSpawning] = React.useState(false);
-  const autoSpawnDone = React.useRef(false);
   const favoritePaneRef = React.useRef<any>(null);
   const configLoadedRef = React.useRef(false); // true once getWorkspaceConfig resolved
   React.useEffect(() => {
@@ -41,62 +39,7 @@ export function WorkspaceView({
       if (cancelled) return;
       favoritePaneRef.current = cfg?.favoritePane ?? null;
       configLoadedRef.current = true;
-      if (!autoSpawnDone.current && workspacePanes.length === 0) {
-        // Auto-spawn squad if configured
-        if (cfg?.autoSpawnSquad?.length) {
-          autoSpawnDone.current = true;
-          setAutoSpawning(true);
-          (async () => {
-            for (const item of cfg.autoSpawnSquad) {
-              if (cancelled) break;
-              try {
-                const result = await window.codeBrainApp?.pty.spawn({
-                  agent: "openclaude",
-                  cwd: workspacePath,
-                  providerId: item.providerId || void 0,
-                  model: item.model || void 0
-                });
-                if (result?.ok && result.paneId) {
-                  addPane({
-                    id: result.paneId,
-                    agent: "openclaude",
-                    cwd: workspacePath,
-                    workspacePath: workspacePath,
-                    providerId: item.providerId || void 0,
-                    model: item.model || void 0,
-                    externallySpawned: true
-                  });
-                }
-              } catch {}
-            }
-            if (!cancelled) setAutoSpawning(false);
-          })();
-        } else if (cfg?.favoritePane?.providerId) {
-          // Auto-spawn with favoritePane (default spawn model) if configured
-          autoSpawnDone.current = true;
-          const fav = cfg.favoritePane;
-          setAutoSpawning(true);
-          window.codeBrainApp?.pty.spawn({
-            agent: fav.agent ?? "openclaude",
-            cwd: workspacePath,
-            providerId: fav.providerId,
-            model: fav.model || undefined,
-          }).then((result: any) => {
-            if (!cancelled && result?.ok && result.paneId) {
-              addPane({
-                id: result.paneId,
-                agent: fav.agent ?? "openclaude",
-                cwd: workspacePath,
-                workspacePath,
-                providerId: fav.providerId,
-                model: fav.model || undefined,
-                externallySpawned: true,
-              });
-            }
-            if (!cancelled) setAutoSpawning(false);
-          }).catch(() => { if (!cancelled) setAutoSpawning(false); });
-        }
-      }
+      // Auto-spawn removed — user must explicitly open a pane via +SHELL or Squad
     }).catch(() => {});
     return () => {
       cancelled = true;
@@ -327,8 +270,8 @@ export function WorkspaceView({
       dirty: false
     });
   }, [updateFloatingFile]);
-  const showPicker = sessions !== null && workspacePanes.length === 0 && view?.kind !== "map" && view?.kind !== "files" && !autoSpawning;
-  const showSessionLoading = sessionsLoading && workspacePanes.length === 0 && view?.kind !== "map" && view?.kind !== "files" && !autoSpawning;
+  const showPicker = sessions !== null && workspacePanes.length === 0 && view?.kind !== "map" && view?.kind !== "files";
+  const showSessionLoading = sessionsLoading && workspacePanes.length === 0 && view?.kind !== "map" && view?.kind !== "files";
 
   return <div ref={rootRef} className="flex flex-col h-full cb-surface" onDragOver={e => {
     if (!e.dataTransfer.types.includes(CODEBRAIN_FILE_DRAG_TYPE)) return;
@@ -340,19 +283,6 @@ export function WorkspaceView({
     e.preventDefault();
     void openFloatingFile(relPath, { x: e.clientX, y: e.clientY });
   }}>
-
-    {/* ── Auto-spawning squad ───────────────────────────────── */}
-    {autoSpawning && (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-5">
-          <div className="relative">
-            <div className="w-10 h-10 rounded-full border-2 border-violet-500/20 border-t-violet-500 animate-spin" />
-            <div className="absolute inset-0 w-10 h-10 rounded-full border-2 border-indigo-500/10 border-b-indigo-500/40 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
-          </div>
-          <p className="font-mono text-[11px] text-slate-400 uppercase tracking-[0.2em]">Iniciando squad…</p>
-        </div>
-      </div>
-    )}
 
     {/* ── Sessions loading ──────────────────────────────────── */}
     {showSessionLoading && (
@@ -535,5 +465,5 @@ export function WorkspaceView({
         onClose={() => closeFloatingFile(file.id)}
       />
     ))}
-  </div>;
+  </div>
 }

@@ -147,7 +147,7 @@ export function WorkspacesPage() {
     setLaunching(false);
   }, [launching, openWorkspace, setWorkspacePath, providers]);
 
-  // Auto-detect and open workspace on first load (after handleOpen is defined)
+  // Auto-detect: only switch to existing tab, never spawn PTY
   const hasAutoOpenedRef = React.useRef(false);
   useEffect(() => {
     if (hasAutoOpenedRef.current) return;
@@ -155,14 +155,16 @@ export function WorkspacesPage() {
     const timer = setTimeout(() => {
       (window as any).codeBrainApp?.workspace?.detect?.()
         .then((result: { path: string; autoDetected: boolean } | null) => {
-          if (result?.path) {
-            handleOpen(result.path);
+          if (!result?.path) return;
+          const existingIdx = useNavStore.getState().tabs.findIndex((t: any) => t.workspacePath === result.path);
+          if (existingIdx >= 0) {
+            useNavStore.getState().setActiveTab(existingIdx);
           }
         })
         .catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [handleOpen]);
+  }, []);
 
   const handleSwitch = (idx: number) => {
     useNavStore.getState().setActiveTab(idx);

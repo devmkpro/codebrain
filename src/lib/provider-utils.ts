@@ -30,29 +30,62 @@ export function resolveIntegrationBaseUrl(
   return integration.baseUrl;
 }
 
+const NON_CHAT_KEYWORDS = ["embed", "embedding", "tts", "whisper", "speech", "rerank", "audio", "moderation", "transcri"];
+function isNonChat(id: string): boolean {
+  const low = id.toLowerCase();
+  return NON_CHAT_KEYWORDS.some(kw => low.includes(kw));
+}
+
 export async function fetchModelsFromEndpoint(
   baseUrl: string,
   token: string,
   kind: "anthropic" | "gemini" | "openai",
 ): Promise<string[]> {
+  const base = baseUrl.replace(/\/$/, "");
   try {
-    const url = kind === "anthropic"
-      ? `${baseUrl.replace(/\/$/, "")}/v1/models`
-      : `${baseUrl.replace(/\/$/, "")}/models`;
-    const res = await fetch(url, {
-      headers: kind === "anthropic"
-        ? { "x-api-key": token, authorization: `Bearer ${token}`, "anthropic-version": "2023-06-01" }
-        : { authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
-    const ids: string[] = [];
-    for (const m of json.data ?? []) if (m?.id) ids.push(m.id);
-    for (const m of json.models ?? []) {
-      if (typeof m === "string") ids.push(m);
-      else if (m?.id) ids.push(m.id);
+    let url: string;
+    let headers: Record<string, string>;
+
+    if (kind === "anthropic") {
+      // Anthropic: GET /v1/models with x-api-key + anthropic-version
+      url = `${base}/v1/models`;
+      headers = {
+        "x-api-key": token,
+        "authorization": `Bearer ${token}`,
+        "anthropic-version": "2023-06-01",
+      };
+    } else if (kind === "gemini") {
+      // Google Gemini: GET /v1beta/models?key=...
+      url = `${base}/v1beta/models?key=${encodeURIComponent(token)}`;
+      headers = {};
+    } else {
+      // OpenAI-compatible: GET /v1/models with Bearer token
+      url = `${base}/v1/models`;
+      headers = { "authorization": `Bearer ${token}` };
     }
-    return Array.from(new Set(ids));
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) return [];
+    const json = await res.json() as any;
+
+    const ids: string[] = [];
+    // OpenAI-compat and Anthropic: json.data[].id
+    for (const m of json.data ?? []) {
+      if (m?.id) ids.push(m.id);
+    }
+    // Gemini: json.models[].name ("models/gemini-2.5-pro" → strip prefix)
+    for (const m of json.models ?? []) {
+      if (typeof m === "string") {
+        ids.push(m.startsWith("models/") ? m.slice(7) : m);
+      } else if (m?.id) {
+        ids.push(m.id);
+      } else if (m?.name) {
+        const name: string = m.name;
+        ids.push(name.startsWith("models/") ? name.slice(7) : name);
+      }
+    }
+
+    return Array.from(new Set(ids)).filter(id => !isNonChat(id));
   } catch {
     return [];
   }

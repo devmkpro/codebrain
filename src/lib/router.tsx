@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 
-export type Route = '/' | '/workspaces' | '/logs' | '/settings';
+export type Route = '/' | '/workspaces' | '/settings';
 
 type RouterContextType = {
   route: Route;

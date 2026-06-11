@@ -42,25 +42,16 @@ export function registerWorkspaceHandlers(ctx: AppContext): void {
     // 1. Try to find a project root by walking up from targetDir
     const projectRoot = detectProjectRoot(targetDir);
     if (projectRoot) {
-      ctx.currentWorkspacePath = projectRoot;
-      touchWorkspace(ctx, projectRoot);
-      writeContextFiles(ctx, projectRoot);
       return { path: projectRoot, autoDetected: true };
     }
 
     // 2. If no project markers found, check recent workspaces
     const recents = readRecentWorkspaces(ctx);
     if (recents.length > 0 && fs.existsSync(recents[0])) {
-      ctx.currentWorkspacePath = recents[0];
-      touchWorkspace(ctx, recents[0]);
-      writeContextFiles(ctx, recents[0]);
       return { path: recents[0], autoDetected: false, fromRecent: true };
     }
 
     // 3. Fall back to cwd itself
-    ctx.currentWorkspacePath = targetDir;
-    touchWorkspace(ctx, targetDir);
-    writeContextFiles(ctx, targetDir);
     return { path: targetDir, autoDetected: false, fallback: true };
   });
 

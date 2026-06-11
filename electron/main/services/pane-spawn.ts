@@ -34,7 +34,23 @@ export async function spawnPaneInternal(
   config: SpawnPaneConfig,
 ): Promise<{ ok: boolean; paneId?: string; providerId?: string; error?: string }> {
   try {
-    const cwd = config.cwd ?? ctx.currentWorkspacePath;
+    // Smart cwd resolution: explicit > most active pane workspace > global > home
+    let cwd = config.cwd;
+    if (!cwd || cwd === require("os").homedir()) {
+      // Find the workspace with the most active panes (most likely the caller's workspace)
+      const wsCounts = new Map<string, number>();
+      for (const [, cfg] of ctx.paneConfigs) {
+        if (cfg.cwd && cfg.cwd !== require("os").homedir()) {
+          wsCounts.set(cfg.cwd, (wsCounts.get(cfg.cwd) ?? 0) + 1);
+        }
+      }
+      if (wsCounts.size > 0) {
+        // Pick workspace with most active panes
+        cwd = [...wsCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      } else {
+        cwd = ctx.currentWorkspacePath;
+      }
+    }
 
     // ── Provider resolution (delegated to provider-resolver module) ────────────
     const resolved = resolveProvider(ctx, {
@@ -804,6 +820,10 @@ export async function spawnPaneInternal(
       log.info("[spawnPaneInternal] Gemini MODEL:", env["MODEL"] ?? "MISSING");
       log.info("[spawnPaneInternal] Gemini CLAUDE_CODE_USE_GEMINI:", env["CLAUDE_CODE_USE_GEMINI"] ?? "MISSING");
     }
+
+    // Feature 9: run pre-spawn command hooks (best-effort, non-blocking on failure)
+    await ctx.hooksManager.runPreSpawnHooks(paneId, agent, cwd ?? "");
+    ctx.hooksManager.fire("pane_spawned" as any, { paneId, agent, cwd, phase: "pre" });
 
     const spawnedPaneId = await ctx.ptyManager.spawn({
       paneId,

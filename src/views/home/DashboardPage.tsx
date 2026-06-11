@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FolderOpen, Terminal, Zap, Bot, ChevronRight,
-  Clock, RefreshCw, Plus, Activity, Circle, Server,
+  RefreshCw, Plus, Activity, Circle, Server, X,
 } from 'lucide-react';
 import { Link } from '../../lib/router';
 import { useNavStore }       from '../../stores/nav-store';
@@ -40,10 +40,10 @@ function StatCard({ icon, label, value, sub, color = '#4F46E5' }: { icon: React.
   );
 }
 
-function PaneRow({ pane }: { pane: any }) {
+function PaneRow({ pane, onClose }: { pane: any; onClose?: (id: string) => void }) {
   const isRun = pane.status === 'running';
   return (
-    <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-white/[0.04] bg-[#0A0A0B]/50 hover:border-white/10 hover:bg-[#0A0A0B]/70 transition-all">
+    <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-white/[0.04] bg-[#0A0A0B]/50 hover:border-white/10 hover:bg-[#0A0A0B]/70 transition-all group/pane">
       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRun ? 'bg-emerald-400 animate-pulse shadow-[0_0_4px_rgba(52,211,153,0.4)]' : pane.kind === 'browser' ? 'bg-cyan-400' : 'bg-slate-700'}`} />
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-mono text-slate-300 truncate">
@@ -55,11 +55,20 @@ function PaneRow({ pane }: { pane: any }) {
       }`}>
         {pane.kind === 'browser' ? 'browser' : pane.status ?? 'idle'}
       </span>
+      {onClose && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onClose(pane.id); }}
+          className="opacity-0 group-hover/pane:opacity-100 w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+          title="Fechar pane"
+        >
+          <X size={10} strokeWidth={2} />
+        </button>
+      )}
     </div>
   );
 }
 
-function WorkspaceGroup({ tab, panes, onSwitch }: { tab: any; panes: any[]; onSwitch: () => void }) {
+function WorkspaceGroup({ tab, panes, onSwitch, onClosePane }: { tab: any; panes: any[]; onSwitch: () => void; onClosePane?: (id: string) => void }) {
   const name    = folderName(tab.workspacePath);
   const running = panes.filter(p => p.status === 'running').length;
   const [open,  setOpen] = useState(true);
@@ -93,7 +102,7 @@ function WorkspaceGroup({ tab, panes, onSwitch }: { tab: any; panes: any[]; onSw
           {panes.length === 0 ? (
             <p className="text-[9px] font-mono text-slate-700 py-1">Sem panes ativos</p>
           ) : (
-            panes.map(p => <PaneRow key={p.id} pane={p} />)
+            panes.map(p => <PaneRow key={p.id} pane={p} onClose={onClosePane} />)
           )}
         </div>
       )}
@@ -129,7 +138,6 @@ function TaskRow({ task }: { task: any }) {
 export function DashboardPage() {
   const [recents,    setRecents]   = useState<string[]>([]);
   const [launching,  setLaunching] = useState(false);
-  const [tokens,     setTokens]    = useState<{ inputTokens: number; outputTokens: number; cacheReadTokens: number; totalTokens: number } | null>(null);
   const [activeView, setView]      = useState<'panes' | 'tasks'>('panes');
 
   const openWorkspace    = useNavStore(s => s.openWorkspace);
@@ -147,33 +155,19 @@ export function DashboardPage() {
     loadProviders().catch(() => {});
     loadTasks().catch(() => {});
 
-    // ── Token usage: load totais das últimas 24h ──────────────────
-    const since = Date.now() - 86_400_000; // 24 h
-    (window as any).codeBrainApp?.tokens?.byWorkspace?.(since)
-      .then((t: any) => {
-        if (t) setTokens({
-          inputTokens:      t.inputTokens      ?? 0,
-          outputTokens:     t.outputTokens     ?? 0,
-          cacheReadTokens:  t.cacheReadTokens  ?? 0,
-          totalTokens:      t.totalTokens      ?? (t.inputTokens ?? 0) + (t.outputTokens ?? 0),
-        });
-      })
-      .catch(() => {});
+  }, []);
 
-    // ── Live subscription: acumula novos tokens enquanto a tela estiver aberta
-    const off = (window as any).codeBrainApp?.tokens?.onUpdated?.((payload: any) => {
-      if (!payload) return;
-      setTokens(prev => {
-        const base = prev ?? { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, totalTokens: 0 };
-        return {
-          inputTokens:     base.inputTokens     + (payload.inputTokens     ?? 0),
-          outputTokens:    base.outputTokens    + (payload.outputTokens    ?? 0),
-          cacheReadTokens: base.cacheReadTokens + (payload.cacheReadTokens ?? 0),
-          totalTokens:     base.totalTokens     + (payload.totalTokens     ?? (payload.inputTokens ?? 0) + (payload.outputTokens ?? 0)),
-        };
-      });
-    });
-    return () => off?.();
+  const handleClosePane = useCallback((id: string) => {
+    (window as any).codeBrainApp?.pty?.kill?.(id)?.catch?.(() => {});
+    usePanesStore.getState().removePane(id);
+  }, []);
+
+  const handleCloseAll = useCallback(() => {
+    const current = usePanesStore.getState().panes;
+    for (const p of current) {
+      (window as any).codeBrainApp?.pty?.kill?.(p.id)?.catch?.(() => {});
+    }
+    usePanesStore.setState({ panes: [], activePaneId: null, layouts: {} });
   }, []);
 
   const handleOpen = useCallback(async (path?: string) => {
@@ -195,7 +189,7 @@ export function DashboardPage() {
     setLaunching(false);
   }, [launching, openWorkspace, setWorkspacePath, providers]);
 
-  // Auto-detect and open workspace on first load (after handleOpen is defined)
+  // Auto-detect: only switch to existing tab, never spawn PTY
   const hasAutoOpenedRef = React.useRef(false);
   useEffect(() => {
     if (hasAutoOpenedRef.current) return;
@@ -203,14 +197,17 @@ export function DashboardPage() {
     const timer = setTimeout(() => {
       (window as any).codeBrainApp?.workspace?.detect?.()
         .then((result: { path: string; autoDetected: boolean } | null) => {
-          if (result?.path) {
-            handleOpen(result.path);
+          if (!result?.path) return;
+          // Only switch to tab if it already exists — never auto-spawn PTY
+          const existingIdx = useNavStore.getState().tabs.findIndex((t: any) => t.workspacePath === result.path);
+          if (existingIdx >= 0) {
+            useNavStore.getState().setActiveTab(existingIdx);
           }
         })
         .catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [handleOpen]);
+  }, []);
 
   const tabs         = useNavStore(s => s.tabs) as any[];
   const setActiveTab = useNavStore(s => s.setActiveTab);
@@ -245,36 +242,10 @@ export function DashboardPage() {
           <StatCard icon={<FolderOpen size={13} />} label="Recentes"   value={recents.length}   color="#10B981" />
         </div>
 
-        {/* Token usage */}
-        <div className="px-4 py-3 border-b border-white/5">
-          <p className="text-[9px] font-mono uppercase tracking-widest text-slate-600 mb-2 flex items-center gap-1.5">
-            Tokens (24h)
-            {!tokens && <span className="w-3 h-3 rounded-full border border-white/10 border-t-[#4F46E5] animate-spin" />}
-          </p>
-          {tokens ? (
-            <div className="space-y-1.5">
-              {[
-                { label: 'Input',  val: tokens.inputTokens,     color: 'text-slate-300' },
-                { label: 'Output', val: tokens.outputTokens,    color: 'text-indigo-400' },
-                { label: 'Cache',  val: tokens.cacheReadTokens, color: 'text-emerald-400/70' },
-                { label: 'Total',  val: tokens.totalTokens,     color: 'text-white' },
-              ].map(({ label, val, color }) => (
-                <div key={label} className={`flex justify-between text-[9px] font-mono ${label === 'Total' ? 'border-t border-white/5 pt-1.5 mt-0.5' : ''}`}>
-                  <span className="text-slate-600">{label}</span>
-                  <span className={color}>{(val ?? 0).toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[9px] font-mono text-slate-700">Carregando…</p>
-          )}
-        </div>
-
         {/* Navigation links */}
         <div className="p-4 space-y-1.5 mt-auto">
           {([
             { href: '/workspaces' as const, label: 'Ver Workspaces', icon: <FolderOpen size={12} /> },
-            { href: '/logs'       as const, label: 'Ver Logs',         icon: <Clock size={12} /> },
             { href: '/settings'   as const, label: 'Configurações',   icon: <Zap size={12} /> },
           ]).map(({ href, label, icon }) => (
             <Link key={href} href={href}
@@ -303,6 +274,16 @@ export function DashboardPage() {
           <button onClick={() => loadTasks().catch(() => {})} className="p-1.5 rounded text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-all">
             <RefreshCw size={12} />
           </button>
+          {panes.length > 0 && (
+            <button
+              onClick={handleCloseAll}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[9px] font-mono font-bold uppercase tracking-wider text-slate-600 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
+              title="Fechar todos os panes"
+            >
+              <X size={10} strokeWidth={2} />
+              Fechar tudo
+            </button>
+          )}
         </div>
 
         <div className="flex-1 p-5 overflow-y-auto relative" style={{ scrollbarWidth: 'thin' }}>
@@ -331,6 +312,7 @@ export function DashboardPage() {
                           tab={tab}
                           panes={tabPanes}
                           onSwitch={() => setActiveTab(i)}
+                          onClosePane={handleClosePane}
                         />
                       );
                     })}
@@ -339,7 +321,7 @@ export function DashboardPage() {
                       <div className="mt-2">
                         <p className="text-[9px] font-mono text-slate-700 uppercase tracking-widest mb-2">Sem workspace</p>
                         <div className="space-y-1">
-                          {orphanPanes.map((p: any) => <PaneRow key={p.id} pane={p} />)}
+                          {orphanPanes.map((p: any) => <PaneRow key={p.id} pane={p} onClose={handleClosePane} />)}
                         </div>
                       </div>
                     )}

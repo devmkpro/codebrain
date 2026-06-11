@@ -4,7 +4,6 @@ import { AppHeader }     from './AppHeader';
 import { AppFooter }     from './AppFooter';
 import { DashboardPage } from '../../views/home/DashboardPage';
 import { WorkspacesPage } from '../../views/home/WorkspacesPage';
-import { LogsPage }      from '../../views/home/LogsPage';
 import { SettingsPage }  from '../../views/home/SettingsPage';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { TasksSidebar }  from '../tasks/TasksSidebar';
@@ -26,7 +25,6 @@ function HomePages() {
     <div className="flex-1 flex overflow-hidden">
       {route === '/'           && <DashboardPage />}
       {route === '/workspaces' && <WorkspacesPage />}
-      {route === '/logs'       && <LogsPage />}
       {route === '/settings'   && <SettingsPage />}
     </div>
   );

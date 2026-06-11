@@ -109,6 +109,8 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     readRaw: (paneId: string, lastN?: number) => ipcRenderer.invoke("pty:readRaw", paneId, lastN),
     readRawText: (paneId: string) => ipcRenderer.invoke("pty:readRawText", paneId),
     kill: (paneId: string) => ipcRenderer.invoke("pty:kill", paneId),
+    hibernate: (paneId: string) => ipcRenderer.invoke("pty:hibernate", paneId),
+    wake: (paneId: string) => ipcRenderer.invoke("pty:wake", paneId),
     detach: (paneId: string) => ipcRenderer.invoke("pty:detach", paneId),
     list: () => ipcRenderer.invoke("pty:list"),
     resize: (paneId: string, cols: number, rows: number) => ipcRenderer.invoke("pty:resize", paneId, cols, rows),
@@ -147,12 +149,6 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     detect: (dir?: string) => ipcRenderer.invoke("workspace:detect", dir),
   },
 
-  tokens: {
-    byTask: () => Promise.resolve({}),
-    byWorkspace: () => Promise.resolve({}),
-    onUpdated: () => () => {},
-  },
-
   session: {
     load: (workspacePath: string) => ipcRenderer.invoke("session:load", workspacePath),
     loadAll: (workspacePath: string) => ipcRenderer.invoke("session:loadAll", workspacePath),
@@ -188,6 +184,8 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     save: (provider: unknown) => ipcRenderer.invoke("providers:save", provider),
     delete: (id: string) => ipcRenderer.invoke("providers:delete", id),
     testToken: (args: unknown) => ipcRenderer.invoke("providers:testToken", args),
+    listModels: (args: unknown) => ipcRenderer.invoke("providers:listModels", args),
+    healthCheck: (args: unknown) => ipcRenderer.invoke("providers:healthCheck", args),
     onUpdated: (callback: (providers: unknown[]) => void) => {
       const handler = (_evt: unknown, providers: unknown[]) => callback(providers);
       ipcRenderer.on(PROVIDERS_UPDATED, handler);
@@ -197,6 +195,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
 
   diagnostics: {
     snapshot: () => ipcRenderer.invoke("diagnostics:snapshot"),
+    perfSnap: () => ipcRenderer.invoke("diagnostics:perfSnap"),
   },
 
   audio: {
@@ -365,15 +364,6 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     reset: () => Promise.resolve({ ok: true }),
     setModelCost: () => Promise.resolve({ ok: true }),
     deleteModelCost: () => Promise.resolve({ ok: true }),
-  },
-
-  log: {
-    list: (opts?: Record<string, unknown>) => ipcRenderer.invoke("log:list", opts ?? {}),
-    onAppended: (callback: (entry: unknown) => void) => {
-      const handler = (_evt: unknown, entry: unknown) => callback(entry);
-      ipcRenderer.on("log:appended", handler);
-      return () => ipcRenderer.off("log:appended", handler);
-    },
   },
 
   update: {

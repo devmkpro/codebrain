@@ -326,4 +326,94 @@ export function registerSkillHandlers(_ctx: AppContext): void {
     if (!fs.existsSync(CLAUDE_CONFIG_DIR)) fs.mkdirSync(CLAUDE_CONFIG_DIR, { recursive: true });
     shell.openPath(CLAUDE_CONFIG_DIR);
   });
+
+  // ── Feature 7: GitHub catalog (davila7/claude-code-templates) ─────────────
+  const GITHUB_API_BASE = "https://api.github.com/repos/davila7/claude-code-templates/contents";
+  const CLAUDE_AGENTS_DIR = path.join(os.homedir(), ".claude", "agents");
+  const CLAUDE_SKILLS_DIR = path.join(os.homedir(), ".claude", "skills");
+
+  ipcMain.handle("catalog:list", async () => {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      let agents: Array<{ name: string; slug: string; type: "agent" }> = [];
+      let skills: Array<{ name: string; slug: string; type: "skill" }> = [];
+
+      try {
+        // Agents: files directly in the repo root ending with .md
+        const agentsResp = await fetch(`${GITHUB_API_BASE}`, {
+          headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "Codebrain/1.0" },
+          signal: controller.signal,
+        });
+        if (agentsResp.ok) {
+          const items = (await agentsResp.json()) as Array<{ name: string; type: string }>;
+          agents = items
+            .filter((i) => i.type === "file" && i.name.endsWith(".md"))
+            .map((i) => ({ name: i.name.replace(/\.md$/, ""), slug: i.name, type: "agent" as const }));
+        }
+        // Skills: directories
+        const skillsResp = await fetch(`${GITHUB_API_BASE}`, {
+          headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "Codebrain/1.0" },
+          signal: controller.signal,
+        });
+        if (skillsResp.ok) {
+          const items = (await skillsResp.json()) as Array<{ name: string; type: string }>;
+          skills = items
+            .filter((i) => i.type === "dir")
+            .map((i) => ({ name: i.name, slug: i.name, type: "skill" as const }));
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+
+      return { ok: true, agents, skills };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || String(err) };
+    }
+  });
+
+  ipcMain.handle("catalog:install", async (_event, args: { slug: string; type: "agent" | "skill" }) => {
+    const { slug, type } = args;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+
+      if (type === "agent") {
+        // Download single .md file to ~/.claude/agents/
+        const rawUrl = `https://raw.githubusercontent.com/davila7/claude-code-templates/main/${slug}`;
+        const resp = await fetch(rawUrl, { signal: controller.signal });
+        clearTimeout(timer);
+        if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}: ${resp.statusText}` };
+        const content = await resp.text();
+        if (!fs.existsSync(CLAUDE_AGENTS_DIR)) fs.mkdirSync(CLAUDE_AGENTS_DIR, { recursive: true });
+        const destPath = path.join(CLAUDE_AGENTS_DIR, slug);
+        fs.writeFileSync(destPath, content, "utf-8");
+        return { ok: true, path: destPath };
+      } else {
+        // Download directory listing then all files to ~/.claude/skills/<slug>/
+        const listResp = await fetch(`${GITHUB_API_BASE}/${slug}`, {
+          headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "Codebrain/1.0" },
+          signal: controller.signal,
+        });
+        if (!listResp.ok) {
+          clearTimeout(timer);
+          return { ok: false, error: `HTTP ${listResp.status}: ${listResp.statusText}` };
+        }
+        const files = (await listResp.json()) as Array<{ name: string; download_url: string | null; type: string }>;
+        const destDir = path.join(CLAUDE_SKILLS_DIR, slug);
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        for (const file of files) {
+          if (file.type !== "file" || !file.download_url) continue;
+          const fileResp = await fetch(file.download_url, { signal: controller.signal });
+          if (!fileResp.ok) continue;
+          const content = await fileResp.text();
+          fs.writeFileSync(path.join(destDir, file.name), content, "utf-8");
+        }
+        clearTimeout(timer);
+        return { ok: true, path: destDir };
+      }
+    } catch (err: any) {
+      return { ok: false, error: err?.message || String(err) };
+    }
+  });
 }

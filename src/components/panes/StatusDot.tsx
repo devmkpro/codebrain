@@ -9,7 +9,9 @@ export function StatusDot({
     running: "bg-green-500 animate-pulse shadow-[0_0_4px_rgba(34,197,94,0.6)]",
     idle: "bg-gray-600",
     done: "bg-blue-500",
-    error: "bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]"
+    error: "bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]",
+    hibernated: "bg-purple-600 opacity-60",
+    waking: "bg-amber-400 animate-pulse shadow-[0_0_4px_rgba(251,191,36,0.6)]",
   };
   return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${colors[status]}`} />;
 }

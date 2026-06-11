@@ -4,7 +4,12 @@ import * as os from "node:os";
 import type { AppContext, McpServerInfo } from "../context";
 
 export function readRecentWorkspaces(ctx: AppContext): string[] {
-  try { return JSON.parse(fs.readFileSync(ctx.WORKSPACES_FILE, "utf-8")); } catch { return []; }
+  try {
+    const raw: string[] = JSON.parse(fs.readFileSync(ctx.WORKSPACES_FILE, "utf-8"));
+    const valid = raw.filter((p) => typeof p === "string" && fs.existsSync(p));
+    if (valid.length !== raw.length) saveRecentWorkspaces(ctx, valid);
+    return valid;
+  } catch { return []; }
 }
 
 export function saveRecentWorkspaces(ctx: AppContext, workspaces: string[]): void {
@@ -12,6 +17,7 @@ export function saveRecentWorkspaces(ctx: AppContext, workspaces: string[]): voi
 }
 
 export function touchWorkspace(ctx: AppContext, wsPath: string): void {
+  if (!fs.existsSync(wsPath)) return; // don't persist non-existent paths
   const list = readRecentWorkspaces(ctx).filter((p) => p !== wsPath);
   saveRecentWorkspaces(ctx, [wsPath, ...list].slice(0, 20));
 }
