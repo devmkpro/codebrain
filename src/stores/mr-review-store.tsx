@@ -117,9 +117,16 @@ export const useMrReviewStore = create<MrReviewState>((set, get) => ({
         }));
         return;
       }
-      setTimeout(async () => {
+      // Poll status every 5s until reviewing is done (max 3 min)
+      let polls = 0;
+      const pollInterval = setInterval(async () => {
+        polls++;
         const { fetchStatus } = get();
         await fetchStatus();
+        const { reviewing } = get();
+        if (!reviewing || polls >= 36) {
+          clearInterval(pollInterval);
+        }
       }, 5000);
     } catch (err) {
       console.error('[mrReviewStore] triggerReview error:', err);
