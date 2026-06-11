@@ -19,6 +19,10 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "feat",
+        "text": "update release highlights with recent MR review enhancements and integration of paneHandlers"
+      },
+      {
+        "kind": "feat",
         "text": "enhance MR review logic to skip unchanged MRs and update reviewed MRs in the store"
       },
       {
