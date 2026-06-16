@@ -2337,6 +2337,58 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
       catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );
+
+  // ── browser_launch — Auto-launch native Chrome ────────────────────────
+  server.tool(
+    "mcp__codebrain__browser_launch",
+    "Launch a native Chrome/Chromium browser with remote debugging enabled, or connect to an already-running instance. Auto-detects Chrome/Brave/Chromium on Windows and Linux/macOS. Returns { ok, launched, port, pid }. After this, all browser_* tools use the native browser (much more capable than the embedded webview).",
+    {
+      url: z.string().optional().describe("URL to open after launch (default: about:blank)"),
+      port: z.number().optional().describe("Debug port to use (default: 9222)"),
+    },
+    async ({ url, port }) => {
+      try {
+        const result = await bridge.browserLaunch({ url, port });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  // ── browser_form_input — Form filling by element ref ──────────────────
+  server.tool(
+    "mcp__codebrain__browser_form_input",
+    "Set a value in a form element using an element reference from browser_get_accessibility_tree. Handles all input types: text, select (by value or text), checkbox (boolean), radio, date, range, number, textarea. More reliable than browser_fill for complex inputs. Requires Chrome CDP.",
+    {
+      ref: z.string().describe("Element reference ID from browser_get_accessibility_tree (e.g. 'ref_5')"),
+      value: z.union([z.string(), z.boolean(), z.number()]).describe("Value to set. For checkbox/radio use boolean. For select use option text or value. For others use string."),
+    },
+    async ({ ref, value }) => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFormInput({ ref, value })) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  // ── browser_get_article_text — Smart article extraction ───────────────
+  server.tool(
+    "mcp__codebrain__browser_get_article_text",
+    "Extract the main article/content text from the current page intelligently. Tries article/main/[role=main] selectors, then common content class names, then falls back to body. Returns clean plain text without HTML. Much better than browser_get_text() for news articles, blog posts, and content-heavy pages. Works in both webview and CDP modes.",
+    {
+      max_chars: z.number().optional().describe("Maximum characters to return (default: 50000)"),
+      pane_id: z.string().optional().describe("Browser pane ID (webview mode only)"),
+    },
+    async ({ max_chars, pane_id }) => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetArticleText(max_chars, pane_id)) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

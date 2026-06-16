@@ -10,10 +10,31 @@
  * - Multi-port detection (9222, 9223, 9224)
  * - Reconnection com exponential backoff
  * - Event buffer para console/network
+ * - Auto-launch Chrome if not running
  */
 
 const http = require("http");
 const WebSocket = require("ws");
+const path = require("path");
+const os = require("os");
+const { spawn, execSync } = require("child_process");
+const fs = require("fs");
+
+const CHROME_PATHS_WIN = [
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+  path.join(os.homedir(), "AppData\\Local\\Google\\Chrome\\Application\\chrome.exe"),
+  "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+  "C:\\Program Files\\Chromium\\Application\\chromium.exe",
+];
+
+const CHROME_PATHS_UNIX = [
+  "/usr/bin/google-chrome",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/chromium",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+];
 
 class CDPClient {
   constructor({ log, debug }) {
@@ -89,7 +110,14 @@ class CDPClient {
    * Connect to a specific Chrome page target via WebSocket.
    */
   async connect(port) {
-    if (this.connected) return;
+    // If already connected via WebSocket that's still open, skip
+    if (this.connected && this.ws && this.ws.readyState === 1 /* OPEN */) return;
+    // Otherwise reset stale state
+    if (this.ws) {
+      try { this.ws.terminate(); } catch {}
+      this.ws = null;
+      this.connected = false;
+    }
 
     port = port || this.activePort || 9222;
     const targets = await this.discoverTargets(port);
@@ -344,6 +372,134 @@ class CDPClient {
     this.connected = false;
     this._captureEnabled = false;
     this.callbacks.clear();
+  }
+
+  /**
+   * Find the Chrome/Chromium executable on this system.
+   */
+  _findChromeExecutable() {
+    const isWin = process.platform === "win32";
+    const paths = isWin ? CHROME_PATHS_WIN : CHROME_PATHS_UNIX;
+
+    for (const p of paths) {
+      if (fs.existsSync(p)) return p;
+    }
+
+    // Try `where chrome` (Windows) or `which google-chrome` (Unix)
+    try {
+      const cmd = isWin ? "where chrome" : "which google-chrome || which chromium-browser || which chromium";
+      const result = execSync(cmd, { timeout: 3000, encoding: "utf-8" }).trim().split("\n")[0].trim();
+      if (result && fs.existsSync(result)) return result;
+    } catch {
+      // not found via PATH
+    }
+
+    return null;
+  }
+
+  /**
+   * Wait for Chrome debugging port to become available.
+   * Uses a fast HTTP probe (no WebSocket) to check quickly.
+   */
+  async _waitForPort(port, timeoutMs) {
+    timeoutMs = timeoutMs || 30000;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        await new Promise((resolve, reject) => {
+          const req = http.get(`http://127.0.0.1:${port}/json/version`, (res) => {
+            res.resume(); // drain
+            resolve(true);
+          });
+          req.setTimeout(1000, () => { req.destroy(); reject(new Error("timeout")); });
+          req.on("error", reject);
+        });
+        return true;
+      } catch {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Launch Chrome/Chromium with remote debugging enabled.
+   * If Chrome is already running on the target port, connects to it instead.
+   * Returns { ok, pid, port, launched } where launched=false means we connected to existing instance.
+   */
+  async launch(opts) {
+    opts = opts || {};
+    const port = opts.port || 9222;
+
+    // 1. Check if Chrome is already running
+    try {
+      const det = await this.detect();
+      if (det.available) {
+        await this.connect(det.port);
+        this.log(`[CDP] Connected to existing Chrome on port ${det.port}`);
+        return { ok: true, pid: null, port: det.port, launched: false };
+      }
+    } catch {
+      // not running, proceed to launch
+    }
+
+    // 2. Find executable
+    const exe = this._findChromeExecutable();
+    if (!exe) {
+      return {
+        ok: false,
+        error: "Chrome/Chromium not found. Install Google Chrome or Brave Browser.",
+        searchedPaths: process.platform === "win32" ? CHROME_PATHS_WIN : CHROME_PATHS_UNIX,
+      };
+    }
+
+    // 3. Prepare user data dir
+    const userDataDir = path.join(os.homedir(), ".codebrain", "chrome-profile");
+    try {
+      fs.mkdirSync(userDataDir, { recursive: true });
+    } catch {}
+
+    // 4. Launch Chrome as a detached subprocess
+    const args = [
+      `--remote-debugging-port=${port}`,
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-networking",
+      "--disable-sync",
+      "--disable-extensions",
+      "--no-default-browser-check",
+      "--disable-client-side-phishing-detection",
+      "--disable-component-update",
+      "--disable-default-apps",
+      `--user-data-dir=${userDataDir}`,
+      "--window-size=1280,800",
+    ];
+
+    this.log(`[CDP] Launching Chrome: ${exe} ${args.join(" ")}`);
+    const child = spawn(exe, args, {
+      stdio: "ignore",
+      detached: true,
+    });
+    child.unref();
+    this._launchedPid = child.pid;
+
+    // 5. Wait for port (up to 30s — Chrome can be slow on first launch)
+    this.log(`[CDP] Waiting for Chrome to start on port ${port}...`);
+    const ready = await this._waitForPort(port, 30000);
+    if (!ready) {
+      return {
+        ok: false,
+        error: `Chrome launched (pid ${child.pid}) but port ${port} did not become available within 30s. Try running Chrome manually: "${exe}" --remote-debugging-port=${port}`,
+        pid: child.pid,
+        exe,
+        hint: `Check if another Chrome instance is already running without --remote-debugging-port. If so, close it and try again, or use port ${port + 1}.`,
+      };
+    }
+
+    // 6. Connect
+    await this.connect(port);
+    this.log(`[CDP] Chrome launched and connected (pid ${child.pid}, port ${port})`);
+    return { ok: true, pid: child.pid, port, launched: true, exe };
   }
 
   /**

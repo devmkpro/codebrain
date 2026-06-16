@@ -136,6 +136,7 @@ function createNativeChromeHandlers(cdpClient) {
             bounds: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
             tag: el.tagName,
           };
+          if (el.__codebrainRef) node.ref = el.__codebrainRef;
           if (el.disabled) node.disabled = true;
           if (el.checked !== undefined) node.checked = el.checked;
           if (el === document.activeElement) node.focused = true;
@@ -149,7 +150,90 @@ function createNativeChromeHandlers(cdpClient) {
         };
         return getTree(document.body, 0);
       })()`);
-      return { ok: true, tree };
+      // Inject element ref map into the page for use with formInput
+      await this._buildRefMap();
+      return { ok: true, tree, note: "Interactive elements have ref_N IDs — use browser_form_input to set values by ref." };
+    },
+
+    /**
+     * _buildRefMap — Inject window.__claudeElementMap into the page.
+     * Maps ref_N strings to DOM elements for stable references across calls.
+     */
+    async _buildRefMap() {
+      const mapScript = `
+        (function() {
+          window.__claudeElementMap = window.__claudeElementMap || {};
+          let refCount = Object.keys(window.__claudeElementMap).length;
+          const all = document.querySelectorAll('button, a, input, select, textarea, [role]');
+          all.forEach(el => {
+            if (!el.__codebrainRef) {
+              el.__codebrainRef = 'ref_' + (++refCount);
+              window.__claudeElementMap[el.__codebrainRef] = new WeakRef(el);
+            }
+          });
+          return refCount;
+        })()
+      `;
+      await evalJS(mapScript);
+    },
+
+    /**
+     * formInput — Set value on a form element identified by its ref_N reference.
+     * Handles all input types correctly with proper DOM events.
+     */
+    async formInput({ ref, value }) {
+      const script = `
+        (function() {
+          if (!window.__claudeElementMap || !window.__claudeElementMap[${JSON.stringify(ref)}]) {
+            return { error: 'Element ref not found: ' + ${JSON.stringify(ref)} + '. Call browser_get_accessibility_tree first.' };
+          }
+          const el = window.__claudeElementMap[${JSON.stringify(ref)}].deref();
+          if (!el || !document.contains(el)) {
+            delete window.__claudeElementMap[${JSON.stringify(ref)}];
+            return { error: 'Element ' + ${JSON.stringify(ref)} + ' is no longer in the DOM.' };
+          }
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const v = ${JSON.stringify(value)};
+          if (el instanceof HTMLSelectElement) {
+            const opts = Array.from(el.options);
+            const idx = opts.findIndex(o => o.value === String(v) || o.text === String(v));
+            if (idx < 0) return { error: 'Option not found: ' + v + '. Available: ' + opts.map(o => o.text).join(', ') };
+            el.selectedIndex = idx;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return { ok: true, type: 'select', value: el.value };
+          }
+          if (el instanceof HTMLInputElement) {
+            if (el.type === 'checkbox' || el.type === 'radio') {
+              const checked = Boolean(v);
+              if (el.checked !== checked) { el.click(); }
+              return { ok: true, type: el.type, checked: el.checked };
+            }
+            if (el.type === 'range' || el.type === 'number') {
+              el.value = String(v);
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              return { ok: true, type: el.type, value: el.value };
+            }
+            el.focus();
+            el.value = '';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.value = String(v);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return { ok: true, type: el.type, value: el.value };
+          }
+          if (el instanceof HTMLTextAreaElement) {
+            el.focus();
+            el.value = String(v);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return { ok: true, type: 'textarea', value: el.value };
+          }
+          el.textContent = String(v);
+          return { ok: true, type: 'other', tagName: el.tagName };
+        })()
+      `;
+      return evalJSON(script);
     },
 
     async findByText(text, role, exact) {

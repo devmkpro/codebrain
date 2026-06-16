@@ -18,29 +18,43 @@ function createBrowserHandlers(opts) {
   let nativeMode = null; // null = not checked, true = CDP, false = webview
   let nativeHandlers = null;
   let cdpCheckPromise = null;
+  let lastCdpCheckTime = 0;
+  const CDP_RECHECK_INTERVAL_MS = 5000; // re-check every 5s when in webview mode
 
   /**
-   * Lazy CDP detection — runs once on first browser tool call.
+   * Lazy CDP detection — checks on first call, and re-checks periodically
+   * when in webview mode (so connecting Chrome later is auto-detected).
    */
   async function ensureBrowserMode() {
-    if (nativeMode !== null) return nativeMode;
+    // If already in CDP mode and connected, stay there
+    const cdpClient = opts.cdpClient;
+    if (nativeMode === true && nativeHandlers && cdpClient?.isConnected()) return true;
 
-    // Only check once (prevent race conditions)
+    // If in webview mode, re-check periodically in case Chrome was launched after startup
+    const now = Date.now();
+    if (nativeMode === false && now - lastCdpCheckTime < CDP_RECHECK_INTERVAL_MS) {
+      return false;
+    }
+
+    // Only one concurrent check
     if (cdpCheckPromise) return cdpCheckPromise;
 
     cdpCheckPromise = (async () => {
-      const cdpClient = opts.cdpClient;
       if (!cdpClient) {
         nativeMode = false;
+        lastCdpCheckTime = Date.now();
         return false;
       }
 
       try {
         const det = await cdpClient.detect();
         if (det.available) {
-          await cdpClient.connect(det.port);
+          if (!cdpClient.isConnected()) {
+            await cdpClient.connect(det.port);
+          }
           nativeHandlers = createNativeChromeHandlers(cdpClient);
           nativeMode = true;
+          lastCdpCheckTime = Date.now();
           console.log(
             `[Browser] Native Chrome detected on port ${det.port} — using CDP`
           );
@@ -51,10 +65,15 @@ function createBrowserHandlers(opts) {
       }
 
       nativeMode = false;
-      console.log("[Browser] No native Chrome — using embedded webview");
+      lastCdpCheckTime = Date.now();
+      if (nativeHandlers) {
+        console.log("[Browser] Chrome disconnected — falling back to webview");
+        nativeHandlers = null;
+      }
       return false;
     })();
 
+    cdpCheckPromise.finally(() => { cdpCheckPromise = null; });
     return cdpCheckPromise;
   }
 
@@ -171,6 +190,7 @@ function createBrowserHandlers(opts) {
       nativeMode = null;
       cdpCheckPromise = null;
       nativeHandlers = null;
+      lastCdpCheckTime = 0; // force immediate re-check
       return this.browserMode();
     },
 
@@ -595,6 +615,73 @@ function createBrowserHandlers(opts) {
     async clearBrowserPaneCache() {
       activeBrowserPaneId = null;
       return { ok: true, message: "Browser pane cache cleared" };
+    },
+
+    // ── Auto-launch Chrome ─────────────────────────────────────────────
+    async browserLaunch({ url, port } = {}) {
+      const cdpClient = opts.cdpClient;
+      if (!cdpClient) return { ok: false, error: "CDP client not available" };
+
+      const result = await cdpClient.launch({ port: port || 9222 });
+      if (!result.ok) return result;
+
+      // Reset browser mode detection so next call re-checks CDP
+      nativeMode = null;
+      cdpCheckPromise = null;
+      nativeHandlers = null;
+      const connected = await ensureBrowserMode();
+
+      if (url && url !== "about:blank" && connected && nativeHandlers) {
+        try { await nativeHandlers.navigate(url); } catch {}
+      }
+
+      return { ...result, cdpConnected: connected };
+    },
+
+    // ── Form input via ref ─────────────────────────────────────────────
+    async browserFormInput({ ref, value }) {
+      await ensureBrowserMode();
+      if (!nativeHandlers) {
+        return { ok: false, error: "browser_form_input requires native Chrome (start with browser_launch first)" };
+      }
+      return nativeHandlers.formInput({ ref, value });
+    },
+
+    // ── Smart article extraction ───────────────────────────────────────
+    async browserGetArticleText(maxChars, paneId) {
+      const script = `(function() {
+        const selectors = [
+          'article', 'main', '[role="main"]',
+          '[class*="articleBody"]', '[class*="article-body"]',
+          '[class*="post-content"]', '[class*="entry-content"]',
+          '[class*="content-body"]', '[class*="page-content"]',
+          '#content', '.content', '#main', '.main'
+        ];
+        const maxLen = ${maxChars || 50000};
+        let best = null;
+        let bestLen = 0;
+        for (const sel of selectors) {
+          try {
+            const els = document.querySelectorAll(sel);
+            for (const el of els) {
+              const txt = (el.innerText || el.textContent || '').trim();
+              if (txt.length > bestLen) { bestLen = txt.length; best = el; }
+            }
+            if (best) break;
+          } catch(e) {}
+        }
+        const source = best ? best : document.body;
+        const text = (source.innerText || source.textContent || '').replace(/\\s+/g, ' ').trim();
+        return {
+          title: document.title,
+          url: location.href,
+          sourceElement: best ? (best.tagName.toLowerCase() + (best.id ? '#'+best.id : '') + (best.className ? '.'+best.className.split(' ')[0] : '')) : 'body',
+          charCount: text.length,
+          text: text.slice(0, maxLen)
+        };
+      })()`;
+
+      return browserCmd("eval", { javascript: script, paneId });
     },
   };
 }
