@@ -50,6 +50,78 @@ function createNativeChromeHandlers(cdpClient) {
     }
   }
 
+  // ── Phantom Cursor Animation ──────────────────────────────────────────────
+  // Inspired by Claude in Chrome's agent-visual-indicator.js
+  // Shows a visible cursor that animates to the target element before acting.
+
+  const CURSOR_SVG_PATH = "M0 0 L0 18 L4.5 14 L7.5 21.5 L11 20 L8 13 L14 13 Z";
+  const CURSOR_COLOR_STROKE = "#7c3aed"; // Codebrain purple
+  const CURSOR_COLOR_FILL = "#ffffff";
+  const CURSOR_GLOW = "drop-shadow(0 0 4px rgba(124,58,237,0.9)) drop-shadow(0 0 10px rgba(124,58,237,0.45))";
+  const CURSOR_TRANSITION_MS = 180;
+  const CURSOR_SETTLE_MS = 50;
+
+  /**
+   * Inject the phantom cursor SVG into the page (idempotent).
+   * If already present, no-op.
+   */
+  async function _injectCursor() {
+    await evalJS(`(() => {
+      if (document.getElementById('codebrain-phantom-cursor')) return;
+      const container = document.createElement('div');
+      container.id = 'codebrain-phantom-cursor';
+      container.setAttribute('aria-hidden', 'true');
+      container.style.cssText = \`
+        position: fixed;
+        top: 0; left: 0;
+        pointer-events: none;
+        z-index: 2147483646;
+        transform: translate3d(-100px, -100px, 0);
+        transition: transform ${CURSOR_TRANSITION_MS}ms cubic-bezier(0.2, 0, 0, 1);
+        will-change: transform;
+      \`;
+      const ns = 'http://www.w3.org/2000/svg';
+      const makePath = (attrs) => {
+        const p = document.createElementNS(ns, 'path');
+        p.setAttribute('d', '${CURSOR_SVG_PATH}');
+        for (const [k, v] of Object.entries(attrs)) p.setAttribute(k, v);
+        return p;
+      };
+      const svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('width', '20');
+      svg.setAttribute('height', '26');
+      svg.setAttribute('viewBox', '0 0 20 26');
+      svg.style.cssText = 'position:absolute; top:0; left:0; overflow:visible; filter: ${CURSOR_GLOW};';
+      svg.appendChild(makePath({ stroke: '${CURSOR_COLOR_STROKE}', 'stroke-width': '3', 'stroke-linejoin': 'round', fill: '${CURSOR_COLOR_STROKE}' }));
+      svg.appendChild(makePath({ fill: '${CURSOR_COLOR_FILL}' }));
+      container.appendChild(svg);
+      document.body.appendChild(container);
+    })()`);
+  }
+
+  /**
+   * Move the phantom cursor to (x, y) and wait for the CSS transition.
+   */
+  async function _moveCursorTo(x, y) {
+    await evalJS(`(() => {
+      const el = document.getElementById('codebrain-phantom-cursor');
+      if (!el) return;
+      el.style.transform = 'translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)';
+    })()`);
+    // Wait for transition to complete
+    await new Promise(r => setTimeout(r, CURSOR_TRANSITION_MS + CURSOR_SETTLE_MS));
+  }
+
+  /**
+   * Remove the phantom cursor from the page.
+   */
+  async function _removeCursor() {
+    await evalJS(`(() => {
+      const el = document.getElementById('codebrain-phantom-cursor');
+      if (el) el.remove();
+    })()`);
+  }
+
   return {
     // ─── Navigation ────────────────────────────────────────────────────
     async navigate(url) {
@@ -182,6 +254,7 @@ function createNativeChromeHandlers(cdpClient) {
      * Handles all input types correctly with proper DOM events.
      */
     async formInput({ ref, value }) {
+      const encodedValue = Buffer.from(String(value ?? ''), 'utf8').toString('base64');
       const script = `
         (function() {
           if (!window.__claudeElementMap || !window.__claudeElementMap[${JSON.stringify(ref)}]) {
@@ -193,7 +266,7 @@ function createNativeChromeHandlers(cdpClient) {
             return { error: 'Element ' + ${JSON.stringify(ref)} + ' is no longer in the DOM.' };
           }
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          const v = ${JSON.stringify(value)};
+          const v = decodeURIComponent(atob('${encodedValue}'));
           if (el instanceof HTMLSelectElement) {
             const opts = Array.from(el.options);
             const idx = opts.findIndex(o => o.value === String(v) || o.text === String(v));
@@ -250,7 +323,7 @@ function createNativeChromeHandlers(cdpClient) {
           const matchesText = exact
             ? elText === query || ariaLabel === query || placeholder === query
             : elText.toLowerCase().includes(query.toLowerCase()) || ariaLabel.toLowerCase().includes(query.toLowerCase());
-          const elRole = el.getAttribute('role') || el.tagName.toLowerCase();
+          const elRole = el.getAttribute('role') || (el.tagName === 'A' ? 'link' : el.tagName.toLowerCase());
           const matchesRole = !roleFilter || elRole === roleFilter || el.tagName.toLowerCase() === roleFilter;
           if (matchesText && matchesRole) {
             const rect = el.getBoundingClientRect();
@@ -269,6 +342,44 @@ function createNativeChromeHandlers(cdpClient) {
         return results.slice(0, 20);
       })()`);
       return { ok: true, elements: results };
+    },
+
+    /**
+     * clickByText — Find element by visible text and click it.
+     * Picks the most specific (deepest/leaf) match to avoid clicking parent containers.
+     */
+    async clickByText(text, role) {
+      // Find matching elements
+      const found = await this.findByText(text, role, false);
+      if (!found.ok || !found.elements || found.elements.length === 0) {
+        throw new Error('Element not found with text: ' + text);
+      }
+      // Pick the most specific element (smallest area = most specific)
+      const best = found.elements.reduce((a, b) => {
+        const areaA = a.bounds.w * a.bounds.h;
+        const areaB = b.bounds.w * b.bounds.h;
+        return areaA <= areaB ? a : b;
+      });
+      // Click it using coordinates (works for any element type including links)
+      const cx = best.center[0];
+      const cy = best.center[1];
+      await _injectCursor();
+      await _moveCursorTo(cx, cy);
+      // Use CDP for reliable click (especially for <a> tags that need real navigation)
+      if (cdpClient && cdpClient.send) {
+        await cdpClient.send("Input.dispatchMouseEvent", { type: "mousePressed", x: cx, y: cy, button: "left", clickCount: 1 });
+        await cdpClient.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: cx, y: cy, button: "left", clickCount: 1 });
+      } else {
+        // Fallback: dispatch synthetic events
+        await evalJS(`(() => {
+          const el = document.elementFromPoint(${cx}, ${cy});
+          if (!el) throw new Error('No element at coordinates');
+          ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
+            el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: ${cx}, clientY: ${cy}, button: 0 }));
+          });
+        })()`);
+      }
+      return { ok: true, clicked: best };
     },
 
     async getElement(selector) {
@@ -296,10 +407,20 @@ function createNativeChromeHandlers(cdpClient) {
     // ─── DOM Interaction ───────────────────────────────────────────────
 
     async click(selector) {
-      await evalJS(`(() => {
+      // Scroll into view and get center coordinates
+      const coords = await evalJSON(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) throw new Error('Element not found: ' + ${JSON.stringify(selector)});
         el.scrollIntoView({ block: 'center', behavior: 'instant' });
+        const rect = el.getBoundingClientRect();
+        return { cx: rect.x + rect.width / 2, cy: rect.y + rect.height / 2 };
+      })()`);
+      // Animate phantom cursor to element
+      await _injectCursor();
+      await _moveCursorTo(coords.cx, coords.cy);
+      // Perform click
+      await evalJS(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
         const rect = el.getBoundingClientRect();
         const cx = rect.x + rect.width / 2;
         const cy = rect.y + rect.height / 2;
@@ -311,12 +432,27 @@ function createNativeChromeHandlers(cdpClient) {
     },
 
     async fill(selector, value, clearFirst) {
+      // Get element center for cursor animation
+      const coords = await evalJSON(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) throw new Error('Element not found');
+        el.scrollIntoView({ block: 'center', behavior: 'instant' });
+        const rect = el.getBoundingClientRect();
+        return { cx: rect.x + rect.width / 2, cy: rect.y + rect.height / 2 };
+      })()`);
+      // Animate phantom cursor to input
+      await _injectCursor();
+      await _moveCursorTo(coords.cx, coords.cy);
+      // Perform fill
+      const encodedValue = Buffer.from(String(value ?? ''), 'utf8').toString('base64');
       await evalJS(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) throw new Error('Element not found');
+        if (el.disabled) throw new Error('Element is disabled');
+        if (el.readOnly) throw new Error('Element is readonly');
         el.focus();
         if (${!!clearFirst}) { el.value = ''; }
-        el.value = ${JSON.stringify(value)};
+        el.value = decodeURIComponent(atob('${encodedValue}'));
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
       })()`);
@@ -368,12 +504,22 @@ function createNativeChromeHandlers(cdpClient) {
     },
 
     async hover(selector) {
-      await evalJS(`(() => {
+      const coords = await evalJSON(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) throw new Error('Element not found');
+        el.scrollIntoView({ block: 'center', behavior: 'instant' });
         const rect = el.getBoundingClientRect();
-        el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 }));
-        el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 }));
+        return { cx: rect.x + rect.width / 2, cy: rect.y + rect.height / 2 };
+      })()`);
+      await _injectCursor();
+      await _moveCursorTo(coords.cx, coords.cy);
+      await evalJS(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        const rect = el.getBoundingClientRect();
+        const cx = rect.x + rect.width / 2;
+        const cy = rect.y + rect.height / 2;
+        el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: cx, clientY: cy }));
+        el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, clientX: cx, clientY: cy }));
       })()`);
       return { ok: true };
     },
@@ -382,6 +528,8 @@ function createNativeChromeHandlers(cdpClient) {
 
     async clickAt(x, y, button) {
       const btn = button === "right" ? 2 : button === "middle" ? 1 : 0;
+      await _injectCursor();
+      await _moveCursorTo(x, y);
       await cdpClient.send("Input.dispatchMouseEvent", {
         type: "mousePressed",
         x,
@@ -400,6 +548,8 @@ function createNativeChromeHandlers(cdpClient) {
     },
 
     async hoverAt(x, y) {
+      await _injectCursor();
+      await _moveCursorTo(x, y);
       await cdpClient.send("Input.dispatchMouseEvent", {
         type: "mouseMoved",
         x,
@@ -784,6 +934,7 @@ function createNativeChromeHandlers(cdpClient) {
       const results = await evalJSON(`(() => {
         const query = ${JSON.stringify(args.query)};
         const role = ${JSON.stringify(args.role || null)};
+        const queryWords = query.toLowerCase().split(/\\s+/).filter(Boolean);
         const allElements = document.querySelectorAll('*');
         const results = [];
         for (const el of allElements) {
@@ -791,7 +942,8 @@ function createNativeChromeHandlers(cdpClient) {
           const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
           const placeholder = (el.getAttribute('placeholder') || '').toLowerCase();
           const title = (el.getAttribute('title') || '').toLowerCase();
-          const matchesText = text.includes(query.toLowerCase()) || ariaLabel.includes(query.toLowerCase()) || placeholder.includes(query.toLowerCase()) || title.includes(query.toLowerCase());
+          const searchable = text + ' ' + ariaLabel + ' ' + placeholder + ' ' + title;
+          const matchesText = queryWords.every(w => searchable.includes(w));
           const matchesRole = !role || el.tagName.toLowerCase() === role.toLowerCase() || (el.getAttribute('role') || '') === role;
           if (matchesText && matchesRole) {
             const rect = el.getBoundingClientRect();

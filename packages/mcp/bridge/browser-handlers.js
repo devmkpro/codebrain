@@ -147,6 +147,15 @@ function createBrowserHandlers(opts) {
         "wait-for-load": () => nativeHandlers.waitForLoad(payload.timeoutMs),
         eval: () => nativeHandlers.evalJs(payload.javascript),
         "page-summary": () => nativeHandlers.pageSummary(),
+        "click-text": () => nativeHandlers.clickByText(payload.text, payload.role),
+        "fill-form": async () => {
+          const results = [];
+          for (const f of (payload.fields || [])) {
+            results.push(await nativeHandlers.fill(f.selector, f.value, false));
+          }
+          return { ok: true, results };
+        },
+        find: () => nativeHandlers.find(payload),
       };
 
       const handler = handlerMap[type];
