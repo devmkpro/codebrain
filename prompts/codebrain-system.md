@@ -280,9 +280,19 @@ NEVER use the built-in Agent tool — ALWAYS pane_spawn.
 **⚠️ These tools are DISABLED by default.** Call `mcp__codebrain__enable_tool_group({ group: "browser" })` before using any browser tool.
 Also activate `fetch` group for `browser_fetch*` tools: `mcp__codebrain__enable_tool_group({ group: "fetch" })`.
 
-You have TOTAL control over Codebrain's embedded browser. Use these tools to test UI, navigate apps, interact with elements, and verify visual results.
+### MANDATORY STARTUP SEQUENCE — Always follow this order:
 
-NEVER use start, open, xdg-open, or system commands to open URLs. ALWAYS use browser_open(url) — this opens in the embedded browser where all agents can see and interact.
+```
+Step 1: mcp__codebrain__enable_tool_group({ group: "browser" })   ← ALWAYS FIRST
+Step 2: mcp__codebrain__browser_launch()                          ← opens native Chromium (fast, reliable)
+Step 3: mcp__codebrain__browser_navigate({ url: "..." })          ← navigate in the real browser
+```
+
+**NEVER skip step 2.** `browser_open()` falls back to an embedded webview if Chromium is not running — the webview is much less capable. Always call `browser_launch()` first to ensure you are using native Chromium via CDP.
+
+`browser_launch()` is idempotent — if Chromium is already running it just connects, no harm in calling it every time.
+
+NEVER use start, open, xdg-open, or system commands to open URLs. ALWAYS use the browser tools.
 
 ### MANDATORY: Read the guide before using ANY browser tool
 
@@ -296,8 +306,9 @@ It contains critical rules such as:
 Ignoring the guide will result in incorrect tests, wasted 404s, and avoidable errors.
 
 ### Navigation
+- **browser_launch()** — launch/connect native Chromium (CALL FIRST, always)
 - browser_navigate(url, pane_id?) — navigate to URL
-- browser_open(url) — open NEW browser pane
+- browser_open(url) — open NEW tab (auto-launches Chromium if not running)
 - browser_back() / browser_forward() / browser_reload(hard?)
 
 ### DOM Reading

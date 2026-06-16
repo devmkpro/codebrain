@@ -204,19 +204,44 @@ function createBrowserHandlers(opts) {
       return browserCmd("navigate", { url, paneId });
     },
     async browserOpen(url) {
-      // In CDP mode, create a new tab instead of a webview pane
-      const isCdp = await ensureBrowserMode();
-      if (isCdp && nativeHandlers) {
-        return nativeHandlers.tabsCreate(url);
+      // Check CDP mode first
+      let isCdp = await ensureBrowserMode();
+
+      // If not in CDP mode, auto-launch the bundled Chromium
+      if (!isCdp && opts.cdpClient) {
+        console.log("[Browser] No CDP detected — auto-launching bundled Chromium...");
+        try {
+          const launched = await opts.cdpClient.launch({ port: 9223 });
+          if (launched.ok) {
+            // Reset detection state and re-check
+            nativeMode = null;
+            cdpCheckPromise = null;
+            nativeHandlers = null;
+            lastCdpCheckTime = 0;
+            isCdp = await ensureBrowserMode();
+            console.log(`[Browser] Chromium launched (pid ${launched.pid}) — CDP mode: ${isCdp}`);
+          } else {
+            console.log(`[Browser] Auto-launch failed: ${launched.error}`);
+          }
+        } catch (err) {
+          console.log(`[Browser] Auto-launch error: ${err.message}`);
+        }
       }
-      // Webview mode: create browser pane
+
+      // CDP mode: open new tab in Chromium
+      if (isCdp && nativeHandlers) {
+        const result = await nativeHandlers.tabsCreate(url);
+        return { ...result, mode: "cdp" };
+      }
+
+      // Fallback: embedded webview pane
       if (!opts.createBrowserPane)
         throw new Error("browser pane creation not available");
       const result = await opts.createBrowserPane(url);
       if (result?.ok && result?.paneId) {
         setActiveBrowserPane(result.paneId);
       }
-      return result;
+      return { ...result, mode: "webview" };
     },
     async browserBack(paneId) {
       return browserCmd("back", { paneId });

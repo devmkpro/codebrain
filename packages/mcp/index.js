@@ -1081,6 +1081,25 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ── mcp__codebrain__file_budgeted_read ─────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__file_budgeted_read",
+    "Read a file within a token budget. Prioritizes structure (headers, function signatures) over body content. Returns headers-first when file exceeds budget. Use for large files to avoid context overflow.",
+    {
+      path:          z.string().describe("Relative or absolute path within the workspace."),
+      budgetTokens:  z.number().optional().describe("Token budget for the read (default: 4000). ~4 chars per token."),
+      encoding:      z.string().optional().describe("File encoding (default: utf-8)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.fileBudgetedRead(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
   // ── mcp__codebrain__file_write ─────────────────────────────────────────────
   server.tool(
     "mcp__codebrain__file_write",
@@ -1466,7 +1485,7 @@ function createCodebrainMCPServer(bridge) {
 
   server.tool(
     "mcp__codebrain__enable_tool_group",
-    "Activate additional MCP tool groups on demand. Call this BEFORE using tools from disabled groups. Groups: browser (60), fetch (5), mr (4), swarm (10), worker (10), consensus (19), event (5), mission (5), memory_advanced (4), hooks_advanced (3). Essential tools (pane, memory, pattern, file, task, hooks, skill, system, todo, agent, provider, handoff) are always available.",
+    "Activate additional MCP tool groups on demand. Call this BEFORE using tools from disabled groups. Groups: browser (60), fetch (5), mr (4), swarm (10), worker (10), consensus (19), event (5), mission (5), memory_advanced (4), hooks_advanced (3). Essential tools (pane, memory, pattern, file, task, hooks, skill, system, todo, agent, provider, handoff) are always available. BROWSER WORKFLOW: (1) enable_tool_group('browser') → (2) browser_launch() → (3) browser_navigate(url). Always call browser_launch() before any browser_* tool to use native Chromium instead of fallback webview.",
     {
       group: z.enum(["browser", "fetch", "mr", "swarm", "worker", "consensus", "event", "mission", "memory_advanced", "hooks_advanced"])
         .describe("Tool group to activate. Use tool_groups() to see all available groups."),
