@@ -14,9 +14,57 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.9.2",
+    "version": "1.9.3",
     "date": "em desenvolvimento",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "auto-fix 1 finding(s) from review  Fixes: Missing error handling in server shutdown"
+      },
+      {
+        "kind": "fix",
+        "text": "auto-fix 1 finding(s) from review  Fixes: Potential race condition in server shutdown"
+      },
+      {
+        "kind": "fix",
+        "text": "auto-fix 1 finding(s) from review  Fixes: Asynchronous server shutdown race condition"
+      },
+      {
+        "kind": "fix",
+        "text": "auto-fix 1 finding(s) from review  Fixes: Default port changed from 3000 to 3001"
+      },
+      {
+        "kind": "fix",
+        "text": "auto-fix 1 finding(s) from review  Fixes: Inconsistent return logic in startApiServer"
+      },
+      {
+        "kind": "feat",
+        "text": "Add a GET /api/health endpoint returning {status: ok, timestamp: iso8601}"
+      },
+      {
+        "kind": "feat",
+        "text": "Add a GET /api/health endpoint returning {status: ok}"
+      },
+      {
+        "kind": "feat",
+        "text": "enhance applyFixes handler to include sourceBranch parameter and update instructions for branch safety"
+      },
+      {
+        "kind": "feat",
+        "text": "refactor git directory resolution and repo detection to use async file operations"
+      },
+      {
+        "kind": "feat",
+        "text": "implement auto-fix modal for MR review findings and enhance review handling"
+      },
+      {
+        "kind": "feat",
+        "text": "prevent duplicate AI signature in comments for merge requests"
+      },
+      {
+        "kind": "fix",
+        "text": "MR review trigger — async syntax, diff extraction, workspace validation, review via MCP"
+      },
       {
         "kind": "feat",
         "text": "add clearReviewingState option to workerManager and implement polling for review status"
