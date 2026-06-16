@@ -451,15 +451,139 @@ class CDPClient {
   }
 
   /**
+   * Download portable Chromium into local/chromium/ if not already present.
+   * Uses the official Chromium snapshot CDN (commondatastorage.googleapis.com).
+   * Returns { ok, exe, downloaded } or { ok: false, error }.
+   */
+  async _downloadChromium() {
+    const isWin = process.platform === "win32";
+    const isMac = process.platform === "darwin";
+
+    const targetExe = isWin ? PORTABLE_CHROMIUM_WIN
+      : isMac ? PORTABLE_CHROMIUM_MAC
+      : PORTABLE_CHROMIUM_UNIX;
+
+    // Already exists — nothing to do
+    if (fs.existsSync(targetExe)) return { ok: true, exe: targetExe, downloaded: false };
+
+    const platform = isWin ? "Win_x64" : isMac ? "Mac" : "Linux_x64";
+    const zipName = isWin ? "chrome-win.zip" : isMac ? "chrome-mac.zip" : "chrome-linux.zip";
+    const destDir = path.join(CODEBRAIN_ROOT, "local", "chromium");
+    const zipPath = path.join(destDir, "chromium-download.zip");
+
+    try {
+      fs.mkdirSync(destDir, { recursive: true });
+    } catch {}
+
+    this.log(`[CDP] Portable Chromium not found — downloading...`);
+
+    // 1. Get latest build number
+    let buildNum;
+    try {
+      buildNum = await new Promise((resolve, reject) => {
+        const req = http.get(
+          `https://commondatastorage.googleapis.com/chromium-browser-snapshots/${platform}/LAST_CHANGE`,
+          (res) => {
+            let d = "";
+            res.on("data", c => d += c);
+            res.on("end", () => resolve(d.trim()));
+          }
+        );
+        req.on("error", reject);
+        req.setTimeout(10000, () => { req.destroy(); reject(new Error("timeout")); });
+      });
+    } catch (err) {
+      return { ok: false, error: `Failed to fetch Chromium build number: ${err.message}` };
+    }
+
+    this.log(`[CDP] Downloading Chromium build ${buildNum}...`);
+
+    // 2. Download zip via HTTPS redirect
+    const downloadUrl = `https://commondatastorage.googleapis.com/chromium-browser-snapshots/${platform}/${buildNum}/${zipName}`;
+
+    try {
+      await new Promise((resolve, reject) => {
+        const https = require("https");
+
+        function get(url, redirects) {
+          redirects = redirects || 0;
+          if (redirects > 5) return reject(new Error("Too many redirects"));
+          https.get(url, (res) => {
+            if (res.statusCode === 301 || res.statusCode === 302) {
+              return get(res.headers.location, redirects + 1);
+            }
+            if (res.statusCode !== 200) {
+              return reject(new Error(`HTTP ${res.statusCode} downloading Chromium`));
+            }
+            const total = parseInt(res.headers["content-length"] || "0", 10);
+            let received = 0;
+            const out = fs.createWriteStream(zipPath);
+            res.on("data", chunk => {
+              received += chunk.length;
+              if (total > 0) {
+                const pct = Math.round(received / total * 100);
+                if (pct % 10 === 0) this.log(`[CDP] Downloading Chromium... ${pct}% (${Math.round(received/1024/1024)}MB)`);
+              }
+            });
+            res.pipe(out);
+            out.on("finish", resolve);
+            out.on("error", reject);
+          }).on("error", reject);
+        }
+
+        get(downloadUrl);
+      });
+    } catch (err) {
+      try { fs.unlinkSync(zipPath); } catch {}
+      return { ok: false, error: `Download failed: ${err.message}` };
+    }
+
+    // 3. Extract zip using Node's built-in (requires Node 18.3+) or PowerShell/unzip
+    this.log(`[CDP] Extracting Chromium...`);
+    try {
+      if (isWin) {
+        // Use PowerShell Expand-Archive
+        const { execSync: exec } = require("child_process");
+        exec(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force"`, {
+          timeout: 120000,
+          windowsHide: true,
+        });
+      } else {
+        const { execSync: exec } = require("child_process");
+        exec(`unzip -o "${zipPath}" -d "${destDir}"`, { timeout: 120000 });
+      }
+    } catch (err) {
+      try { fs.unlinkSync(zipPath); } catch {}
+      return { ok: false, error: `Extraction failed: ${err.message}` };
+    }
+
+    // 4. Cleanup zip
+    try { fs.unlinkSync(zipPath); } catch {}
+
+    // 5. Set executable bit on Linux/Mac
+    if (!isWin && fs.existsSync(targetExe)) {
+      try { fs.chmodSync(targetExe, 0o755); } catch {}
+    }
+
+    if (!fs.existsSync(targetExe)) {
+      return { ok: false, error: `Extraction complete but executable not found at: ${targetExe}` };
+    }
+
+    this.log(`[CDP] Chromium downloaded and ready: ${targetExe}`);
+    return { ok: true, exe: targetExe, downloaded: true };
+  }
+
+  /**
    * Launch Chrome/Chromium with remote debugging enabled.
    * If Chrome is already running on the target port, connects to it instead.
+   * Auto-downloads portable Chromium if not present.
    * Returns { ok, pid, port, launched } where launched=false means we connected to existing instance.
    */
   async launch(opts) {
     opts = opts || {};
-    const port = opts.port || 9222;
+    const port = opts.port || 9223;
 
-    // 1. Check if Chrome is already running
+    // 1. Check if Chrome is already running on any debug port
     try {
       const det = await this.detect();
       if (det.available) {
@@ -471,12 +595,18 @@ class CDPClient {
       // not running, proceed to launch
     }
 
-    // 2. Find executable
+    // 2. Auto-download portable Chromium if not present
+    const dlResult = await this._downloadChromium();
+    if (!dlResult.ok) {
+      this.log(`[CDP] Chromium download failed: ${dlResult.error} — falling back to system Chrome`);
+    }
+
+    // 3. Find executable (portable first, then system)
     const exe = this._findChromeExecutable();
     if (!exe) {
       return {
         ok: false,
-        error: "Chrome/Chromium not found. Install Google Chrome or Brave Browser.",
+        error: "Chrome/Chromium not found and auto-download failed. Install Google Chrome.",
         searchedPaths: process.platform === "win32" ? CHROME_PATHS_WIN : CHROME_PATHS_UNIX,
       };
     }
