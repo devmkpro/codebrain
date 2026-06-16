@@ -14,8 +14,22 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.9.5",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "bundle portable Chromium + fix CDP detection with Brave on port 9222"
+      },
+      {
+        "kind": "feat",
+        "text": "auto-launch native Chrome + smart CDP re-detection + browser_form_input/get_article_text"
+      }
+    ]
+  },
+  {
     "version": "1.9.4",
-    "date": "em desenvolvimento",
+    "date": "junho 2026",
     "highlights": [
       {
         "kind": "feat",
