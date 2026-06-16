@@ -87,6 +87,7 @@ export async function spawnPaneInternal(
       args.push("--resume", config.claudeSessionId);
     }
 
+
     const { nanoid } = await import("nanoid");
     const paneId = config.paneId ?? nanoid();
 
@@ -113,17 +114,11 @@ export async function spawnPaneInternal(
       // ── Collect all MCPs installed in Claude Code and inject into .mcp.json ──
       // This ensures OpenClaude/MIMO panes have access to the same MCPs as
       // the native Claude CLI (Built-in MCPs + user MCPs from ~/.claude.json).
-
-      // 1. Built-in MCPs: detect known native host executables
-      const builtins: Array<{ name: string; batPath: string; npmPkg?: string }> = [
-        { name: "claude-in-chrome", batPath: path.join(os.homedir(), ".claude", "chrome", "chrome-native-host.bat") },
-      ];
-      for (const { name, batPath } of builtins) {
-        if (fs.existsSync(batPath)) {
-          mcpServers[name] = { type: "stdio", command: batPath, args: [] };
-          log.info(`[spawnPaneInternal] Auto-injected built-in MCP: ${name}`);
-        }
-      }
+      //
+      // NOTE: "claude-in-chrome" is RESERVED in Claude Code CLI — injecting it into
+      // .mcp.json causes a "[Warning] reserved MCP server name" error and it is NOT loaded.
+      // For agent="claude": use --claude-in-chrome-mcp flag (handled above).
+      // For agent="openclaude": inject into ~/.openclaude.json (handled below).
 
       // 2. User MCPs from ~/.claude.json (global + current project)
       const claudeJsonPath = path.join(os.homedir(), ".claude.json");

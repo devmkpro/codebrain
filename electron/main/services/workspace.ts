@@ -185,6 +185,7 @@ Query the MCP server at ${httpUrl} using Streamable HTTP transport.
         };
         updated++;
       }
+
     }
     if (updated > 0) {
       fs.writeFileSync(openClaudeConfigPath, JSON.stringify(openClaudeConfig, null, 2), "utf-8");

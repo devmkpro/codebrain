@@ -322,6 +322,83 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ── mcp__codebrain__task_tree ─────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__task_tree",
+    "Manage hierarchical tasks with tree structure (T1, T1.1, T1.2). SQLite-backed, persistent. Actions: create, update, list, get, delete, gate. Gate returns incomplete tasks for pre-stop check.",
+    {
+      action: z.enum(["create", "update", "list", "get", "delete", "gate"])
+               .describe("Action: create, update, list, get, delete, gate."),
+      id: z.string().optional().describe("Task ID (pattern: T1, T1.1, T1.2). Required for create/update/get/delete."),
+      description: z.string().optional().describe("Task description. Required for create."),
+      status: z.enum(["open", "in_progress", "blocked", "done", "abandoned"]).optional()
+               .describe("New status for update action."),
+      parentId: z.string().optional().describe("Parent task ID for create (makes this a subtask)."),
+      owner: z.string().optional().describe("Pane ID of the assigned agent."),
+      sessionId: z.string().optional().describe("Session ID for grouping."),
+      workspace: z.string().optional().describe("Workspace path filter."),
+    },
+    async (args) => {
+      try {
+        const store = opts.memoryStore;
+        if (!store) return { content: [{ type: "text", text: "error: memory store not available" }], isError: true };
+        let result;
+        switch (args.action) {
+          case "create":
+            result = store.taskTreeCreate({ id: args.id, description: args.description, parentId: args.parentId, sessionId: args.sessionId, owner: args.owner, workspace: args.workspace });
+            break;
+          case "update":
+            result = store.taskTreeUpdate({ id: args.id, status: args.status, owner: args.owner, workspace: args.workspace });
+            break;
+          case "list":
+            result = store.taskTreeList({ sessionId: args.sessionId, status: args.status, workspace: args.workspace, parentId: args.parentId });
+            break;
+          case "get":
+            result = store.taskTreeGet({ id: args.id });
+            break;
+          case "delete":
+            result = store.taskTreeDelete({ id: args.id });
+            break;
+          case "gate":
+            result = store.taskTreeGate({ workspace: args.workspace });
+            break;
+          default:
+            result = { ok: false, error: `unknown action: ${args.action}` };
+        }
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__auto_dream ────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__auto_dream",
+    "Run auto-dream (consolidate working memories into semantic summaries) or auto-distill (extract repeated workflow patterns from trajectories). Use periodically for memory hygiene.",
+    {
+      mode: z.enum(["dream", "distill"]).describe("Mode: 'dream' consolidates working memories, 'distill' extracts workflow patterns from trajectories."),
+      workspace: z.string().optional().describe("Workspace to scope the operation."),
+      maxAge: z.number().optional().describe("For dream: max age in seconds of working memories to consolidate (default: 7 days)."),
+      minOccurrences: z.number().optional().describe("For distill: minimum occurrences to count as pattern (default: 2)."),
+    },
+    async (args) => {
+      try {
+        const store = opts.memoryStore;
+        if (!store) return { content: [{ type: "text", text: "error: memory store not available" }], isError: true };
+        let result;
+        if (args.mode === "dream") {
+          result = store.autoDream({ workspace: args.workspace, maxAge: args.maxAge });
+        } else {
+          result = store.autoDistill({ workspace: args.workspace, minOccurrences: args.minOccurrences });
+        }
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
   // ── mcp__codebrain__pane_write_many ────────────────────────────────────────
   server.tool(
     "mcp__codebrain__pane_write_many",

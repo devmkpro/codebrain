@@ -245,6 +245,111 @@ function createFileHandlers(opts) {
         },
       };
     },
+
+    /**
+     * Read a file within a token budget (MiMo-inspired budgeted read).
+     * Prioritizes structure (headers, function signatures) over full body content.
+     * Useful for reading large files without consuming the entire context window.
+     *
+     * @param {{ path: string, budgetTokens?: number, encoding?: string }} opts
+     * @returns {{ ok: boolean, content?: string, truncated?: boolean, sections?: number, budgetUsed?: number }}
+     */
+    async fileBudgetedRead({ path: filePath, budgetTokens = 4000, encoding }) {
+      try {
+        const fullPath = resolveSafe(filePath);
+        enforceAccessMode(fullPath, "read");
+        if (!fs.existsSync(fullPath)) return { ok: false, error: "file not found" };
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) return { ok: false, error: "is a directory, use fileRead" };
+
+        const fullText = fs.readFileSync(fullPath, encoding || "utf-8");
+        const totalChars = fullText.length;
+
+        // Rough token estimate: ~4 chars per token (conservative for code)
+        const estimateTokens = (text) => Math.ceil(text.length / 4);
+
+        // If file fits within budget, return as-is
+        if (estimateTokens(fullText) <= budgetTokens) {
+          return { ok: true, content: fullText, truncated: false, size: stat.size, budgetUsed: estimateTokens(fullText) };
+        }
+
+        // Parse into sections by markdown/code headers
+        const lines = fullText.split("\n");
+        const sections = [];
+        let currentSection = { header: "", headerLine: 0, lines: [], isHeader: false };
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          // Detect headers: # markdown, // === section, function/class/const declarations
+          const isHeader = /^(#{1,6}\s|\/\/\s*={3,}|(?:export\s+)?(?:async\s+)?function\s+\w|(?:export\s+)?class\s+\w|(?:export\s+)?(?:const|let|var)\s+\w+\s*=)/.test(line);
+
+          if (isHeader && currentSection.lines.length > 0) {
+            sections.push(currentSection);
+            currentSection = { header: line, headerLine: i, lines: [line], isHeader: true };
+          } else {
+            currentSection.lines.push(line);
+          }
+        }
+        if (currentSection.lines.length > 0) sections.push(currentSection);
+
+        // Always include headers (structure skeleton)
+        const headerLines = sections.map(s => s.header || s.lines[0]).filter(Boolean);
+        const headerTokens = estimateTokens(headerLines.join("\n"));
+
+        if (headerTokens >= budgetTokens) {
+          // Even headers exceed budget — return skeleton only
+          const skeleton = headerLines.join("\n").slice(0, budgetTokens * 4);
+          return {
+            ok: true,
+            content: skeleton + "\n// ... (truncated — headers only, file too large for budget)",
+            truncated: true,
+            sections: sections.length,
+            budgetUsed: estimateTokens(skeleton),
+            totalSize: stat.size,
+          };
+        }
+
+        // Fill sections within remaining budget
+        const remaining = budgetTokens - headerTokens;
+        const out = [];
+        let used = headerTokens;
+
+        for (const section of sections) {
+          // Always include header line
+          out.push(section.header || section.lines[0]);
+          const sectionBody = section.lines.slice(section.isHeader ? 1 : 0).join("\n");
+          const sectionTokens = estimateTokens(sectionBody);
+
+          if (used + sectionTokens <= budgetTokens) {
+            // Entire section fits
+            if (section.lines.length > 1) {
+              out.push(sectionBody);
+              used += sectionTokens;
+            }
+          } else {
+            // Partial — include what fits
+            const charBudget = (budgetTokens - used) * 4;
+            if (charBudget > 80) {
+              out.push(sectionBody.slice(0, charBudget) + "\n// ... (section truncated)");
+            }
+            used = budgetTokens;
+            break;
+          }
+        }
+
+        return {
+          ok: true,
+          content: out.join("\n"),
+          truncated: true,
+          sections: sections.length,
+          budgetUsed: used,
+          totalSize: stat.size,
+          totalTokensEstimate: estimateTokens(fullText),
+        };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
   };
 }
 

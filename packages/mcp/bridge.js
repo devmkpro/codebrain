@@ -227,6 +227,128 @@ function createMCPBridge(ptyManager, opts = {}) {
   // Agents should call pane_read_messages proactively per their system prompt,
   // not be driven by a polling loop. Messages remain in the inbox until read.
 
+  // ── Repeated-Step Loop Detection (MiMo-inspired) ─────────────────────────
+  // When a pane goes idle, check if its recent output shows the same tool call
+  // repeated 3+ times consecutively. If so, inject a warning to break the loop.
+  if (opts.memoryStore && opts.memoryStore.recordStep) {
+    ptyManager.on("idle", ({ paneId, idle }) => {
+      try {
+        const store = opts.memoryStore;
+        if (!store || !idle?.lastOutput) return;
+        // Scan last output lines for repeated tool call patterns
+        const outputText = Array.isArray(idle.lastOutput) ? idle.lastOutput.join("\n") : String(idle.lastOutput);
+        // Look for MCP tool call patterns (mcp__codebrain__xxx)
+        const toolCalls = outputText.match(/mcp__codebrain__(\w+)/g);
+        if (!toolCalls || toolCalls.length < 2) return;
+        // Check if the same tool was called multiple times
+        const lastTool = toolCalls[toolCalls.length - 1];
+        const recentTools = toolCalls.slice(-3);
+        if (recentTools.length >= 3 && recentTools.every(t => t === lastTool)) {
+          // Potential loop detected — check if this pattern persists
+          const result = store.recordStep({ paneId, toolName: lastTool, toolInput: {} });
+          if (result.isLooping) {
+            console.warn(`[bridge] LOOP DETECTED: pane ${paneId.slice(0,8)} repeated "${lastTool}" ${result.count}x`);
+            // Inject a gentle warning (the agent will see it on next turn)
+            try {
+              const warning = `\n⚠️ LOOP WARNING: You appear to be calling "${lastTool}" repeatedly with the same result. Try a different approach or stop.\n`;
+              ptyManager.write(paneId, warning, false);
+            } catch {}
+          }
+        }
+      } catch {}
+    });
+  }
+
+  // Clean up step history and pressure tracking on pane exit
+  if (opts.hooksManager) {
+    opts.hooksManager.on("pane_exited", ({ paneId }) => {
+      try { opts.memoryStore?.clearStepHistory?.({ paneId }); } catch {}
+      try { opts.memoryStore?.clearPressureTracking?.({ paneId }); } catch {}
+    });
+  }
+
+  // ── Context Pressure Tracking (MiMo-inspired) ────────────────────────────
+  // Track output volume and tool calls per pane for pressure estimation.
+  if (opts.memoryStore?.recordActivity) {
+    ptyManager.on("idle", ({ paneId, idle }) => {
+      try {
+        const lastOutput = idle?.lastOutput;
+        if (!lastOutput || lastOutput.length === 0) return;
+        const outputText = Array.isArray(lastOutput) ? lastOutput.join("\n") : String(lastOutput);
+        const outputChars = outputText.length;
+        const hasToolCall = /mcp__codebrain__|tool_use|function_call/i.test(outputText);
+        opts.memoryStore.recordActivity({ paneId, outputChars, toolCall: hasToolCall });
+      } catch {}
+    });
+  }
+
+  // ── Memory Auto-Pruning (MiMo-inspired) ──────────────────────────────────
+  // Run once on startup, then every 6 hours.
+  if (opts.memoryStore?.autoPrune) {
+    // Initial prune on startup (cleanup stale data from previous sessions)
+    try {
+      const result = opts.memoryStore.autoPrune();
+      if (result.ok && result.pruned > 0) {
+        console.log(`[bridge] Memory auto-prune: removed ${result.pruned} stale entries (stale: ${result.details.stale}, orphans: ${result.details.orphans}, excess: ${result.details.excess})`);
+      }
+    } catch {}
+
+    // Periodic prune every 6 hours
+    const PRUNE_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
+    setInterval(() => {
+      try {
+        const result = opts.memoryStore.autoPrune();
+        if (result.ok && result.pruned > 0) {
+          console.log(`[bridge] Memory auto-prune (periodic): removed ${result.pruned} entries`);
+        }
+      } catch {}
+    }, PRUNE_INTERVAL);
+  }
+
+  // ── Auto-Dream + Auto-Distill (MiMo-inspired) ────────────────────────────
+  // Dream: consolidate working memories older than 1 day → semantic summaries
+  // Distill: extract repeated workflows from trajectories → patterns
+  // Dream runs every 24h, Distill runs every 7 days
+  if (opts.memoryStore?.autoDream && opts.memoryStore?.autoDistill) {
+    const DREAM_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+    const DISTILL_INTERVAL = 7 * 24 * 60 * 60 * 1000; // 7 days
+    const workspace = opts.getCurrentWorkspacePath?.() || null;
+
+    // Dream on startup delay (wait 5 min for some activity first)
+    setTimeout(() => {
+      try {
+        const result = opts.memoryStore.autoDream({ workspace });
+        if (result.ok && result.consolidated > 0) {
+          console.log(`[bridge] Auto-dream: consolidated ${result.consolidated} memory groups`);
+        }
+      } catch {}
+    }, 5 * 60 * 1000);
+
+    // Periodic dream every 24h
+    setInterval(() => {
+      try {
+        const ws = opts.getCurrentWorkspacePath?.() || null;
+        const result = opts.memoryStore.autoDream({ workspace: ws });
+        if (result.ok && result.consolidated > 0) {
+          console.log(`[bridge] Auto-dream (periodic): consolidated ${result.consolidated} groups`);
+        }
+      } catch {}
+    }, DREAM_INTERVAL);
+
+    // Periodic distill every 7 days
+    setTimeout(() => {
+      setInterval(() => {
+        try {
+          const ws = opts.getCurrentWorkspacePath?.() || null;
+          const result = opts.memoryStore.autoDistill({ workspace: ws });
+          if (result.ok && result.distilled > 0) {
+            console.log(`[bridge] Auto-distill: extracted ${result.distilled} workflow patterns`);
+          }
+        } catch {}
+      }, DISTILL_INTERVAL);
+    }, 60 * 60 * 1000); // First distill after 1 hour
+  }
+
   // ── CDP Client for native Chrome control ─────────────────────────────
   // Lazy-initialized on first browser tool call.
   // If opts.cdpClient is already provided (from mcp.ts), use it.
@@ -334,6 +456,31 @@ function createMCPBridge(ptyManager, opts = {}) {
     getBotToken: opts.getBotToken,
     emitNotification: opts.emitNotification,
   });
+
+  // ── Start stuck detection scanner (MiMo-inspired) ──────────────────────────
+  // Scans actor_registry every 60s for actors stuck in 'running' for >5 minutes.
+  // Marks them as 'stuck' and fires hooks for UI notification.
+  if (opts.memoryStore && opts.memoryStore.actorStartStuckScanner) {
+    opts.memoryStore.actorStartStuckScanner(60000, (stuckActors) => {
+      try {
+        for (const actor of stuckActors) {
+          const label = actor.label || actor.agent || actor.pane_id?.slice(0, 8) || 'unknown';
+          const stuckMin = Math.floor((actor.stuckDuration || 0) / 60000);
+          console.warn(`[bridge] STUCK DETECTED: "${label}" (${actor.pane_id}) — no activity for ${stuckMin}m`);
+          // Fire hook for observability
+          if (opts.hooksManager) {
+            opts.hooksManager.fire("worker_alert", {
+              paneId: actor.pane_id,
+              label,
+              stuckDuration: actor.stuckDuration,
+              type: "stuck",
+            });
+          }
+        }
+      } catch {}
+    });
+    console.log("[bridge] Actor stuck detection scanner started (60s interval, 5min threshold)");
+  }
 
   // Wire mrHandlers + configStore + paneHandlers into WorkerManager for mr_poll worker
   workerManager.opts.mrHandlers = mrHandlers;

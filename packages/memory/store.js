@@ -240,6 +240,85 @@ function createMemoryStore(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_agent_msgs_created ON agent_messages(created_at);
   `);
 
+  // ── Task Tree (MiMo-inspired hierarchical task system) ────────────────────
+  // Supports T1, T1.1, T1.2 tree-structured tasks with event audit trail.
+  // Unlike the in-memory todo_manager, this is SQLite-backed and persistent.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS task_tree (
+      id            TEXT NOT NULL,
+      session_id    TEXT,
+      parent_id     TEXT,
+      description   TEXT NOT NULL,
+      status        TEXT NOT NULL DEFAULT 'open'
+                    CHECK(status IN ('open','in_progress','blocked','done','abandoned')),
+      owner         TEXT,
+      blocked_by    TEXT,
+      workspace     TEXT,
+      created_at    INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at    INTEGER NOT NULL DEFAULT (unixepoch()),
+      completed_at  INTEGER,
+      PRIMARY KEY (id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_tree_session ON task_tree(session_id);
+    CREATE INDEX IF NOT EXISTS idx_task_tree_status ON task_tree(status);
+    CREATE INDEX IF NOT EXISTS idx_task_tree_parent ON task_tree(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_task_tree_workspace ON task_tree(workspace);
+
+    CREATE TABLE IF NOT EXISTS task_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id     TEXT NOT NULL,
+      kind        TEXT NOT NULL,
+      data        TEXT,
+      workspace   TEXT,
+      created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id);
+    CREATE INDEX IF NOT EXISTS idx_task_events_created ON task_events(created_at);
+  `);
+
+  // ── FTS5 Full-Text Search (MiMo-inspired) ────────────────────────────────
+  // Provides BM25-ranked search over memories, replacing the old LIKE-based search.
+  // Content-synced with the memories table via triggers.
+  try {
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+        key, content, tags, type, workspace, scope,
+        content='memories', content_rowid='rowid',
+        tokenize='porter unicode61'
+      );
+
+      -- Sync triggers: keep memory_fts in sync with memories table
+      CREATE TRIGGER IF NOT EXISTS memory_fts_ai AFTER INSERT ON memories BEGIN
+        INSERT INTO memory_fts(rowid, key, content, tags, type, workspace, scope)
+        VALUES (new.rowid, new.key, new.content, new.tags, new.type, new.workspace, new.scope);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS memory_fts_ad AFTER DELETE ON memories BEGIN
+        INSERT INTO memory_fts(memory_fts, rowid, key, content, tags, type, workspace, scope)
+        VALUES ('delete', old.rowid, old.key, old.content, old.tags, old.type, old.workspace, old.scope);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS memory_fts_au AFTER UPDATE ON memories BEGIN
+        INSERT INTO memory_fts(memory_fts, rowid, key, content, tags, type, workspace, scope)
+        VALUES ('delete', old.rowid, old.key, old.content, old.tags, old.type, old.workspace, old.scope);
+        INSERT INTO memory_fts(rowid, key, content, tags, type, workspace, scope)
+        VALUES (new.rowid, new.key, new.content, new.tags, new.type, new.workspace, new.scope);
+      END;
+    `);
+  } catch (e) {
+    // FTS5 not available in this SQLite build — degrade gracefully to LIKE-based search
+    if (!String(e.message || e).includes("not supported")) {
+      console.warn("[memory] FTS5 setup warning:", e.message);
+    }
+  }
+
+  // Check if FTS5 is available (used by search() to choose strategy)
+  let fts5Available = false;
+  try {
+    db.prepare("SELECT * FROM memory_fts LIMIT 0").all();
+    fts5Available = true;
+  } catch { fts5Available = false; }
+
   // Migration: add scope column if not already present (ALTER TABLE lacks IF NOT EXISTS)
   try {
     db.exec(`ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'project' CHECK(scope IN ('project','local','user'))`);
@@ -247,6 +326,27 @@ function createMemoryStore(dbPath) {
     if (!String(e.message).includes("duplicate column")) throw e;
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope)`);
+
+  // FTS5 rebuild: populate from existing memories on first run (or after upgrade)
+  if (fts5Available) {
+    try {
+      const ftsCount = db.prepare("SELECT COUNT(*) as c FROM memory_fts").get();
+      const memCount = db.prepare("SELECT COUNT(*) as c FROM memories").get();
+      if (ftsCount.c < memCount.c) {
+        db.exec(`INSERT INTO memory_fts(memory_fts) VALUES('rebuild')`);
+      }
+    } catch {}
+  }
+
+  // ── FTS5 Query Builder (from MiMo-Code) ────────────────────────────────────
+  // Converts free-form user queries into safe FTS5 MATCH expressions.
+  // Uses OR-join (not AND) for better recall on multi-word queries.
+  // Unicode regex includes CJK letters for international recall.
+  function buildFtsQuery(raw) {
+    const tokens = raw.match(/[\p{L}\p{N}_]+/gu)?.map(t => t.trim()).filter(Boolean) ?? [];
+    if (tokens.length === 0) return null;
+    return tokens.map(t => `"${t.replaceAll('"', '')}"`).join(' OR ');
+  }
 
   // ── Kanban Tasks Table ──────────────────────────────────────────────────
   db.exec(`
@@ -677,44 +777,102 @@ function createMemoryStore(dbPath) {
 
     /**
      * Search memories by keyword across content, key, and tags.
+     * Uses FTS5 with BM25 ranking when available, falls back to LIKE-based search.
+     * Relative floor filtering: drops results below 15% of top BM25 score.
      * When scope is NOT specified, searches across all scopes.
      * @param {{ query: string, type?: string, workspace?: string, limit?: number, scope?: 'project'|'local'|'user' }} opts
      */
     search({ query, type, workspace, limit = 20, scope }) {
       if (!query) return { ok: false, error: "query is required" };
-      const likeQuery = `%${query}%`;
-      const rows = stmts.searchKeyword.all({
-        query: likeQuery,
-        type: type || null,
-        workspace: workspace || null,
-        limit,
-        scope: scope || null,
-      });
 
-      let results = rows.map((r) => ({ ...r, tags: JSON.parse(r.tags || "[]") }));
+      let results;
 
-      // Graph-aware ranking: combinedScore = 0.7 * textScore + 0.3 * pageRank
-      if (knowledgeGraph && results.length > 1) {
+      if (fts5Available) {
+        // ── FTS5 + BM25 ranking (MiMo-inspired) ──────────────────────────
+        const ftsQuery = buildFtsQuery(query);
+        if (!ftsQuery) return { ok: true, memories: [], count: 0 };
+
+        const FLOOR_RATIO = 0.15; // Relative floor: keep results within 15% of top score
+        const fetchLimit = Math.min(limit * 3, 60); // Over-fetch 3x for floor filtering
+
         try {
-          const ranks = knowledgeGraph.pageRank();
-          if (ranks && ranks.size > 0) {
-            // Normalize PageRank scores to 0-1 range
-            let maxRank = 0;
-            for (const [, score] of ranks) {
-              if (score > maxRank) maxRank = score;
-            }
-            if (maxRank > 0) {
-              results = results.map((r, i) => {
-                const textScore = 1 - (i / results.length); // higher position = higher text score
-                const pageRank = (ranks.get(r.id) || 0) / maxRank;
-                const combinedScore = 0.7 * textScore + 0.3 * pageRank;
-                return { ...r, _combinedScore: Math.round(combinedScore * 1000) / 1000 };
-              });
-              results.sort((a, b) => (b._combinedScore || 0) - (a._combinedScore || 0));
-            }
+          // Build dynamic WHERE clause for optional filters
+          const conditions = [];
+          const params = [ftsQuery];
+          if (type) { conditions.push("m.type = ?"); params.push(type); }
+          if (workspace) { conditions.push("m.workspace = ?"); params.push(workspace); }
+          if (scope) { conditions.push("m.scope = ?"); params.push(scope); }
+          const whereClause = conditions.length > 0 ? "AND " + conditions.join(" AND ") : "";
+
+          params.push(fetchLimit);
+          const rows = db.prepare(`
+            SELECT m.*, snippet(memory_fts, 1, '<<', '>>', '...', 32) AS _snippet,
+                   bm25(memory_fts) AS _bm25_score
+            FROM memory_fts
+            JOIN memories m ON m.rowid = memory_fts.rowid
+            WHERE memory_fts MATCH ?
+            ${whereClause}
+            ORDER BY bm25(memory_fts)
+            LIMIT ?
+          `).all(...params);
+
+          if (rows.length > 0) {
+            // BM25: lower = better. Negate so higher = better for caller.
+            const mapped = rows.map(r => ({
+              ...r,
+              tags: JSON.parse(r.tags || "[]"),
+              _score: -r._bm25_score,
+              _snippet: r._snippet,
+            }));
+
+            // Relative floor: keep only results within 15% of top score
+            const topScore = mapped[0]._score;
+            const cutoff = topScore * FLOOR_RATIO;
+            results = mapped
+              .filter((r, i) => i === 0 || r._score >= cutoff)
+              .slice(0, limit);
+          } else {
+            results = [];
           }
-        } catch {
-          // Graph ranking failure → fall back to default text ordering
+        } catch (e) {
+          // FTS5 query failed (e.g., syntax error in query) — fall back to LIKE
+          console.warn("[memory] FTS5 search failed, falling back to LIKE:", e.message);
+          results = null; // Signal to use LIKE fallback
+        }
+      }
+
+      // ── LIKE-based fallback (original behavior) ──────────────────────────
+      if (!results) {
+        const likeQuery = `%${query}%`;
+        const rows = stmts.searchKeyword.all({
+          query: likeQuery,
+          type: type || null,
+          workspace: workspace || null,
+          limit,
+          scope: scope || null,
+        });
+        results = rows.map((r) => ({ ...r, tags: JSON.parse(r.tags || "[]") }));
+
+        // Graph-aware ranking: combinedScore = 0.7 * textScore + 0.3 * pageRank
+        if (knowledgeGraph && results.length > 1) {
+          try {
+            const ranks = knowledgeGraph.pageRank();
+            if (ranks && ranks.size > 0) {
+              let maxRank = 0;
+              for (const [, score] of ranks) {
+                if (score > maxRank) maxRank = score;
+              }
+              if (maxRank > 0) {
+                results = results.map((r, i) => {
+                  const textScore = 1 - (i / results.length);
+                  const pageRank = (ranks.get(r.id) || 0) / maxRank;
+                  const combinedScore = 0.7 * textScore + 0.3 * pageRank;
+                  return { ...r, _combinedScore: Math.round(combinedScore * 1000) / 1000 };
+                });
+                results.sort((a, b) => (b._combinedScore || 0) - (a._combinedScore || 0));
+              }
+            }
+          } catch {}
         }
       }
 
@@ -1812,6 +1970,500 @@ function createMemoryStore(dbPath) {
         }
         return { ok: true, text: lines.join('\n') };
       } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    // ── Stuck Detection Scanner (MiMo-inspired) ─────────────────────────────
+    // Periodically scans for actors stuck in 'running' state with no recent turns.
+    // Threshold: 5 minutes (configurable). Marks stuck actors and fires callback.
+    _stuckScanner: null,
+    _onStuckDetected: null,
+
+    /**
+     * Start the stuck detection scanner. Runs every intervalMs.
+     * @param {number} intervalMs - Scan interval (default: 60000 = 60s)
+     * @param {function} onStuck - Callback when stuck actors found: (stuckActors) => void
+     */
+    actorStartStuckScanner(intervalMs = 60000, onStuck = null) {
+      const STUCK_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+      if (this._stuckScanner) clearInterval(this._stuckScanner);
+      this._onStuckDetected = onStuck;
+      this._stuckScanner = setInterval(() => {
+        try {
+          const cutoff = Date.now() - STUCK_THRESHOLD_MS;
+          const stuckActors = db.prepare(`
+            SELECT * FROM actor_registry
+            WHERE status = 'running' AND last_turn_time <= ?
+          `).all(cutoff);
+
+          for (const actor of stuckActors) {
+            const stuckDuration = Date.now() - actor.last_turn_time;
+            const stuckSec = Math.floor(stuckDuration / 1000);
+            db.prepare(`
+              UPDATE actor_registry
+              SET status = 'stuck', last_error = ?, time_updated = ?
+              WHERE pane_id = ?
+            `).run(`stuck: no activity for ${stuckSec}s`, Date.now(), actor.pane_id);
+          }
+
+          if (stuckActors.length > 0 && this._onStuckDetected) {
+            this._onStuckDetected(stuckActors.map(a => ({
+              ...a,
+              stuckDuration: Date.now() - a.last_turn_time,
+            })));
+          }
+        } catch (e) {
+          // Scanner errors should never crash the app
+        }
+      }, intervalMs);
+    },
+
+    /**
+     * Stop the stuck detection scanner.
+     */
+    actorStopStuckScanner() {
+      if (this._stuckScanner) {
+        clearInterval(this._stuckScanner);
+        this._stuckScanner = null;
+      }
+    },
+
+    // ── Repeated-Step Detection (MiMo-inspired) ──────────────────────────────
+    // Tracks tool call signatures per pane. If 3 consecutive identical signatures
+    // are detected, the agent is considered to be in a loop.
+    _stepHistory: new Map(), // paneId → [{signature, timestamp}]
+
+    /**
+     * Record a tool call step and check for repeated patterns.
+     * @param {{ paneId: string, toolName: string, toolInput: any }} opts
+     * @returns {{ isLooping: boolean, signature?: string, count?: number }}
+     */
+    recordStep({ paneId, toolName, toolInput }) {
+      if (!paneId || !toolName) return { isLooping: false };
+
+      // Stable stringify with sorted keys for deterministic comparison
+      function stableStringify(value) {
+        if (value === null || typeof value !== 'object') return JSON.stringify(value);
+        if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
+        const keys = Object.keys(value).sort();
+        return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
+      }
+
+      const sig = `tool:${toolName}:${stableStringify(toolInput || {})}`;
+      const history = this._stepHistory.get(paneId) || [];
+      history.push({ signature: sig, timestamp: Date.now() });
+      if (history.length > 10) history.shift(); // Keep last 10 steps
+      this._stepHistory.set(paneId, history);
+
+      // Check for 3 consecutive identical signatures
+      const REPEATED_THRESHOLD = 3;
+      const recent = history.slice(-REPEATED_THRESHOLD);
+      if (recent.length === REPEATED_THRESHOLD && recent.every(s => s.signature === recent[0].signature)) {
+        return { isLooping: true, signature: toolName, count: REPEATED_THRESHOLD };
+      }
+      return { isLooping: false };
+    },
+
+    /**
+     * Clear step history for a pane (called when pane exits).
+     * @param {{ paneId: string }} opts
+     */
+    clearStepHistory({ paneId }) {
+      if (paneId) this._stepHistory.delete(paneId);
+    },
+
+    // ── Task Tree CRUD (MiMo-inspired) ───────────────────────────────────────
+
+    /**
+     * Create a task in the tree. IDs follow hierarchical pattern: T1, T1.1, T1.2.
+     * @param {{ id: string, description: string, parentId?: string, sessionId?: string, owner?: string, workspace?: string }} opts
+     */
+    taskTreeCreate({ id, description, parentId, sessionId, owner, workspace }) {
+      if (!id || !description) return { ok: false, error: "id and description are required" };
+      // Validate ID format: T followed by digits, optionally dot-separated
+      if (!/^T\d+(\.\d+)*$/.test(id)) return { ok: false, error: "id must match pattern T1, T1.1, T1.2, etc." };
+      // Validate parent exists if specified
+      if (parentId) {
+        const parent = db.prepare("SELECT id FROM task_tree WHERE id = ?").get(parentId);
+        if (!parent) return { ok: false, error: `parent task ${parentId} not found` };
+      }
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        db.prepare(`
+          INSERT INTO task_tree (id, description, parent_id, session_id, owner, workspace, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, description, parentId || null, sessionId || null, owner || null, workspace || null, now, now);
+        // Log event
+        this._logTaskEvent(id, "created", { description, parentId, owner }, workspace);
+        return { ok: true, id };
+      } catch (e) {
+        if (String(e.message).includes("UNIQUE")) return { ok: false, error: `task ${id} already exists` };
+        return { ok: false, error: e.message };
+      }
+    },
+
+    /**
+     * Update task status with terminal state protection.
+     * @param {{ id: string, status: string, owner?: string, workspace?: string }} opts
+     */
+    taskTreeUpdate({ id, status, owner, workspace }) {
+      if (!id || !status) return { ok: false, error: "id and status are required" };
+      const validStatuses = ["open", "in_progress", "blocked", "done", "abandoned"];
+      if (!validStatuses.includes(status)) return { ok: false, error: `status must be one of: ${validStatuses.join(", ")}` };
+      const row = db.prepare("SELECT * FROM task_tree WHERE id = ?").get(id);
+      if (!row) return { ok: false, error: `task ${id} not found` };
+      // Terminal state protection: can't restart done/abandoned tasks
+      if ((row.status === "done" || row.status === "abandoned") && (status === "in_progress" || status === "open")) {
+        return { ok: false, error: `cannot restart task ${id} — terminal state: ${row.status}` };
+      }
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        const completedAt = (status === "done" || status === "abandoned") ? now : null;
+        const sets = ["status = ?", "updated_at = ?"];
+        const params = [status, now];
+        if (owner !== undefined) { sets.push("owner = ?"); params.push(owner); }
+        if (completedAt) { sets.push("completed_at = ?"); params.push(completedAt); }
+        params.push(id);
+        db.prepare(`UPDATE task_tree SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+        this._logTaskEvent(id, status === "done" ? "done" : status === "abandoned" ? "abandoned" : "updated", { status, owner }, workspace || row.workspace);
+        return { ok: true, id, status };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * List tasks with optional filters. Returns flat list sorted by id.
+     * @param {{ sessionId?: string, status?: string, workspace?: string, parentId?: string }} opts
+     */
+    taskTreeList({ sessionId, status, workspace, parentId } = {}) {
+      try {
+        const conds = [];
+        const params = [];
+        if (sessionId) { conds.push("session_id = ?"); params.push(sessionId); }
+        if (status) { conds.push("status = ?"); params.push(status); }
+        if (workspace) { conds.push("workspace = ?"); params.push(workspace); }
+        if (parentId !== undefined) { conds.push("parent_id = ?"); params.push(parentId || null); }
+        const where = conds.length > 0 ? "WHERE " + conds.join(" AND ") : "";
+        const rows = db.prepare(`SELECT * FROM task_tree ${where} ORDER BY id ASC`).all(...params);
+        return { ok: true, tasks: rows, count: rows.length };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Get a single task by ID.
+     */
+    taskTreeGet({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      const row = db.prepare("SELECT * FROM task_tree WHERE id = ?").get(id);
+      if (!row) return { ok: false, error: "not found" };
+      // Get children
+      const children = db.prepare("SELECT id, status FROM task_tree WHERE parent_id = ? ORDER BY id").all(id);
+      // Get events
+      const events = db.prepare("SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at DESC LIMIT 20").all(id);
+      return { ok: true, task: row, children, events };
+    },
+
+    /**
+     * Delete a task and its children (cascade).
+     */
+    taskTreeDelete({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      try {
+        // Delete children first
+        db.prepare("DELETE FROM task_events WHERE task_id IN (SELECT id FROM task_tree WHERE parent_id = ?)").run(id);
+        db.prepare("DELETE FROM task_tree WHERE parent_id = ?").run(id);
+        // Delete events for this task
+        db.prepare("DELETE FROM task_events WHERE task_id = ?").run(id);
+        // Delete task
+        const result = db.prepare("DELETE FROM task_tree WHERE id = ?").run(id);
+        return { ok: true, deleted: result.changes > 0 };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Get incomplete tasks for gate logic (warn before stopping).
+     * Returns tasks that are not done/abandoned.
+     * @param {{ workspace?: string }} opts
+     */
+    taskTreeGate({ workspace } = {}) {
+      try {
+        const conds = ["status NOT IN ('done', 'abandoned')"];
+        const params = [];
+        if (workspace) { conds.push("workspace = ?"); params.push(workspace); }
+        const rows = db.prepare(`SELECT id, description, status, owner FROM task_tree WHERE ${conds.join(" AND ")} ORDER BY id`).all(...params);
+        if (rows.length === 0) return { ok: true, hasIncomplete: false, tasks: [] };
+        // Build re-entry text (MiMo pattern)
+        const lines = [`You still have ${rows.length} incomplete task(s):`];
+        for (const t of rows) {
+          lines.push(`- ${t.id}: ${t.description} [${t.status}]${t.owner ? ` (${t.owner})` : ""}`);
+        }
+        return { ok: true, hasIncomplete: true, tasks: rows, reentryText: lines.join("\n") };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /** @private Log a task event */
+    _logTaskEvent(taskId, kind, data, workspace) {
+      try {
+        db.prepare(`INSERT INTO task_events (task_id, kind, data, workspace) VALUES (?, ?, ?, ?)`)
+          .run(taskId, kind, JSON.stringify(data || {}), workspace || null);
+      } catch {}
+    },
+
+    // ── Auto-Dream / Auto-Distill (MiMo-inspired) ───────────────────────────
+
+    /**
+     * Auto-Dream: Consolidate scattered working memories into coherent semantic summaries.
+     * Groups working memories by key prefix, creates consolidated semantic entries.
+     * @param {{ workspace?: string, maxAge?: number }} opts
+     */
+    autoDream({ workspace, maxAge = 7 * 24 * 60 * 60 } = {}) {
+      try {
+        const cutoff = Math.floor(Date.now() / 1000) - maxAge;
+        const ws = workspace || null;
+        // Get working memories older than 1 day (ripe for consolidation)
+        const dayCutoff = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
+        const conds = ["type = 'working'", "created_at < ?"];
+        const params = [dayCutoff];
+        if (ws) { conds.push("workspace = ?"); params.push(ws); }
+        const working = db.prepare(`SELECT * FROM memories WHERE ${conds.join(" AND ")} ORDER BY key, created_at`).all(...params);
+        if (working.length < 3) return { ok: true, consolidated: 0, message: "Not enough working memories to consolidate" };
+
+        // Group by key prefix (before last dash)
+        const groups = new Map();
+        for (const mem of working) {
+          const prefix = mem.key.replace(/-[^-]*$/, "") || mem.key;
+          const group = groups.get(prefix) || [];
+          group.push(mem);
+          groups.set(prefix, group);
+        }
+
+        let consolidated = 0;
+        for (const [prefix, memories] of groups) {
+          if (memories.length < 2) continue;
+          // Build consolidated content
+          const summary = memories.map(m => `- [${m.key}] ${m.content.slice(0, 200)}`).join("\n");
+          const allTags = new Set();
+          for (const m of memories) {
+            try { JSON.parse(m.tags || "[]").forEach(t => allTags.add(t)); } catch {}
+          }
+          allTags.add("auto-dream");
+          allTags.add("consolidated");
+
+          // Create semantic memory
+          const id = `mem_dream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          const now = Math.floor(Date.now() / 1000);
+          db.prepare(`
+            INSERT INTO memories (id, type, key, content, tags, agent_id, workspace, scope, created_at, updated_at)
+            VALUES (?, 'semantic', ?, ?, ?, 'auto-dream', ?, 'project', ?, ?)
+          `).run(id, `dream:${prefix}`, summary, JSON.stringify([...allTags]), ws, now, now);
+
+          // Delete the original working memories
+          for (const m of memories) {
+            db.prepare("DELETE FROM memories WHERE id = ?").run(m.id);
+          }
+          consolidated++;
+        }
+
+        return { ok: true, consolidated, groupsAnalyzed: groups.size };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Auto-Distill: Extract repeated workflow patterns from successful trajectories.
+     * Scans trajectories for common action sequences and creates pattern entries.
+     * @param {{ minOccurrences?: number, workspace?: string }} opts
+     */
+    autoDistill({ minOccurrences = 2, workspace } = {}) {
+      try {
+        const ws = workspace || null;
+        // Get successful trajectories
+        const conds = ["outcome = 'success'"];
+        const params = [];
+        if (ws) { conds.push("workspace = ?"); params.push(ws); }
+        params.push(50); // limit
+        const rows = db.prepare(`SELECT * FROM trajectories WHERE ${conds.join(" AND ")} ORDER BY created_at DESC LIMIT ?`).all(...params);
+        if (rows.length < minOccurrences) return { ok: true, distilled: 0, message: `Need ${minOccurrences}+ successful trajectories, found ${rows.length}` };
+
+        // Extract action sequence signatures
+        const signatures = new Map();
+        for (const row of rows) {
+          const steps = JSON.parse(row.steps || "[]");
+          const actions = steps.map(s => s.action || s.tool || "unknown").join(" → ");
+          if (!actions) continue;
+          const sig = signatures.get(actions) || { actions, count: 0, taskTypes: new Set(), examples: [] };
+          sig.count++;
+          if (row.task_type) sig.taskTypes.add(row.task_type);
+          sig.examples.push(row.id);
+          signatures.set(actions, sig);
+        }
+
+        let distilled = 0;
+        for (const [, sig] of signatures) {
+          if (sig.count < minOccurrences) continue;
+          // Check if pattern already exists
+          const existing = db.prepare("SELECT id FROM patterns WHERE description LIKE ?").get(`%${sig.actions.slice(0, 50)}%`);
+          if (existing) continue; // Already distilled
+
+          const id = `pat_distill_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          db.prepare(`
+            INSERT INTO patterns (id, pattern_type, description, source_trajectory, quality_score, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch())
+          `).run(id, [...sig.taskTypes][0] || "general",
+            `Distilled workflow (${sig.count} occurrences): ${sig.actions}`,
+            sig.examples.slice(0, 3).join(","),
+            Math.min(1, sig.count / 10));
+          distilled++;
+        }
+
+        return { ok: true, distilled, trajectoriesAnalyzed: rows.length };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    // ── Context Pressure Levels (MiMo-inspired) ─────────────────────────────
+    // Since Codebrain uses CLI agents (not direct API), we track proxy signals
+    // to estimate context pressure: activity duration, output volume, tool calls.
+    // Levels: 0=safe, 1=moderate, 2=high, 3=critical
+    _paneActivity: new Map(), // paneId → { startTime, outputChars, toolCalls }
+
+    /**
+     * Record pane activity for pressure tracking.
+     * Call this when a pane produces output or makes a tool call.
+     * @param {{ paneId: string, outputChars?: number, toolCall?: boolean }} opts
+     */
+    recordActivity({ paneId, outputChars = 0, toolCall = false }) {
+      if (!paneId) return;
+      const now = Date.now();
+      let activity = this._paneActivity.get(paneId);
+      if (!activity) {
+        activity = { startTime: now, outputChars: 0, toolCalls: 0 };
+        this._paneActivity.set(paneId, activity);
+      }
+      activity.outputChars += outputChars;
+      if (toolCall) activity.toolCalls++;
+      activity.lastUpdate = now;
+    },
+
+    /**
+     * Get context pressure level for a pane.
+     * Uses proxy signals since CLI agents manage their own context windows.
+     * @param {{ paneId: string }} opts
+     * @returns {{ ok: boolean, level?: number, label?: string, details?: object }}
+     */
+    getPressureLevel({ paneId }) {
+      if (!paneId) return { ok: false, error: "paneId required" };
+      const activity = this._paneActivity.get(paneId);
+      if (!activity) return { ok: true, level: 0, label: "safe", details: { duration: 0, outputChars: 0, toolCalls: 0 } };
+
+      const durationMin = (Date.now() - activity.startTime) / 60000;
+      const { outputChars, toolCalls } = activity;
+
+      // Pressure heuristics based on activity signals
+      let level = 0;
+      if (durationMin > 10 || outputChars > 300000 || toolCalls > 50) {
+        level = 3; // Critical
+      } else if (durationMin > 5 || outputChars > 150000 || toolCalls > 25) {
+        level = 2; // High
+      } else if (durationMin > 2 || outputChars > 50000 || toolCalls > 10) {
+        level = 1; // Moderate
+      }
+
+      const labels = ["safe", "moderate", "high", "critical"];
+      return {
+        ok: true,
+        level,
+        label: labels[level],
+        details: {
+          durationMin: Math.round(durationMin * 10) / 10,
+          outputChars,
+          toolCalls,
+          startedAt: activity.startTime,
+        },
+      };
+    },
+
+    /**
+     * Get pressure levels for all active panes.
+     * @returns {{ ok: boolean, panes?: Array }}
+     */
+    getAllPressureLevels() {
+      const panes = [];
+      for (const [paneId, activity] of this._paneActivity) {
+        const result = this.getPressureLevel({ paneId });
+        if (result.ok) panes.push({ paneId, ...result });
+      }
+      panes.sort((a, b) => b.level - a.level); // Highest pressure first
+      return { ok: true, panes, count: panes.length };
+    },
+
+    /**
+     * Clear pressure tracking for a pane (call on pane exit).
+     * @param {{ paneId: string }} opts
+     */
+    clearPressureTracking({ paneId }) {
+      if (paneId) this._paneActivity.delete(paneId);
+    },
+
+    // ── Memory Auto-Pruning (MiMo-inspired) ─────────────────────────────────
+    // Periodically prunes stale working memories to prevent unbounded growth.
+    // Rules:
+    //   1. Delete working memories older than 7 days
+    //   2. Delete orphaned file-changed entries for files that no longer exist
+    //   3. Cap total working memories at 500 (oldest first)
+
+    /**
+     * Run memory auto-pruning. Safe to call periodically (idempotent).
+     * @param {{ maxWorkingAge?: number, maxWorkingCount?: number }} opts
+     * @returns {{ ok: boolean, pruned?: number, details?: object }}
+     */
+    autoPrune({ maxWorkingAge = 7 * 24 * 60 * 60, maxWorkingCount = 500 } = {}) {
+      try {
+        let pruned = 0;
+        const details = { stale: 0, excess: 0, orphans: 0 };
+        const cutoff = Math.floor(Date.now() / 1000) - maxWorkingAge;
+
+        // 1. Delete stale working memories (>7 days old)
+        const staleResult = db.prepare(`
+          DELETE FROM memories WHERE type = 'working' AND created_at < ?
+        `).run(cutoff);
+        details.stale = staleResult.changes;
+        pruned += staleResult.changes;
+
+        // 2. Delete orphaned file-changed entries
+        try {
+          const fileChanged = db.prepare(`
+            SELECT id, key, content FROM memories
+            WHERE key LIKE 'file-changed-%' AND type = 'working'
+          `).all();
+          for (const mem of fileChanged) {
+            const relPath = mem.key.replace('file-changed-', '');
+            const ws = mem.workspace;
+            if (ws) {
+              const absPath = path.join(ws, relPath);
+              if (!fs.existsSync(absPath)) {
+                db.prepare("DELETE FROM memories WHERE id = ?").run(mem.id);
+                details.orphans++;
+                pruned++;
+              }
+            }
+          }
+        } catch {}
+
+        // 3. Cap working memories at maxWorkingCount
+        const countRow = db.prepare(`SELECT COUNT(*) as c FROM memories WHERE type = 'working'`).get();
+        if (countRow.c > maxWorkingCount) {
+          const excess = countRow.c - maxWorkingCount;
+          db.prepare(`
+            DELETE FROM memories WHERE id IN (
+              SELECT id FROM memories WHERE type = 'working'
+              ORDER BY updated_at ASC LIMIT ?
+            )
+          `).run(excess);
+          details.excess = excess;
+          pruned += excess;
+        }
+
+        return { ok: true, pruned, details };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
     },
   };
 }
