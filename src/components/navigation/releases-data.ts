@@ -14,8 +14,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.9.3",
+    "version": "1.9.4",
     "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "actor registry, provider host fix, MiMo Claude edit, ProviderList key"
+      }
+    ]
+  },
+  {
+    "version": "1.9.3",
+    "date": "junho 2026",
     "highlights": [
       {
         "kind": "fix",
