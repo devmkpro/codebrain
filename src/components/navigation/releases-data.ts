@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.10.2",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "port 25 MiMo-Code features (v1.10.2)"
+      }
+    ]
+  },
+  {
     "version": "1.10.1",
     "date": "junho 2026",
     "highlights": [
