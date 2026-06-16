@@ -26,7 +26,22 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 - **Background workers** — 7 persistent maintenance daemons (health, patterns, security, git, learning, cache, swarm)
 - **Consensus** — majority/unanimous/weighted voting + automatic leader election
 - **Priority MessageBus** — in-memory messaging with 4 priority levels, ack/retry, TTL, metrics
-- **177 MCP tools** — pane, browser (CDP + webview), memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus, skills
+- **Session compaction** — LLM-based summarization when context pressure is high; preserves key decisions and frees tokens
+- **Goal/Judge system** — set goals for autonomous agents; independent judge model evaluates if truly satisfied before stopping
+- **Checkpoint persistence** — save/restore session state across context limits; 11-section structured checkpoints with validation
+- **Cross-session history** — FTS5 search across ALL conversation history with BM25 ranking; filter by kind, tool, time
+- **LSP integration** — 12 semantic code navigation tools: goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, goToImplementation, callHierarchy, incoming/outgoing calls
+- **Text loop recovery** — detects repeated identical text output and injects progressive recovery prompts (mild → strong)
+- **Step classification** — classifies agent steps (final/continue/filtered/think-only/invalid/failed) for loop control
+- **Max mode** — Best-of-N: run N parallel candidate responses, judge selects the best for higher quality outputs
+- **Compose mode** — specs-driven development workflow: plan → execute → review → test → debug → verify → merge
+- **Plan agent** — read-only mode for code exploration and solution design before implementation
+- **Question tool** — structured user interaction with predefined options; auto-resolve in headless mode
+- **Session snapshots** — revert workspace to any previous state; supports revert/unrevert with diff computation
+- **Multi-edit** — batch multiple edit operations on a single file in one call
+- **Provider-specific prompts** — model-optimized prompt additions per family (Claude, Gemini, GPT, MIMO)
+- **Task gate pre-stop** — checks for incomplete tasks before allowing agent to stop; nudges completion
+- **244 MCP tools** — pane, browser (CDP + webview), memory, patterns, swarm, hooks, trajectories, files, system, knowledge graph, scoring, pipeline, workers, consensus, skills, LSP (12), session management, goal/judge, checkpoints, history search, compose mode, plan agent, max mode, question tool
 - **Skills system** — create, list, install and manage prompt templates scoped to project or globally (`~/.codebrain/skills/`); marketplace with featured skills, tag filters, and one-click install all
 - **Voice input** — push-to-talk with Groq Whisper transcription
 - **Discord Rich Presence** — shows Codebrain status in your Discord profile; Client ID configurable via Settings
