@@ -1,6 +1,23 @@
 ﻿import type { AppContext } from "../context";
 import { PROVIDER_REGISTRY } from "./constants";
 
+/**
+ * Merge user-saved models with template models.
+ * Template models are ALWAYS included (guaranteed defaults).
+ * User-saved models that aren't in the template are preserved (custom additions).
+ * Template models come first in the merged list.
+ */
+function mergeModels(saved: string[] | undefined, templateModels: string[]): string[] {
+  const savedSet = new Set((saved ?? []).map(m => m.trim()).filter(Boolean));
+  const templateSet = new Set(templateModels);
+  // Template models first (in template order), then user-only models
+  const merged = [...templateModels];
+  for (const m of savedSet) {
+    if (!templateSet.has(m)) merged.push(m);
+  }
+  return merged.length > 0 ? merged : templateModels;
+}
+
 export function getEnhancedProviders(ctx: AppContext) {
   const list = ctx.providerStore.listFull();
   const claudeDetected = ctx.cliDetector?.getAll()?.claude?.found ?? false;
@@ -58,31 +75,43 @@ export function getEnhancedProviders(ctx: AppContext) {
           // Only fall back to template.host if the user hasn't explicitly set one.
           host: p.host || template.host,
           type: template.type as any,
-          models: [...template.models],
+          // Always ensure template models are present
+          models: mergeModels(p.models, template.models),
         };
       }
 
-      // Fallback: detect by label/id keywords (for custom providers)
+      // Fallback: detect by label/id keywords (for custom providers).
+      // Match the MOST SPECIFIC template first (most keywords matched) to avoid
+      // false positives from short keywords like "mimo" matching "mimo-claude".
       const label = p.label?.toLowerCase() || "";
       const id = (p.id || "").toLowerCase();
+      let bestMatch: typeof PROVIDER_REGISTRY[number] | null = null;
+      let bestScore = 0;
       for (const tpl of PROVIDER_REGISTRY) {
-        const labelMatch = tpl.labelIncludes?.some(k => label.includes(k.toLowerCase()));
-        const idMatch = tpl.idIncludes?.some(k => id.includes(k.toLowerCase()));
-        if (labelMatch || idMatch) {
-          // Same: normalize MIMO label for keyword-matched providers
-          const resolvedLabel = tpl.id === "mimo" ? tpl.label : p.label;
-          return {
-            ...p,
-            label: resolvedLabel,
-            // Respect user-saved host; fall back to template only if not set.
-            host: p.host || tpl.host,
-            type: tpl.type as any,
-            models: [...tpl.models],
-          };
+        const labelHits = tpl.labelIncludes?.filter(k => label.includes(k.toLowerCase())).length ?? 0;
+        const idHits = tpl.idIncludes?.filter(k => id.includes(k.toLowerCase())).length ?? 0;
+        const score = labelHits + idHits;
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = tpl;
         }
       }
+      if (bestMatch) {
+        const resolvedLabel = bestMatch.id === "mimo" ? bestMatch.label : p.label;
+        return {
+          ...p,
+          label: resolvedLabel,
+          // Respect user-saved host; fall back to template only if not set.
+          host: p.host || bestMatch.host,
+          type: bestMatch.type as any,
+          // Always ensure template models are present — merge with user-saved
+          // models so custom additions are preserved, but template defaults
+          // are never lost (fixes providers showing no models after re-add).
+          models: mergeModels(p.models, bestMatch.models),
+        };
+      }
 
-      // Unknown provider — default to openclaude
+      // Unknown provider — default to openclaude, but keep user-saved models
       return { ...p, host: p.host || "openclaude" };
     });
 

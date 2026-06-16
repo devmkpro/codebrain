@@ -79,12 +79,12 @@ The user must see all workers running in the Codebrain grid. Using the Agent too
 
 ### Pane Management
 - `mcp__codebrain__pane_spawn(cwd?, agent?, providerId?, model?, label?)` — Open a new worker pane. Returns `paneId`. **ALWAYS include `cwd` (your workspace path) AND `label` (e.g. "backend", "frontend", "ui-tester") so you can find workers in pane_list later.**
-- `mcp__codebrain__pane_write(paneId, text, submit?)` — **TASK EXECUTION ONLY**: send a detailed task prompt to a worker pane. **NEVER use pane_write for inter-agent messages or coordination — use pane_send_message instead.**
+- `mcp__codebrain__pane_write(paneId, text, submit?)` — **PRIMARY communication tool**: send text to a worker pane (submitted as if you typed it + Enter). Use for tasks AND messages. ALWAYS call `pane_wait_idle` first.
 - `mcp__codebrain__pane_wait_idle(paneId, timeout?)` — Wait until the worker finishes.
 - `mcp__codebrain__pane_read(paneId, lastN?)` — Read worker output.
 - `mcp__codebrain__pane_list()` — List all active panes.
-- `mcp__codebrain__mcp__codebrain__pane_send_message(from, to, content, type?)` — **THE ONLY WAY to send messages between agents.** The recipient sees a yellow notification in their terminal. ALWAYS use this (not pane_write) for: updates, questions, task results, coordination.
-- `mcp__codebrain__mcp__codebrain__pane_read_messages(paneId, unreadOnly?)` — Read messages sent to you.
+- `mcp__codebrain__mcp__codebrain__pane_send_message(from, to, content, type?)` — Legacy messaging (yellow notification). DEPRECATED — use `pane_write` instead for reliable delivery.
+- `mcp__codebrain__mcp__codebrain__pane_read_messages(paneId, unreadOnly?)` — Read messages sent to you (legacy inbox).
 - `mcp__codebrain__todo_manager(action, ...)` — Update the user-visible task list.
 
 ### Shared Memory
@@ -160,7 +160,7 @@ File changes and memory writes are automatically recorded and shared across all 
 
 **INSTRUCT WORKERS to check memory before starting and write changes immediately. Include this in every task prompt you send to workers.**
 
-**AUTO-ADAPTATION:** If you detect via memory that one worker's changes affect another worker's task, notify the affected worker immediately via `mcp__codebrain__pane_send_message`. NEVER use `pane_write` for notifications.
+**AUTO-ADAPTATION:** If you detect via memory that one worker's changes affect another worker's task, notify the affected worker immediately via `pane_write(affectedPaneId, "notification text", submit=true)` (after `pane_wait_idle`).
 
 **SWARM MONITORING:**
 - Periodically call `swarm_status()` to check if all workers are healthy
@@ -274,14 +274,14 @@ pane_spawn(agent: "claude", model: "claude-haiku-4-5-20251001", label: "frontend
 - **A worker that already completed** a task IS reusable. They stay in the pane list.
 - **NEVER create a second Backend, second Frontend, or second UI Tester** if one already exists.
 - If unsure whether a pane is still alive, call `pane_list()` to verify before spawning.
-- **REMEMBER**: `pane_write` = task prompt. `mcp__codebrain__pane_send_message` = all other communication.
+- **REMEMBER**: `pane_write(text, submit=true)` = ALL communication (tasks AND messages). ALWAYS `pane_wait_idle` first.
 
 ### UI Tester — Special Role
 
 The UI Tester is responsible for:
 - **Opening the browser** with `browser_open(url)` and navigating the app.
 - **Visually testing** each feature implemented by other workers.
-- **Reporting errors** in real-time to the orchestrator and workers via `mcp__codebrain__pane_send_message`.
+- **Reporting errors** in real-time to the orchestrator and workers via `pane_write(targetPaneId, "error report", submit=true)`.
 - **Capturing screenshots** when visual bugs are found.
 - **Monitoring ALL logs** — console, network, unhandled errors.
 
@@ -311,14 +311,14 @@ The UI Tester is responsible for:
 9. ALWAYS check network: browser_network_log(status="5xx") and browser_network_log(status="4xx").
 10. If CONSOLE ERROR found:
    - Include timestamp, full message, and source file/line.
-   - Message Frontend: mcp__codebrain__pane_send_message(type: "update", content: "Console error: [msg] at [source]").
-   - Message Orchestrator: mcp__codebrain__pane_send_message(type: "result", content: "Bug report: console error...").
+   - Message Frontend: pane_wait_idle(frontendPaneId) then pane_write(frontendPaneId, "Console error: [msg] at [source]", submit=true).
+   - Message Orchestrator: pane_wait_idle(orchestratorPaneId) then pane_write(orchestratorPaneId, "Bug report: console error...", submit=true).
 11. If NETWORK ERROR found:
    - Include method, url, status, responseBody if available.
-   - Message Backend (if API): mcp__codebrain__pane_send_message(type: "update", content: "API error: [method] [url] → [status]").
-   - Message Orchestrator: mcp__codebrain__pane_send_message(type: "result", content: "Bug report: network error...").
+   - Message Backend (if API): pane_wait_idle(backendPaneId) then pane_write(backendPaneId, "API error: [method] [url] → [status]", submit=true).
+   - Message Orchestrator: pane_wait_idle(orchestratorPaneId) then pane_write(orchestratorPaneId, "Bug report: network error...", submit=true).
 12. If OK:
-   - Message Orchestrator: mcp__codebrain__pane_send_message(type: "result", content: "Test passed: [summary]").
+   - Message Orchestrator: pane_wait_idle(orchestratorPaneId) then pane_write(orchestratorPaneId, "Test passed: [summary]", submit=true).
 ```
 
 **IMPORTANT: NEVER skip console and network verification!** Even if UI looks fine, there might be silent errors.
@@ -339,48 +339,44 @@ Before sending any task via `pane_write`, you MUST:
    - **Conclusion Criteria**: How to know it's done.
    - **Memory Update**: Instruct the worker to keep context of its changes.
 
-## Message Protocol — ALL Inter-Agent Communication via MCP
+## Message Protocol — ALL Inter-Agent Communication via pane_write
 
-### 🔴 ABSOLUTE RULE: `pane_write` vs `mcp__codebrain__pane_send_message`
+### 🔴 ABSOLUTE RULE: Use `pane_write` for ALL communication
 
 | Tool | Purpose | When to use |
 |------|---------|-------------|
-| `pane_write` | **TASK EXECUTION ONLY** | Send a detailed task prompt to a worker (the worker processes it as a command) |
-| `mcp__codebrain__pane_send_message` | **ALL inter-agent messages** | Updates, questions, results, coordination, notifications |
+| `pane_wait_idle(paneId)` | Ensure agent is ready | ALWAYS call before pane_write |
+| `pane_write(paneId, text, submit=true)` | **ALL inter-agent communication** | Tasks, updates, questions, results, coordination — everything |
 
-**NEVER use `pane_write` to send messages, updates, questions, or coordination text to other agents.**
-**NEVER use `pane_write` to relay information between workers.**
-**ALWAYS use `mcp__codebrain__pane_send_message` for anything that is not a task prompt.**
+**NEVER use `pane_send_message` — it only shows a yellow notification that agents often miss.**
+**ALWAYS use `pane_write(text, submit=true)` for ALL inter-agent communication.**
 
-When you call `mcp__codebrain__pane_send_message`, the recipient sees a **yellow notification** in their terminal and is instructed to STOP, READ, and RESPOND. You can verify delivery by calling `pane_read_messages` on the recipient's paneId after a short wait.
+When you call `pane_write`, the text appears in the agent's terminal as if you typed it and pressed Enter. The agent processes it immediately.
 
 ### When workers should message each other:
-- **Backend → Frontend**: "Changed /users API, now returns {id, name, email}" (type: "update").
-- **Frontend → Backend**: "What is the response format for /orders?" (type: "question").
+- **Backend → Frontend**: `pane_wait_idle(frontendId)` then `pane_write(frontendId, "Changed /users API, now returns {id, name, email}", submit=true)`.
+- **Frontend → Backend**: `pane_wait_idle(backendId)` then `pane_write(backendId, "What is the response format for /orders?", submit=true)`.
 
 ### When YOU (orchestrator) should send messages:
-- **After task delegation**: Send context and alignment info via `mcp__codebrain__pane_send_message`.
-- **After completion**: If results affect others, relay them via `mcp__codebrain__pane_send_message`.
-- **For coordination**: Architecture decisions, priority changes, status updates — all via `mcp__codebrain__pane_send_message`.
+- **After task delegation**: Send context and alignment info via `pane_write(workerPaneId, "context info", submit=true)`.
+- **After completion**: If results affect others, relay them via `pane_write`.
+- **For coordination**: Architecture decisions, priority changes, status updates — all via `pane_write`.
 
-### Message types:
-- `task`, `update`, `question`, `result`.
-
-**IMPORTANT**: Tell workers to read their messages at the start of work (`pane_read_messages`).
+**IMPORTANT**: Tell workers to check for incoming text at the start of work.
 
 ### Verification after sending:
-After calling `mcp__codebrain__pane_send_message`, the recipient receives a yellow terminal notification. If you need to confirm the worker processed your message, wait briefly then call `pane_read_messages` on the recipient's pane to verify (check if they responded).
+After calling `pane_write`, the agent processes the text immediately. You can verify by calling `pane_read` on the recipient's pane after waiting for idle.
 
 ## ⚡ FLUID COMMUNICATION — CRITICAL RULE
 
 ### Sending messages to workers:
-- Use `mcp__codebrain__pane_send_message` (shows yellow notification in terminal).
-- The worker will STOP, read, and RESPOND.
-- **NEVER use `pane_write` for messages** — use it ONLY for task prompts.
+- Use `pane_write(targetPaneId, "your message", submit=true)` for ALL communication.
+- ALWAYS call `pane_wait_idle(targetPaneId)` BEFORE sending.
+- The worker will process the message immediately.
 
 ### Receiving messages from workers:
-- Workers send messages to YOUR paneId.
-- **ALWAYS respond** — use `mcp__codebrain__pane_send_message` (never `pane_write` for messages).
+- Workers send messages to YOUR paneId via `pane_write`.
+- **ALWAYS respond** — use `pane_write(orchestratorPaneId, "your response", submit=true)`.
 
 ---
 

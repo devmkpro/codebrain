@@ -19,6 +19,22 @@ const { createMissionHandlers } = require("./bridge/mission-handlers.js");
 const { createFetchHandlers } = require("./bridge/fetch-handlers.js");
 const { createMRHandlers } = require("./bridge/mr-handlers.js");
 
+// ── MiMo-Code Features (25 new features) ───────────────────────────────────
+const { createCompactionHandlers } = require("./bridge/compaction-handlers.js");
+const { createStepClassifier } = require("./bridge/step-classifier.js");
+const { createTextLoopRecovery } = require("./bridge/text-loop-recovery.js");
+const { createGoalHandlers } = require("./bridge/goal-handlers.js");
+const { createSnapshotHandlers } = require("./bridge/snapshot-handlers.js");
+const { createCheckpointHandlers } = require("./bridge/checkpoint-handlers.js");
+const { createHistoryHandlers } = require("./bridge/history-handlers.js");
+const { createQuestionHandlers } = require("./bridge/question-handlers.js");
+const { createLSPHandlers } = require("./bridge/lsp-handlers.js");
+const { createMultiEditHandlers } = require("./bridge/multi-edit-handlers.js");
+const { createProviderPromptHandlers } = require("./bridge/provider-prompt-handlers.js");
+const { createMaxModeHandlers } = require("./bridge/max-mode-handlers.js");
+const { createComposeModeHandlers } = require("./bridge/compose-mode-handlers.js");
+const { createPlanAgentHandlers } = require("./bridge/plan-agent-handlers.js");
+
 // ── New multi-agent features ────────────────────────────────────────────────
 const { MessageBus } = require("./bridge/message-bus.js");
 const { AgentScorer } = require("./bridge/agent-scorer.js");
@@ -259,13 +275,73 @@ function createMCPBridge(ptyManager, opts = {}) {
     });
   }
 
-  // Clean up step history and pressure tracking on pane exit
+  // Clean up step history, pressure tracking, text loop buffers, and step signatures on pane exit
   if (opts.hooksManager) {
     opts.hooksManager.on("pane_exited", ({ paneId }) => {
       try { opts.memoryStore?.clearStepHistory?.({ paneId }); } catch {}
       try { opts.memoryStore?.clearPressureTracking?.({ paneId }); } catch {}
+      try { opts.memoryStore?.clearTextLoopBuffer?.({ paneId }); } catch {}
+      try { opts.memoryStore?.clearStepSignatures?.({ paneId }); } catch {}
+      try { opts.memoryStore?.clearGoal?.(paneId); } catch {}
+      try { opts.memoryStore?.clearCompactionState?.(paneId); } catch {}
     });
   }
+
+  // ── Text Loop Recovery on idle (MiMo-inspired) ─────────────────────────────
+  // When a pane goes idle, check if its output text has been repeating.
+  ptyManager.on("idle", ({ paneId, idle }) => {
+    try {
+      const store = opts.memoryStore;
+      if (!store?.recordTextOutput || !idle?.lastOutput) return;
+      const outputText = Array.isArray(idle.lastOutput) ? idle.lastOutput.join("\n") : String(idle.lastOutput);
+      if (outputText.length < 50) return; // Skip very short outputs
+      const result = store.recordTextOutput(paneId, outputText);
+      if (result.isLooping && result.recoveryCount <= 2) {
+        const warning = result.recoveryCount === 1
+          ? "\n⚠️ TEXT LOOP: Your recent outputs are identical. Try a completely different approach.\n"
+          : "\n🚨 TEXT LOOP (strong): STOP. Ask the user for guidance.\n";
+        try { ptyManager.write(paneId, warning, false); } catch {}
+        console.warn(`[bridge] TEXT LOOP: pane ${paneId.slice(0,8)} recovery #${result.recoveryCount}`);
+      }
+    } catch {}
+  });
+
+  // ── Enhanced Step Signature Loop Detection on idle ──────────────────────────
+  // Uses stableStringify for key-order-independent comparison.
+  if (opts.memoryStore?.recordStepSignature) {
+    ptyManager.on("idle", ({ paneId, idle }) => {
+      try {
+        const store = opts.memoryStore;
+        if (!store?.recordStepSignature || !idle?.lastOutput) return;
+        const outputText = Array.isArray(idle.lastOutput) ? idle.lastOutput.join("\n") : String(idle.lastOutput);
+        const toolCalls = outputText.match(/mcp__codebrain__(\w+)/g);
+        if (!toolCalls || toolCalls.length < 2) return;
+        const lastTool = toolCalls[toolCalls.length - 1];
+        const result = store.recordStepSignature({ paneId, toolName: lastTool, toolInput: {} });
+        if (result.isLooping) {
+          console.warn(`[bridge] ENHANCED LOOP: pane ${paneId.slice(0,8)} repeated "${lastTool}" ${result.count}x (key-order-independent)`);
+        }
+      } catch {}
+    });
+  }
+
+  // ── Task Gate Pre-Stop Validation (wired on idle) ──────────────────────────
+  // When a pane goes idle after significant activity, check for incomplete tasks.
+  ptyManager.on("idle", ({ paneId, idle }) => {
+    try {
+      const store = opts.memoryStore;
+      if (!store?.taskGateCheck) return;
+      // Only check if there was meaningful activity (not empty idle pings)
+      const lastLines = idle?.lastOutput?.slice(-5) || [];
+      const summary = lastLines.join(" ").replace(/\x1b\[[0-9;]*m/g, "").trim();
+      if (!summary || summary.length < 20) return;
+      const gate = store.taskGateCheck({ paneId, maxReEntries: 3 });
+      if (!gate.shouldStop && gate.nudgeText) {
+        // Inject nudge into pane terminal
+        try { ptyManager.write(paneId, `\n${gate.nudgeText}\n`, false); } catch {}
+      }
+    } catch {}
+  });
 
   // ── Context Pressure Tracking (MiMo-inspired) ────────────────────────────
   // Track output volume and tool calls per pane for pressure estimation.
@@ -457,6 +533,22 @@ function createMCPBridge(ptyManager, opts = {}) {
     emitNotification: opts.emitNotification,
   });
 
+  // ── MiMo-Code Feature Handlers ──────────────────────────────────────────
+  const compactionHandlers = createCompactionHandlers(sharedOpts);
+  const stepClassifier = createStepClassifier(sharedOpts);
+  const textLoopRecovery = createTextLoopRecovery(sharedOpts);
+  const goalHandlers = createGoalHandlers(sharedOpts);
+  const snapshotHandlers = createSnapshotHandlers(sharedOpts);
+  const checkpointHandlers = createCheckpointHandlers(sharedOpts);
+  const historyHandlers = createHistoryHandlers(sharedOpts);
+  const questionHandlers = createQuestionHandlers(sharedOpts);
+  const lspHandlers = createLSPHandlers(sharedOpts);
+  const multiEditHandlers = createMultiEditHandlers(sharedOpts);
+  const providerPromptHandlers = createProviderPromptHandlers(sharedOpts);
+  const maxModeHandlers = createMaxModeHandlers(sharedOpts);
+  const composeModeHandlers = createComposeModeHandlers(sharedOpts);
+  const planAgentHandlers = createPlanAgentHandlers(sharedOpts);
+
   // ── Start stuck detection scanner (MiMo-inspired) ──────────────────────────
   // Scans actor_registry every 60s for actors stuck in 'running' for >5 minutes.
   // Marks them as 'stuck' and fires hooks for UI notification.
@@ -592,6 +684,21 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...fetchHandlers,
     ...mrHandlers,
     ...agentHandlers,
+    // ── MiMo-Code Feature Handlers (25 new features) ──────────────────────
+    ...compactionHandlers,
+    ...stepClassifier,
+    ...textLoopRecovery,
+    ...goalHandlers,
+    ...snapshotHandlers,
+    ...checkpointHandlers,
+    ...historyHandlers,
+    ...questionHandlers,
+    ...lspHandlers,
+    ...multiEditHandlers,
+    ...providerPromptHandlers,
+    ...maxModeHandlers,
+    ...composeModeHandlers,
+    ...planAgentHandlers,
     // Expose foundational instances
     messageBus,
     agentScorer,

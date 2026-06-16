@@ -137,9 +137,9 @@ class CDPClient {
   /**
    * Connect to a specific Chrome page target via WebSocket.
    */
-  async connect(port) {
+  async connect(port, directWsUrl) {
     // If already connected via WebSocket that's still open, skip
-    if (this.connected && this.ws && this.ws.readyState === 1 /* OPEN */) return;
+    if (this.connected && this.ws && this.ws.readyState === 1 /* OPEN */ && !directWsUrl) return;
     // Otherwise reset stale state
     if (this.ws) {
       try { this.ws.terminate(); } catch {}
@@ -148,20 +148,27 @@ class CDPClient {
     }
 
     port = port || this.activePort || 9222;
-    const targets = await this.discoverTargets(port);
 
-    // Find the first page target
-    const pageTarget = targets.find(
-      (t) => t.type === "page" && t.webSocketDebuggerUrl
-    );
-    if (!pageTarget) {
-      throw new Error(
-        "No Chrome page target found. Open a tab in Chrome first."
+    // If a direct WebSocket URL is provided, use it (for tab switching)
+    if (directWsUrl) {
+      this.browserWsUrl = directWsUrl;
+      this.activePort = port;
+    } else {
+      const targets = await this.discoverTargets(port);
+
+      // Find the first page target
+      const pageTarget = targets.find(
+        (t) => t.type === "page" && t.webSocketDebuggerUrl
       );
-    }
+      if (!pageTarget) {
+        throw new Error(
+          "No Chrome page target found. Open a tab in Chrome first."
+        );
+      }
 
-    this.browserWsUrl = pageTarget.webSocketDebuggerUrl;
-    this.activePort = port;
+      this.browserWsUrl = pageTarget.webSocketDebuggerUrl;
+      this.activePort = port;
+    }
     this.log(
       `[CDP] Connecting to Chrome: ${pageTarget.title} (${pageTarget.url}) on port ${port}`
     );

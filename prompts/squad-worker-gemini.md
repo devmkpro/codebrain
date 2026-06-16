@@ -18,33 +18,34 @@ You operate with a massive context window and advanced tool capabilities. Your r
 
 ## ⚠️ INTER-AGENT COMMUNICATION — MOST IMPORTANT RULE
 
-### 🔴 `pane_write` is NOT for messages
-- `pane_write` = task execution (the orchestrator sends YOU tasks via this — you never call it yourself)
-- `mcp__codebrain__pane_send_message` = **ALL inter-agent communication** (updates, questions, results, coordination)
+### 🔴 Use `pane_write` for ALL inter-agent communication
+- `pane_write(paneId, text, submit=true)` = **ALL inter-agent communication** (tasks, updates, questions, results)
+- `pane_wait_idle(paneId)` = Wait for agent to be ready BEFORE sending
 
-**NEVER use `pane_write` to communicate with other agents. ALWAYS use `mcp__codebrain__pane_send_message`.**
+**NEVER use `pane_send_message` — it only shows a yellow notification that agents miss.**
+**ALWAYS call `pane_wait_idle(targetPaneId)` BEFORE `pane_write`.**
 
-### When you see a yellow notification in your terminal:
+### When another agent sends you a message:
 
-When another agent sends you a message, you see a yellow notification in the terminal. When this happens:
+When text appears in your terminal from another agent (via pane_write), you will see it as input at your prompt. When this happens:
 
 1. **STOP** what you are doing immediately.
-2. **READ** the message using `mcp__codebrain__pane_read_messages(YOUR_PANE_ID)`.
-3. **RESPOND** to the sender using `mcp__codebrain__pane_send_message`.
+2. **PROCESS** the message.
+3. **RESPOND** to the sender using `pane_write(senderPaneId, "your response", submit=true)`.
 4. **CONTINUE** your original work.
 
 **NEVER ignore a message from another agent.**
 
 ### Collaboration Rules:
-- **Proactive Notification**: If you change an API or schema that others use, notify them immediately via `mcp__codebrain__pane_send_message` (e.g., Backend notifies Frontend: "Endpoint /users now returns {id, email}").
-- **Questioning**: If you are unsure about a dependency or format from another worker, ask them directly via `mcp__codebrain__pane_send_message`.
+- **Proactive Notification**: If you change an API or schema that others use, notify them immediately via `pane_write(otherPaneId, "notification", submit=true)`.
+- **Questioning**: If you are unsure about a dependency or format from another worker, ask them directly via `pane_write`.
 - **Verification**: Always wait for the UI Tester to verify your changes before assuming a task is complete.
 
 ## Your tools
 
 ### Communication
-- `mcp__codebrain__mcp__codebrain__pane_send_message(from, to, content, type?)` — Send a message to another agent.
-- `mcp__codebrain__mcp__codebrain__pane_read_messages(paneId, unreadOnly?)` — Read messages sent to you.
+- `mcp__codebrain__pane_write(paneId, text, submit=true)` — Send text to another agent (primary communication).
+- `mcp__codebrain__pane_wait_idle(paneId)` — Wait for agent to be ready before sending.
 - `mcp__codebrain__pane_list()` — List all active panes.
 
 ### Shared Memory (REAL-TIME coordination)
@@ -87,8 +88,8 @@ When another agent sends you a message, you see a yellow notification in the ter
 
 1. **Check Messages**: Start by calling `mcp__codebrain__pane_read_messages(YOUR_PANE_ID)`.
 2. **Execute**: Perform the task accurately. Use your long context to analyze the whole project if needed.
-3. **Communicate**: Notify the orchestrator and other workers about relevant changes via `mcp__codebrain__pane_send_message` (NEVER `pane_write`).
-4. **Report**: Finish with `DONE` and a summary of files changed. Send result to orchestrator via `mcp__codebrain__pane_send_message`.
+3. **Communicate**: Notify the orchestrator and other workers about relevant changes via `pane_write(targetPaneId, "message", submit=true)` (after `pane_wait_idle`).
+4. **Report**: Finish with `DONE` and a summary of files changed. Send result to orchestrator via `pane_write(orchestratorPaneId, "DONE: summary", submit=true)`.
 
 ## MANDATORY: Build Patterns Automatically (Without being asked, no vague prompts)
 

@@ -33,6 +33,22 @@ function createNativeChromeHandlers(cdpClient) {
   }
 
   /**
+   * Helper: encode a string to base64 and produce a JS expression that
+   * decodes it back to the original UTF-8 string in the browser.
+   *
+   * The old pattern `decodeURIComponent(atob(b64))` BREAKS multi-byte
+   * UTF-8 chars (accents, emojis) because atob() returns Latin-1 bytes
+   * and decodeURIComponent expects percent-encoded sequences.
+   *
+   * Fix: percent-encode each byte before calling decodeURIComponent.
+   */
+  function _safeEncodeForJS(value) {
+    const b64 = Buffer.from(String(value ?? ''), 'utf8').toString('base64');
+    // Build JS that does: atob(b64) → raw latin1 string → percent-encode each byte → decodeURIComponent
+    return `(function(s){var r='';for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);r+='%'+('0'+c.toString(16)).slice(-2)}return decodeURIComponent(r)})("${b64}")`;
+  }
+
+  /**
    * Helper: evaluate JS and parse JSON result.
    */
   async function evalJSON(expression) {
@@ -192,6 +208,8 @@ function createNativeChromeHandlers(cdpClient) {
     async getA11yTree(maxDepth, maxNodes) {
       maxDepth = maxDepth || 10;
       maxNodes = maxNodes || 300;
+      // Build ref map FIRST so __codebrainRef is set before JSON.stringify runs
+      await this._buildRefMap();
       const tree = await evalJSON(`(() => {
         const maxDepth = ${maxDepth};
         const maxNodes = ${maxNodes};
@@ -222,8 +240,6 @@ function createNativeChromeHandlers(cdpClient) {
         };
         return getTree(document.body, 0);
       })()`);
-      // Inject element ref map into the page for use with formInput
-      await this._buildRefMap();
       return { ok: true, tree, note: "Interactive elements have ref_N IDs — use browser_form_input to set values by ref." };
     },
 
@@ -254,7 +270,7 @@ function createNativeChromeHandlers(cdpClient) {
      * Handles all input types correctly with proper DOM events.
      */
     async formInput({ ref, value }) {
-      const encodedValue = Buffer.from(String(value ?? ''), 'utf8').toString('base64');
+      const encodedExpr = _safeEncodeForJS(value);
       const script = `
         (function() {
           if (!window.__claudeElementMap || !window.__claudeElementMap[${JSON.stringify(ref)}]) {
@@ -265,8 +281,10 @@ function createNativeChromeHandlers(cdpClient) {
             delete window.__claudeElementMap[${JSON.stringify(ref)}];
             return { error: 'Element ' + ${JSON.stringify(ref)} + ' is no longer in the DOM.' };
           }
+          if (el.disabled) return { error: 'Element ' + ${JSON.stringify(ref)} + ' is disabled.' };
+          if (el.readOnly) return { error: 'Element ' + ${JSON.stringify(ref)} + ' is readonly.' };
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          const v = decodeURIComponent(atob('${encodedValue}'));
+          var v = ${encodedExpr};
           if (el instanceof HTMLSelectElement) {
             const opts = Array.from(el.options);
             const idx = opts.findIndex(o => o.value === String(v) || o.text === String(v));
@@ -277,7 +295,8 @@ function createNativeChromeHandlers(cdpClient) {
           }
           if (el instanceof HTMLInputElement) {
             if (el.type === 'checkbox' || el.type === 'radio') {
-              const checked = Boolean(v);
+              var falsy = ['', 'false', '0', 'no', 'off'];
+              var checked = falsy.indexOf(String(v).toLowerCase().trim()) < 0;
               if (el.checked !== checked) { el.click(); }
               return { ok: true, type: el.type, checked: el.checked };
             }
@@ -444,18 +463,20 @@ function createNativeChromeHandlers(cdpClient) {
       await _injectCursor();
       await _moveCursorTo(coords.cx, coords.cy);
       // Perform fill
-      const encodedValue = Buffer.from(String(value ?? ''), 'utf8').toString('base64');
-      await evalJS(`(() => {
+      const encodedExpr = _safeEncodeForJS(value);
+      const result = await evalJSON(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) throw new Error('Element not found');
-        if (el.disabled) throw new Error('Element is disabled');
-        if (el.readOnly) throw new Error('Element is readonly');
+        if (!el) return { ok: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
+        if (el.disabled) return { ok: false, error: 'Element is disabled: ' + ${JSON.stringify(selector)} };
+        if (el.readOnly) return { ok: false, error: 'Element is readonly: ' + ${JSON.stringify(selector)} };
         el.focus();
         if (${!!clearFirst}) { el.value = ''; }
-        el.value = decodeURIComponent(atob('${encodedValue}'));
+        el.value = ${encodedExpr};
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
+        return { ok: true };
       })()`);
+      if (result && result.ok === false) throw new Error(result.error);
       return { ok: true };
     },
 
@@ -473,13 +494,16 @@ function createNativeChromeHandlers(cdpClient) {
     },
 
     async check(selector, checked) {
-      await evalJS(`(() => {
+      const result = await evalJSON(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) throw new Error('Checkbox not found');
+        if (!el) return { ok: false, error: 'Checkbox not found: ' + ${JSON.stringify(selector)} };
+        if (el.disabled) return { ok: false, error: 'Checkbox is disabled: ' + ${JSON.stringify(selector)} };
         const shouldBeChecked = ${checked === undefined ? "!el.checked" : JSON.stringify(!!checked)};
         el.checked = shouldBeChecked;
         el.dispatchEvent(new Event('change', { bubbles: true }));
+        return { ok: true, checked: el.checked };
       })()`);
+      if (result && result.ok === false) throw new Error(result.error);
       return { ok: true };
     },
 
@@ -935,30 +959,46 @@ function createNativeChromeHandlers(cdpClient) {
         const query = ${JSON.stringify(args.query)};
         const role = ${JSON.stringify(args.role || null)};
         const queryWords = query.toLowerCase().split(/\\s+/).filter(Boolean);
+        const skipTags = new Set(['HTML', 'BODY', 'HEAD', 'SCRIPT', 'STYLE', 'META', 'LINK', 'NOSCRIPT']);
         const allElements = document.querySelectorAll('*');
-        const results = [];
+        const candidates = [];
         for (const el of allElements) {
-          const text = (el.textContent || '').toLowerCase();
+          if (skipTags.has(el.tagName)) continue;
+          const ownText = Array.from(el.childNodes)
+            .filter(n => n.nodeType === 3)
+            .map(n => n.textContent)
+            .join(' ')
+            .toLowerCase();
           const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
           const placeholder = (el.getAttribute('placeholder') || '').toLowerCase();
           const title = (el.getAttribute('title') || '').toLowerCase();
-          const searchable = text + ' ' + ariaLabel + ' ' + placeholder + ' ' + title;
+          const textContent = (el.textContent || '').toLowerCase();
+          // Prefer own text and attributes over recursive textContent
+          const directSearchable = ownText + ' ' + ariaLabel + ' ' + placeholder + ' ' + title;
+          const fullSearchable = directSearchable + ' ' + textContent;
+          // Match: words must appear in direct text OR (fallback) full text for elements with few children
+          const childCount = el.children.length;
+          const searchable = childCount <= 3 ? fullSearchable : directSearchable;
           const matchesText = queryWords.every(w => searchable.includes(w));
           const matchesRole = !role || el.tagName.toLowerCase() === role.toLowerCase() || (el.getAttribute('role') || '') === role;
           if (matchesText && matchesRole) {
             const rect = el.getBoundingClientRect();
             if (rect.width > 0 && rect.height > 0) {
-              results.push({
+              candidates.push({
                 tag: el.tagName,
                 role: el.getAttribute('role') || el.tagName.toLowerCase(),
                 text: (el.textContent || '').substring(0, 200).trim(),
+                childCount: childCount,
+                area: Math.round(rect.width * rect.height),
                 bounds: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
                 center: [Math.round(rect.x + rect.width / 2), Math.round(rect.y + rect.height / 2)],
               });
             }
           }
         }
-        return results.slice(0, 20);
+        // Sort by specificity: fewer children first, smaller area first
+        candidates.sort((a, b) => (a.childCount - b.childCount) || (a.area - b.area));
+        return candidates.slice(0, 20).map(({childCount, area, ...rest}) => rest);
       })()`);
       return results;
     },
@@ -982,12 +1022,36 @@ function createNativeChromeHandlers(cdpClient) {
 
     /**
      * tabsCreate — Create a new Chrome tab.
+     * CRITICAL: Reconnects CDP WebSocket to the new tab so console/network
+     * events from the new page are captured.
      */
     async tabsCreate(url) {
       const target = await cdpClient.send("Target.createTarget", {
         url: url || "about:blank",
       });
-      return { ok: true, tabId: target.targetId };
+      const tabId = target.targetId;
+
+      // Reconnect CDP to the new tab so events (console, network) are captured
+      try {
+        const port = cdpClient.activePort || 9223;
+        const targets = await cdpClient.discoverTargets(port);
+        const newTabTarget = targets.find(t => t.id === tabId && t.webSocketDebuggerUrl);
+        if (newTabTarget) {
+          // Close old WebSocket and connect to new tab via direct WS URL
+          if (cdpClient.ws) {
+            try { cdpClient.ws.close(); } catch {}
+            cdpClient.ws = null;
+            cdpClient.connected = false;
+          }
+          cdpClient._captureEnabled = false;
+          await cdpClient.connect(port, newTabTarget.webSocketDebuggerUrl);
+        }
+      } catch (err) {
+        // Non-fatal: tab created but events may not be captured
+        if (this._debug) console.log('[CDP] tabsCreate reconnect warning:', err.message);
+      }
+
+      return { ok: true, tabId };
     },
 
     /**

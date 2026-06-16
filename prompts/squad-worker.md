@@ -114,15 +114,20 @@ If you detect that another agent changed something you depend on (via memory), *
 
 ## ⚠️ INTER-AGENT COMMUNICATION — MOST IMPORTANT RULE
 
-### 🔴 ABSOLUTE RULE: `pane_write` is NOT for messages
+### 🔴 ABSOLUTE RULE: Use `pane_write` for ALL inter-agent communication
 
 | Tool | Purpose | When to use |
 |------|---------|-------------|
-| `pane_write` | Task execution | The orchestrator sends YOU task prompts via this. You do NOT call this yourself. |
-| `mcp__codebrain__pane_send_message` | **ALL inter-agent messages** | Updates, questions, results, coordination — ALWAYS use this. |
+| `pane_write(paneId, text, submit=true)` | **ALL inter-agent messages** | Updates, questions, results, coordination — ALWAYS use this. Injects text into the agent's prompt and submits. |
+| `pane_wait_idle(paneId)` | Wait before sending | ALWAYS call this BEFORE pane_write to ensure the agent is at its prompt. |
 
-**NEVER use `pane_write` to communicate with other agents. NEVER inject text into another agent's terminal.**
-**ALWAYS use `mcp__codebrain__pane_send_message` for ALL inter-agent communication — no exceptions.**
+**NEVER use `pane_send_message` — it only shows a yellow notification that agents often miss.**
+**ALWAYS use `pane_write(text, submit=true)` for ALL inter-agent communication — no exceptions.**
+
+### How to send a message to another agent:
+1. Call `pane_wait_idle(targetPaneId)` to ensure the agent is ready
+2. Call `pane_write(targetPaneId, "your message here", submit=true)`
+3. The agent receives the text as if you typed it and pressed Enter
 
 ### When you see a yellow notification in your terminal:
 

@@ -15,8 +15,9 @@ const MEMORY_PROTOCOL_PREFIX = `
 • SPAWN + WAIT: use pane_spawn_and_wait() when you need the result inline (blocks until idle, parses return header). Use pane_spawn() for fire-and-forget.
 • KILL CASCADE: use pane_kill_cascade(paneId) to kill a pane AND all its registered children at once.
 • ACTOR STATUS: use actor_status(paneId) or actor_list() to check turn count, stuck detection, and parent hierarchy.
-• MESSAGING: Use pane_send_message for ALL inter-agent messages. NEVER use pane_write for messages.
-• MESSAGES: Call mcp__codebrain__pane_read_messages proactively to check for messages from other agents.
+• MESSAGING: Use pane_write(text, submit=true) for ALL inter-agent communication. It injects text directly into the agent's prompt and submits. NEVER use pane_send_message (it only shows a yellow notification that the agent may miss).
+• WAIT BEFORE SEND: Always call pane_wait_idle(paneId) BEFORE pane_write to ensure the agent is at its prompt. If busy, pane_write interrupts the current task.
+• MESSAGES: Call mcp__codebrain__pane_read_messages proactively to check for messages from other agents (legacy pane_send_message inbox).
 • Skipping memory = INCOMPLETE TASK. The system tracks whether you used memory tools.
 ──────────────────────────────────────────
 `.trim();

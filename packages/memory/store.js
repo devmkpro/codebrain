@@ -2465,6 +2465,624 @@ function createMemoryStore(dbPath) {
         return { ok: false, error: e.message };
       }
     },
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // MiMo-Code Features Phase 4-6: 25 new features ported 2026-06-16
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // ── 1.1 Session Compaction State ────────────────────────────────────────
+    _compactionState: new Map(), // paneId → { lastCompactionAt, messageCount, totalChars }
+
+    getCompactionState(paneId) {
+      return this._compactionState.get(paneId) || null;
+    },
+
+    updateCompactionState(paneId, state) {
+      const prev = this._compactionState.get(paneId) || {};
+      this._compactionState.set(paneId, { ...prev, ...state, updatedAt: Date.now() });
+    },
+
+    clearCompactionState(paneId) {
+      this._compactionState.delete(paneId);
+    },
+
+    /**
+     * Get compaction history for a session (persisted in memory).
+     */
+    getCompactionHistory({ sessionId, workspace, limit = 20 } = {}) {
+      try {
+        let sql = `SELECT * FROM memories WHERE key LIKE 'compaction-%' AND type = 'working'`;
+        const params = [];
+        if (workspace) { sql += ` AND workspace = ?`; params.push(workspace); }
+        sql += ` ORDER BY created_at DESC LIMIT ?`;
+        params.push(limit);
+        const rows = db.prepare(sql).all(...params);
+        return { ok: true, data: rows };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    },
+
+    // ── 1.2 Step Classification (pure function) ────────────────────────────
+    /**
+     * Classify an assistant step: final | continue | filtered | think-only | invalid | failed
+     * @param {{ output: string, hasPendingTools?: boolean, hasError?: boolean }} params
+     * @returns {{ classification: string, reason: string }}
+     */
+    classifyStep({ output, hasPendingTools = false, hasError = false } = {}) {
+      if (hasError) return { classification: 'failed', reason: 'Step produced an error' };
+      if (hasPendingTools) return { classification: 'continue', reason: 'Pending tool calls need execution' };
+      if (!output || output.trim().length === 0) return { classification: 'invalid', reason: 'Empty output' };
+      // Check for think-only (only reasoning blocks, no actionable text)
+      const stripped = output.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').replace(/<thinking>[\s\S]*?<\/antml:thinking>/g, '').trim();
+      if (stripped.length === 0) return { classification: 'think-only', reason: 'Only reasoning, no actionable output' };
+      // Check for content filter patterns
+      if (/I (?:can't|cannot|am unable to) (?:assist|help|complete|fulfill)/i.test(output)) {
+        return { classification: 'filtered', reason: 'Content filter detected' };
+      }
+      return { classification: 'final', reason: 'Normal completion' };
+    },
+
+    // ── 1.3 Text Loop Recovery ─────────────────────────────────────────────
+    _textLoopBuffers: new Map(), // paneId → { outputs: string[], recoveryCount: number }
+
+    /**
+     * Track text output and detect repetition. Returns { isLooping, recoveryCount, suggestion }
+     */
+    recordTextOutput(paneId, output) {
+      if (!output || typeof output !== 'string') return { isLooping: false };
+      // Normalize: lowercase, strip whitespace, remove common prefixes, truncate
+      let normalized = output.toLowerCase().trim();
+      normalized = normalized.replace(/^(let me|i'll|okay|sure|alright|here'?s?|now|so)[,\s]+/i, '');
+      normalized = normalized.slice(0, 200);
+      if (normalized.length < 20) return { isLooping: false };
+
+      let buf = this._textLoopBuffers.get(paneId);
+      if (!buf) { buf = { outputs: [], recoveryCount: 0 }; }
+      buf.outputs.push(normalized);
+      if (buf.outputs.length > 5) buf.outputs.shift();
+
+      this._textLoopBuffers.set(paneId, buf);
+
+      // Check if 3 consecutive outputs are identical
+      if (buf.outputs.length >= 3) {
+        const last3 = buf.outputs.slice(-3);
+        if (last3.every(o => o === last3[0])) {
+          buf.recoveryCount++;
+          this._textLoopBuffers.set(paneId, buf);
+          const suggestion = buf.recoveryCount === 1
+            ? 'MILD: Try a completely different approach. Your last 3 outputs were identical.'
+            : 'STRONG: Abandon your current plan entirely and ask the user for guidance.';
+          return { isLooping: true, recoveryCount: buf.recoveryCount, suggestion };
+        }
+      }
+      return { isLooping: false };
+    },
+
+    clearTextLoopBuffer(paneId) {
+      this._textLoopBuffers.delete(paneId);
+    },
+
+    // ── 1.4 Enhanced Loop Detection (stableStringify) ─────────────────────
+    _stepSignatures: new Map(), // paneId → string[]
+
+    /**
+     * Deterministic JSON serialization with sorted keys.
+     * Same logical object always produces the same string regardless of key order.
+     */
+    stableStringify(obj) {
+      if (obj === null || obj === undefined) return String(obj);
+      if (typeof obj !== 'object') return JSON.stringify(obj);
+      if (Array.isArray(obj)) return '[' + obj.map(item => this.stableStringify(item)).join(',') + ']';
+      const sortedKeys = Object.keys(obj).sort();
+      return '{' + sortedKeys.map(k => JSON.stringify(k) + ':' + this.stableStringify(obj[k])).join(',') + '}';
+    },
+
+    /**
+     * Record a step signature using stableStringify for key-order independence.
+     * Returns { isLooping, count } if 3+ consecutive identical signatures.
+     */
+    recordStepSignature({ paneId, toolName, toolInput }) {
+      const sig = 'tool:' + toolName + ':' + this.stableStringify(toolInput || {});
+      let sigs = this._stepSignatures.get(paneId) || [];
+      sigs.push(sig);
+      if (sigs.length > 5) sigs.shift();
+      this._stepSignatures.set(paneId, sigs);
+      if (sigs.length >= 3) {
+        const last3 = sigs.slice(-3);
+        if (last3.every(s => s === last3[0])) {
+          return { isLooping: true, count: 3 };
+        }
+      }
+      return { isLooping: false, count: 0 };
+    },
+
+    clearStepSignatures(paneId) {
+      this._stepSignatures.delete(paneId);
+    },
+
+    // ── 2.1 Goal / Stop Condition ──────────────────────────────────────────
+    _goals: new Map(), // paneId → { goal, setAt, judgeVerdicts, reEntryCount }
+
+    setGoal(paneId, goal) {
+      this._goals.set(paneId, { goal, setAt: Date.now(), judgeVerdicts: [], reEntryCount: 0 });
+      return { ok: true };
+    },
+
+    getGoal(paneId) {
+      return this._goals.get(paneId) || null;
+    },
+
+    clearGoal(paneId) {
+      this._goals.delete(paneId);
+    },
+
+    recordJudgeVerdict(paneId, verdict) {
+      const goal = this._goals.get(paneId);
+      if (!goal) return { ok: false, error: 'No goal set for this pane' };
+      goal.judgeVerdicts.push({ ...verdict, timestamp: Date.now() });
+      if (!verdict.satisfied) goal.reEntryCount++;
+      this._goals.set(paneId, goal);
+      return { ok: true, reEntryCount: goal.reEntryCount };
+    },
+
+    // ── 2.2 Task Gate (Pre-Stop Validation) ────────────────────────────────
+    /**
+     * Check for incomplete tasks before allowing agent to stop.
+     * Returns { shouldStop, nudgeText?, incompleteTasks[] }
+     */
+    taskGateCheck({ sessionId, paneId, maxReEntries = 3 } = {}) {
+      try {
+        const incomplete = db.prepare(`
+          SELECT id, description, status FROM task_tree
+          WHERE status IN ('open', 'in_progress')
+          ${sessionId ? 'AND session_id = ?' : ''}
+          ORDER BY id
+        `).all(...(sessionId ? [sessionId] : []));
+
+        if (incomplete.length === 0) return { shouldStop: true };
+
+        // Check re-entry count from goal state
+        const goal = this._goals.get(paneId);
+        const reEntryCount = goal?.reEntryCount || 0;
+        if (reEntryCount >= maxReEntries) {
+          return { shouldStop: true, reason: 'Max re-entries exceeded', incompleteTasks: incomplete };
+        }
+
+        const taskList = incomplete.map(t => `  ${t.id}: ${t.description} [${t.status}]`).join('\n');
+        const nudgeText = `⚠️ You have ${incomplete.length} incomplete task(s):\n${taskList}\n\nComplete or explicitly abandon each task before stopping.`;
+        return { shouldStop: false, nudgeText, incompleteTasks: incomplete };
+      } catch (e) {
+        return { shouldStop: true, error: e.message };
+      }
+    },
+
+    // ── 2.3 Actor Return Header Parsing ────────────────────────────────────
+    /**
+     * Parse structured return header from subagent output.
+     * Format: **Status**: success|partial|failed|blocked
+     *         **Summary**: <one line>
+     *         **Files touched**: <paths>
+     *         **Findings worth promoting**: <bullets>
+     */
+    parseReturnHeader(text) {
+      if (!text || typeof text !== 'string') return null;
+      const statusMatch = text.match(/\*\*Status\*\*\s*:\s*(success|partial|failed|blocked)/i);
+      if (!statusMatch) return null;
+      const summaryMatch = text.match(/\*\*Summary\*\*\s*:\s*(.+)/i);
+      const filesMatch = text.match(/\*\*Files touched\*\*\s*:\s*(.+)/i);
+      const findingsMatch = text.match(/\*\*Findings worth promoting\*\*\s*:\s*([\s\S]*?)(?=\n\*\*|\n---|\n$)/i);
+      return {
+        status: statusMatch[1].toLowerCase(),
+        summary: summaryMatch?.[1]?.trim() || '',
+        filesTouched: filesMatch?.[1]?.split(',').map(f => f.trim()).filter(Boolean) || [],
+        findings: findingsMatch?.[1]?.split('\n').map(f => f.replace(/^[-*]\s*/, '').trim()).filter(Boolean) || [],
+      };
+    },
+
+    // ── 2.4 Actor Lifecycle (Persistent) ───────────────────────────────────
+    // Already partially handled by actor registry. Add lifecycle field support.
+    actorSetLifecycle({ paneId, lifecycle }) {
+      try {
+        db.prepare(`UPDATE actor_registry SET lifecycle = ? WHERE pane_id = ?`).run(lifecycle, paneId);
+        return { ok: true };
+      } catch {
+        // Column may not exist yet — add it
+        try {
+          db.prepare(`ALTER TABLE actor_registry ADD COLUMN lifecycle TEXT DEFAULT 'ephemeral'`).run();
+          db.prepare(`UPDATE actor_registry SET lifecycle = ? WHERE pane_id = ?`).run(lifecycle, paneId);
+          return { ok: true };
+        } catch (e) {
+          return { ok: false, error: e.message };
+        }
+      }
+    },
+
+    actorGetLifecycle(paneId) {
+      try {
+        const row = db.prepare(`SELECT lifecycle FROM actor_registry WHERE pane_id = ?`).get(paneId);
+        return row?.lifecycle || 'ephemeral';
+      } catch {
+        return 'ephemeral';
+      }
+    },
+
+    // ── 3.1 Session Revert / Snapshot Metadata ─────────────────────────────
+    // Snapshot metadata stored in memory entries + dedicated SQLite table
+    snapshotTrack({ sessionId, snapshotHash, filePaths, messageIndex }) {
+      try {
+        // Ensure snapshot_metadata table exists
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS snapshot_metadata (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            snapshot_hash TEXT NOT NULL,
+            file_paths TEXT,
+            message_index INTEGER,
+            created_at INTEGER DEFAULT (strftime('%s','now'))
+          )
+        `).run();
+        db.prepare(`
+          INSERT INTO snapshot_metadata (session_id, snapshot_hash, file_paths, message_index)
+          VALUES (?, ?, ?, ?)
+        `).run(sessionId, snapshotHash, JSON.stringify(filePaths || []), messageIndex || 0);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    },
+
+    snapshotList({ sessionId, limit = 50 } = {}) {
+      try {
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS snapshot_metadata (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            snapshot_hash TEXT NOT NULL,
+            file_paths TEXT,
+            message_index INTEGER,
+            created_at INTEGER DEFAULT (strftime('%s','now'))
+          )
+        `).run();
+        let sql = `SELECT * FROM snapshot_metadata`;
+        const params = [];
+        if (sessionId) { sql += ` WHERE session_id = ?`; params.push(sessionId); }
+        sql += ` ORDER BY created_at DESC LIMIT ?`;
+        params.push(limit);
+        const rows = db.prepare(sql).all(...params);
+        return { ok: true, data: rows.map(r => ({ ...r, file_paths: JSON.parse(r.file_paths || '[]') })) };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    },
+
+    // ── 3.2 Checkpoint State ───────────────────────────────────────────────
+    _checkpoints: new Map(), // sessionId → { lastCheckpointAt, path, sections }
+
+    updateCheckpointState(sessionId, state) {
+      const prev = this._checkpoints.get(sessionId) || {};
+      this._checkpoints.set(sessionId, { ...prev, ...state, updatedAt: Date.now() });
+    },
+
+    getCheckpointState(sessionId) {
+      return this._checkpoints.get(sessionId) || null;
+    },
+
+    // ── 3.3 Checkpoint Validation ──────────────────────────────────────────
+    REQUIRED_CHECKPOINT_SECTIONS: [
+      'Active Intent', 'Next Action', 'Directives', 'Task Tree',
+      'Current Work', 'Files', 'Discovered Knowledge', 'Errors',
+      'Live Resources', 'Design Decisions', 'Open Notes',
+    ],
+
+    SECTION_BUDGETS: {
+      'Active Intent': 500,
+      'Next Action': 500,
+      'Directives': 800,
+      'Task Tree': 1000,
+      'Current Work': 2000,
+      'Files': 1500,
+      'Discovered Knowledge': 1500,
+      'Errors': 800,
+      'Live Resources': 500,
+      'Design Decisions': 800,
+      'Open Notes': 500,
+    },
+
+    TOTAL_CHECKPOINT_BUDGET: 8000,
+
+    /**
+     * Validate a checkpoint's quality and budget compliance.
+     * Returns { valid, violations[], spilloverSections[] }
+     */
+    validateCheckpoint(checkpointText) {
+      const violations = [];
+      const spilloverSections = [];
+      if (!checkpointText || typeof checkpointText !== 'string') {
+        return { valid: false, violations: [{ type: 'error', message: 'Empty checkpoint' }], spilloverSections };
+      }
+
+      const lines = checkpointText.split('\n');
+      const sectionsFound = new Set();
+      let totalTokens = 0;
+
+      // Parse sections
+      let currentSection = null;
+      let currentSectionTokens = 0;
+      for (const line of lines) {
+        const h2 = line.match(/^##\s+(.+)/);
+        if (h2) {
+          // Save previous section budget
+          if (currentSection && this.SECTION_BUDGETS[currentSection]) {
+            const budget = this.SECTION_BUDGETS[currentSection];
+            if (currentSectionTokens > budget * 1.5) {
+              spilloverSections.push(currentSection);
+              violations.push({ type: 'extract-required', section: currentSection, tokens: currentSectionTokens, budget });
+            } else if (currentSectionTokens > budget) {
+              violations.push({ type: 'warn', section: currentSection, tokens: currentSectionTokens, budget });
+            }
+          }
+          const sectionName = h2[1].trim();
+          sectionsFound.add(sectionName);
+          currentSection = sectionName;
+          currentSectionTokens = 0;
+          continue;
+        }
+        const approxTokens = Math.ceil(line.length / 4);
+        currentSectionTokens += approxTokens;
+        totalTokens += approxTokens;
+      }
+
+      // Check last section
+      if (currentSection && this.SECTION_BUDGETS[currentSection]) {
+        const budget = this.SECTION_BUDGETS[currentSection];
+        if (currentSectionTokens > budget * 1.5) {
+          spilloverSections.push(currentSection);
+          violations.push({ type: 'extract-required', section: currentSection, tokens: currentSectionTokens, budget });
+        }
+      }
+
+      // Check required sections
+      for (const req of this.REQUIRED_CHECKPOINT_SECTIONS) {
+        if (!sectionsFound.has(req)) {
+          violations.push({ type: 'error', message: `Missing required section: ${req}` });
+        }
+      }
+
+      // Check total budget
+      if (totalTokens > this.TOTAL_CHECKPOINT_BUDGET) {
+        violations.push({ type: 'warn', message: `Total ${totalTokens} tokens exceeds budget of ${this.TOTAL_CHECKPOINT_BUDGET}` });
+      }
+
+      const hasErrors = violations.some(v => v.type === 'error' || v.type === 'extract-required');
+      return { valid: !hasErrors, violations, spilloverSections, totalTokens };
+    },
+
+    // ── 4.2 History Search (Cross-Session FTS) ─────────────────────────────
+    // Store conversation messages for cross-session search
+
+    /**
+     * Initialize history_messages table + FTS5 index if not exists.
+     */
+    _initHistoryTable() {
+      try {
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS history_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            workspace TEXT,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            kind TEXT DEFAULT 'text',
+            tool_name TEXT,
+            created_at INTEGER DEFAULT (strftime('%s','now'))
+          )
+        `).run();
+        db.prepare(`CREATE INDEX IF NOT EXISTS idx_history_session ON history_messages(session_id)`).run();
+        db.prepare(`CREATE INDEX IF NOT EXISTS idx_history_workspace ON history_messages(workspace)`).run();
+        // Try FTS5
+        try {
+          db.prepare(`
+            CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(
+              content, session_id, role, kind, tool_name,
+              content=history_messages, content_rowid=id
+            )
+          `).run();
+          // Triggers for auto-sync
+          db.prepare(`
+            CREATE TRIGGER IF NOT EXISTS history_ai AFTER INSERT ON history_messages BEGIN
+              INSERT INTO history_fts(rowid, content, session_id, role, kind, tool_name)
+              VALUES (new.id, new.content, new.session_id, new.role, new.kind, new.tool_name);
+            END
+          `).run();
+          db.prepare(`
+            CREATE TRIGGER IF NOT EXISTS history_ad AFTER DELETE ON history_messages BEGIN
+              INSERT INTO history_fts(history_fts, rowid, content, session_id, role, kind, tool_name)
+              VALUES ('delete', old.id, old.content, old.session_id, old.role, old.kind, old.tool_name);
+            END
+          `).run();
+        } catch {
+          // FTS5 not available — history search will use LIKE fallback
+        }
+      } catch {}
+    },
+
+    /**
+     * Record a conversation message for cross-session history search.
+     */
+    recordHistoryMessage({ sessionId, workspace, role, content, kind = 'text', toolName }) {
+      try {
+        this._initHistoryTable();
+        db.prepare(`
+          INSERT INTO history_messages (session_id, workspace, role, content, kind, tool_name)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(sessionId, workspace, role, content, kind, toolName || null);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    },
+
+    /**
+     * Search cross-session history with FTS5 + BM25 or LIKE fallback.
+     */
+    searchHistory({ query, scope, sessionId, kind, toolName, since, limit = 20 } = {}) {
+      try {
+        this._initHistoryTable();
+        // Try FTS5 first
+        try {
+          const ftsQuery = query.split(/\s+/).filter(Boolean).map(w => `"${w.replace(/"/g, '""')}"`).join(' OR ');
+          let sql = `
+            SELECT hm.*, rank
+            FROM history_fts hf
+            JOIN history_messages hm ON hf.rowid = hm.id
+            WHERE history_fts MATCH ?
+          `;
+          const params = [ftsQuery];
+          if (sessionId) { sql += ` AND hm.session_id = ?`; params.push(sessionId); }
+          if (scope === 'project' && !sessionId) { /* filter by workspace */ }
+          if (kind) { sql += ` AND hm.kind = ?`; params.push(kind); }
+          if (toolName) { sql += ` AND hm.tool_name = ?`; params.push(toolName); }
+          if (since) { sql += ` AND hm.created_at >= ?`; params.push(Math.floor(since / 1000)); }
+          sql += ` ORDER BY rank LIMIT ?`;
+          params.push(limit);
+          const rows = db.prepare(sql).all(...params);
+          return { ok: true, data: rows, method: 'fts5' };
+        } catch {
+          // Fallback to LIKE
+          let sql = `SELECT * FROM history_messages WHERE content LIKE ?`;
+          const params = [`%${query}%`];
+          if (sessionId) { sql += ` AND session_id = ?`; params.push(sessionId); }
+          if (kind) { sql += ` AND kind = ?`; params.push(kind); }
+          if (toolName) { sql += ` AND tool_name = ?`; params.push(toolName); }
+          if (since) { sql += ` AND created_at >= ?`; params.push(Math.floor(since / 1000)); }
+          sql += ` ORDER BY created_at DESC LIMIT ?`;
+          params.push(limit);
+          const rows = db.prepare(sql).all(...params);
+          return { ok: true, data: rows, method: 'like' };
+        }
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    },
+
+    /**
+     * Get messages around a specific message ID for context.
+     */
+    getHistoryAround({ messageId, before = 5, after = 5 } = {}) {
+      try {
+        this._initHistoryTable();
+        const target = db.prepare(`SELECT * FROM history_messages WHERE id = ?`).get(messageId);
+        if (!target) return { ok: false, error: 'Message not found' };
+        const beforeRows = db.prepare(`
+          SELECT * FROM history_messages WHERE session_id = ? AND id < ? ORDER BY id DESC LIMIT ?
+        `).all(target.session_id, messageId, before);
+        const afterRows = db.prepare(`
+          SELECT * FROM history_messages WHERE session_id = ? AND id > ? ORDER BY id ASC LIMIT ?
+        `).all(target.session_id, messageId, after);
+        return {
+          ok: true,
+          data: [...beforeRows.reverse(), target, ...afterRows],
+          sessionId: target.session_id,
+        };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    },
+
+    // ── 3.6 Memory Path Guard ──────────────────────────────────────────────
+    /**
+     * Validate memory write paths against allowed scopes.
+     * Scopes: global, project, session, checkpoint-writer
+     */
+    validateMemoryPath({ path: writePath, scope = 'project', agentRole = 'worker' }) {
+      if (!writePath) return { valid: false, error: 'Path required' };
+      const normalizedPath = writePath.replace(/\\/g, '/').replace(/\/+/g, '/');
+
+      // Checkpoint-writer has strict allowlist
+      if (agentRole === 'checkpoint-writer') {
+        const allowed = ['checkpoint.md', 'MEMORY.md', 'notes.md'];
+        const isTaskProgress = /^tasks\/[^/]+\/progress\.md$/.test(normalizedPath);
+        const isAllowed = allowed.some(a => normalizedPath.endsWith(a)) || isTaskProgress;
+        return { valid: isAllowed, error: isAllowed ? undefined : `Checkpoint-writer cannot write to "${writePath}". Allowed: checkpoint.md, MEMORY.md, notes.md, tasks/<id>/progress.md` };
+      }
+
+      // Main agents cannot write to task progress directories
+      if (/^tasks\/[^/]+\/progress\.md$/.test(normalizedPath)) {
+        return { valid: false, error: `Main agents cannot write to task progress files. Use checkpoint-writer role instead.` };
+      }
+
+      // Block reserved paths
+      const reserved = ['checkpoint.invalid.md'];
+      if (reserved.some(r => normalizedPath.endsWith(r))) {
+        return { valid: false, error: `Path "${writePath}" is reserved` };
+      }
+
+      return { valid: true };
+    },
+
+    // ── 3.5 Subagent Progress Checker ──────────────────────────────────────
+    REQUIRED_PROGRESS_SECTIONS: [
+      'Task identity', 'Subagent intent', 'Files and code sections',
+      'Verbatim commands', 'Outcome and discoveries',
+    ],
+
+    /**
+     * Validate subagent progress file has required sections.
+     */
+    validateProgressFile(progressText) {
+      if (!progressText || typeof progressText !== 'string') {
+        return { valid: false, missing: this.REQUIRED_PROGRESS_SECTIONS };
+      }
+      const lower = progressText.toLowerCase();
+      const missing = this.REQUIRED_PROGRESS_SECTIONS.filter(section => {
+        const pattern = section.toLowerCase();
+        return !lower.includes(pattern) && !lower.includes(`## ${pattern}`) && !lower.includes(`# ${pattern}`);
+      });
+      return { valid: missing.length === 0, missing };
+    },
+
+    // ── 4.3 Instruction File Hierarchy ─────────────────────────────────────
+    /**
+     * Find instruction files walking up from a given directory.
+     * Returns array of { path, content } for each instruction file found.
+     */
+    findInstructionFiles(fromDir, { maxDepth = 10, filenames = ['AGENTS.md', 'CLAUDE.md'] } = {}) {
+      const results = [];
+      let dir = fromDir;
+      for (let i = 0; i < maxDepth && dir; i++) {
+        for (const filename of filenames) {
+          const filePath = path.join(dir, filename);
+          try {
+            if (fs.existsSync(filePath)) {
+              const content = fs.readFileSync(filePath, 'utf-8').trim();
+              if (content.length > 0) {
+                results.push({ path: filePath, content, depth: i });
+              }
+            }
+          } catch {}
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+      }
+      // Also check global instructions
+      const globalPaths = [
+        path.join(os.homedir(), '.codebrain', 'AGENTS.md'),
+        path.join(os.homedir(), '.codebrain', 'CLAUDE.md'),
+      ];
+      for (const gPath of globalPaths) {
+        try {
+          if (fs.existsSync(gPath)) {
+            const content = fs.readFileSync(gPath, 'utf-8').trim();
+            if (content.length > 0) {
+              results.push({ path: gPath, content, depth: -1, global: true });
+            }
+          }
+        } catch {}
+      }
+      return results;
+    },
   };
 }
 
