@@ -1,0 +1,16 @@
+{
+  "id": "codebrain-dev-squad",
+  "name": "Codebrain Dev Squad",
+  "type": "squad",
+  "version": "1.0.0",
+  "description": "Squad especializado para desenvolver features no próprio Codebrain: orchestrator + backend (Electron/MCP) + frontend (React/Tailwind) + tester",
+  "tags": [
+    "codebrain",
+    "squad",
+    "dev",
+    "electron",
+    "react"
+  ],
+  "entrypoint": "prompt.md",
+  "triggers": ["squad codebrain", "squad dev", "spawna squad", "time de desenvolvimento"]
+}

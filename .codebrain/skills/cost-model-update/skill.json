@@ -1,0 +1,15 @@
+{
+  "id": "cost-model-update",
+  "name": "Update Model Pricing",
+  "type": "prompt",
+  "version": "1.0.0",
+  "description": "Atualiza preços de modelos no cost-tracker do Codebrain (packages/mcp/bridge/cost-tracker.js) com novos valores da Anthropic, Google ou outros providers",
+  "tags": [
+    "codebrain",
+    "custo",
+    "modelo",
+    "pricing"
+  ],
+  "entrypoint": "prompt.md",
+  "triggers": ["preço errado", "sem preço", "adicionar modelo", "preço do modelo", "corrigir custo", "novo modelo preço"]
+}

@@ -30,6 +30,10 @@ interface MrReviewState {
   showFixModal: boolean;
   /** Whether auto-fix is in progress */
   fixing: boolean;
+  /** Last review error message (e.g. "glab CLI not authenticated") */
+  reviewError: string | null;
+  /** Quick fix hint for the error (e.g. "Run: glab auth login") */
+  reviewErrorQuickFix: string | null;
 
   /** Fetch current review status from main process */
   fetchStatus: () => Promise<void>;
@@ -47,6 +51,10 @@ interface MrReviewState {
   applyFixes: () => Promise<void>;
   /** Listen for findings from main process */
   listenForFindings: () => () => void;
+  /** Listen for review errors from main process */
+  listenForErrors: () => () => void;
+  /** Clear review error */
+  clearReviewError: () => void;
 }
 
 const api = () => (window as any).codeBrainApp?.mrReview;
@@ -62,6 +70,8 @@ export const useMrReviewStore = create<MrReviewState>((set, get) => ({
   pendingFindings: null,
   showFixModal: false,
   fixing: false,
+  reviewError: null,
+  reviewErrorQuickFix: null,
 
   fetchStatus: async () => {
     try {
@@ -130,8 +140,11 @@ export const useMrReviewStore = create<MrReviewState>((set, get) => ({
     try {
       const mrApi = api();
       if (!mrApi) return;
+      // Clear any previous error before starting a new review
       set(s => ({
         reviewing: true,
+        reviewError: null,
+        reviewErrorQuickFix: null,
         activeWorkspaces: [...s.activeWorkspaces, workspace],
       }));
       const res = await mrApi.trigger({ workspace });
@@ -193,5 +206,31 @@ export const useMrReviewStore = create<MrReviewState>((set, get) => ({
         set({ pendingFindings: data as MrReviewFindings, showFixModal: true });
       }
     });
+  },
+
+  listenForErrors: () => {
+    const mrApi = api();
+    if (!mrApi?.onError) return () => {};
+    return mrApi.onError((data) => {
+      set({
+        reviewError: data?.error || "Unknown review error",
+        reviewErrorQuickFix: data?.quickFix || null,
+        reviewing: false,
+      });
+      // Auto-clear error after 30s
+      setTimeout(() => {
+        set((s) => {
+          // Only clear if it's still the same error
+          if (s.reviewError === data?.error) {
+            return { reviewError: null, reviewErrorQuickFix: null };
+          }
+          return {};
+        });
+      }, 30_000);
+    });
+  },
+
+  clearReviewError: () => {
+    set({ reviewError: null, reviewErrorQuickFix: null });
   },
 }));

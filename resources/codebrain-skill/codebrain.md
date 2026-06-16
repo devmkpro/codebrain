@@ -5,12 +5,35 @@ You are running inside **Codebrain**, an AI multi-agent IDE. You have access to 
 ## Core Pane Tools
 
 ### mcp__codebrain__pane_spawn
-Open a NEW VISIBLE terminal pane in the workspace grid. Use this instead of the Agent tool if you want the user to see progress.
+Open a NEW VISIBLE terminal pane in the workspace grid. Use this for fire-and-forget workers. For blocking (run mode), use `pane_spawn_and_wait`.
 - `cwd?` — Working directory (defaults to current workspace)
 - `agent?` — Agent binary: openclaude, claude, gemini, codex, shell (default: openclaude)
 - `providerId?` — Provider ID to use
 - `model?` — Model to use
-- Returns `{ paneId, ok: true }`
+- `label?` — Short label for pane_list (e.g. 'backend', 'frontend')
+- `description?` — Short task description — stored in actor registry for monitoring
+- `parentPaneId?` — Your own pane_id — enables cancel cascade and hierarchy tracking
+- Returns `{ paneId, ok: true, reused: bool }`
+
+### mcp__codebrain__pane_spawn_and_wait
+Spawn a pane and BLOCK until it goes idle (like MiMo's `action:"run"`). Returns the output + parsed status header.
+- `description` — (required) Short task description
+- `cwd?`, `agent?`, `providerId?`, `model?`, `label?`, `parentPaneId?` — same as pane_spawn
+- `timeout_ms?` — Max wait in ms (default 600000 = 10 min)
+- Returns `{ paneId, timedOut, reportedStatus, reportedSummary, output }`
+- `reportedStatus`: 'success'|'partial'|'failed'|'blocked' — parsed from worker's **Status**: header
+
+### mcp__codebrain__pane_kill_cascade
+Kill a pane AND all its registered children recursively (cancel cascade). Safe on leaf panes.
+- `paneId` — Pane to kill (with all its children)
+
+### mcp__codebrain__actor_status
+Get actor registry info for a pane: status (pending/running/idle/stuck/cancelled), turn_count, last_turn_time, last_error, parent hierarchy.
+- `paneId` — Pane to inspect
+
+### mcp__codebrain__actor_list
+List all active workers from the persistent actor registry. More detailed than pane_list (includes stuck detection, hierarchy, turn counts).
+- `include_terminal?` — Include completed panes (default false)
 
 ### mcp__codebrain__pane_write
 Write a TASK PROMPT to an existing pane (simulates keyboard input). **Use ONLY for task execution — NEVER for inter-agent messages.** For all inter-agent communication, use `pane_send_message`.

@@ -1,0 +1,15 @@
+{
+  "id": "debug-pane",
+  "name": "Debug Pane / Agent",
+  "type": "prompt",
+  "version": "1.0.0",
+  "description": "Diagnóstico rápido de pane ou agente travado no Codebrain: lista panes, lê output, verifica mensagens pendentes, verifica saúde do swarm",
+  "tags": [
+    "codebrain",
+    "debug",
+    "pane",
+    "agente"
+  ],
+  "entrypoint": "prompt.md",
+  "triggers": ["travado", "não responde", "pane travou", "agente parou", "debug pane", "agente não faz nada"]
+}

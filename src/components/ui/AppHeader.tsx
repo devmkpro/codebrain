@@ -838,7 +838,7 @@ function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
 
 // ─── MR Review Indicator ────────────────────────────────────────────────────
 function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
-  const { reviewing, activeWorkspaces, allowedWorkspaces, hasReviewModel, triggerReview, fetchStatus } = useMrReviewStore();
+  const { reviewing, activeWorkspaces, allowedWorkspaces, hasReviewModel, reviewError, reviewErrorQuickFix, triggerReview, fetchStatus, listenForErrors, clearReviewError } = useMrReviewStore();
   const [showMenu, setShowMenu] = React.useState(false);
   const [menuPos, setMenuPos] = React.useState({ top: 0, right: 0 });
   const btnRef = React.useRef<HTMLButtonElement>(null);
@@ -850,6 +850,12 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
     const id = setInterval(fetchStatus, 10000);
     return () => clearInterval(id);
   }, [fetchStatus]);
+
+  // Listen for review errors from main process
+  React.useEffect(() => {
+    const unsub = listenForErrors();
+    return unsub;
+  }, [listenForErrors]);
 
   // Close on outside click
   React.useEffect(() => {
@@ -866,18 +872,22 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
   const isAllowed = activeWorkspace ? allowedWorkspaces.includes(activeWorkspace) : false;
   const isReviewing = reviewing && (activeWorkspace ? activeWorkspaces.includes(activeWorkspace) : activeWorkspaces.length > 0);
 
-  // Icon color logic
-  const iconClass = isReviewing
-    ? 'text-amber-400 animate-pulse'
-    : reviewing
-      ? 'text-amber-400/60'
-      : isAllowed
-        ? 'text-emerald-400/70'
-        : 'text-slate-500 hover:text-slate-400';
+  // Icon color logic — error state takes priority
+  const iconClass = reviewError
+    ? 'text-red-400'
+    : isReviewing
+      ? 'text-amber-400 animate-pulse'
+      : reviewing
+        ? 'text-amber-400/60'
+        : isAllowed
+          ? 'text-emerald-400/70'
+          : 'text-slate-500 hover:text-slate-400';
 
-  const bgClass = isReviewing
-    ? 'bg-amber-500/10'
-    : 'hover:bg-white/[0.04]';
+  const bgClass = reviewError
+    ? 'bg-red-500/10'
+    : isReviewing
+      ? 'bg-amber-500/10'
+      : 'hover:bg-white/[0.04]';
 
   const [triggering, setTriggering] = React.useState(false);
 
@@ -906,10 +916,13 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
         ref={btnRef}
         onClick={handleToggle}
         className={`flex items-center gap-1.5 px-2 h-full text-[11px] transition-all focus:outline-none cursor-pointer ${iconClass} ${bgClass}`}
-        title={isReviewing ? 'Revisando MRs...' : !hasReviewModel ? 'MR Review — configure um modelo em Settings' : isAllowed ? 'MR Review — clique para opções' : 'MR Review'}
+        title={reviewError ? `MR Review — ${reviewError}` : isReviewing ? 'Revisando MRs...' : !hasReviewModel ? 'MR Review — configure um modelo em Settings' : isAllowed ? 'MR Review — clique para opções' : 'MR Review'}
       >
         <GitPullRequest size={15} strokeWidth={1.5} />
-        {isReviewing && (
+        {reviewError && (
+          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+        )}
+        {isReviewing && !reviewError && (
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
         )}
       </button>
@@ -934,6 +947,28 @@ function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
                 <span className={`font-mono text-[9px] ${isAllowed ? 'text-emerald-400' : 'text-slate-600'}`}>
                   {isAllowed ? 'Permitido' : 'Não permitido'}
                 </span>
+              </div>
+            </div>
+          )}
+          {reviewError && (
+            <div className="px-3 py-2 border-b border-red-500/20 bg-red-500/5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-mono text-[9px] text-red-400 uppercase tracking-widest mb-0.5">Erro</p>
+                  <p className="font-mono text-[10px] text-red-300 break-words">{reviewError}</p>
+                  {reviewErrorQuickFix && (
+                    <p className="font-mono text-[10px] text-amber-400/80 mt-1">
+                      Fix: <code className="bg-amber-500/10 px-1 rounded">{reviewErrorQuickFix}</code>
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={clearReviewError}
+                  className="text-slate-600 hover:text-slate-400 p-0.5 cursor-pointer flex-shrink-0"
+                  title="Dispensar"
+                >
+                  <X size={10} />
+                </button>
               </div>
             </div>
           )}

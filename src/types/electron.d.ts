@@ -563,6 +563,7 @@ export interface CodebrainApp {
     trigger: (args: { workspace: string }) => Promise<{ ok: boolean; message?: string; error?: string }>;
     applyFixes: (args: { workspace: string; mrId: number; findings: string; sourceBranch?: string }) => Promise<{ ok: boolean; paneId?: string; error?: string }>;
     onFindings: (cb: (data: { mrId: number; workspace: string; findings: string[]; summary: string; title: string; sourceBranch: string; targetBranch: string }) => void) => () => void;
+    onError: (cb: (data: { workspace: string; error: string; quickFix?: string }) => void) => () => void;
   };
   notify: (title: string, body: string) => void;
   log: {

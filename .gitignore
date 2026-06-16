@@ -66,7 +66,10 @@ electron.vite.config.*.mjs
 500)
 
 # ── Codebrain workspace data ─────────────────────────────────────────────────
-.codebrain/
+.codebrain/worktrees/*
+.codebrain/tmp/*
+*.screenshot.*
+*.png
 
 # ── Prebuild native binaries (copied by prebuild-native.mjs) ────────────────
 resources/native/

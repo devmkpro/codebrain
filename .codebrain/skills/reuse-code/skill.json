@@ -1,0 +1,15 @@
+{
+  "id": "reuse-code",
+  "name": "Code Reuse Refactor",
+  "type": "prompt",
+  "version": "1.0.0",
+  "description": "Identifica e elimina duplicações no Codebrain: dados hardcoded em múltiplos lugares, lógica repetida, constantes duplicadas. Centraliza na fonte de verdade correta.",
+  "tags": [
+    "codebrain",
+    "refactor",
+    "dry",
+    "reuso"
+  ],
+  "entrypoint": "prompt.md",
+  "triggers": ["código duplicado", "refatorar", "remover duplicação", "dry", "centralizar"]
+}

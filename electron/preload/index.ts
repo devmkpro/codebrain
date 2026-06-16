@@ -368,6 +368,11 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
       ipcRenderer.on("mr_review:findings", handler);
       return () => ipcRenderer.removeListener("mr_review:findings", handler);
     },
+    onError: (cb: (data: { workspace: string; error: string; quickFix?: string }) => void) => {
+      const handler = (_e: any, data: any) => cb(data);
+      ipcRenderer.on("mr_review:error", handler);
+      return () => ipcRenderer.removeListener("mr_review:error", handler);
+    },
   },
 
   notify: (title: string, body: string) => ipcRenderer.send("notify", title, body),

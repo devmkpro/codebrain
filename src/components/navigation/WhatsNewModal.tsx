@@ -313,7 +313,7 @@ export function WhatsNewModal({
             {/* Title + subtitle */}
             <div className="space-y-1.5">
               <h2 className="text-[22px] font-bold text-white tracking-tight">
-                Code Review com IA
+                Code Review com IA: BETA
               </h2>
               <p className="text-[13px] text-slate-400 leading-relaxed max-w-[420px] mx-auto">
                 O Codebrain agora revisa seus Merge Requests e Pull Requests automaticamente

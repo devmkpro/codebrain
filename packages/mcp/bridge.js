@@ -295,6 +295,8 @@ function createMCPBridge(ptyManager, opts = {}) {
         const store = opts.memoryStore;
         if (!store) return;
         store.updateAgentStatus({ paneId, status: "exited" });
+        // Update actor registry on exit
+        try { store.actorUpdateStatus?.({ paneId, status: 'idle', lastOutcome: 'success' }); } catch {}
         // Notify others that this agent exited
         const label = paneLabels.get(paneId) || paneId.slice(0, 8);
         const workspace = opts.getCurrentWorkspacePath?.() || null;
@@ -340,6 +342,7 @@ function createMCPBridge(ptyManager, opts = {}) {
   workerManager.opts.paneHandlers = paneHandlers;
   workerManager.opts.clearReviewingState = opts.clearReviewingState;
   workerManager.opts.sendFindings = opts.sendFindings;
+  workerManager.opts.sendReviewError = opts.sendReviewError;
 
   // Expose direct trigger function for IPC handler (bypasses HooksManager event bus)
   if (opts.setMrPollTrigger) {

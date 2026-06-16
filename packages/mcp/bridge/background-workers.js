@@ -1372,7 +1372,17 @@ class WorkerManager {
         console.log(`[mr_poll] mrList for ${wsPath}: ok=${listRes?.ok}, count=${listRes?.mrs?.length ?? "n/a"}, error=${listRes?.error || "none"}`);
 
         if (!listRes?.ok || !listRes.mrs || listRes.mrs.length === 0) {
-          if (!listRes?.ok) results.errors.push(`${wsPath}: mrList failed: ${listRes?.error || "unknown"}`);
+          if (!listRes?.ok) {
+            results.errors.push(`${wsPath}: mrList failed: ${listRes?.error || "unknown"}`);
+            // Notify UI so the user sees the error (e.g. "glab CLI not authenticated")
+            if (typeof this.opts.sendReviewError === "function") {
+              this.opts.sendReviewError({
+                workspace: wsPath,
+                error: listRes?.error || "Unknown error listing MRs",
+                quickFix: listRes?.quick_fix || (listRes?.setup_needed ? `Run: ${listRes?.error?.includes("glab") ? "glab" : "gh"} auth login` : undefined),
+              });
+            }
+          }
           continue;
         }
 

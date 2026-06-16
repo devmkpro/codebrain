@@ -257,6 +257,41 @@ export function ProvidersModal({
       const fetched = await fetchModelsFromEndpoint(baseUrl, token, editing.type === "anthropic-compat" || editing.type === "mimo-compat" ? "anthropic" : editing.type === "gemini-compat" ? "gemini" : "openai");
       if (fetched.length > 0) cleanModels = fetched;
     }
+
+    // Special case: mimo-claude is a virtual provider that inherits its key from the
+    // real MIMO (mimo-compat) provider. Saving a key here should update the MIMO provider
+    // directly so provider-resolver.ts can find it in the store on next spawn.
+    if (editing.id === "mimo-claude") {
+      const newKey = cleanEnv["ANTHROPIC_AUTH_TOKEN"] || cleanEnv["MIMO_API_KEY"];
+      if (newKey) {
+        const mimoProvider = providers.find(p =>
+          p.type === "mimo-compat" ||
+          (p.id || "").toLowerCase().includes("mimo") ||
+          (p.label || "").toLowerCase().includes("mimo")
+        );
+        if (mimoProvider) {
+          const updated = {
+            ...mimoProvider,
+            env: {
+              ...(mimoProvider.env ?? {}),
+              ANTHROPIC_AUTH_TOKEN: newKey,
+            },
+          };
+          const res = await save(updated);
+          if (!res.ok) { setError(res.error ?? "falha ao salvar key no provider MIMO"); return; }
+          setEditing(null);
+          setError(null);
+          onClose();
+          return;
+        }
+      }
+      // No real MIMO provider found — nothing to update, close silently
+      setEditing(null);
+      setError(null);
+      onClose();
+      return;
+    }
+
     const payload = {
       ...editing,
       env: cleanEnv,

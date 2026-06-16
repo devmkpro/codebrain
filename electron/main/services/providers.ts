@@ -54,7 +54,9 @@ export function getEnhancedProviders(ctx: AppContext) {
         return {
           ...p,
           label,
-          host: template.host,
+          // Respect user-saved host (e.g. "claude" for mimo-claude path).
+          // Only fall back to template.host if the user hasn't explicitly set one.
+          host: p.host || template.host,
           type: template.type as any,
           models: [...template.models],
         };
@@ -72,7 +74,8 @@ export function getEnhancedProviders(ctx: AppContext) {
           return {
             ...p,
             label: resolvedLabel,
-            host: tpl.host,
+            // Respect user-saved host; fall back to template only if not set.
+            host: p.host || tpl.host,
             type: tpl.type as any,
             models: [...tpl.models],
           };

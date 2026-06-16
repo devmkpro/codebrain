@@ -1,0 +1,16 @@
+{
+  "id": "add-ipc-feature",
+  "name": "Add IPC Feature",
+  "type": "prompt",
+  "version": "1.0.0",
+  "description": "Guia completo para adicionar uma feature IPC ao Codebrain (main process → preload → types → store → component)",
+  "tags": [
+    "codebrain",
+    "ipc",
+    "electron",
+    "react",
+    "dev"
+  ],
+  "entrypoint": "prompt.md",
+  "triggers": ["adicionar ipc", "nova feature ipc", "novo ipc", "implementar ipc"]
+}

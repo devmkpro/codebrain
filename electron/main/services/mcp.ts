@@ -62,6 +62,9 @@ function buildMcpBridge(ctx: AppContext) {
     sendFindings: (data: { mrId: number; workspace: string; findings: string[]; summary: string; title: string; sourceBranch: string; targetBranch: string }) => {
       safeSend(ctx, "mr_review:findings", data);
     },
+    sendReviewError: (data: { workspace: string; error: string; quickFix?: string }) => {
+      safeSend(ctx, "mr_review:error", data);
+    },
     memoryStore: ctx.memoryStore,
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,

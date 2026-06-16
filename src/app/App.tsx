@@ -291,6 +291,10 @@ export function App() {
   React.useEffect(() => {
     return useMrReviewStore.getState().listenForFindings();
   }, []);
+  // Listen for MR review errors from main process (auth errors, CLI not found, etc.)
+  React.useEffect(() => {
+    return useMrReviewStore.getState().listenForErrors();
+  }, []);
   const closeWhatsNew = React.useCallback(() => {
     whatsNewDismiss(LATEST_RELEASE_VERSION);
   }, []);

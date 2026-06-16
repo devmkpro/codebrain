@@ -1,0 +1,15 @@
+{
+  "id": "add-mcp-tool",
+  "name": "Add MCP Tool",
+  "type": "prompt",
+  "version": "1.0.0",
+  "description": "Guia completo para adicionar um novo MCP tool ao Codebrain seguindo o padrão 3 camadas",
+  "tags": [
+    "codebrain",
+    "mcp",
+    "tool",
+    "dev"
+  ],
+  "entrypoint": "prompt.md",
+  "triggers": ["novo mcp tool", "adicionar mcp", "novo tool", "criar mcp tool"]
+}

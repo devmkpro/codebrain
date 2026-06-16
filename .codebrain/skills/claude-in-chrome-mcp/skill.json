@@ -1,0 +1,11 @@
+{
+  "id": "claude-in-chrome-mcp",
+  "name": "Claude in Chrome MCP Guide",
+  "type": "prompt",
+  "version": "1.0.0",
+  "description": "Complete guide to using Claude in Chrome browser automation with MCP tools. Learn how to control Chrome/Brave from Codebrain agents, navigate websites, interact with DOM, capture screenshots, and automate browser testing.",
+  "author": "MK (maikeofc18@gmail.com)",
+  "tags": ["browser-automation", "mcp", "chrome", "testing", "web-scraping", "ui-automation"],
+  "entrypoint": "prompt.md",
+  "scope": "global"
+}

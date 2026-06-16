@@ -329,6 +329,48 @@ function createMemoryStore(dbPath) {
     if (!String(e.message).includes("no such table")) throw e;
   }
 
+  // ── Actor Registry (MiMo-inspired — persistent pane/worker state) ─────────
+  // Tracks every spawned pane with status, hierarchy, turn count, and stuck detection.
+  // Unlike the in-memory paneConfigs Map, this survives restarts and allows cancel cascade.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS actor_registry (
+      pane_id         TEXT PRIMARY KEY,
+      parent_pane_id  TEXT,
+      agent           TEXT,
+      label           TEXT,
+      description     TEXT,
+      status          TEXT NOT NULL DEFAULT 'pending'
+                        CHECK(status IN ('pending','running','idle','cancelled','stuck')),
+      last_outcome    TEXT CHECK(last_outcome IN ('success','partial','failed','blocked','cancelled') OR last_outcome IS NULL),
+      turn_count      INTEGER NOT NULL DEFAULT 0,
+      last_turn_time  INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      last_error      TEXT,
+      workspace       TEXT,
+      cwd             TEXT,
+      provider_id     TEXT,
+      model           TEXT,
+      time_created    INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      time_updated    INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      time_completed  INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_actor_status ON actor_registry(status);
+    CREATE INDEX IF NOT EXISTS idx_actor_parent ON actor_registry(parent_pane_id);
+    CREATE INDEX IF NOT EXISTS idx_actor_workspace ON actor_registry(workspace);
+    CREATE INDEX IF NOT EXISTS idx_actor_last_turn ON actor_registry(last_turn_time);
+  `);
+
+  // Orphan recovery: on store init, mark all pending/running as failed (process restarted)
+  try {
+    const now = Date.now();
+    db.prepare(`
+      UPDATE actor_registry
+      SET status = 'idle', last_outcome = 'failed',
+          last_error = 'orphaned: process restarted',
+          time_updated = ?, time_completed = ?
+      WHERE status IN ('pending', 'running')
+    `).run(now, now);
+  } catch {}
+
   // ── Knowledge Graph + Vector Store ────────────────────────────────────────
   let knowledgeGraph;
   try {
@@ -1641,6 +1683,135 @@ function createMemoryStore(dbPath) {
       } catch (e) {
         return { ok: false, error: e.message };
       }
+    },
+
+    // ── Actor Registry API (MiMo-inspired) ────────────────────────────────────
+
+    /**
+     * Register a pane in the actor registry. Called on pane spawn.
+     */
+    actorRegister({ paneId, parentPaneId, agent, label, description, workspace, cwd, providerId, model }) {
+      try {
+        const now = Date.now();
+        db.prepare(`
+          INSERT OR REPLACE INTO actor_registry
+            (pane_id, parent_pane_id, agent, label, description, status, workspace, cwd, provider_id, model, time_created, time_updated, last_turn_time)
+          VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+        `).run(paneId, parentPaneId || null, agent || null, label || null, description || null,
+               workspace || null, cwd || null, providerId || null, model || null, now, now, now);
+        return { ok: true };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Update actor status. Called on pane state changes.
+     */
+    actorUpdateStatus({ paneId, status, lastOutcome, lastError }) {
+      try {
+        const now = Date.now();
+        const isTerminal = status === 'idle' && lastOutcome !== undefined;
+        db.prepare(`
+          UPDATE actor_registry
+          SET status = ?, last_outcome = ?, last_error = ?,
+              time_updated = ?, time_completed = ?
+          WHERE pane_id = ?
+        `).run(status, lastOutcome || null, lastError || null,
+               now, isTerminal ? now : null, paneId);
+        return { ok: true };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Increment turn count + update last_turn_time. Called when pane produces output.
+     */
+    actorUpdateTurn({ paneId }) {
+      try {
+        const now = Date.now();
+        db.prepare(`
+          UPDATE actor_registry
+          SET turn_count = turn_count + 1, last_turn_time = ?, status = 'running', time_updated = ?
+          WHERE pane_id = ?
+        `).run(now, now, paneId);
+        return { ok: true };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Get a single actor by paneId.
+     */
+    actorGet({ paneId }) {
+      try {
+        const row = db.prepare(`SELECT * FROM actor_registry WHERE pane_id = ?`).get(paneId);
+        return { ok: true, actor: row || null };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * List actors. Optionally filter by workspace, status, or parentPaneId.
+     */
+    actorList({ workspace, status, parentPaneId, includeTerminal = false } = {}) {
+      try {
+        const conds = [];
+        const params = [];
+        if (workspace) { conds.push('workspace = ?'); params.push(workspace); }
+        if (status) { conds.push('status = ?'); params.push(status); }
+        if (parentPaneId !== undefined) { conds.push('parent_pane_id = ?'); params.push(parentPaneId || null); }
+        if (!includeTerminal) {
+          conds.push("(status != 'idle' OR last_outcome IS NULL)");
+        }
+        const where = conds.length > 0 ? 'WHERE ' + conds.join(' AND ') : '';
+        const rows = db.prepare(`SELECT * FROM actor_registry ${where} ORDER BY time_created DESC`).all(...params);
+        return { ok: true, actors: rows };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Get children of a given pane (for cancel cascade).
+     */
+    actorListChildren({ parentPaneId }) {
+      try {
+        const rows = db.prepare(`SELECT * FROM actor_registry WHERE parent_pane_id = ?`).all(parentPaneId);
+        return { ok: true, actors: rows };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Detect stuck actors (running but no turn for > thresholdMs).
+     */
+    actorDetectStuck({ thresholdMs = 5 * 60 * 1000 } = {}) {
+      try {
+        const cutoff = Date.now() - thresholdMs;
+        const rows = db.prepare(`
+          SELECT * FROM actor_registry
+          WHERE status = 'running' AND last_turn_time <= ?
+        `).all(cutoff);
+        return { ok: true, stuck: rows };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Render a summary of active actors for agent system prompt injection.
+     */
+    actorRenderForAgent({ workspace } = {}) {
+      try {
+        const params = workspace ? [workspace] : [];
+        const where = workspace ? "WHERE workspace = ? AND status IN ('pending','running')" : "WHERE status IN ('pending','running')";
+        const rows = db.prepare(`SELECT * FROM actor_registry ${where} ORDER BY time_created DESC`).all(...params);
+        if (rows.length === 0) return { ok: true, text: '' };
+        const now = Date.now();
+        const lines = ['## Active Workers'];
+        lines.push('');
+        lines.push(`You have ${rows.length} active worker(s) in this session.`);
+        lines.push('');
+        for (const r of rows) {
+          const idleMs = now - r.last_turn_time;
+          const idleStr = idleMs < 60000 ? `${Math.floor(idleMs/1000)}s` : `${Math.floor(idleMs/60000)}m`;
+          const parentInfo = r.parent_pane_id ? ` (child of ${r.parent_pane_id.slice(0,8)})` : '';
+          lines.push(`- pane_id: ${r.pane_id} — ${r.label || r.agent || 'worker'} [${r.status}, last activity ${idleStr} ago]${parentInfo}`);
+          if (r.description) lines.push(`  task: ${r.description}`);
+        }
+        return { ok: true, text: lines.join('\n') };
+      } catch (e) { return { ok: false, error: e.message }; }
     },
   };
 }

@@ -1,0 +1,15 @@
+{
+  "id": "version-bump",
+  "name": "Version Bump",
+  "type": "prompt",
+  "version": "1.0.0",
+  "description": "Faz bump de versão no Codebrain: atualiza package.json, commita, cria tag git, push e regenera releases-data.ts",
+  "tags": [
+    "codebrain",
+    "versão",
+    "release",
+    "git"
+  ],
+  "entrypoint": "prompt.md",
+  "triggers": ["bump", "versão", "nova versão", "tag", "release", "commit tag", "faça tag", "nova tag"]
+}

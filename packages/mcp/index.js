@@ -77,27 +77,123 @@ function createCodebrainMCPServer(bridge) {
     "mcp__codebrain__pane_spawn",
     "Open a NEW VISIBLE terminal pane in the CodeBrain workspace grid. Use this instead of your built-in background agent tool if you want the user to see the progress. Returns the paneId.",
     {
-      cwd:        z.string().optional().describe("Working directory for the new pane. STRONGLY RECOMMENDED — always pass your workspace path here to ensure the pane opens in the correct project. If omitted, the system guesses from active panes."),
-      agent:      z.string().optional().describe("Agent binary: claude, codex, gemini, openclaude, shell. Defaults to claude."),
-      providerId: z.string().optional().describe("Provider ID to use for the new pane."),
-      model:      z.string().optional().describe("Model to use for the new pane."),
-      label:      z.string().optional().describe("A short label to identify this pane in pane_list (e.g. 'backend', 'frontend', 'ui-tester'). Helps the orchestrator reuse existing workers."),
+      cwd:          z.string().optional().describe("Working directory for the new pane. STRONGLY RECOMMENDED — always pass your workspace path here to ensure the pane opens in the correct project. If omitted, the system guesses from active panes."),
+      agent:        z.string().optional().describe("Agent binary: claude, codex, gemini, openclaude, shell. Defaults to claude."),
+      providerId:   z.string().optional().describe("Provider ID to use for the new pane."),
+      model:        z.string().optional().describe("Model to use for the new pane."),
+      label:        z.string().optional().describe("A short label to identify this pane in pane_list (e.g. 'backend', 'frontend', 'ui-tester'). Helps the orchestrator reuse existing workers."),
+      description:  z.string().optional().describe("Short description of the task this pane will perform. Stored in actor registry for status/monitoring."),
+      parentPaneId: z.string().optional().describe("The pane_id of the parent/orchestrator that spawned this pane. Used for cancel cascade and hierarchy tracking."),
     },
     async (args) => {
       try {
         const result = await bridge.spawnPane({
-          agent:      args.agent,
-          cwd:        args.cwd,
-          providerId: args.providerId,
-          model:      args.model,
-          label:      args.label,
+          agent:        args.agent,
+          cwd:          args.cwd,
+          providerId:   args.providerId,
+          model:        args.model,
+          label:        args.label,
+          description:  args.description,
+          parentPaneId: args.parentPaneId,
         });
-        
+
         const paneId = result?.paneId;
         if (!paneId || result?.error) {
           return { content: [{ type: "text", text: `error: ${result?.error ?? "spawn failed"}` }], isError: true };
         }
-        return { content: [{ type: "text", text: JSON.stringify({ paneId, ok: true }) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ paneId, ok: true, reused: result.reused || false }) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__pane_spawn_and_wait ────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__pane_spawn_and_wait",
+    "Spawn a pane and BLOCK until it goes idle (run mode). Returns the pane output + parsed status header. Use when you need the result inline (like MiMo action:'run'). For fire-and-forget, use pane_spawn instead.",
+    {
+      cwd:          z.string().optional().describe("Working directory for the new pane."),
+      agent:        z.string().optional().describe("Agent binary: claude, codex, gemini, openclaude. Defaults to claude."),
+      providerId:   z.string().optional().describe("Provider ID to use."),
+      model:        z.string().optional().describe("Model to use."),
+      label:        z.string().optional().describe("Label to identify this pane."),
+      description:  z.string().min(1).describe("Short description of the task (3-5 words). Required."),
+      parentPaneId: z.string().optional().describe("Parent orchestrator pane_id for hierarchy tracking."),
+      timeout_ms:   z.number().int().positive().optional().describe("Max wait time in milliseconds (default 600000 = 10 min)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.paneSpawnAndWait({
+          agent:        args.agent,
+          cwd:          args.cwd,
+          providerId:   args.providerId,
+          model:        args.model,
+          label:        args.label,
+          description:  args.description,
+          parentPaneId: args.parentPaneId,
+          timeoutMs:    args.timeout_ms,
+        });
+        if (!result.ok) return { content: [{ type: "text", text: `error: ${result.error}` }], isError: true };
+        const output = (result.lines || []).join('\n').slice(-8000); // cap to avoid context overflow
+        return { content: [{ type: "text", text: JSON.stringify({
+          paneId: result.paneId,
+          timedOut: result.timedOut,
+          reportedStatus: result.reportedStatus,
+          reportedSummary: result.reportedSummary,
+          output,
+        }, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__pane_kill_cascade ─────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__pane_kill_cascade",
+    "Kill a pane and ALL its registered children recursively (cancel cascade). Use when you want to terminate an orchestrator and all workers it spawned. Safe to call on leaf panes (no children) — just kills that one pane.",
+    {
+      paneId: z.string().describe("The pane to kill (with all its children)."),
+    },
+    async (args) => {
+      try {
+        await bridge.killPaneCascade(args.paneId);
+        return { content: [{ type: "text", text: JSON.stringify({ ok: true, paneId: args.paneId }) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__actor_status ──────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__actor_status",
+    "Get the actor registry entry for a pane: status (pending/running/idle/stuck/cancelled), turn_count, last_turn_time, last_error, parent_pane_id, description.",
+    {
+      paneId: z.string().describe("The pane ID to inspect."),
+    },
+    async (args) => {
+      try {
+        const result = bridge.actorStatus({ paneId: args.paneId });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__actor_list ────────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__actor_list",
+    "List all active actors (panes) in the current workspace from the persistent registry. Shows status, turn count, parent hierarchy, and stuck detection. More detailed than pane_list.",
+    {
+      include_terminal: z.boolean().optional().describe("Include already-completed panes (default false — only active ones)."),
+    },
+    async (args) => {
+      try {
+        const result = bridge.actorList({ includeTerminal: args.include_terminal });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -395,9 +491,18 @@ function createCodebrainMCPServer(bridge) {
             });
           }
         } catch {}
-        // No terminal injection — agents poll via mcp__codebrain__pane_read_messages.
-        // Injecting text into the terminal output causes Claude Code to echo the
-        // message back to the user as chat input (pane_read_messages spam bug).
+        // Inject a compact notification into the recipient's PTY stdin (echo-suppressed).
+        // This makes the agent aware of the message so it calls pane_read_messages.
+        // Uses writeSilent (not injectOutput) so the CLI agent actually receives it on stdin.
+        try {
+          if (typeof bridge.messagePane === "function") {
+            const shortFrom = args.from.slice(0, 8);
+            const typeLabel = msgType.toUpperCase();
+            const preview = args.content.length > 120 ? args.content.slice(0, 120) + "..." : args.content;
+            const injectMsg = `\n\x1b[33m[MESSAGE from ${shortFrom} | ${typeLabel}] ${preview}\x1b[0m\nUse pane_read_messages to read the full message.\n`;
+            await bridge.messagePane(args.to, injectMsg);
+          }
+        } catch {}
 
         // ── Desktop notification for incoming message ─────────────────────
         try {

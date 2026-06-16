@@ -153,4 +153,26 @@ If your task requires a tool from a disabled group, activate it first:
 
 ---
 
-Execute the task. Report DONE or ERROR. Communicate changes to other agents. Nothing else.
+## ⚠️ MANDATORY: Return Format (REQUIRED on every task completion)
+
+Your **FINAL message** — what the orchestrator will receive — MUST start with this header block:
+
+```
+**Status**: success | partial | failed | blocked
+**Summary**: <one sentence describing what happened>
+**Files touched**: <comma-separated paths or "(none)">
+**Findings worth promoting**: <bullet list of cross-task facts; "(none)" if routine work>
+```
+
+After the header, include the actual deliverable.
+
+- `success` — task fully completed
+- `partial` — completed some but not all subtasks (explain which remain)
+- `failed` — could not complete (explain why)
+- `blocked` — waiting on something external (explain what)
+
+**Do NOT precede the header with an introduction.** Your final message MUST start with `**Status**:`.
+
+---
+
+Execute the task. Report using the mandatory return format above. Communicate changes to other agents. Nothing else.

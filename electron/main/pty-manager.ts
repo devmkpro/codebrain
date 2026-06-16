@@ -260,17 +260,25 @@ function quoteWindowsCmdArg(arg: string): string {
 }
 
 /**
- * Build cmd.exe args array for running a .cmd/.bat file via `cmd.exe /d /s /c call "path" args`.
- * Returns string[] for node-pty: ["/d", "/s", "/c", "call \"path\" arg1 arg2"]
- * The part after /c MUST be a single string — node-pty joins it correctly.
+ * Build cmd.exe args array for running a .cmd/.bat file via `cmd.exe /d /s /c "call \"path\" args"`.
+ * Returns string[] for node-pty: ["/d", "/s", "/c", "\"call ...\""]
+ *
+ * CRITICAL: With /s, cmd.exe strips ONLY the outermost pair of quotes from the /c argument.
+ * All inner quotes must use \" and the entire command MUST be wrapped in outer quotes.
+ * Without outer quotes, args containing spaces (e.g. JSON --settings) break cmd.exe parsing.
  */
 function buildWindowsCmdLine(resolved: string, args: string[]): string[] {
-  // cmd.exe /d /s /c "call \"path with spaces\" arg1 arg2"
-  // The outer quotes wrap the whole command; inner path must be double-quoted.
-  const quotedPath = `"${resolved.replace(/"/g, '\\"')}"`;
-  const quotedArgs = args.map(a => a.includes(" ") ? `"${a.replace(/"/g, '\\"')}"` : a);
-  const command = ["call", quotedPath, ...quotedArgs].join(" ");
-  return ["/d", "/s", "/c", command];
+  // Quote path: "C:\path\to\file.cmd"
+  const quotedPath = `"${resolved}"`;
+  // Quote args that contain spaces with \" escaping for cmd.exe /s
+  const quotedArgs = args.map(a => {
+    if (!a.includes(" ")) return a;
+    // Escape inner quotes for cmd.exe /s context: " → \"
+    return `"${a.replace(/"/g, '\\"')}"`;
+  });
+  const inner = ["call", quotedPath, ...quotedArgs].join(" ");
+  // Wrap entire command in outer quotes — cmd.exe /s will strip these
+  return ["/d", "/s", "/c", `"${inner.replace(/"/g, '\\"')}"`];
 }
 
 /**
@@ -302,6 +310,10 @@ function windowsNodeScriptFromShim(shimPath: string): string | null {
       /"%_prog%"\s+"%dp0%\\([^"\r\n]+)"\s*%\*/i,
       // node  "%~dp0\path\to\script"  (extensionless, with quotes)
       /node(?:\.exe)?\s+"%(~)?dp0%?\\([^"\r\n]+)"/i,
+      // ── Catch-all: any %dp0%\...path ending in .js (handles NVM4W and other variants) ──
+      /%(?:~)?dp0%?\\([^"\r\n]+\.js)/i,
+      // Catch-all extensionless: any %dp0%\...path to node_modules\...\bin
+      /%(?:~)?dp0%?\\(node_modules\\[^"\r\n]+\\bin[^"\r\n]*)/i,
     ];
 
     for (const pattern of patterns) {
