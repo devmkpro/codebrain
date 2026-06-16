@@ -20,20 +20,40 @@ const os = require("os");
 const { spawn, execSync } = require("child_process");
 const fs = require("fs");
 
+// Portable Chromium bundled with Codebrain — resolved relative to this file
+// Path: <codebrain-root>/local/chromium/chrome-win/chrome.exe
+const CODEBRAIN_ROOT = path.resolve(__dirname, "..", "..", "..");
+const PORTABLE_CHROMIUM_WIN = path.join(CODEBRAIN_ROOT, "local", "chromium", "chrome-win", "chrome.exe");
+const PORTABLE_CHROMIUM_UNIX = path.join(CODEBRAIN_ROOT, "local", "chromium", "chrome-linux", "chrome");
+const PORTABLE_CHROMIUM_MAC = path.join(CODEBRAIN_ROOT, "local", "chromium", "chrome-mac", "Chromium.app", "Contents", "MacOS", "Chromium");
+
+// Also support packaged app (asar): resources/chromium/...
+const PACKAGED_CHROMIUM_WIN = path.join(process.resourcesPath || "", "chromium", "chrome-win", "chrome.exe");
+const PACKAGED_CHROMIUM_UNIX = path.join(process.resourcesPath || "", "chromium", "chrome-linux", "chrome");
+
 const CHROME_PATHS_WIN = [
+  // 1. Portable Chromium bundled with Codebrain (always preferred)
+  PORTABLE_CHROMIUM_WIN,
+  PACKAGED_CHROMIUM_WIN,
+  // 2. System Chrome/Chromium (fallback only)
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
   path.join(os.homedir(), "AppData\\Local\\Google\\Chrome\\Application\\chrome.exe"),
-  "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
   "C:\\Program Files\\Chromium\\Application\\chromium.exe",
+  // NOTE: Brave is intentionally excluded — it uses port 9222 internally
+  // and returns 404 on CDP endpoints, causing false detection.
 ];
 
 const CHROME_PATHS_UNIX = [
+  // 1. Portable Chromium bundled with Codebrain
+  PORTABLE_CHROMIUM_UNIX,
+  PACKAGED_CHROMIUM_UNIX,
+  // 2. System Chrome/Chromium
   "/usr/bin/google-chrome",
   "/usr/bin/chromium-browser",
   "/usr/bin/chromium",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
 ];
 
 class CDPClient {
@@ -55,28 +75,36 @@ class CDPClient {
 
   /**
    * Discover Chrome debugging targets on a given port.
+   * Validates that the response is actually a CDP endpoint (not some other service).
    */
   async discoverTargets(port) {
     port = port || this.activePort || 9222;
     return new Promise((resolve, reject) => {
       const req = http.get(`http://127.0.0.1:${port}/json`, (res) => {
+        // A non-200 status means the port is occupied by a non-CDP service
+        if (res.statusCode !== 200) {
+          res.resume();
+          reject(new Error(`Port ${port} returned HTTP ${res.statusCode} — not a CDP endpoint`));
+          return;
+        }
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
           try {
-            const targets = JSON.parse(data);
-            resolve(targets);
+            const parsed = JSON.parse(data);
+            // Must be an array (list of targets)
+            if (!Array.isArray(parsed)) {
+              reject(new Error(`Port ${port} is not a Chrome CDP endpoint (unexpected response shape)`));
+              return;
+            }
+            resolve(parsed);
           } catch (e) {
-            reject(new Error("Failed to parse Chrome targets"));
+            reject(new Error(`Failed to parse Chrome targets on port ${port}`));
           }
         });
       });
       req.on("error", (e) => {
-        reject(
-          new Error(
-            `Chrome not found on port ${port}. Start Chrome with --remote-debugging-port=${port}`
-          )
-        );
+        reject(new Error(`Chrome not found on port ${port}: ${e.message}`));
       });
       req.setTimeout(3000, () => {
         req.destroy();

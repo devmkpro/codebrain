@@ -622,7 +622,9 @@ function createBrowserHandlers(opts) {
       const cdpClient = opts.cdpClient;
       if (!cdpClient) return { ok: false, error: "CDP client not available" };
 
-      const result = await cdpClient.launch({ port: port || 9222 });
+      // Use port 9223 by default — port 9222 is often used by Brave internally
+      // and returns 404 on CDP endpoints (false negative).
+      const result = await cdpClient.launch({ port: port || 9223 });
       if (!result.ok) return result;
 
       // Reset browser mode detection so next call re-checks CDP

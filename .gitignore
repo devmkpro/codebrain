@@ -18,6 +18,9 @@ dist/
 *-bundle.js
 *.tsbuildinfo
 
+# ── Portable Chromium (bundled browser — large binary, not committed) ─────────
+local/chromium/
+
 # ── Electron app / binaries (never commit) ────────────────────────────────────
 *.exe
 *.dll
