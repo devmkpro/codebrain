@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.10.0",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "auto-download portable Chromium on first browser_launch"
+      }
+    ]
+  },
+  {
     "version": "1.9.5",
     "date": "junho 2026",
     "highlights": [
