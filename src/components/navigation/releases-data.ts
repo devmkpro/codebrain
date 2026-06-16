@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.10.1",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "6 MCP browser bugs — click_text CDP, fill disabled/readonly, newline handling, find tokenization, link role mapping, clickByText method"
+      }
+    ]
+  },
+  {
     "version": "1.10.0",
     "date": "junho 2026",
     "highlights": [
