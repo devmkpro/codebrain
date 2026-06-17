@@ -153,6 +153,55 @@ export function setupClaudeIntegration(): void {
       }
     }
 
+    // ── 0.1 Fix stale MCP paths in ~/.claude.json (per-project configs) ──
+    // Claude Code stores per-project mcpServers in ~/.claude.json.
+    // A common bug is "resources\resources\mcp-stdio" (double "resources").
+    // This scans ALL project entries and fixes any stale paths to the correct stdio.cjs.
+    {
+      const stdioPath = getStdioPath();
+      const claudeJsonPath = path.join(os.homedir(), ".claude.json");
+      if (fs.existsSync(claudeJsonPath)) {
+        try {
+          const raw = fs.readFileSync(claudeJsonPath, "utf-8");
+          // Detect the known-broken pattern: resources\resources\mcp-stdio
+          const wrongPattern = String.raw`resources\resources\mcp-stdio`;
+          const correctPattern = String.raw`resources\mcp-stdio`;
+          if (raw.includes(wrongPattern)) {
+            const fixed = raw.split(wrongPattern).join(correctPattern);
+            fs.writeFileSync(claudeJsonPath, fixed, "utf-8");
+            const count = raw.split(wrongPattern).length - 1;
+            log.info(`[setup-claude] Fixed ${count} stale MCP path(s) in ~/.claude.json`);
+          }
+
+          // Also scan for any codebrain mcpServers args that don't match the current stdio path
+          const parsed = JSON.parse(fs.readFileSync(claudeJsonPath, "utf-8"));
+          let pathFixCount = 0;
+          for (const [projectKey, projectVal] of Object.entries(parsed)) {
+            if (typeof projectVal !== "object" || projectVal === null) continue;
+            const servers = (projectVal as any).mcpServers;
+            if (!servers?.codebrain) continue;
+            const args = servers.codebrain.args;
+            if (!Array.isArray(args) || args.length === 0) continue;
+            // Only fix stdio-based configs (not streamable-http)
+            if (servers.codebrain.command !== "node") continue;
+            if (args[0] !== stdioPath && typeof args[0] === "string") {
+              // Check if the path simply doesn't exist but stdioPath does
+              if (!fs.existsSync(args[0]) && fs.existsSync(stdioPath)) {
+                args[0] = stdioPath;
+                pathFixCount++;
+              }
+            }
+          }
+          if (pathFixCount > 0) {
+            fs.writeFileSync(claudeJsonPath, JSON.stringify(parsed, null, 2), "utf-8");
+            log.info(`[setup-claude] Fixed ${pathFixCount} non-existent MCP path(s) in ~/.claude.json`);
+          }
+        } catch (err) {
+          log.warn("[setup-claude] ~/.claude.json MCP path repair skipped (non-fatal):", err);
+        }
+      }
+    }
+
     // ── Steps 1-3 depend on bundledDir (helpers, skills, settings) ──
     if (!fs.existsSync(bundledDir)) {
       log.info("[setup-claude] Bundled .claude dir not found, skipping helper/skill sync");
