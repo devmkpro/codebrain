@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   FolderOpen, Terminal, Zap, Bot, ChevronRight,
   RefreshCw, Plus, Activity, Circle, Server, X,
+  Store, Download, Gamepad2, Sparkles,
 } from 'lucide-react';
-import { Link } from '../../lib/router';
+import { Link, useRouter } from '../../lib/router';
 import { useNavStore }       from '../../stores/nav-store';
 import { useWorkspaceStore } from '../../stores/workspace-store';
 import { useProvidersStore } from '../../stores/providers-store';
@@ -136,6 +137,7 @@ function TaskRow({ task }: { task: any }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export function DashboardPage() {
+  const { navigate } = useRouter();
   const [recents,    setRecents]   = useState<string[]>([]);
   const [launching,  setLaunching] = useState(false);
   const [activeView, setView]      = useState<'panes' | 'tasks'>('panes');
@@ -254,8 +256,37 @@ export function DashboardPage() {
           <StatCard icon={<FolderOpen size={13} />} label="Recentes"   value={recents.length}   color="#10B981" />
         </div>
 
+        {/* Features recentes — quick access to Settings sections */}
+        <div className="p-4 space-y-1">
+          <p className="text-[9px] font-mono text-slate-600 uppercase tracking-widest mb-1.5 px-1">Features Recentes</p>
+          {([
+            { section: 'marketplace', label: 'Marketplace', icon: <Store size={11} />, badge: 'Novo' },
+            { section: 'skill',       label: 'Skill & CLI', icon: <Download size={11} />, badge: null },
+            { section: 'discord',     label: 'Discord RPC', icon: <Gamepad2 size={11} />, badge: null },
+            { section: 'providers',   label: 'Providers',   icon: <Zap size={11} />, badge: null },
+          ] as const).map(({ section, label, icon, badge }) => (
+            <button key={section}
+              onClick={() => {
+                try { localStorage.setItem('codebrain.settings.openSection', section); } catch {}
+                navigate('/settings');
+              }}
+              className="w-full flex items-center justify-between p-2.5 rounded-lg border border-transparent hover:border-white/[0.04] hover:bg-white/[0.02] transition-all group text-left"
+            >
+              <div className="flex items-center gap-2 text-slate-600 group-hover:text-slate-300">
+                {icon}
+                <span className="text-[10px] font-medium">{label}</span>
+              </div>
+              {badge ? (
+                <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-[8px] font-bold text-indigo-400 border border-indigo-500/20">{badge}</span>
+              ) : (
+                <ChevronRight size={10} className="text-slate-700 group-hover:text-slate-500 transition-colors" />
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* Navigation links */}
-        <div className="p-4 space-y-1.5 mt-auto">
+        <div className="p-4 space-y-1.5 border-t border-white/[0.04]">
           {([
             { href: '/workspaces' as const, label: 'Ver Workspaces', icon: <FolderOpen size={12} /> },
             { href: '/settings'   as const, label: 'Configurações',   icon: <Zap size={12} /> },

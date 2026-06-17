@@ -1592,6 +1592,7 @@ function createCodebrainMCPServer(bridge) {
     server.tool("mcp__codebrain__hooks_export_logs", "Export hook logs in JSONL or CSV format.", { format: z.string().optional(), since: z.number().optional(), types: z.array(z.string()).optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksExportLogs(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
     server.tool("mcp__codebrain__hooks_event_stats", "Get hook event statistics by type and correlation.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksEventStats(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
     server.tool("mcp__codebrain__hooks_correlation_events", "Get all events for a correlation ID.", { correlation_id: z.string() }, async ({ correlation_id }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksCorrelationEvents({ correlationId: correlation_id }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+  ];
 
   // ── MiMo-Code: Session Advanced (10 tools) ───────────────────────────────
   advancedToolGroups.session_advanced = [

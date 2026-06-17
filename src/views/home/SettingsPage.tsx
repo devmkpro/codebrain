@@ -218,7 +218,16 @@ function CliRow({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export function SettingsPage() {
-  const [open,      setOpen]   = useState<Section[]>(['terminal']);
+  const [open,      setOpen]   = useState<Section[]>(() => {
+    try {
+      const saved = localStorage.getItem('codebrain.settings.openSection');
+      if (saved && saved !== 'terminal') {
+        localStorage.removeItem('codebrain.settings.openSection');
+        return [saved as Section];
+      }
+    } catch {}
+    return ['terminal'];
+  });
   const [saved,     setSaved]  = useState(false);
   const [shells,    setShells] = useState<string[]>([]);
   const [skillStatus, setSkillStatus] = useState<{ installed: boolean } | null>(null);
