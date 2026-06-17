@@ -14,6 +14,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.11.3",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "auto-repair stale MCP paths in"
+      },
+      {
+        "kind": "fix",
+        "text": "version-bump skill — gen-releases ignores chore: commits, now requires fix:/feat: before tag"
+      }
+    ]
+  },
+  {
     "version": "1.11.2",
     "date": "junho 2026",
     "highlights": [
