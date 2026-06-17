@@ -2,6 +2,11 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.11.3] — 2026-06-17
+
+### Fixes
+- **Auto-repair stale MCP paths in `~/.claude.json`**: On every startup, scans all per-project `mcpServers` entries and fixes the known `resources\resources\mcp-stdio` double-path bug (17 affected projects). Also detects any path pointing to a non-existent file and replaces with the correct stdio path. Prevents "MCP failed" error when opening Claude Code in any project.
+
 ## [1.11.2] — 2026-06-17
 
 ### Fixes
