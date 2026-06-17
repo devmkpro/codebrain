@@ -51,7 +51,7 @@ export function Editor() {
             </div>;
       })}
         {active && <div className="ml-auto flex items-center px-3">
-            <button onClick={save} className="flex items-center gap-1 font-mono text-[10px] font-bold text-indigo-500/70 hover:text-indigo-400" title="Save (⌘S)">
+            <button onClick={save} className="flex items-center gap-1 font-mono text-[10px] font-bold text-indigo-500/70 hover:text-indigo-400" title={`Save (${/Mac/i.test(navigator.userAgent) ? '⌘' : 'Ctrl'}+S)`}>
               <Save size={12} strokeWidth={1.5} /> SAVE
             </button>
           </div>}

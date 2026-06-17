@@ -11,6 +11,61 @@ import { buildSystemPrompt } from "./spawn/prompt-builder";
 
 const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
+/**
+ * Ensure `.claude/settings.json` exists in the target cwd with Codebrain metadata
+ * so Claude Code's statusline shows version, MCP tool count, providers, etc.
+ */
+function ensureClaudeSettings(cwd: string): void {
+  try {
+    // Resolve codebrain root: same directory as this project's package.json
+    // In dev mode, app.getAppPath() returns the project root
+    const { app } = require("electron");
+    const codebrainRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
+
+    let version = "unknown";
+    let totalTools = 0;
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(codebrainRoot, "package.json"), "utf-8"));
+      version = pkg.version ?? "unknown";
+    } catch {}
+    try {
+      const indexJs = path.join(codebrainRoot, "packages", "mcp", "index.js");
+      const src = fs.readFileSync(indexJs, "utf-8");
+      totalTools = (src.match(/server\.tool\(/g) || []).length;
+    } catch {}
+
+    const settingsDir = path.join(cwd, ".claude");
+    const settingsPath = path.join(settingsDir, "settings.json");
+
+    let existing: Record<string, any> = {};
+    try {
+      existing = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    } catch {}
+
+    // Merge codebrain metadata (don't overwrite other settings)
+    const merged = {
+      ...existing,
+      env: { ...(existing.env ?? {}), CODEBRAIN_VERSION: version },
+      codebrain: {
+        version,
+        mcp: { totalTools },
+      },
+    };
+
+    // Only write if content actually changed
+    const newContent = JSON.stringify(merged, null, 2);
+    let currentContent = "";
+    try { currentContent = fs.readFileSync(settingsPath, "utf-8"); } catch {}
+    if (currentContent === newContent) return;
+
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(settingsPath, newContent, "utf-8");
+    log.info(`[ensureClaudeSettings] Synced .claude/settings.json to ${cwd} (v${version}, ${totalTools} tools)`);
+  } catch (err) {
+    log.warn("[ensureClaudeSettings] Failed to sync settings:", err);
+  }
+}
+
 export interface SpawnPaneConfig {
   agent?: string;
   providerId?: string;
@@ -819,6 +874,9 @@ export async function spawnPaneInternal(
     // Feature 9: run pre-spawn command hooks (best-effort, non-blocking on failure)
     await ctx.hooksManager.runPreSpawnHooks(paneId, agent, cwd ?? "");
     ctx.hooksManager.fire("pane_spawned" as any, { paneId, agent, cwd, phase: "pre" });
+
+    // Ensure .claude/settings.json exists in target cwd for Claude Code statusline
+    if (cwd) ensureClaudeSettings(cwd);
 
     const spawnedPaneId = await ctx.ptyManager.spawn({
       paneId,

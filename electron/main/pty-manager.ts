@@ -534,6 +534,8 @@ export class PtyManager extends EventEmitter {
     const env: Record<string, string> = {
       ...filteredEnv,
       TERM: "xterm-256color",
+      COLORTERM: "truecolor",
+      FORCE_COLOR: "1",
       ...config.env,
     };
 

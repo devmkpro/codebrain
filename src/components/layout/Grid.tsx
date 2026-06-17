@@ -100,11 +100,15 @@ export function Grid({ workspacePath } = {} as any) {
           </button>
           {/* Quick action hints */}
           <div className="flex items-center justify-center gap-3 pt-1">
-            {[
-              { keys: '⌘T', label: 'Terminal' },
-              { keys: '⌘⇧M', label: 'Missões' },
-              { keys: '⌘1-9', label: 'Switch' },
-            ].map(({ keys, label }) => (
+            {(() => {
+              const mod = /Mac/i.test(navigator.userAgent) && !/Windows/i.test(navigator.userAgent) ? '⌘' : 'Ctrl';
+              const shift = /Mac/i.test(navigator.userAgent) ? '⇧' : 'Shift';
+              return [
+                { keys: `${mod}+T`, label: 'Terminal' },
+                { keys: `${mod}+${shift}+M`, label: 'Missões' },
+                { keys: `${mod}+1-9`, label: 'Switch' },
+              ];
+            })().map(({ keys, label }) => (
               <div key={keys} className="flex items-center gap-1.5 text-[9px] text-slate-700">
                 <kbd className="px-1.5 py-0.5 rounded bg-white/[0.03] border border-white/[0.06] font-mono text-slate-600">{keys}</kbd>
                 <span>{label}</span>

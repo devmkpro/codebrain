@@ -1,7 +1,6 @@
 import React from "react";
 import { X, Terminal as TerminalIcon } from "lucide-react";
 import { xtermExports, addonFitExports, L } from "../../lib/xterm-exports";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { TERMINAL_THEMES, FONT_OPTIONS, useTerminalSettings } from "../../stores/terminal-settings-store";
 import { PaneTitle } from "../panes/PaneTitle";
 import { PaneIdBadge } from "../panes/PaneIdBadge";
@@ -20,7 +19,6 @@ export function DetachedPaneView({ paneId, workspacePath }: { paneId: string; wo
   const lineHeight = useTerminalSettings(s => s.lineHeight);
   const theme = useTerminalSettings(s => s.theme);
   const cursorBlink = useTerminalSettings(s => s.cursorBlink);
-  const gpuAcceleration = useTerminalSettings(s => s.gpuAcceleration);
   const fontStack = (FONT_OPTIONS.find(f => f.id === fontFamilyId) ?? FONT_OPTIONS[0]).stack;
 
   // PTY pane info (may not be available if pane was killed)
@@ -53,16 +51,6 @@ export function DetachedPaneView({ paneId, workspacePath }: { paneId: string; wo
     term.loadAddon(new L((url: string) => window.open(url, "_blank")));
 
     term.open(containerRef.current);
-
-    if (gpuAcceleration) {
-      try {
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => webgl.dispose());
-        term.loadAddon(webgl);
-      } catch (e) {
-        console.warn("WebGL addon failed, falling back", e);
-      }
-    }
 
     fitAddon.fit();
     termRef.current = term;

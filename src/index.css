@@ -426,6 +426,9 @@ html, body, #root {
     z-index: 5;
 }
 .xterm .xterm-helper-textarea {
+    padding: 0;
+    border: 0;
+    margin: 0;
     position: absolute;
     opacity: 0;
     left: -9999em;
@@ -449,7 +452,8 @@ html, body, #root {
     display: block;
 }
 .xterm .xterm-viewport {
-    background-color: transparent !important;
+    /* On OS X this is required in order for the scroll bar to appear fully opaque */
+    background-color: #000;
     overflow-y: scroll;
     cursor: default;
     position: absolute;
@@ -480,7 +484,8 @@ html, body, #root {
 .xterm.enable-mouse-events {
     cursor: default;
 }
-.xterm.xterm-cursor-pointer {
+.xterm.xterm-cursor-pointer,
+.xterm .xterm-cursor-pointer {
     cursor: pointer;
 }
 .xterm.column-select.focus {

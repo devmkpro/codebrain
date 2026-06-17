@@ -110,12 +110,42 @@ app.whenReady().then(async () => {
   const discordClientId = ctx.configStore.get().discordClientId as string | undefined;
   setupDiscordRPC(discordClientId);
 
-  // PTY event forwarding
+  // PTY event forwarding — batched at 16ms to reduce IPC overhead during heavy output
+  const PTY_OUTPUT_FLUSH_MS = 16;
+  const ptyOutputBatches = new Map<string, string[]>();
+  const ptyEchoBatches = new Map<string, string[]>();
+  let ptyOutputTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function flushPtyOutput() {
+    if (ptyOutputTimer) { clearTimeout(ptyOutputTimer); ptyOutputTimer = null; }
+    for (const [id, chunks] of ptyOutputBatches) {
+      if (chunks.length === 0) continue;
+      ptyOutputBatches.delete(id);
+      safeSend(ctx, "pty:output", id, chunks.join(""), false);
+    }
+    for (const [id, chunks] of ptyEchoBatches) {
+      if (chunks.length === 0) continue;
+      ptyEchoBatches.delete(id);
+      safeSend(ctx, "pty:output", id, chunks.join(""), true);
+    }
+  }
+
+  function enqueuePtyOutput(paneId: string, data: string, isEcho: boolean) {
+    if (!data) return;
+    const batch = isEcho ? ptyEchoBatches : ptyOutputBatches;
+    const chunks = batch.get(paneId);
+    if (chunks) chunks.push(data);
+    else batch.set(paneId, [data]);
+    if (ptyOutputTimer) return;
+    ptyOutputTimer = setTimeout(() => flushPtyOutput(), PTY_OUTPUT_FLUSH_MS);
+    ptyOutputTimer.unref?.();
+  }
+
   ctx.ptyManager.on("output", (paneId: string, data: string) => {
-    safeSend(ctx, "pty:output", paneId, data, false);
+    enqueuePtyOutput(paneId, data, false);
   });
   ctx.ptyManager.on("output-echo", (paneId: string, data: string) => {
-    safeSend(ctx, "pty:output", paneId, data, true);
+    enqueuePtyOutput(paneId, data, true);
   });
   ctx.ptyManager.on("exit", (paneId: string, exitCode: number) => {
     safeSend(ctx, "pty:exit", paneId, exitCode);

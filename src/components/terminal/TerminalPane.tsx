@@ -2,7 +2,6 @@
 import { X$1 } from "../../stores/providers-store";
 import { usePushToTalk, spawnedPaneIds, openWebLink } from "../../stores/voice-store";
 import { xtermExports, addonFitExports, L } from "../../lib/xterm-exports";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { Copy, Clipboard, Square, MessageSquare, Terminal as TerminalIcon, Settings, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -74,6 +73,30 @@ import { PaneIdBadge } from "../panes/PaneIdBadge";
 import { PaneTokenBadge } from "../panes/PaneTokenBadge";
 import { MissionBadge } from "../panes/MissionBadge";
 import { SavedContextPanel } from "../panes/SavedContextPanel";
+
+/** Wait for xterm cols/rows to stabilize across animation frames before syncing to PTY. */
+async function waitForReplayFit(container: HTMLElement, fitAddon: any, term: any) {
+  let lastCols = -1;
+  let lastRows = -1;
+  let stableFrames = 0;
+  for (let i = 0; i < 60; i++) {
+    if (container.clientWidth >= 10 && container.clientHeight >= 10) {
+      try { fitAddon.fit(); } catch {}
+      if (term.cols >= 20) {
+        if (term.cols === lastCols && term.rows === lastRows) {
+          stableFrames++;
+          if (stableFrames >= 2) return;
+        } else {
+          stableFrames = 0;
+        }
+        lastCols = term.cols;
+        lastRows = term.rows;
+      }
+    }
+    await new Promise(r => requestAnimationFrame(() => r(undefined)));
+  }
+}
+
 export function TerminalPane({
   pane,
   isActive,
@@ -95,7 +118,6 @@ export function TerminalPane({
   const lineHeight = useTerminalSettings(s => s.lineHeight);
   const theme = useTerminalSettings(s => s.theme);
   const cursorBlink = useTerminalSettings(s => s.cursorBlink);
-  const gpuAcceleration = useTerminalSettings(s => s.gpuAcceleration);
   const lowGpuMode = useTerminalSettings(s => s.lowGpuMode);
   const scrollbackSize = useTerminalSettings(s => (s as any).scrollbackSize ?? 5000);
   const fontStack = (FONT_OPTIONS.find(f => f.id === fontFamilyId) ?? FONT_OPTIONS[0]).stack;
@@ -108,6 +130,9 @@ export function TerminalPane({
   const savedSelectionRef = React.useRef('');
   const termElementRef = React.useRef<HTMLElement | null>(null);
   const zoomFixHandlerRef = React.useRef<((e: MouseEvent) => void) | null>(null);
+  const lastPtySizeRef = React.useRef<{ cols: number; rows: number } | null>(null);
+  const followOutputRef = React.useRef(true);
+  const userPausedFollowRef = React.useRef(false);
 
   const handleContextMenu = React.useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -204,6 +229,27 @@ export function TerminalPane({
     if (!(event.target instanceof HTMLElement)) return;
     if (event.target.closest(".xterm")) activatePane();
   }, [activatePane]);
+
+  /** Force-fit + redraw + sync dims to PTY (mirrors Overclock's recoverTerminalRender). */
+  const recoverTerminalRender = React.useCallback((options: { refresh?: boolean; follow?: boolean } = {}) => {
+    const shouldRefresh = options.refresh ?? true;
+    const shouldFollow = options.follow ?? (followOutputRef.current && !userPausedFollowRef.current);
+    const term = termRef.current;
+    const container = containerRef.current;
+    if (!term || !container || container.clientWidth < 10 || container.clientHeight < 10) return;
+    try { fitAddonRef.current?.fit(); } catch {}
+    if (shouldRefresh) {
+      try { term.refresh(0, Math.max(0, term.rows - 1)); } catch {}
+    }
+    if (shouldFollow) term.scrollToBottom();
+    const size = { cols: term.cols, rows: term.rows };
+    const lastSize = lastPtySizeRef.current;
+    if (window.codeBrainApp && size.cols > 2 && size.rows > 2 && (!lastSize || lastSize.cols !== size.cols || lastSize.rows !== size.rows)) {
+      lastPtySizeRef.current = size;
+      window.codeBrainApp.pty.resize(pane.id, size.cols, size.rows).catch(() => {});
+    }
+  }, [pane.id]);
+
   const initTerminal = React.useCallback(() => {
     if (!containerRef.current || termRef.current) return;
     const currentPane = paneRef.current;
@@ -255,19 +301,14 @@ export function TerminalPane({
       };
     }
 
-    if (gpuAcceleration) {
-      try {
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => webgl.dispose());
-        term.loadAddon(webgl);
-      } catch (e) {
-        console.warn("WebGL addon failed to load, falling back to canvas/dom renderer", e);
-      }
-    }
+    // No addon renderer — xterm 6.0.0 uses its built-in DOM renderer (stable, no GPU deps)
 
-    fitAddon.fit();
     termRef.current = term;
     fitAddonRef.current = fitAddon;
+    // Wait for dimensions to stabilize before first fit (avoids flash of misaligned content)
+    waitForReplayFit(containerRef.current, fitAddon, term).then(() => {
+      lastPtySizeRef.current = { cols: term.cols, rows: term.rows };
+    });
     term.attachCustomKeyEventHandler(e => {
       if (handlePushToTalkKeyRef.current(e)) return false;
       if (e.type !== "keydown") return true;
@@ -367,7 +408,7 @@ export function TerminalPane({
         status: "idle"
       });
     }
-  }, [pane.id, cursorBlink, gpuAcceleration]);
+  }, [pane.id, cursorBlink]);
   // Runtime cursorBlink update without re-creating terminal
   React.useEffect(() => {
     if (termRef.current) termRef.current.options.cursorBlink = cursorBlink;
@@ -378,7 +419,11 @@ export function TerminalPane({
         // Suppress echo from programmatic writes (MCP pane_write / pane_send_message)
         // so the sent text doesn't appear duplicated in the terminal
         if (echo) return;
-        termRef.current.write(data);
+        termRef.current.write(data, () => {
+          if (followOutputRef.current && !userPausedFollowRef.current) {
+            termRef.current?.scrollToBottom();
+          }
+        });
         lastOutputRef.current = Date.now();
       }
     });
@@ -407,6 +452,31 @@ export function TerminalPane({
       }
     };
   }, [initTerminal]);
+
+  // Detect user scroll — pause auto-follow when scrolling up, resume when at bottom
+  React.useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const checkAndSync = () => {
+      const term = termRef.current;
+      if (!term) return;
+      // Find xterm's viewport scroll element
+      const viewport = container.querySelector(".xterm-viewport") as HTMLElement | null;
+      if (!viewport) return;
+      const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 30;
+      if (atBottom) {
+        userPausedFollowRef.current = false;
+        followOutputRef.current = true;
+      } else {
+        userPausedFollowRef.current = true;
+        followOutputRef.current = false;
+      }
+    };
+    const handleWheel = () => requestAnimationFrame(checkAndSync);
+    container.addEventListener("wheel", handleWheel, { passive: true });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, []);
+
   // Rastreia output ativo real — reseta quando pane para de rodar
   React.useEffect(() => {
     if (pane.status !== "running") {
@@ -423,47 +493,25 @@ export function TerminalPane({
     return () => clearInterval(interval);
   }, [pane.status]);
   React.useEffect(() => {
-    const doFit = () => {
-      if (!containerRef.current) return;
-      if (containerRef.current.clientWidth < 10 || containerRef.current.clientHeight < 10) return;
-      try {
-        fitAddonRef.current?.fit();
-      } catch (err) { }
-      const term = termRef.current;
-      if (term && term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
-        window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => { });
-      }
-    };
-    const obs = new ResizeObserver(doFit);
+    const obs = new ResizeObserver(() => recoverTerminalRender({ refresh: true }));
     if (containerRef.current) obs.observe(containerRef.current);
     const intObs = new IntersectionObserver(entries => {
-      if (entries.some(e => e.isIntersecting)) doFit();
-    }, {
-      threshold: 0.01
-    });
+      if (entries.some(e => e.isIntersecting)) recoverTerminalRender({ refresh: true });
+    }, { threshold: 0.01 });
     if (containerRef.current) intObs.observe(containerRef.current);
-    const timers = [50, 300].map(ms => setTimeout(doFit, ms));
+    const timers = [50, 300].map(ms => setTimeout(() => recoverTerminalRender({ refresh: true }), ms));
     return () => {
       obs.disconnect();
       intObs.disconnect();
       timers.forEach(clearTimeout);
     };
-  }, []);
+  }, [recoverTerminalRender]);
   React.useEffect(() => {
     if (!isActive) return;
     termRef.current?.focus();
-    const t = setTimeout(() => {
-      if (!containerRef.current || containerRef.current.clientWidth < 10 || containerRef.current.clientHeight < 10) return;
-      try {
-        fitAddonRef.current?.fit();
-      } catch (err) { }
-      const term = termRef.current;
-      if (term && term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
-        window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => { });
-      }
-    }, 50);
+    const t = setTimeout(() => recoverTerminalRender({ refresh: true }), 50);
     return () => clearTimeout(t);
-  }, [isActive, pane.id]);
+  }, [isActive, pane.id, recoverTerminalRender]);
   React.useEffect(() => {
     const term = termRef.current;
     if (!term) return;
@@ -500,6 +548,12 @@ export function TerminalPane({
     }
     term.scrollToBottom();
   }, [lineHeight, pane.id]);
+  // Live-update scrollback when setting changes (applies to existing panes)
+  React.useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.scrollback = scrollbackSize;
+  }, [scrollbackSize]);
   const handleDrop = React.useCallback(async e => {
     e.preventDefault();
     setDropHover(false);
@@ -627,7 +681,7 @@ export function TerminalPane({
       </div>
     <div className="relative z-0 h-full flex flex-col">
       <SavedContextPanel pane={pane} open={showSavedContext} onToggle={() => setShowSavedContext(v2 => !v2)} />
-      <div className={`flex-1 min-h-0 relative ${dropHover ? "ring-2 ring-red-500/40" : ""}`} onDragEnter={e => {
+      <div className={`flex-1 min-h-0 relative flex flex-col ${dropHover ? "ring-2 ring-red-500/40" : ""}`} onDragEnter={e => {
         if (e.dataTransfer.types.includes("Files")) {
           e.preventDefault();
           setDropHover(true);
@@ -641,12 +695,13 @@ export function TerminalPane({
         if (e.currentTarget === e.target) setDropHover(false);
       }} onDrop={handleDrop}>
 
-        <div className="absolute inset-0 px-2 pt-2 pb-6 overflow-hidden">
+        {/* Terminal container — flex-1 so footer sits below, no overlap */}
+        <div className="flex-1 min-h-0 px-2 pt-2 overflow-hidden">
           <div ref={containerRef} className="h-full w-full" />
         </div>
 
-        {/* Input Feedback & Quick Actions Rodapé */}
-        <div className="absolute bottom-0 left-0 right-0 h-8 bg-linear-gradient-to-t from-zinc-300 via-zinc-700  dark:from-black dark:via-black/80 to-transparent flex items-end px-3 pb-1">
+        {/* Input Feedback & Quick Actions Rodapé — natural flex flow, no absolute */}
+        <div className="shrink-0 h-8 bg-linear-gradient-to-t from-zinc-300 via-zinc-700  dark:from-black dark:via-black/80 to-transparent flex items-end px-3 pb-1">
           <div className="flex items-center justify-between w-full border-t border-white/5 pt-1.5">
             <div className="flex items-center gap-2">
               <span className="text-red-500 font-mono text-[10px] font-bold animate-pulse">❯</span>
