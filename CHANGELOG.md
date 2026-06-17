@@ -2,6 +2,17 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.11.1] — 2026-06-17
+
+### Fixes
+- MCP auto-detection: workspace `.mcp.json` now uses stdio transport (was streamable-http, broke standalone Claude Code)
+- `ensureClaudeSettings` now runs on app startup (was only called when spawning panes, leaving workspace settings stale)
+- `refreshAllWorkspaces` writes stdio in `.mcp.json` and `~/.claude.json` projects (HTTP kept for OpenClaude/Gemini/Codex/Kimi configs)
+- Workspace `.claude/settings.json` synced with correct version + 250 MCP tools on every app start
+
+### Other
+- 250 total MCP tools (was showing 172 in global settings)
+
 ## [1.11.0] — 2026-06-16
 
 ### Features

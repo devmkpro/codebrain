@@ -21,6 +21,7 @@ import { attachNetworkTracking } from "./services/network";
 import { setupHooks } from "./services/hooks";
 import { setupClaudeIntegration } from "./services/setup-claude";
 import { refreshAllWorkspaces, clearCodexGlobalConfig } from "./services/workspace";
+import { ensureClaudeSettings } from "./services/pane-spawn";
 import { setupDiscordRPC, teardownDiscordRPC } from "./discord-rpc";
 import { createSessionWatchers } from "./services/session-watchers";
 
@@ -90,6 +91,12 @@ app.whenReady().then(async () => {
 
   // Auto-install Claude Code integration (statusline, .mcp.json, helpers)
   setupClaudeIntegration();
+
+  // Ensure workspace .claude/settings.json has correct version + tool count on startup.
+  // Previously this only ran when spawning a pane — now it runs every app start.
+  const { app } = require("electron");
+  const codebrainRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  ensureClaudeSettings(codebrainRoot);
 
   // Auto-install bundled skills (~/.codebrain/skills/<id>)
   autoInstallBundledSkills();

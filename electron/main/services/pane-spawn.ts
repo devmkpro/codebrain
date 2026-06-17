@@ -15,7 +15,7 @@ const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
  * Ensure `.claude/settings.json` exists in the target cwd with Codebrain metadata
  * so Claude Code's statusline shows version, MCP tool count, providers, etc.
  */
-function ensureClaudeSettings(cwd: string): void {
+export function ensureClaudeSettings(cwd: string): void {
   try {
     // Resolve codebrain root: same directory as this project's package.json
     // In dev mode, app.getAppPath() returns the project root

@@ -3,6 +3,18 @@ import * as path from "node:path";
 import * as os from "node:os";
 import type { AppContext, McpServerInfo } from "../context";
 
+/**
+ * Resolve the stdio MCP server path for workspace .mcp.json files.
+ * Same logic as setup-claude.ts getStdioPath() but without Electron app dependency.
+ */
+function getStdioPathForWorkspace(): string {
+  // Try bundled first (works in production)
+  const bundledPath = path.join(__dirname, "..", "..", "..", "resources", "mcp-stdio", "stdio.cjs");
+  if (fs.existsSync(bundledPath)) return bundledPath;
+  // Fallback to source
+  return path.join(__dirname, "..", "..", "..", "packages", "mcp", "stdio.js");
+}
+
 export function readRecentWorkspaces(ctx: AppContext): string[] {
   try {
     const raw: string[] = JSON.parse(fs.readFileSync(ctx.WORKSPACES_FILE, "utf-8"));
@@ -90,7 +102,7 @@ ${projectInfo}
  *
  * Called on startup and whenever the MCP server starts/restarts.
  * Ensures all workspaces have up-to-date config for every AI provider:
- *   - Claude Code  → .mcp.json (SSE transport)
+ *   - Claude Code  → .mcp.json (stdio transport — works standalone AND inside app)
  *   - Codex        → .codex/instructions.md + ~/.codex/config.toml (HTTP transport)
  *   - Gemini CLI   → .gemini/codebrain-context.md
  *   - All          → .claude/codebrain-context.md
@@ -118,12 +130,19 @@ export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo): 
   const sseUrl = mcpInfo?.sseUrl ?? `http://127.0.0.1:${port}/sse`;
   const httpUrl = mcpInfo?.streamableHttpUrl ?? `http://127.0.0.1:${port}/mcp`;
 
+  // Resolve stdio path once for all workspace configs
+  const stdioPath = getStdioPathForWorkspace();
+
   // ── Per-workspace files ──
   for (const wsPath of wsSet) {
     try {
-      // 1. .mcp.json — Streamable HTTP transport (works for all agents: Claude, Kimi, Gemini, Codex, Cursor)
+      // 1. .mcp.json — Stdio transport for Claude Code (works standalone AND inside app).
+      //    IMPORTANT: Must be stdio, NOT streamable-http. Claude Code reads workspace .mcp.json
+      //    with higher priority than ~/.mcp.json. If we write HTTP here, standalone Claude Code
+      //    (outside the app) fails because no MCP server is listening. Stdio always works.
+      //    Other agents (OpenClaude, Gemini, Codex, Kimi) use their own config files (HTTP).
       const mcpJson = JSON.stringify({
-        mcpServers: { codebrain: { type: "streamable-http", url: httpUrl } },
+        mcpServers: { codebrain: { command: "node", args: [stdioPath] } },
       }, null, 2);
       fs.writeFileSync(path.join(wsPath, ".mcp.json"), mcpJson, "utf-8");
 
@@ -210,10 +229,11 @@ Query the MCP server at ${httpUrl} using Streamable HTTP transport.
       if (!claudeJson.projects[projectKey]) claudeJson.projects[projectKey] = {};
       if (!claudeJson.projects[projectKey].mcpServers) claudeJson.projects[projectKey].mcpServers = {};
       const existing = claudeJson.projects[projectKey].mcpServers.codebrain;
-      if (!existing || existing.url !== httpUrl) {
+      // Update if missing, or if still using old HTTP config (has url/type but no command)
+      if (!existing || existing.url || !existing.command) {
         claudeJson.projects[projectKey].mcpServers.codebrain = {
-          type: "streamable-http",
-          url: httpUrl,
+          command: "node",
+          args: [stdioPath],
         };
         updated++;
       }
