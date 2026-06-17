@@ -2,6 +2,7 @@ stages:
   - verify
   - build
   - release
+  - mirror
 
 variables:
   GIT_DEPTH: "0"
@@ -83,4 +84,22 @@ release:
   script:
     - node scripts/create-release.mjs
   only:
+    - tags
+
+# Mirror to GitHub (one-way sync from GitLab)
+mirror-github:
+  stage: mirror
+  tags:
+    - local
+  image: alpine/git
+  variables:
+    GIT_STRATEGY: clone
+  before_script:
+    - git config --global user.email "ci@codebrain.dev"
+    - git config --global user.name "Codebrain CI"
+  script:
+    - git remote add github https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/${GITHUB_USER}/codebrain.git || true
+    - git push github HEAD:master --force --tags
+  only:
+    - master
     - tags
