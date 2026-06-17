@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.11.0",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "v1.11.0 — semantic hash embeddings, auto-memory bridge, security scanner, intelligence pipeline, 20 agent prompts, 20 slash commands, tool group reclassification"
+      }
+    ]
+  },
+  {
     "version": "1.10.4",
     "date": "junho 2026",
     "highlights": [
@@ -51,7 +61,7 @@ export const RELEASES: Release[] = [
       },
       {
         "kind": "feat",
-        "text": "Mission UX overhaul — wizard, sidebar, close dialog"
+        "text": "Mission UX overhaul — wizard, sidebar, close dialog (Overclock-style)"
       }
     ]
   },
@@ -467,7 +477,7 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "fix",
-        "text": "Windows CLI binary resolution — cmd.exe pattern fix"
+        "text": "Windows CLI binary resolution — port Overclock's cmd.exe pattern"
       }
     ]
   },
@@ -581,7 +591,7 @@ export const RELEASES: Release[] = [
       },
       {
         "kind": "feat",
-        "text": "v1.8.1 — Terminal header + text selection zoom fix"
+        "text": "v1.8.1 — Overclock-style terminal header + text selection zoom fix"
       }
     ]
   },
@@ -591,7 +601,7 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "feat",
-        "text": "v1.8.0 — New CLI agents, kanban, missions, session watchers, terminal settings"
+        "text": "v1.8.0 — Overclock parity: new CLI agents, kanban, missions, session watchers, terminal settings"
       }
     ]
   },
