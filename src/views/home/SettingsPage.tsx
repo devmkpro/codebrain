@@ -1156,7 +1156,7 @@ export function SettingsPage() {
                       return true;
                     })
                     .map((item: any) => {
-                      const isInstalled = installedSkills.includes(item.id);
+                      const isInstalled = item.installed === true || installedSkills.includes(item.id);
                       const isInstalling = installingId === item.id;
                       return (
                         <div
@@ -1197,25 +1197,32 @@ export function SettingsPage() {
                           <button
                             onClick={async () => {
                               if (isInstalled) {
-                                setInstallingId(item.id);
-                                await (window as any).codeBrainApp?.skill?.uninstall?.({ id: item.id }).catch(() => {});
-                                setInstalledSkills(prev => prev.filter(s => s !== item.id));
-                                setInstallingId(null);
+                                // Uninstall — only works for .codebrain/skills/ items
+                                if (item.scope === 'codebrain') {
+                                  setInstallingId(item.id);
+                                  await (window as any).codeBrainApp?.skill?.uninstall?.({ id: item.id }).catch(() => {});
+                                  setInstalledSkills(prev => prev.filter(s => s !== item.id));
+                                  setInstallingId(null);
+                                }
+                                // Claude/workspace skills: no uninstall from marketplace
                               } else {
+                                // Install from registry (remote only)
                                 setInstallingId(item.id);
                                 const res = await (window as any).codeBrainApp?.skill?.installFromRegistry?.({ id: item.id }).catch(() => null);
                                 if (res?.ok !== false) setInstalledSkills(prev => [...prev, item.id]);
                                 setInstallingId(null);
                               }
                             }}
-                            disabled={isInstalling}
+                            disabled={isInstalling || (isInstalled && item.scope !== 'codebrain')}
                             className={`shrink-0 px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all disabled:opacity-40 ${
                               isInstalled
-                                ? 'border border-white/10 text-slate-500 hover:text-red-400 hover:border-red-500/20'
+                                ? item.scope === 'codebrain'
+                                  ? 'border border-white/10 text-slate-500 hover:text-red-400 hover:border-red-500/20'
+                                  : 'border border-emerald-500/20 text-emerald-400/60 cursor-default'
                                 : 'bg-[#4F46E5] text-white hover:bg-[#4338CA]'
                             }`}
                           >
-                            {isInstalling ? '…' : isInstalled ? 'Remover' : 'Instalar'}
+                            {isInstalling ? '…' : isInstalled ? '✓ Instalado' : 'Instalar'}
                           </button>
                         </div>
                       );
