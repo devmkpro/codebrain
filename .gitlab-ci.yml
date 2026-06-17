@@ -100,7 +100,7 @@ mirror-github:
     - git config --global user.name "Codebrain CI"
   script:
     - git remote add github https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/${GITHUB_USER}/codebrain.git || true
-    - git push github HEAD:master --force --tags
+    - git push github HEAD:refs/heads/master --force --tags
   only:
     - master
     - tags
