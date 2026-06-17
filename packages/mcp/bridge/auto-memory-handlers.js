@@ -1,10 +1,8 @@
 "use strict";
 
-/**
- * Auto-Memory Bridge MCP Handlers
- * Imports Claude Code's native memory files (~/.claude/projects/*/memory/*.md)
- * into Codebrain's SQLite memory store for cross-project knowledge.
- */
+// Auto-Memory Bridge MCP Handlers
+// Imports Claude Code's native memory files (~/.claude/projects/<id>/memory/<file>.md)
+// into Codebrain's SQLite memory store for cross-project knowledge.
 
 const { createAutoMemoryBridge } = require("../../memory/auto-memory-bridge.js");
 

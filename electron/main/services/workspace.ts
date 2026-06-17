@@ -5,14 +5,25 @@ import type { AppContext, McpServerInfo } from "../context";
 
 /**
  * Resolve the stdio MCP server path for workspace .mcp.json files.
- * Same logic as setup-claude.ts getStdioPath() but without Electron app dependency.
+ * Same logic as setup-claude.ts getStdioPath().
+ *
+ * MUST return a path that actually exists on disk. If the primary path is
+ * missing, fall back to the source — but NEVER return a non-existent path.
+ * A wrong path means MCP fails silently for every Claude Code session.
+ *
+ * @param projectRoot - The project root from app.getAppPath() (passed from caller).
+ *                      Falls back to __dirname traversal if not provided.
  */
-function getStdioPathForWorkspace(): string {
+function getStdioPathForWorkspace(projectRoot?: string): string {
+  const root = projectRoot || path.join(__dirname, "..", "..", "..");
   // Try bundled first (works in production)
-  const bundledPath = path.join(__dirname, "..", "..", "..", "resources", "mcp-stdio", "stdio.cjs");
+  const bundledPath = path.join(root, "resources", "mcp-stdio", "stdio.cjs");
   if (fs.existsSync(bundledPath)) return bundledPath;
   // Fallback to source
-  return path.join(__dirname, "..", "..", "..", "packages", "mcp", "stdio.js");
+  const sourcePath = path.join(root, "packages", "mcp", "stdio.js");
+  if (fs.existsSync(sourcePath)) return sourcePath;
+  // Last resort: return bundled path anyway (will fail with a clear error)
+  return bundledPath;
 }
 
 export function readRecentWorkspaces(ctx: AppContext): string[] {
@@ -107,7 +118,7 @@ ${projectInfo}
  *   - Gemini CLI   → .gemini/codebrain-context.md
  *   - All          → .claude/codebrain-context.md
  */
-export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo): void {
+export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo, projectRoot?: string): void {
   // Collect all known workspaces: current + active panes + recent list
   const wsSet = new Set<string>();
 
@@ -131,7 +142,7 @@ export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo): 
   const httpUrl = mcpInfo?.streamableHttpUrl ?? `http://127.0.0.1:${port}/mcp`;
 
   // Resolve stdio path once for all workspace configs
-  const stdioPath = getStdioPathForWorkspace();
+  const stdioPath = getStdioPathForWorkspace(projectRoot);
 
   // ── Per-workspace files ──
   for (const wsPath of wsSet) {
@@ -229,8 +240,10 @@ Query the MCP server at ${httpUrl} using Streamable HTTP transport.
       if (!claudeJson.projects[projectKey]) claudeJson.projects[projectKey] = {};
       if (!claudeJson.projects[projectKey].mcpServers) claudeJson.projects[projectKey].mcpServers = {};
       const existing = claudeJson.projects[projectKey].mcpServers.codebrain;
-      // Update if missing, or if still using old HTTP config (has url/type but no command)
-      if (!existing || existing.url || !existing.command) {
+      // Update if missing, or if still using old HTTP config (has url/type but no command),
+      // or if the stdio path is stale (e.g. old packages/mcp/stdio.js → mcp-stdio/stdio.cjs)
+      const argsMatch = Array.isArray(existing?.args) && existing.args[0] === stdioPath;
+      if (!existing || existing.url || !existing.command || !argsMatch) {
         claudeJson.projects[projectKey].mcpServers.codebrain = {
           command: "node",
           args: [stdioPath],

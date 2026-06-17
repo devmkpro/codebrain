@@ -10,7 +10,9 @@ const { CDPClient } = require("../../packages/mcp/bridge/cdp-client.js");
 
 export function writeMcpConfig(ctx: AppContext, info: McpServerInfo): void {
   // Delegate to refreshAllWorkspaces which handles all providers + all workspaces in one pass.
-  refreshAllWorkspaces(ctx, info);
+  const { app } = require("electron");
+  const projectRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  refreshAllWorkspaces(ctx, info, projectRoot);
 }
 
 function buildMcpBridge(ctx: AppContext) {

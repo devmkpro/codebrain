@@ -2,6 +2,14 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.11.2] — 2026-06-17
+
+### Fixes
+- **MCP server crash on startup**: `auto-memory-handlers.js` comment contained `*/` inside glob pattern `*/memory/*.md` which JS parser interpreted as end-of-comment, leaving bare `memory;` statement → ReferenceError crash. Fixed by converting to line comments.
+- **MCP stale path bug**: `~/.mcp.json` and `~/.claude.json` project entries kept pointing to non-existent `resources/packages/mcp/stdio.js` instead of `resources/mcp-stdio/stdio.cjs`. Root cause: `setupClaudeIntegration()` returned early in dev mode (missing `electron/.claude/` dir), so `~/.mcp.json` was never updated; `refreshAllWorkspaces()` only checked `!existing.command` (not path correctness), so stale entries persisted forever.
+- **`getStdioPath()` unreliable `__dirname` in dev mode**: electron-vite resolves `__dirname` differently than expected, producing paths like `Desktop/resources/...` (missing `/codebrain/`). Fixed to use `app.getAppPath()` which always returns the correct project root.
+- **`~/.mcp.json` update moved before early return**: Step 0 (write `~/.mcp.json`) now runs before the `bundledDir` existence check, ensuring the MCP config is always updated even when `electron/.claude/` doesn't exist in dev mode.
+
 ## [1.11.1] — 2026-06-17
 
 ### Fixes

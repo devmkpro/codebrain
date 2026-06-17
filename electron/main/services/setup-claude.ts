@@ -55,11 +55,16 @@ function getStdioPath(): string {
     // Return the bundled path anyway — will fail with a clear error
     return bundledPath;
   }
-  // Dev mode — prefer the bundle if it exists
-  const bundledPath = path.resolve(__dirname, "..", "..", "..", "resources", "mcp-stdio", "stdio.cjs");
+  // Dev mode — use app.getAppPath() which returns the actual project root.
+  // __dirname is unreliable in dev (electron-vite may resolve it differently).
+  const projectRoot = app.getAppPath();
+  const bundledPath = path.join(projectRoot, "resources", "mcp-stdio", "stdio.cjs");
   if (fs.existsSync(bundledPath)) return bundledPath;
-  // Dev fallback — direct source
-  return path.resolve(__dirname, "..", "..", "..", "packages", "mcp", "stdio.js");
+  // Dev fallback — direct source (only if it actually exists)
+  const sourcePath = path.join(projectRoot, "packages", "mcp", "stdio.js");
+  if (fs.existsSync(sourcePath)) return sourcePath;
+  // Neither exists — return bundled path anyway (will fail with a clear error)
+  return bundledPath;
 }
 
 /**
@@ -108,13 +113,51 @@ export function setupClaudeIntegration(): void {
       ? path.join(process.resourcesPath, "codebrain-claude")
       : path.resolve(__dirname, "..", "..", ".claude");
 
-    if (!fs.existsSync(bundledDir)) {
-      log.info("[setup-claude] Bundled .claude dir not found, skipping setup");
-      return;
-    }
-
     const userClaudeDir = path.join(os.homedir(), ".claude");
     fs.mkdirSync(userClaudeDir, { recursive: true });
+
+    // ── 0. Write ~/.mcp.json FIRST — does NOT depend on bundledDir ──
+    // This MUST run on every startup regardless of whether bundledDir exists.
+    // If bundledDir is missing (dev mode), we still need the correct stdio path
+    // so Claude Code can connect to the MCP server.
+    {
+      const homeMcpPath = path.join(os.homedir(), ".mcp.json");
+      const stdioPath = getStdioPath();
+      const mcpConfig = JSON.stringify({
+        mcpServers: {
+          codebrain: {
+            command: "node",
+            args: [stdioPath],
+          },
+        },
+      }, null, 2);
+
+      // Only skip if the file already has the exact correct path.
+      // Always overwrite stale/wrong paths — this is the #1 cause of "MCP failed".
+      let shouldWrite = true;
+      if (fs.existsSync(homeMcpPath)) {
+        try {
+          const existing = JSON.parse(fs.readFileSync(homeMcpPath, "utf-8"));
+          const existingArgs = existing?.mcpServers?.codebrain?.args;
+          if (Array.isArray(existingArgs) && existingArgs[0] === stdioPath) {
+            shouldWrite = false;
+          }
+        } catch {
+          // Invalid JSON — overwrite
+        }
+      }
+
+      if (shouldWrite) {
+        fs.writeFileSync(homeMcpPath, mcpConfig, "utf-8");
+        log.info("[setup-claude] Wrote ~/.mcp.json with stdio transport:", stdioPath);
+      }
+    }
+
+    // ── Steps 1-3 depend on bundledDir (helpers, skills, settings) ──
+    if (!fs.existsSync(bundledDir)) {
+      log.info("[setup-claude] Bundled .claude dir not found, skipping helper/skill sync");
+      return;
+    }
 
     // ── 1. Copy dirs: skills, helpers, agents, commands, config ──
     const dirsToCopy = ["skills", "helpers", "agents", "commands", "config"];
@@ -201,47 +244,6 @@ export function setupClaudeIntegration(): void {
       if (changed) {
         fs.writeFileSync(settingsDest, JSON.stringify(userSettings, null, 2), "utf-8");
       }
-    }
-
-    // ── 4. Write ~/.mcp.json for Claude Code CLI (stdio transport) ──
-    const homeMcpPath = path.join(os.homedir(), ".mcp.json");
-    const stdioPath = getStdioPath();
-
-    // Escape backslashes for JSON on Windows
-    const escapedStdioPath = stdioPath.replace(/\\/g, "\\\\");
-    const mcpConfig = JSON.stringify({
-      mcpServers: {
-        codebrain: {
-          command: "node",
-          args: [stdioPath],
-        },
-      },
-    }, null, 2);
-
-    // Only write if missing or different (avoid overwriting user customizations).
-    // CRITICAL: ~/.mcp.json must ALWAYS be stdio transport (never HTTP).
-    // HTTP config belongs in workspace .mcp.json, not the global home dir.
-    // If someone/something wrote HTTP here (e.g. stale port file), overwrite with stdio.
-    let shouldWrite = true;
-    if (fs.existsSync(homeMcpPath)) {
-      try {
-        const existing = JSON.parse(fs.readFileSync(homeMcpPath, "utf-8"));
-        const existingType = existing?.mcpServers?.codebrain?.type;
-        const existingArgs = existing?.mcpServers?.codebrain?.args;
-        // Skip only if already stdio with the correct binary path
-        if (existingType === "stdio" && Array.isArray(existingArgs) && existingArgs[0] === stdioPath) {
-          shouldWrite = false;
-        } else if (existingType && existingType !== "stdio") {
-          log.warn(`[setup-claude] ~/.mcp.json has type "${existingType}" — fixing to stdio`);
-        }
-      } catch {
-        // Invalid JSON — overwrite
-      }
-    }
-
-    if (shouldWrite) {
-      fs.writeFileSync(homeMcpPath, mcpConfig, "utf-8");
-      log.info("[setup-claude] Wrote ~/.mcp.json with stdio transport");
     }
 
     log.info("[setup-claude] Claude Code integration setup complete");

@@ -107,7 +107,7 @@ app.whenReady().then(async () => {
   clearCodexGlobalConfig();
 
   // Refresh all workspace provider files (pre-MCP, uses fixed port default)
-  refreshAllWorkspaces(ctx);
+  refreshAllWorkspaces(ctx, undefined, codebrainRoot);
 
   ctx.mainWindow = createWindow();
   registerAllIpcHandlers(ctx);
