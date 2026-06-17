@@ -166,14 +166,12 @@ function createBrowserHandlers(opts) {
       return { ok: false, error: `Command '${type}' not supported in CDP mode` };
     }
 
-    // ── Webview fallback ────────────────────────────────────────────────
-    if (!opts.sendBrowserCmd) throw new Error("browser control not available");
-    const paneId = opts.resolveBrowserPaneId
-      ? opts.resolveBrowserPaneId(payload.paneId)
-      : payload.paneId;
-    if (!paneId) throw new Error("no browser pane found");
-    const { paneId: _, ...cmdPayload } = payload;
-    return opts.sendBrowserCmd(paneId, { type, ...cmdPayload });
+    // ── No webview fallback — CDP is required ─────────────────────────
+    return {
+      ok: false,
+      error: "Chrome CDP not available. Browser commands require native Chrome with --remote-debugging-port. Webview mode is disabled.",
+      hint: "Start Chrome with: chrome.exe --remote-debugging-port=9222"
+    };
   }
 
   function setActiveBrowserPane(paneId) {
@@ -216,9 +214,15 @@ function createBrowserHandlers(opts) {
       // Check CDP mode first
       let isCdp = await ensureBrowserMode();
 
-      // If not in CDP mode, auto-launch the bundled Chromium
+      // CDP mode: open new tab in existing Chrome/Chromium
+      if (isCdp && nativeHandlers) {
+        const result = await nativeHandlers.tabsCreate(url);
+        return { ...result, mode: "cdp" };
+      }
+
+      // If not in CDP mode, try to launch Chrome
       if (!isCdp && opts.cdpClient) {
-        console.log("[Browser] No CDP detected — auto-launching bundled Chromium...");
+        console.log("[Browser] No CDP detected — attempting to launch Chrome...");
         try {
           const launched = await opts.cdpClient.launch({ port: 9223 });
           if (launched.ok) {
@@ -228,29 +232,31 @@ function createBrowserHandlers(opts) {
             nativeHandlers = null;
             lastCdpCheckTime = 0;
             isCdp = await ensureBrowserMode();
-            console.log(`[Browser] Chromium launched (pid ${launched.pid}) — CDP mode: ${isCdp}`);
+            console.log(`[Browser] Chrome launched (pid ${launched.pid}) — CDP mode: ${isCdp}`);
+
+            // If CDP is now available, open tab
+            if (isCdp && nativeHandlers) {
+              const result = await nativeHandlers.tabsCreate(url);
+              return { ...result, mode: "cdp" };
+            }
           } else {
-            console.log(`[Browser] Auto-launch failed: ${launched.error}`);
+            // Launch failed — return error with instructions
+            console.log(`[Browser] Chrome launch failed: ${launched.error}`);
+            return {
+              ok: false,
+              error: launched.error,
+              hint: launched.hint,
+              chromeRunningOnPort: launched.chromeRunningOnPort
+            };
           }
         } catch (err) {
-          console.log(`[Browser] Auto-launch error: ${err.message}`);
+          console.log(`[Browser] Chrome launch error: ${err.message}`);
+          return { ok: false, error: err.message };
         }
       }
 
-      // CDP mode: open new tab in Chromium
-      if (isCdp && nativeHandlers) {
-        const result = await nativeHandlers.tabsCreate(url);
-        return { ...result, mode: "cdp" };
-      }
-
-      // Fallback: embedded webview pane
-      if (!opts.createBrowserPane)
-        throw new Error("browser pane creation not available");
-      const result = await opts.createBrowserPane(url);
-      if (result?.ok && result?.paneId) {
-        setActiveBrowserPane(result.paneId);
-      }
-      return { ...result, mode: "webview" };
+      // If we get here, something went wrong
+      return { ok: false, error: "Failed to open browser. Chrome may be running without CDP enabled." };
     },
     async browserBack(paneId) {
       return browserCmd("back", { paneId });

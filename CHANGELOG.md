@@ -2,6 +2,13 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.10.7] — 2026-06-17
+
+### Fixes
+- Browser: fixed `pageTarget` scope bug in CDP client connect function
+- Browser: Chrome without CDP now auto-kills and relaunches with CDP enabled
+- Browser: removed webview fallback — CDP (native Chrome) is now required for all browser commands
+
 ## [1.10.6] — 2026-06-17
 
 ### CI/CD

@@ -74,6 +74,23 @@ class CDPClient {
   }
 
   /**
+   * Check if Chrome is running on a port (even if CDP is not enabled).
+   * Returns true if Chrome is listening on the port (even with 404).
+   */
+  async isChromeOnPort(port) {
+    return new Promise((resolve) => {
+      const req = http.get(`http://127.0.0.1:${port}/json/version`, (res) => {
+        res.resume();
+        // Chrome with CDP returns 200, Chrome without CDP returns 404
+        // Both mean Chrome is running on this port
+        resolve(res.statusCode === 200 || res.statusCode === 404);
+      });
+      req.on("error", () => resolve(false));
+      req.setTimeout(2000, () => { req.destroy(); resolve(false); });
+    });
+  }
+
+  /**
    * Discover Chrome debugging targets on a given port.
    * Validates that the response is actually a CDP endpoint (not some other service).
    */
@@ -116,6 +133,7 @@ class CDPClient {
   /**
    * Check if Chrome is available on any debug port.
    * Returns { available, port, targets } or { available: false }.
+   * Also returns chromeRunningOnPort if Chrome is on a port but CDP is not enabled.
    */
   async detect() {
     const envPort = process.env.CHROME_DEBUG_PORT
@@ -123,15 +141,22 @@ class CDPClient {
       : null;
     const ports = envPort ? [envPort] : [9222, 9223, 9224];
 
+    let chromeRunningOnPort = null;
+
     for (const port of ports) {
       try {
         const targets = await this.discoverTargets(port);
         return { available: true, port, targets };
-      } catch {
-        // try next port
+      } catch (err) {
+        // Check if Chrome is running on this port but CDP is not enabled
+        const isChrome = await this.isChromeOnPort(port);
+        if (isChrome && !chromeRunningOnPort) {
+          chromeRunningOnPort = port;
+          this.log(`[CDP] Chrome found on port ${port} but CDP is not enabled (HTTP 404)`);
+        }
       }
     }
-    return { available: false, port: null, targets: null };
+    return { available: false, port: null, targets: null, chromeRunningOnPort };
   }
 
   /**
@@ -168,9 +193,13 @@ class CDPClient {
 
       this.browserWsUrl = pageTarget.webSocketDebuggerUrl;
       this.activePort = port;
+      this.log(
+        `[CDP] Connecting to Chrome: ${pageTarget.title} (${pageTarget.url}) on port ${port}`
+      );
     }
+
     this.log(
-      `[CDP] Connecting to Chrome: ${pageTarget.title} (${pageTarget.url}) on port ${port}`
+      `[CDP] Connecting to Chrome on port ${port}`
     );
 
     return new Promise((resolve, reject) => {
@@ -597,6 +626,24 @@ class CDPClient {
         await this.connect(det.port);
         this.log(`[CDP] Connected to existing Chrome on port ${det.port}`);
         return { ok: true, pid: null, port: det.port, launched: false };
+      }
+
+      // Chrome is running but CDP is not enabled — kill and relaunch with CDP
+      if (det.chromeRunningOnPort) {
+        const chromePort = det.chromeRunningOnPort;
+        this.log(`[CDP] Chrome is running on port ${chromePort} without CDP. Killing and relaunching with CDP enabled...`);
+        try {
+          if (process.platform === "win32") {
+            execSync("taskkill /F /IM chrome.exe", { stdio: "ignore" });
+          } else {
+            execSync("pkill -f chrome", { stdio: "ignore" });
+          }
+          // Wait a bit for Chrome to fully exit
+          await new Promise(r => setTimeout(r, 1500));
+        } catch (killErr) {
+          this.log(`[CDP] Warning: Failed to kill Chrome: ${killErr.message}`);
+        }
+        // Continue to launch below
       }
     } catch {
       // not running, proceed to launch
