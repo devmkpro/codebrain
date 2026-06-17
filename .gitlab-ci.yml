@@ -120,44 +120,17 @@ github-release:
     - apk add --no-cache curl
   script:
     - TAG="${CI_COMMIT_TAG}"
-    - echo "GITHUB_USER=${GITHUB_USER}"
-    - echo "GITHUB_TOKEN prefix=${GITHUB_TOKEN:0:4}"
-    - echo "Creating GitHub Release: ${TAG}"
-    - |
-      # Create release via GitHub API
-      HTTP_CODE=$(curl -w "%{http_code}" -o /tmp/release.json -X POST \
-        -H "Authorization: token ${GITHUB_TOKEN}" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/${GITHUB_USER}/codebrain/releases" \
-        -d "{\"tag_name\":\"${TAG}\",\"name\":\"Codebrain ${TAG}\",\"body\":\"Release ${TAG}\",\"draft\":false,\"prerelease\":false}")
-      echo "Create release: HTTP ${HTTP_CODE}"
-      cat /tmp/release.json
-      if [ "$HTTP_CODE" != "201" ]; then
-        echo "Failed to create release"
-        exit 1
-      fi
-    - |
-      # Extract release ID (simple grep, no jq needed)
-      RELEASE_ID=$(grep -o '"id":[0-9]*' /tmp/release.json | head -1 | grep -o '[0-9]*')
-      echo "Release ID: ${RELEASE_ID}"
-      if [ -z "$RELEASE_ID" ]; then
-        echo "Could not extract release ID"
-        exit 1
-      fi
-    - |
-      # Upload each artifact
-      for f in dist/*.AppImage dist/*.deb dist/*.exe dist/latest-linux.yml dist/latest.yml; do
-        if [ -f "$f" ]; then
-          FN=$(basename "$f")
-          echo "Uploading ${FN}..."
-          HTTP=$(curl -w "%{http_code}" -o /tmp/upload_${FN}.json -X POST \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Content-Type: application/octet-stream" \
-            "https://uploads.github.com/repos/${GITHUB_USER}/codebrain/releases/${RELEASE_ID}/assets?name=${FN}" \
-            --data-binary "@${f}")
-          echo "  ${FN}: HTTP ${HTTP}"
-        fi
-      done
-    - echo "✅ GitHub Release ${TAG} done"
+    - echo "Creating GitHub Release: ${TAG} for user ${GITHUB_USER}"
+    - >
+      curl -w "\nHTTP:%{http_code}" -o /tmp/release.json -X POST
+      -H "Authorization: token ${GITHUB_TOKEN}"
+      -H "Accept: application/vnd.github.v3+json"
+      "https://api.github.com/repos/${GITHUB_USER}/codebrain/releases"
+      -d "{\"tag_name\":\"${TAG}\",\"name\":\"Codebrain ${TAG}\",\"body\":\"Release ${TAG}\",\"draft\":false,\"prerelease\":false}"
+    - RELEASE_ID=$(grep -o '"id":[0-9]*' /tmp/release.json | head -1 | grep -o '[0-9]*')
+    - echo "Release ID: ${RELEASE_ID}"
+    - test -n "${RELEASE_ID}" || { cat /tmp/release.json; exit 1; }
+    - "for f in dist/*.AppImage dist/*.deb dist/*.exe dist/latest-linux.yml dist/latest.yml; do [ -f \"$f\" ] || continue; FN=$(basename \"$f\"); echo \"Uploading ${FN}...\"; curl -w \"HTTP:%{http_code}\n\" -o /dev/null -X POST -H \"Authorization: token ${GITHUB_TOKEN}\" -H \"Content-Type: application/octet-stream\" \"https://uploads.github.com/repos/${GITHUB_USER}/codebrain/releases/${RELEASE_ID}/assets?name=${FN}\" --data-binary \"@${f}\"; done"
+    - echo "Done: GitHub Release ${TAG}"
   only:
     - tags
