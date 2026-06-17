@@ -1635,7 +1635,6 @@ function createCodebrainMCPServer(bridge) {
     server.tool("mcp__codebrain__plan_list", "List saved plans for the workspace.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
     server.tool("mcp__codebrain__plan_exit", "Exit plan mode and optionally switch to build mode.", { paneId: z.string().optional(), switchToBuild: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planExit(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
   ];
-  ];
 
   // ── DISABLE all advanced tool groups on startup ─────────────────────────
   for (const refs of Object.values(advancedToolGroups)) {
