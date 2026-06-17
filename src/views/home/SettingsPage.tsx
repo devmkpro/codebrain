@@ -530,6 +530,12 @@ export function SettingsPage() {
 
         <div className="mt-auto pt-4 border-t border-white/5 space-y-2">
           <div className="p-2.5 rounded-lg bg-[#0A0A0B]/50 border border-white/5">
+            <p className="text-[9px] font-mono text-slate-600 uppercase tracking-widest mb-1">Marketplace</p>
+            <p className={`text-[10px] font-bold ${registryIndex.length > 0 ? 'text-indigo-400' : 'text-slate-600'}`}>
+              {registryLoading ? '...' : `${registryIndex.length} itens`}
+            </p>
+          </div>
+          <div className="p-2.5 rounded-lg bg-[#0A0A0B]/50 border border-white/5">
             <p className="text-[9px] font-mono text-slate-600 uppercase tracking-widest mb-1">Skill</p>
             <p className={`text-[10px] font-bold ${skillStatus?.installed ? 'text-emerald-400' : 'text-slate-600'}`}>
               {skillStatus === null ? '—' : skillStatus.installed ? '✓ Instalada' : '✗ Não instalada'}
