@@ -7,6 +7,7 @@ import {
   Type, Monitor, Plus, X, Variable, Gamepad2, Bell,
   Mic, Cloud, Cpu, Link, Copy, Check, ExternalLink,
   Globe, Lock, GitPullRequest, FolderGit2,
+  Store, Search, Package, Filter,
 } from 'lucide-react';
 import {
   useTerminalSettings,
@@ -20,7 +21,7 @@ import { useProvidersStore } from '../../stores/providers-store';
 import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
 import { useMrReviewStore } from '../../stores/mr-review-store';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -246,6 +247,12 @@ export function SettingsPage() {
   const [mrReviewModel, setMrReviewModel] = useState('');
   const { detectedWorkspaces, loading: mrLoading, fetchAllowed, toggleWorkspace, allowedWorkspaces } = useMrReviewStore();
   const [skillBusy,   setSkillBusy]   = useState(false);
+  // Marketplace
+  const [registryIndex, setRegistryIndex] = useState<any[]>([]);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [marketSearch, setMarketSearch] = useState('');
+  const [marketCategory, setMarketCategory] = useState<'all' | 'agent' | 'skill'>('all');
+  const [installingId, setInstallingId] = useState<string | null>(null);
   const [cliBusy,     setCliBusy]     = useState(false);
   // Voice / BrainVoice
   const [audioConfig, setAudioConfig] = useState<any>(null);
@@ -297,8 +304,6 @@ export function SettingsPage() {
   const resetAppZoom     = useTerminalSettings(s => s.resetAppZoom);
   const cursorBlink      = useTerminalSettings(s => s.cursorBlink);
   const setCursorBlink   = useTerminalSettings(s => s.setCursorBlink);
-  const gpuAcceleration  = useTerminalSettings(s => s.gpuAcceleration);
-  const setGpuAcceleration = useTerminalSettings(s => s.setGpuAcceleration);
   const lowGpuMode       = useTerminalSettings(s => s.lowGpuMode);
   const setLowGpuMode    = useTerminalSettings(s => s.setLowGpuMode);
   const scrollbackSize   = useTerminalSettings(s => (s as any).scrollbackSize ?? 5000);
@@ -329,6 +334,12 @@ export function SettingsPage() {
     (window as any).codeBrainApp?.skill?.list?.()
       .then((skills: string[]) => setInstalledSkills(skills))
       .catch(() => {});
+    // Load marketplace registry
+    setRegistryLoading(true);
+    (window as any).codeBrainApp?.skill?.registryIndex?.()
+      .then((res: any) => { if (res?.ok && res.index?.skills) setRegistryIndex(res.index.skills); })
+      .catch(() => {})
+      .finally(() => setRegistryLoading(false));
     // Load CLI status — detect returns AllCliInfo { openclaude, claude, shell }
     (window as any).codeBrainApp?.cli?.detect?.()
       .then((s: any) => {
@@ -506,6 +517,7 @@ export function SettingsPage() {
           { id: 'spawn'     as Section, icon: <Monitor size={12} />,  label: 'Spawn Padrão' },
           { id: 'envvars'   as Section, icon: <Variable size={12} />, label: 'Env Vars' },
           { id: 'skill'          as Section, icon: <Download size={12} />, label: 'Skill & CLI' },
+          { id: 'marketplace'    as Section, icon: <Store size={12} />,    label: 'Marketplace' },
           { id: 'notifications'  as Section, icon: <Bell size={12} />,     label: 'Notificações' },
           { id: 'discord'        as Section, icon: <Gamepad2 size={12} />, label: 'Discord'   },
           { id: 'oauth'          as Section, icon: <Link size={12} />,     label: 'Review Bot' },
@@ -596,11 +608,6 @@ export function SettingsPage() {
 
             <Row label="Cursor piscando" description="Mantém o cursor animado dentro dos panes">
               <Toggle enabled={cursorBlink} onChange={setCursorBlink} />
-            </Row>
-            <Divider />
-
-            <Row label="Aceleração de hardware" description="Usa a GPU para compor a janela do Electron">
-              <Toggle enabled={gpuAcceleration} onChange={setGpuAcceleration} />
             </Row>
             <Divider />
 
@@ -1056,6 +1063,172 @@ export function SettingsPage() {
               >
                 <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
               </button>
+            </div>
+          </SectionCard>
+
+          {/* ── Marketplace ─────────────────────────────────────────────── */}
+          <SectionCard id="marketplace" icon={<Store size={13} />} title="Marketplace" badge={`${registryIndex.length} itens`} active={open.includes('marketplace')} onToggle={toggleSection}>
+            <div className="space-y-3">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-medium text-slate-300">Catálogo · 1 clique</p>
+                  <p className="text-[10px] text-slate-600 mt-0.5">
+                    codebrain-skills · {registryIndex.length} componentes
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setRegistryLoading(true);
+                    (window as any).codeBrainApp?.skill?.registryIndex?.()
+                      .then((res: any) => { if (res?.ok && res.index?.skills) setRegistryIndex(res.index.skills); })
+                      .catch(() => {})
+                      .finally(() => setRegistryLoading(false));
+                  }}
+                  disabled={registryLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-white/10 text-slate-500 text-[9px] hover:text-slate-300 hover:border-white/20 transition-colors"
+                >
+                  <RefreshCw size={10} className={registryLoading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="relative">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
+                <input
+                  type="text"
+                  value={marketSearch}
+                  onChange={e => setMarketSearch(e.target.value)}
+                  placeholder="Buscar agents e skills..."
+                  className="w-full pl-7 pr-3 py-2 rounded-lg border border-white/[0.08] bg-white/[0.03] text-[10px] text-slate-300 placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-colors"
+                />
+              </div>
+
+              {/* Category tabs */}
+              <div className="flex gap-1">
+                {[
+                  { key: 'all' as const, label: 'Todos' },
+                  { key: 'agent' as const, label: 'Agents' },
+                  { key: 'skill' as const, label: 'Skills' },
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setMarketCategory(tab.key)}
+                    className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                      marketCategory === tab.key
+                        ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20'
+                        : 'text-slate-600 border border-transparent hover:text-slate-400 hover:border-white/5'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Registry list */}
+              {registryLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <RefreshCw size={14} className="animate-spin text-slate-600" />
+                </div>
+              ) : registryIndex.length === 0 ? (
+                <div className="text-center py-6">
+                  <Package size={20} className="text-slate-700 mx-auto mb-2" />
+                  <p className="text-[10px] text-slate-600">Nenhum item encontrado no catálogo.</p>
+                  <p className="text-[9px] text-slate-700 mt-1">Verifique sua conexão ou adicione skills manualmente.</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-[320px] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                  {registryIndex
+                    .filter(item => {
+                      if (marketCategory !== 'all' && item.type !== marketCategory) return false;
+                      if (marketSearch.trim()) {
+                        const q = marketSearch.toLowerCase();
+                        return (item.name || item.id || '').toLowerCase().includes(q)
+                          || (item.description || '').toLowerCase().includes(q)
+                          || (item.tags || []).some((t: string) => t.toLowerCase().includes(q));
+                      }
+                      return true;
+                    })
+                    .map((item: any) => {
+                      const isInstalled = installedSkills.includes(item.id);
+                      const isInstalling = installingId === item.id;
+                      return (
+                        <div
+                          key={item.id}
+                          className="group flex items-start gap-3 p-3 rounded-lg border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03] hover:border-indigo-500/15 transition-all"
+                        >
+                          <div className="mt-0.5">
+                            {item.type === 'agent' ? (
+                              <Cpu size={14} className="text-violet-400/60" />
+                            ) : (
+                              <Zap size={14} className="text-amber-400/60" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[11px] font-bold text-slate-300 truncate">
+                                {item.name || item.id}
+                              </span>
+                              {isInstalled && (
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-bold text-emerald-400 uppercase">
+                                  Instalado
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[9px] text-slate-600 mt-0.5 line-clamp-2">
+                              {item.description || 'Sem descrição'}
+                            </p>
+                            {item.tags && item.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {item.tags.slice(0, 4).map((tag: string) => (
+                                  <span key={tag} className="px-1.5 py-0.5 rounded bg-white/[0.04] text-[8px] text-slate-600">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (isInstalled) {
+                                setInstallingId(item.id);
+                                await (window as any).codeBrainApp?.skill?.uninstall?.({ id: item.id }).catch(() => {});
+                                setInstalledSkills(prev => prev.filter(s => s !== item.id));
+                                setInstallingId(null);
+                              } else {
+                                setInstallingId(item.id);
+                                const res = await (window as any).codeBrainApp?.skill?.installFromRegistry?.({ id: item.id }).catch(() => null);
+                                if (res?.ok !== false) setInstalledSkills(prev => [...prev, item.id]);
+                                setInstallingId(null);
+                              }
+                            }}
+                            disabled={isInstalling}
+                            className={`shrink-0 px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all disabled:opacity-40 ${
+                              isInstalled
+                                ? 'border border-white/10 text-slate-500 hover:text-red-400 hover:border-red-500/20'
+                                : 'bg-[#4F46E5] text-white hover:bg-[#4338CA]'
+                            }`}
+                          >
+                            {isInstalling ? '…' : isInstalled ? 'Remover' : 'Instalar'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  {registryIndex.filter(item => {
+                    if (marketCategory !== 'all' && item.type !== marketCategory) return false;
+                    if (marketSearch.trim()) {
+                      const q = marketSearch.toLowerCase();
+                      return (item.name || item.id || '').toLowerCase().includes(q)
+                        || (item.description || '').toLowerCase().includes(q);
+                    }
+                    return true;
+                  }).length === 0 && (
+                    <div className="text-center py-4">
+                      <p className="text-[10px] text-slate-600">Nenhum resultado para "{marketSearch}"</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </SectionCard>
 
