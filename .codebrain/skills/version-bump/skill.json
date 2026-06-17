@@ -2,8 +2,8 @@
   "id": "version-bump",
   "name": "Version Bump",
   "type": "prompt",
-  "version": "1.0.0",
-  "description": "Faz bump de versão no Codebrain: atualiza package.json, commita, cria tag git, push e regenera releases-data.ts",
+  "version": "1.1.0",
+  "description": "Faz bump de versão no Codebrain: atualiza package.json, CHANGELOG.md, settings.json, commita, cria tag git, push e regenera releases-data.ts",
   "tags": [
     "codebrain",
     "versão",
