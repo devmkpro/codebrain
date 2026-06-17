@@ -14,6 +14,48 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.10.4",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "index.js duplicate ]; syntax error + Features Recentes nav (v1.10.4)"
+      },
+      {
+        "kind": "fix",
+        "text": "Features Recentes navigation + index.js array close + mission colors"
+      },
+      {
+        "kind": "fix",
+        "text": "marketplace install button for local skills"
+      },
+      {
+        "kind": "fix",
+        "text": "marketplace registry scan local filesystem (GitLab blocked by Cloudflare)"
+      },
+      {
+        "kind": "feat",
+        "text": "add Marketplace badge to Settings sidebar showing catalog count"
+      },
+      {
+        "kind": "feat",
+        "text": "add Marketplace section to Settings with catalog browsing"
+      },
+      {
+        "kind": "feat",
+        "text": "auto-open MissionWizard when workspace has no panes"
+      },
+      {
+        "kind": "fix",
+        "text": "align mission UX colors with Codebrain palette"
+      },
+      {
+        "kind": "feat",
+        "text": "Mission UX overhaul — wizard, sidebar, close dialog (Overclock-style)"
+      }
+    ]
+  },
+  {
     "version": "1.10.2",
     "date": "junho 2026",
     "highlights": [
