@@ -7,6 +7,7 @@ import { DropTarget } from "./DropTarget";
 import { BrowserPane } from "../panes/BrowserPane";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { RenderNode } from "./RenderNode";
+import { MissionSidebar } from "../missions/MissionSidebar";
 
 export function Grid({ workspacePath } = {} as any) {
   const allPanes = usePanesStore(s => s.panes) as any[];
@@ -43,7 +44,8 @@ export function Grid({ workspacePath } = {} as any) {
 
   if (!layout) {
     return (
-      <div className="flex-1 flex items-center justify-center select-none relative">
+      <div className="flex-1 flex select-none relative">
+        <div className="flex-1 flex items-center justify-center relative">
         {/* Subtle radial gradient background */}
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at center, rgba(139,92,246,0.03) 0%, transparent 70%)' }} />
         <div className="text-center space-y-5 relative z-10">
@@ -74,6 +76,8 @@ export function Grid({ workspacePath } = {} as any) {
             ))}
           </div>
         </div>
+        </div>
+        {ws && <MissionSidebar workspacePath={ws} />}
       </div>
     );
   }
@@ -91,8 +95,11 @@ export function Grid({ workspacePath } = {} as any) {
   };
 
   return (
-    <div className="h-full w-full overflow-hidden p-1.5">
-      <RenderNode node={layout} panesById={panesById} renderLeaf={renderLeaf} />
+    <div className="h-full w-full flex overflow-hidden">
+      <div className="flex-1 overflow-hidden p-1.5">
+        <RenderNode node={layout} panesById={panesById} renderLeaf={renderLeaf} />
+      </div>
+      {ws && <MissionSidebar workspacePath={ws} />}
     </div>
   );
 }

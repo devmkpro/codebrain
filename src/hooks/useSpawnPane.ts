@@ -152,5 +152,37 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
     }
   };
 
-  return { permissionMode, setPermissionMode, favoritePane, resolveValidModel, handleAddPane, handleAddTerminal, handleAddBrowser, handleSpawnSquad, detectedUrl };
+  const handleSpawnFromConfig = async (configs: Array<{ providerId: string; model?: string; count: number; label?: string }>, missionId?: string) => {
+    if (!activeWorkspace) return;
+    const { nanoid } = await import("nanoid");
+    const activityId = nanoid(8);
+
+    for (const config of configs) {
+      if (!config.providerId) continue;
+      const provider = providers.find(p => p.id === config.providerId);
+      const agent = provider?.host ?? (provider?.type === "oauth" ? "claude" : "openclaude");
+      const validModel = resolveValidModel(config.providerId, config.model);
+
+      for (let i = 0; i < config.count; i++) {
+        const label = config.label ? (config.count > 1 ? `${config.label} ${i + 1}` : config.label) : undefined;
+        try {
+          const result = await window.codeBrainApp?.pty.spawn({
+            agent, cwd: activeWorkspace, activityId,
+            providerId: config.providerId, model: validModel,
+            permissionMode, label,
+          });
+          if (!result?.ok || !result.paneId) continue;
+          addPane({
+            id: result.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace,
+            activityId, providerId: config.providerId, model: validModel,
+            missionId, externallySpawned: true,
+          } as any);
+        } catch (err) {
+          notify("Erro ao abrir pane", String(err), "error");
+        }
+      }
+    }
+  };
+
+  return { permissionMode, setPermissionMode, favoritePane, resolveValidModel, handleAddPane, handleAddTerminal, handleAddBrowser, handleSpawnSquad, handleSpawnFromConfig, detectedUrl };
 }

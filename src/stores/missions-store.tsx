@@ -3,12 +3,23 @@ import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 
 export type MissionStatus = 'active' | 'running' | 'blocked' | 'ready_to_integrate' | 'archived';
+export type MissionMode = 'livre' | 'squad';
+
+export interface ProviderPaneConfig {
+  providerId: string;
+  model: string;
+  count: number;
+  label?: string;
+}
 
 export interface Mission {
   id: string;
   title: string;
   objective?: string;
   status: MissionStatus;
+  mode?: MissionMode;
+  squadId?: string;
+  providerConfig?: ProviderPaneConfig[];
   branch?: string;
   worktreePath?: string;
   createdAt: number;
@@ -20,6 +31,7 @@ interface MissionsState {
   activeMissionByWorkspace: Record<string, string>;
   ensureMissionForWorkspace: (workspacePath: string) => string;
   getWorkspaceMissions: (workspacePath: string) => Mission[];
+  getArchivedMissions: (workspacePath: string) => Mission[];
   getActiveMissionId: (workspacePath: string) => string | null;
   setActiveMission: (workspacePath: string, missionId: string) => void;
   createMission: (workspacePath: string, mission: Partial<Mission>) => string;
@@ -100,6 +112,9 @@ export const useMissionsStore = create<MissionsState>()(
       getWorkspaceMissions: (workspacePath) =>
         get().missionsByWorkspace[workspacePath] ?? EMPTY_MISSIONS,
 
+      getArchivedMissions: (workspacePath) =>
+        (get().missionsByWorkspace[workspacePath] ?? EMPTY_MISSIONS).filter(m => m.status === 'archived'),
+
       getActiveMissionId: (workspacePath) => {
         const state = get();
         return activeMissionOrFallback(state, workspacePath);
@@ -128,6 +143,9 @@ export const useMissionsStore = create<MissionsState>()(
           title: mission.title?.trim() || nextMissionTitle(existing),
           objective: mission.objective?.trim(),
           status: mission.status ?? 'active',
+          mode: mission.mode,
+          squadId: mission.squadId,
+          providerConfig: mission.providerConfig,
           branch: mission.branch?.trim(),
           worktreePath: mission.worktreePath?.trim(),
           createdAt: now,
