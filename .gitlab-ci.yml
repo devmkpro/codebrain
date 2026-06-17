@@ -86,7 +86,7 @@ release:
   only:
     - tags
 
-# Mirror to GitHub (one-way sync from GitLab)
+# Mirror source to GitHub (one-way sync from GitLab)
 mirror-github:
   stage: mirror
   tags:
@@ -95,12 +95,72 @@ mirror-github:
   variables:
     GIT_STRATEGY: clone
   before_script:
-    - apk add --no-cache git
+    - apk add --no-cache git curl
+  script:
     - git config --global user.email "ci@codebrain.dev"
     - git config --global user.name "Codebrain CI"
-  script:
     - git remote add github https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/${GITHUB_USER}/codebrain.git || true
     - git push github HEAD:refs/heads/master --force --tags
   only:
     - master
+    - tags
+
+# Create GitHub Release with build artifacts
+github-release:
+  stage: mirror
+  tags:
+    - local
+  image: alpine:latest
+  needs:
+    - job: build_linux
+      artifacts: true
+    - job: build_windows
+      artifacts: true
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - TAG="${CI_COMMIT_TAG}"
+    - RELEASE_NAME="Codebrain ${TAG}"
+    - |
+      # Create GitHub Release
+      echo "Creating GitHub Release: ${RELEASE_NAME}"
+      RESPONSE=$(curl -s -X POST \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/${GITHUB_USER}/codebrain/releases" \
+        -d "{
+          \"tag_name\": \"${TAG}\",
+          \"name\": \"${RELEASE_NAME}\",
+          \"body\": \"Release ${TAG} — see [GitLab release](https://gitlab.com/maikeofc18/codebrain/-/releases/${TAG}) for full changelog.\",
+          \"draft\": false,
+          \"prerelease\": false
+        }")
+      RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
+      if [ "$RELEASE_ID" = "null" ] || [ -z "$RELEASE_ID" ]; then
+        echo "Error creating release:"
+        echo "$RESPONSE"
+        exit 1
+      fi
+      echo "Release created: ID=${RELEASE_ID}"
+
+      # Upload assets function
+      upload_asset() {
+        local FILE="$1"
+        local FILENAME=$(basename "$FILE")
+        local SIZE=$(stat -c%s "$FILE" 2>/dev/null || stat -f%z "$FILE")
+        echo "Uploading ${FILENAME} (${SIZE} bytes)..."
+        curl -s -X POST \
+          -H "Authorization: token ${GITHUB_TOKEN}" \
+          -H "Content-Type: application/octet-stream" \
+          "https://uploads.github.com/repos/${GITHUB_USER}/codebrain/releases/${RELEASE_ID}/assets?name=${FILENAME}" \
+          --data-binary "@${FILE}" | jq -r '.name // .message'
+      }
+
+      # Upload all build artifacts
+      for f in dist/*.AppImage dist/*.deb dist/*.exe dist/latest-linux.yml dist/latest.yml; do
+        [ -f "$f" ] && upload_asset "$f"
+      done
+
+      echo "✅ GitHub Release ${TAG} created with all artifacts"
+  only:
     - tags
