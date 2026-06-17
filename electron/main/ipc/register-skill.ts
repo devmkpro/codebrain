@@ -7,8 +7,13 @@ import { setupClaudeIntegration } from "../services/setup-claude";
 
 const SKILLS_DIR = path.join(os.homedir(), ".codebrain", "skills");
 const CLAUDE_CONFIG_DIR = path.join(os.homedir(), ".codebrain", ".claude");
-const REGISTRY_URL = "https://gitlab.com/maikeofc18/codebrain-skills/-/raw/main/index.json";
-const REGISTRY_BASE = "https://gitlab.com/maikeofc18/codebrain-skills/-/raw/main";
+// Use GitLab API (bypasses Cloudflare challenge on raw URLs)
+const GITLAB_PROJECT = "maikeofc18%2Fcodebrain-skills";
+const REGISTRY_URL = `https://gitlab.com/api/v4/projects/${GITLAB_PROJECT}/repository/files/index.json/raw?ref=main`;
+const REGISTRY_BASE_API = `https://gitlab.com/api/v4/projects/${GITLAB_PROJECT}/repository/files`;
+// Fallback raw URLs (may be blocked by Cloudflare)
+const REGISTRY_URL_RAW = "https://gitlab.com/maikeofc18/codebrain-skills/-/raw/main/index.json";
+const REGISTRY_BASE_RAW = "https://gitlab.com/maikeofc18/codebrain-skills/-/raw/main";
 
 // ── Skill manifest interface ──
 
@@ -53,16 +58,44 @@ function readEntrypoint(skillDir: string, entrypoint: string): string | null {
   }
 }
 
+const FETCH_HEADERS = {
+  "User-Agent": "Codebrain/1.10.3",
+  "Accept": "application/json",
+};
+
+/** Build GitLab API URL for a file in the skills repo */
+function skillFileUrl(skillId: string, filename: string): string {
+  return `${REGISTRY_BASE_API}/skills%2F${encodeURIComponent(skillId)}%2F${encodeURIComponent(filename)}?ref=main`;
+}
+
 async function fetchJson(url: string): Promise<any> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-  return res.json();
+  // Try API URL first, then raw fallback
+  const urls = url.includes("/api/v4/") ? [url, url.replace(REGISTRY_BASE_API, REGISTRY_BASE_RAW).replace(/\?.*$/, "")] : [url];
+  for (const u of urls) {
+    try {
+      const res = await fetch(u, { headers: FETCH_HEADERS });
+      if (!res.ok) continue;
+      const text = await res.text();
+      // Check for Cloudflare challenge page
+      if (text.includes("challenge-platform") || text.includes("Just a moment")) continue;
+      return JSON.parse(text);
+    } catch { /* try next */ }
+  }
+  throw new Error(`Failed to fetch: ${url}`);
 }
 
 async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-  return res.text();
+  const urls = url.includes("/api/v4/") ? [url, url.replace(REGISTRY_BASE_API, REGISTRY_BASE_RAW).replace(/\?.*$/, "")] : [url];
+  for (const u of urls) {
+    try {
+      const res = await fetch(u, { headers: FETCH_HEADERS });
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (text.includes("challenge-platform") || text.includes("Just a moment")) continue;
+      return text;
+    } catch { /* try next */ }
+  }
+  throw new Error(`Failed to fetch: ${url}`);
 }
 
 function copyDirRecursive(src: string, dest: string): void {
@@ -186,7 +219,7 @@ export function registerSkillHandlers(_ctx: AppContext): void {
       const skillDir = path.join(SKILLS_DIR, args.id);
 
       // Fetch manifest from registry
-      const manifestUrl = `${REGISTRY_BASE}/skills/${args.id}/skill.json`;
+      const manifestUrl = skillFileUrl(args.id, 'skill.json');
       const manifest = await fetchJson(manifestUrl) as SkillManifest;
 
       // Create skill directory
@@ -197,14 +230,14 @@ export function registerSkillHandlers(_ctx: AppContext): void {
       fs.writeFileSync(path.join(skillDir, "skill.json"), JSON.stringify(manifest, null, 2));
 
       // Fetch and save entrypoint
-      const entryUrl = `${REGISTRY_BASE}/skills/${args.id}/${manifest.entrypoint}`;
+      const entryUrl = skillFileUrl(args.id, manifest.entrypoint);
       const entryContent = await fetchText(entryUrl);
       fs.writeFileSync(path.join(skillDir, manifest.entrypoint), entryContent);
 
       // If squad type, also fetch squad.json
       if (manifest.type === "squad" && manifest.entrypoint !== "squad.json") {
         try {
-          const squadUrl = `${REGISTRY_BASE}/skills/${args.id}/squad.json`;
+          const squadUrl = skillFileUrl(args.id, 'squad.json');
           const squadContent = await fetchText(squadUrl);
           fs.writeFileSync(path.join(skillDir, "squad.json"), squadContent);
         } catch {}
@@ -212,7 +245,7 @@ export function registerSkillHandlers(_ctx: AppContext): void {
 
       // Fetch README if available
       try {
-        const readmeUrl = `${REGISTRY_BASE}/skills/${args.id}/README.md`;
+        const readmeUrl = skillFileUrl(args.id, 'README.md');
         const readme = await fetchText(readmeUrl);
         fs.writeFileSync(path.join(skillDir, "README.md"), readme);
       } catch {}
@@ -248,20 +281,20 @@ export function registerSkillHandlers(_ctx: AppContext): void {
           if (!localManifest || localManifest.version !== entry.version) {
             const installResult = await (async () => {
               try {
-                const manifestUrl = `${REGISTRY_BASE}/skills/${entry.id}/skill.json`;
+                const manifestUrl = skillFileUrl(entry.id, 'skill.json');
                 const manifest = await fetchJson(manifestUrl) as SkillManifest;
                 if (fs.existsSync(skillDir)) fs.rmSync(skillDir, { recursive: true, force: true });
                 fs.mkdirSync(skillDir, { recursive: true });
                 fs.writeFileSync(path.join(skillDir, "skill.json"), JSON.stringify(manifest, null, 2));
-                const entryUrl = `${REGISTRY_BASE}/skills/${entry.id}/${manifest.entrypoint}`;
+                const entryUrl = skillFileUrl(entry.id, manifest.entrypoint);
                 fs.writeFileSync(path.join(skillDir, manifest.entrypoint), await fetchText(entryUrl));
                 if (manifest.type === "squad") {
                   try {
-                    fs.writeFileSync(path.join(skillDir, "squad.json"), await fetchText(`${REGISTRY_BASE}/skills/${entry.id}/squad.json`));
+                    fs.writeFileSync(path.join(skillDir, "squad.json"), await fetchText(skillFileUrl(entry.id, 'squad.json')));
                   } catch {}
                 }
                 try {
-                  fs.writeFileSync(path.join(skillDir, "README.md"), await fetchText(`${REGISTRY_BASE}/skills/${entry.id}/README.md`));
+                  fs.writeFileSync(path.join(skillDir, "README.md"), await fetchText(skillFileUrl(entry.id, 'README.md')));
                 } catch {}
                 return { ok: true };
               } catch (err: any) {
@@ -288,12 +321,89 @@ export function registerSkillHandlers(_ctx: AppContext): void {
   });
 
   ipcMain.handle("skill:registryIndex", async () => {
+    // Try remote registry first, then fallback to local filesystem scan
     try {
       const index = await fetchJson(REGISTRY_URL);
-      return { ok: true, index };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || String(err) };
+      if (index?.skills?.length > 0) return { ok: true, index };
+    } catch {}
+
+    // Local filesystem scan (like Overclock)
+    const skills: any[] = [];
+    const scannedDirs = [
+      { dir: path.join(os.homedir(), ".codebrain", "skills"), scope: "codebrain" },
+      { dir: path.join(os.homedir(), ".claude", "skills"), scope: "claude" },
+    ];
+
+    for (const { dir, scope } of scannedDirs) {
+      if (!fs.existsSync(dir)) continue;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          // Try to read skill.json manifest
+          const manifestPath = path.join(fullPath, "skill.json");
+          if (fs.existsSync(manifestPath)) {
+            try {
+              const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+              skills.push({
+                id: manifest.id || entry.name,
+                name: manifest.name || entry.name,
+                description: manifest.description || "",
+                type: manifest.type || "skill",
+                version: manifest.version || "1.0.0",
+                tags: manifest.tags || [],
+                scope,
+                installed: true,
+              });
+            } catch {
+              skills.push({ id: entry.name, name: entry.name, description: "", type: "skill", scope, installed: true });
+            }
+          } else {
+            skills.push({ id: entry.name, name: entry.name, description: "", type: "skill", scope, installed: true });
+          }
+        } else if (entry.name.endsWith(".md")) {
+          // .md skill file in .claude/skills/
+          const id = entry.name.replace(/\.md$/, "");
+          let description = "";
+          try {
+            const content = fs.readFileSync(fullPath, "utf-8").slice(0, 200);
+            const firstLine = content.split("\n").find(l => l.trim() && !l.startsWith("#"));
+            if (firstLine) description = firstLine.trim().slice(0, 120);
+          } catch {}
+          skills.push({ id, name: id, description, type: "skill", scope, installed: true });
+        }
+      }
     }
+
+    // Also scan workspaces for AGENTS.md (like Overclock's catalog scan)
+    try {
+      const navStore = path.join(os.homedir(), ".codebrain", "nav-store.json");
+      if (fs.existsSync(navStore)) {
+        const nav = JSON.parse(fs.readFileSync(navStore, "utf-8"));
+        const workspaces = (nav.state?.tabs || []).map((t: any) => t.workspacePath).filter(Boolean);
+        for (const ws of workspaces) {
+          const agentsPath = path.join(ws, "AGENTS.md");
+          if (fs.existsSync(agentsPath)) {
+            let description = "";
+            try {
+              const content = fs.readFileSync(agentsPath, "utf-8").slice(0, 200);
+              const firstLine = content.split("\n").find((l: string) => l.trim() && !l.startsWith("#"));
+              if (firstLine) description = firstLine.trim().slice(0, 120);
+            } catch {}
+            skills.push({
+              id: `agents:${path.basename(ws)}`,
+              name: `AGENTS.md — ${path.basename(ws)}`,
+              description: description || "Workspace agent instructions",
+              type: "agent",
+              scope: "workspace",
+              workspace: ws,
+              installed: true,
+            });
+          }
+        }
+      }
+    } catch {}
+
+    return { ok: true, index: { skills } };
   });
 
   // ── Claude Config handlers (.claude/ directory) ──
