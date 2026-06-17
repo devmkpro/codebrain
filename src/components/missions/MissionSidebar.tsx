@@ -1,6 +1,6 @@
 /**
  * MissionSidebar — Painel lateral direito com lista de missões.
- * Estilo Overclock: status dots, pane counts, inline rename, collapse toggle.
+ * Status dots, pane counts, inline rename, collapse toggle.
  */
 import React from 'react';
 import { Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';

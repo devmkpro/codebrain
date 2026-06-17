@@ -3,7 +3,7 @@
 /**
  * Background worker dispatch bridge handler.
  * Detects trigger patterns in text and dispatches background workers.
- * Inspired by Ruflo's WorkerDispatchService.
+ * Detects trigger patterns in text and dispatches background workers.
  */
 
 const TRIGGERS = [

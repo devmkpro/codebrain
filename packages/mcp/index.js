@@ -1643,12 +1643,24 @@ function createCodebrainMCPServer(bridge) {
   const advancedToolCount = Object.values(advancedToolGroups).reduce((sum, refs) => sum + refs.length, 0);
   console.log(`[MCP] ${advancedToolCount} advanced tools disabled (activate via enable_tool_group)`);
 
+  // ── RE-ENABLE essential advanced groups (always available) ─────────────
+  // These groups are advanced in implementation but essential in usage:
+  // - session_advanced: compaction, snapshots, checkpoints — critical for long sessions
+  // - memory_advanced: knowledge graph, PageRank, similarity — core intelligence
+  // - mission: structured workflow goals — fundamental coordination
+  const essentialAdvancedGroups = ["session_advanced", "memory_advanced", "mission"];
+  for (const name of essentialAdvancedGroups) {
+    const refs = advancedToolGroups[name];
+    if (refs) refs.forEach(ref => ref.enable());
+  }
+  console.log(`[MCP] Essential advanced groups enabled: ${essentialAdvancedGroups.join(", ")}`);
+
   // ── Meta-tools: enable_tool_group + tool_groups (always enabled) ────────
   const activatedGroups = new Set();
 
   server.tool(
     "mcp__codebrain__enable_tool_group",
-    "Activate additional MCP tool groups on demand. Call this BEFORE using tools from disabled groups. Groups: browser (60), fetch (5), mr (4), swarm (10), worker (10), consensus (19), event (5), mission (5), memory_advanced (4), hooks_advanced (3). Essential tools (pane, memory, pattern, file, task, hooks, skill, system, todo, agent, provider, handoff) are always available. BROWSER WORKFLOW: (1) enable_tool_group('browser') → (2) browser_launch() → (3) browser_navigate(url). Always call browser_launch() before any browser_* tool to use native Chromium instead of fallback webview.",
+    "Activate additional MCP tool groups on demand. Call this BEFORE using tools from disabled groups. ALWAYS-ON groups (no activation needed): session_advanced (7), memory_advanced (4), mission (5). ON-DEMAND groups: browser (60), fetch (5), mr (5), swarm (10), worker (10), consensus (19), event (5), hooks_advanced (3), lsp (12), workflows (11). Essential tools (pane, memory, pattern, file, task, hooks, skill, system, todo, agent, provider, handoff, goal, checkpoint, snapshot, compaction) are always available. BROWSER WORKFLOW: (1) enable_tool_group('browser') → (2) browser_launch() → (3) browser_navigate(url).",
     {
       group: z.enum(["browser", "fetch", "mr", "swarm", "worker", "consensus", "event", "mission", "memory_advanced", "hooks_advanced", "session_advanced", "lsp", "workflows"])
         .describe("Tool group to activate. Use tool_groups() to see all available groups."),
@@ -1701,16 +1713,110 @@ function createCodebrainMCPServer(bridge) {
           toolCount: refs.length,
           enabled: refs[0] ? refs[0].enabled : false,
         }));
-        // Browser, fetch, and MR are lazy (registered on demand)
+        // Browser, fetch, and MR are lazy (registered on demand, not in advancedToolGroups)
         groups.push({ name: "browser", toolCount: 60, enabled: activatedGroups.has("browser") });
         groups.push({ name: "fetch", toolCount: 5, enabled: activatedGroups.has("fetch") });
         groups.push({ name: "mr", toolCount: 5, enabled: activatedGroups.has("mr") });
-        groups.push({ name: "session_advanced", toolCount: 7, enabled: activatedGroups.has("session_advanced") });
         groups.push({ name: "lsp", toolCount: 12, enabled: activatedGroups.has("lsp") });
         groups.push({ name: "workflows", toolCount: 11, enabled: activatedGroups.has("workflows") });
         const totalTools = Object.keys(server._registeredTools || {}).length;
         const enabledTools = Object.values(server._registeredTools || {}).filter(t => t.enabled !== false).length;
         return { content: [{ type: "text", text: JSON.stringify({ groups, enabled: enabledTools, total: totalTools }, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Gap-Closing Tools — Auto-Memory Bridge + Security Scanner
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  server.tool(
+    "mcp__codebrain__memory_import_claude",
+    "Import ALL Claude Code native memory files (~/.claude/projects/*/memory/*.md) into Codebrain's SQLite store. Enables cross-project knowledge sharing.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.memoryImportClaude();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__memory_bridge_status",
+    "Get auto-memory bridge status: how many Claude Code memories exist, how many imported, which projects.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.memoryBridgeStatus();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__memory_scan_claude",
+    "Scan for available Claude Code memory files without importing. Lists all projects and their memory files.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.memoryScanClaude();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__security_scan",
+    "Scan workspace for security issues: hardcoded secrets (API keys, passwords, tokens), vulnerabilities (SQL/command injection, eval), and code smells. Returns structured findings with severity levels.",
+    {
+      path: z.string().optional().describe("Directory to scan (default: current workspace)"),
+      type: z.enum(["full", "secrets", "vulnerabilities"]).optional().describe("Scan type (default: full)"),
+      force: z.boolean().optional().describe("Bypass 30-minute cooldown between scans"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.securityScan(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__security_status",
+    "Get the last security scan result from memory. Shows findings summary and status.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.securityStatus();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__intelligence_consolidate",
+    "Run the full intelligence pipeline: RETRIEVE (search memory+patterns), JUDGE (evaluate quality), DISTILL (extract new patterns from trajectories), CONSOLIDATE (promote short-term→long-term, dream, prune stale). One-shot intelligence maintenance pass.",
+    {
+      query: z.string().optional().describe("Optional search query for the RETRIEVE step"),
+      workspace: z.string().optional().describe("Workspace scope"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.intelligenceConsolidate(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
       }

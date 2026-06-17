@@ -77,7 +77,7 @@ const Database = loadBetterSqlite3();
 
 /**
  * SQLite-backed shared memory store for CodeBrain multi-agent sessions.
- * Inspired by Ruflo's AgentDB/HybridBackend architecture.
+ * SQLite-backed memory store with typed entries, patterns, and trajectories.
  *
  * Memory types:
  *   - episodic:  specific events/experiences during a session
@@ -131,6 +131,28 @@ function createMemoryStore(dbPath) {
 
     CREATE INDEX IF NOT EXISTS idx_patterns_type ON patterns(pattern_type);
     CREATE INDEX IF NOT EXISTS idx_patterns_quality ON patterns(quality_score);
+
+    -- Short-term patterns: session-level, auto-promoted to long-term (patterns table)
+    -- when usage_count >= 3 AND quality >= 0.6.
+    CREATE TABLE IF NOT EXISTS short_term_patterns (
+      id                   TEXT PRIMARY KEY,
+      pattern_type         TEXT NOT NULL,
+      description          TEXT NOT NULL,
+      domain               TEXT DEFAULT 'general',
+      embedding            BLOB,
+      quality              REAL DEFAULT 0.5,
+      usage_count          INTEGER DEFAULT 0,
+      success_count        INTEGER DEFAULT 0,
+      session_id           TEXT,
+      trajectory_id        TEXT,
+      metadata             TEXT,
+      created_at           INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at           INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_stp_type ON short_term_patterns(pattern_type);
+    CREATE INDEX IF NOT EXISTS idx_stp_quality ON short_term_patterns(quality);
+    CREATE INDEX IF NOT EXISTS idx_stp_session ON short_term_patterns(session_id);
 
     CREATE TABLE IF NOT EXISTS trajectories (
       id              TEXT PRIMARY KEY,
@@ -536,6 +558,34 @@ function createMemoryStore(dbPath) {
       WHERE id = @id
     `),
     deletePattern: db.prepare(`DELETE FROM patterns WHERE id = ?`),
+    // Short-term patterns
+    insertShortTermPattern: db.prepare(`
+      INSERT INTO short_term_patterns (id, pattern_type, description, domain, embedding, quality, usage_count, success_count, session_id, trajectory_id, metadata)
+      VALUES (@id, @pattern_type, @description, @domain, @embedding, @quality, @usage_count, @success_count, @session_id, @trajectory_id, @metadata)
+    `),
+    listShortTermPatterns: db.prepare(`
+      SELECT * FROM short_term_patterns
+      WHERE (@pattern_type IS NULL OR pattern_type = @pattern_type)
+      ORDER BY quality DESC, usage_count DESC
+      LIMIT @limit
+    `),
+    updateShortTermUsage: db.prepare(`
+      UPDATE short_term_patterns SET usage_count = usage_count + 1, updated_at = unixepoch() WHERE id = ?
+    `),
+    updateShortTermSuccess: db.prepare(`
+      UPDATE short_term_patterns SET success_count = success_count + 1, quality = (quality * usage_count + 1.0) / (usage_count + 1), usage_count = usage_count + 1, updated_at = unixepoch() WHERE id = ?
+    `),
+    updateShortTermFailure: db.prepare(`
+      UPDATE short_term_patterns SET quality = (quality * usage_count + 0.0) / (usage_count + 1), usage_count = usage_count + 1, updated_at = unixepoch() WHERE id = ?
+    `),
+    getPromotableShortTerm: db.prepare(`
+      SELECT * FROM short_term_patterns WHERE usage_count >= 3 AND quality >= 0.6
+    `),
+    deleteShortTermPattern: db.prepare(`DELETE FROM short_term_patterns WHERE id = ?`),
+    pruneOldShortTerm: db.prepare(`
+      DELETE FROM short_term_patterns WHERE created_at < unixepoch() - 86400 AND usage_count < 3
+    `),
+    countShortTerm: db.prepare(`SELECT COUNT(*) as count FROM short_term_patterns`),
     // Trajectories
     insertTrajectory: db.prepare(`
       INSERT INTO trajectories (id, session_id, agent_id, workspace, task_type, steps, outcome, outcome_detail, duration_ms, tool_calls)
@@ -988,6 +1038,112 @@ function createMemoryStore(dbPath) {
     deletePattern({ id }) {
       stmts.deletePattern.run(id);
       return { ok: true };
+    },
+
+    // ── Short-term Pattern Management ─────────────────────────────────────────
+    // Short-term patterns are session-level. When usage_count >= 3 && quality >= 0.6,
+    // they get promoted to the long-term patterns table.
+
+    /**
+     * Write a short-term pattern (session-level).
+     */
+    writeShortTermPattern({ pattern_type, description, domain, session_id, trajectory_id, metadata }) {
+      if (!pattern_type || !description) return { ok: false, error: "pattern_type and description required" };
+      const id = `stp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      stmts.insertShortTermPattern.run({
+        id,
+        pattern_type,
+        description,
+        domain: domain || "general",
+        embedding: null,
+        quality: 0.5,
+        usage_count: 0,
+        success_count: 0,
+        session_id: session_id || null,
+        trajectory_id: trajectory_id || null,
+        metadata: metadata ? JSON.stringify(metadata) : null,
+      });
+      return { ok: true, id };
+    },
+
+    /**
+     * Record a successful use of a short-term pattern.
+     */
+    recordShortTermSuccess({ id }) {
+      stmts.updateShortTermSuccess.run(id);
+      return this._maybePromote(id);
+    },
+
+    /**
+     * Record a failed use of a short-term pattern.
+     */
+    recordShortTermFailure({ id }) {
+      stmts.updateShortTermFailure.run(id);
+      return { ok: true };
+    },
+
+    /**
+     * List short-term patterns.
+     */
+    listShortTermPatterns({ pattern_type, limit = 50 } = {}) {
+      const rows = stmts.listShortTermPatterns.all({ pattern_type: pattern_type || null, limit });
+      return { ok: true, patterns: rows, count: rows.length };
+    },
+
+    /**
+     * Check if a short-term pattern qualifies for promotion, and promote if so.
+     * Promotion criteria: usage_count >= 3 AND quality >= 0.6
+     * @private
+     */
+    _maybePromote(stpId) {
+      const row = db.prepare("SELECT * FROM short_term_patterns WHERE id = ?").get(stpId);
+      if (!row) return { ok: false, error: "not found" };
+
+      const PROMOTION_USAGE = 3;
+      const PROMOTION_QUALITY = 0.6;
+
+      if (row.usage_count >= PROMOTION_USAGE && row.quality >= PROMOTION_QUALITY) {
+        // Promote to long-term patterns table
+        const ltId = `lt_${row.id}`;
+        this.writePattern({
+          pattern_type: row.pattern_type,
+          description: row.description,
+          source_trajectory: row.trajectory_id || null,
+          quality_score: row.quality,
+        });
+        // Remove from short-term
+        stmts.deleteShortTermPattern.run(stpId);
+        return { ok: true, promoted: true, longTermId: ltId, quality: row.quality };
+      }
+      return { ok: true, promoted: false, quality: row.quality, usage: row.usage_count };
+    },
+
+    /**
+     * Promote all qualifying short-term patterns to long-term.
+     * Called periodically (every 30 min via bridge).
+     */
+    promoteShortTermPatterns() {
+      const promotable = stmts.getPromotableShortTerm.all();
+      let promoted = 0;
+      for (const row of promotable) {
+        this.writePattern({
+          pattern_type: row.pattern_type,
+          description: row.description,
+          source_trajectory: row.trajectory_id || null,
+          quality_score: row.quality,
+        });
+        stmts.deleteShortTermPattern.run(row.id);
+        promoted++;
+      }
+      return { ok: true, promoted, remaining: stmts.countShortTerm.get().count };
+    },
+
+    /**
+     * Prune old short-term patterns that didn't qualify for promotion.
+     */
+    pruneShortTermPatterns() {
+      const result = stmts.pruneOldShortTerm.run();
+      return { ok: true, pruned: result.changes };
     },
 
     // ── Trajectory Tracking ──────────────────────────────────────────────────
@@ -2314,6 +2470,73 @@ function createMemoryStore(dbPath) {
         }
 
         return { ok: true, distilled, trajectoriesAnalyzed: rows.length };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    // ── Intelligence Pipeline ─────────────────────────────────────────────────
+    // RETRIEVE → JUDGE → DISTILL → CONSOLIDATE
+    // A full intelligence pass that retrieves context, judges quality,
+    // distills new patterns, and consolidates memory.
+
+    /**
+     * Run the full intelligence pipeline.
+     * @param {{ query?: string, workspace?: string }} opts
+     */
+    intelligenceConsolidate({ query, workspace } = {}) {
+      try {
+        const report = { retrieve: null, judge: null, distill: null, consolidate: null };
+
+        // RETRIEVE: Search for relevant memories and patterns
+        if (query) {
+          const memResults = this.search({ query, workspace, limit: 10 });
+          const patResults = this.listPatterns({ limit: 10 });
+          report.retrieve = {
+            memories: memResults?.length || 0,
+            patterns: patResults?.patterns?.length || 0,
+            topMemory: memResults?.[0]?.key || null,
+            topPattern: patResults?.patterns?.[0]?.description?.slice(0, 80) || null,
+          };
+        }
+
+        // JUDGE: Evaluate pattern quality — count high/low quality patterns
+        const allPatterns = this.listPatterns({ limit: 100 });
+        const highQuality = (allPatterns?.patterns || []).filter(p => p.quality_score >= 0.7).length;
+        const lowQuality = (allPatterns?.patterns || []).filter(p => p.quality_score < 0.3).length;
+        report.judge = {
+          totalPatterns: allPatterns?.patterns?.length || 0,
+          highQuality,
+          lowQuality,
+          avgQuality: allPatterns?.patterns?.length > 0
+            ? Math.round((allPatterns.patterns.reduce((s, p) => s + (p.quality_score || 0), 0) / allPatterns.patterns.length) * 100) / 100
+            : 0,
+        };
+
+        // DISTILL: Extract new patterns from trajectories
+        const distillResult = this.autoDistill({ workspace });
+        report.distill = distillResult;
+
+        // CONSOLIDATE: Promote short-term patterns + dream
+        const promoted = this.promoteShortTermPatterns();
+        const dream = this.autoDream({ workspace });
+        report.consolidate = {
+          promoted: promoted?.promoted || 0,
+          consolidated: dream?.consolidated || 0,
+        };
+
+        // Prune low-quality patterns (quality < 0.1 with no successes)
+        let pruned = 0;
+        try {
+          const stale = db.prepare(
+            "SELECT id FROM patterns WHERE quality_score < 0.1 AND success_count = 0 AND created_at < unixepoch() - 604800"
+          ).all();
+          for (const row of stale) {
+            this.deletePattern({ id: row.id });
+            pruned++;
+          }
+        } catch {}
+        report.pruned = pruned;
+
+        return { ok: true, report };
       } catch (e) { return { ok: false, error: e.message }; }
     },
 

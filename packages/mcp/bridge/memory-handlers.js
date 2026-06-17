@@ -130,6 +130,12 @@ function createMemoryHandlers(opts) {
       const store = getStore();
       return store.memorySimilar({ id, limit });
     },
+
+    async intelligenceConsolidate({ query, workspace }) {
+      const store = getStore();
+      const ws = workspace || opts.getCurrentWorkspacePath?.();
+      return store.intelligenceConsolidate({ query, workspace: ws });
+    },
   };
 }
 

@@ -327,7 +327,7 @@ export function registerSkillHandlers(_ctx: AppContext): void {
       if (index?.skills?.length > 0) return { ok: true, index };
     } catch {}
 
-    // Local filesystem scan (like Overclock)
+    // Local filesystem scan
     const skills: any[] = [];
     const scannedDirs = [
       { dir: path.join(os.homedir(), ".codebrain", "skills"), scope: "codebrain" },
@@ -374,7 +374,7 @@ export function registerSkillHandlers(_ctx: AppContext): void {
       }
     }
 
-    // Also scan workspaces for AGENTS.md (like Overclock's catalog scan)
+    // Also scan workspaces for AGENTS.md catalog files
     try {
       const navStore = path.join(os.homedir(), ".codebrain", "nav-store.json");
       if (fs.existsSync(navStore)) {

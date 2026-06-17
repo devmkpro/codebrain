@@ -1,7 +1,7 @@
 /**
  * Hooks System — Lifecycle event emitters for Codebrain.
  *
- * Inspired by Ruflo's 27 lifecycle hooks. Provides a central event bus
+ * Provides a central event bus
  * that all services can emit to and react from. Enables:
  * - Auto-notification when panes spawn/exit/idle
  * - Auto-dispatch workers on triggers

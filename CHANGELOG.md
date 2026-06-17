@@ -2,6 +2,31 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.11.0] — 2026-06-16
+
+### Features
+- **Semantic Hash Embeddings** — 384-dim dense vectors replace TF-IDF for knowledge graph similarity (packages/memory/vector-store.js)
+- **Auto-Memory Bridge** — import ALL Claude Code project memories (~/.claude/projects/*/memory/*.md) into SQLite for cross-project knowledge (packages/memory/auto-memory-bridge.js)
+- **Short-term Pattern Promotion** — session-level patterns auto-promote to long-term after 3 uses + 0.6 quality (packages/memory/store.js)
+- **Intelligence Pipeline** — full RETRIEVE→JUDGE→DISTILL→CONSOLIDATE pass via `intelligence_consolidate` MCP tool
+- **Security Scanner** — automated secret detection (passwords, API keys, tokens) + vulnerability scanning (SQL/command injection, eval) via `security_scan` MCP tool
+- **20 Agent Prompts** — specialized roles: code-analyst, security-auditor, performance-engineer, api-designer, test-generator, database-optimizer, refactor-specialist, system-architect, ci-pipeline-builder, code-reviewer, dependency-auditor, bottleneck-analyzer, migration-planner, tech-lead, readme-writer, docker-optimizer, lint-fixer, tech-researcher, changelog-generator, competitor-analyzer
+- **20 Slash Commands** — discoverable via /command syntax: squad, memory, security, pattern, agent, task, system, coordination
+- **Statusline Auto-Detection** — auto-reads version from package.json and counts MCP tools from index.js when settings.json has stale values
+
+### MCP Tools — 250 total (was 244)
+- `mcp__codebrain__memory_import_claude` — import Claude Code memories cross-project
+- `mcp__codebrain__memory_bridge_status` — auto-memory bridge status
+- `mcp__codebrain__memory_scan_claude` — scan available memory files without importing
+- `mcp__codebrain__security_scan` — scan workspace for secrets and vulnerabilities
+- `mcp__codebrain__security_status` — last scan result
+- `mcp__codebrain__intelligence_consolidate` — full intelligence pipeline pass
+
+### Changes
+- Tool group reclassification: session_advanced (7), memory_advanced (4), mission (5) promoted to essential (always-on)
+- Knowledge graph now uses semantic-hash embeddings by default (was TF-IDF)
+- EmbeddingService LRU cache increased to 2000 entries
+
 ## [1.10.7] — 2026-06-17
 
 ### Fixes

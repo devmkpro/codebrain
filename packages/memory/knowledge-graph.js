@@ -9,6 +9,7 @@
 const {
   buildTfIdf, cosineSimilarity, euclideanDistance, manhattanDistance,
   jaccardSimilarity, hammingDistance, allMetrics, EmbeddingService,
+  cosineSimilarityDense, vectorToBuffer, bufferToVector, semanticHash,
 } = require("./vector-store.js");
 
 // ─── BoundedSet for dedup (100K max) ───
@@ -230,8 +231,8 @@ class KnowledgeGraph {
     this.db = db;
     this._ensureSchema();
 
-    // Embedding service with LRU cache
-    this.embeddingService = new EmbeddingService({ provider: "tfidf", useBigrams: true, cacheMaxSize: 1000 });
+    // Embedding service with LRU cache — semantic hash for dense 384-dim vectors
+    this.embeddingService = new EmbeddingService({ provider: "semantic-hash", cacheMaxSize: 2000 });
 
     // HNSW index (rebuilt lazily from vectors table)
     this.hnsw = new HNSWIndex({ maxM: 16, efConstruction: 200, efSearch: 50 });
@@ -453,11 +454,52 @@ class KnowledgeGraph {
 
   // ─── Similarity Search (uses HNSW when available) ───
 
+  /**
+   * Load a vector from DB row, handling both BLOB (dense Float32Array) and JSON (sparse Map).
+   * @private
+   */
+  _loadVector(row) {
+    const raw = row.vector;
+    if (!raw) return null;
+    // Buffer/BLOB → dense Float32Array
+    if (Buffer.isBuffer(raw)) {
+      return bufferToVector(raw);
+    }
+    // String → legacy sparse Map
+    if (typeof raw === "string") {
+      return new Map(Object.entries(JSON.parse(raw)));
+    }
+    return null;
+  }
+
+  /**
+   * Get the appropriate distance function for a vector type.
+   * @private
+   */
+  _getDistFn(vec) {
+    if (vec instanceof Float32Array) {
+      return (a, b) => 1 - cosineSimilarityDense(a, b);
+    }
+    return (a, b) => 1 - cosineSimilarity(a, b);
+  }
+
+  /**
+   * Get the appropriate cosine similarity function for a vector type.
+   * @private
+   */
+  _getSimFn(vec) {
+    if (vec instanceof Float32Array) {
+      return cosineSimilarityDense;
+    }
+    return cosineSimilarity;
+  }
+
   findSimilar(memoryId, limit = 10) {
     const vecRow = this._stmts.getVector.get(memoryId);
     if (!vecRow) return [];
 
-    const targetVec = new Map(Object.entries(JSON.parse(vecRow.vector)));
+    const targetVec = this._loadVector(vecRow);
+    if (!targetVec) return [];
 
     // Try HNSW first for large datasets
     if (this.nodes.size > 100 || this._shouldUseHnsw()) {
@@ -465,12 +507,14 @@ class KnowledgeGraph {
     }
 
     // Fallback: brute force
+    const simFn = this._getSimFn(targetVec);
     const allVecs = this._stmts.allVectors.all();
     const results = [];
     for (const row of allVecs) {
       if (row.memory_id === memoryId) continue;
-      const vec = new Map(Object.entries(JSON.parse(row.vector)));
-      const sim = cosineSimilarity(targetVec, vec);
+      const vec = this._loadVector(row);
+      if (!vec) continue;
+      const sim = simFn(targetVec, vec);
       if (sim > 0.01) {
         results.push({ memoryId: row.memory_id, similarity: Math.round(sim * 1000) / 1000 });
       }
@@ -486,8 +530,7 @@ class KnowledgeGraph {
   _findSimilarHnsw(memoryId, targetVec, limit) {
     this._rebuildHnswIfNeeded();
 
-    // Distance function: 1 - cosine similarity (lower = more similar)
-    const distFn = (a, b) => 1 - cosineSimilarity(a, b);
+    const distFn = this._getDistFn(targetVec);
     const results = this.hnsw.search(targetVec, limit + 1, distFn);
 
     return results
@@ -508,12 +551,21 @@ class KnowledgeGraph {
     if (!this._hnswDirty && this.hnsw.size > 0) return;
 
     this.hnsw = new HNSWIndex({ maxM: 16, efConstruction: 200, efSearch: 50 });
-    const distFn = (a, b) => 1 - cosineSimilarity(a, b);
 
     const allVecs = this._stmts.allVectors.all();
+    // Detect format from first vector
+    let isDense = false;
+    if (allVecs.length > 0) {
+      const first = this._loadVector(allVecs[0]);
+      isDense = first instanceof Float32Array;
+    }
+    const distFn = isDense
+      ? (a, b) => 1 - cosineSimilarityDense(a, b)
+      : (a, b) => 1 - cosineSimilarity(a, b);
+
     for (const row of allVecs) {
-      const vec = new Map(Object.entries(JSON.parse(row.vector)));
-      this.hnsw.insert(row.memory_id, vec, distFn);
+      const vec = this._loadVector(row);
+      if (vec) this.hnsw.insert(row.memory_id, vec, distFn);
     }
 
     this._hnswDirty = false;
@@ -525,7 +577,18 @@ class KnowledgeGraph {
     if (!content) return;
     // Use embedding service (with LRU cache)
     const vector = this.embeddingService.embed(content, memoryId);
-    if (vector && vector.size > 0) {
+    if (!vector) return;
+
+    // Dense Float32Array (semantic-hash) → store as BLOB
+    if (vector instanceof Float32Array) {
+      if (vector.length > 0) {
+        const buf = vectorToBuffer(vector);
+        this._stmts.insertVector.run(memoryId, buf);
+        this._hnswDirty = true;
+      }
+    }
+    // Sparse Map (tfidf legacy) → store as JSON
+    else if (vector instanceof Map && vector.size > 0) {
       const vectorObj = Object.fromEntries(vector);
       this._stmts.insertVector.run(memoryId, JSON.stringify(vectorObj));
       this._hnswDirty = true;

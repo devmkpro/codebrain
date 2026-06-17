@@ -44,6 +44,10 @@ const { createBackgroundWorkerHandlers } = require("./bridge/worker-handlers.js"
 const { createConsensusHandlers } = require("./bridge/consensus-handlers.js");
 const { createExpandedHooksHandlers } = require("./bridge/hooks-expand-handlers.js");
 
+// ── Gap-Closing Features ──────────────────────────────────────────────────
+const { createAutoMemoryHandlers } = require("./bridge/auto-memory-handlers.js");
+const { createSecurityHandlers } = require("./bridge/security-handlers.js");
+
 // ── Auto-notify helpers ─────────────────────────────────────────────────────
 // When agents make changes (file writes, memory writes), other agents are
 // automatically notified via the message bus so they can adapt in real-time.
@@ -425,6 +429,23 @@ function createMCPBridge(ptyManager, opts = {}) {
     }, 60 * 60 * 1000); // First distill after 1 hour
   }
 
+  // ── Short-term → Long-term Pattern Promotion ────────────────────────────
+  // Promote qualifying short-term patterns every 30 minutes
+  // Criteria: usage_count >= 3 AND quality >= 0.6
+  if (opts.memoryStore?.promoteShortTermPatterns) {
+    const PROMOTE_INTERVAL = 30 * 60 * 1000; // 30 minutes
+    setInterval(() => {
+      try {
+        const result = opts.memoryStore.promoteShortTermPatterns();
+        if (result.ok && result.promoted > 0) {
+          console.log(`[bridge] Pattern promotion: ${result.promoted} short-term → long-term (${result.remaining} remaining)`);
+        }
+        // Also prune old short-term patterns
+        opts.memoryStore.pruneShortTermPatterns();
+      } catch {}
+    }, PROMOTE_INTERVAL);
+  }
+
   // ── CDP Client for native Chrome control ─────────────────────────────
   // Lazy-initialized on first browser tool call.
   // If opts.cdpClient is already provided (from mcp.ts), use it.
@@ -532,6 +553,10 @@ function createMCPBridge(ptyManager, opts = {}) {
     getBotToken: opts.getBotToken,
     emitNotification: opts.emitNotification,
   });
+
+  // Gap-closing handlers
+  const autoMemoryHandlers = createAutoMemoryHandlers({ memoryStore: opts.memoryStore });
+  const securityHandlers = createSecurityHandlers({ memoryStore: opts.memoryStore, getCurrentWorkspacePath: opts.getCurrentWorkspacePath });
 
   // ── MiMo-Code Feature Handlers ──────────────────────────────────────────
   const compactionHandlers = createCompactionHandlers(sharedOpts);
@@ -699,6 +724,9 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...maxModeHandlers,
     ...composeModeHandlers,
     ...planAgentHandlers,
+    // Gap-closing handlers
+    ...autoMemoryHandlers,
+    ...securityHandlers,
     // Expose foundational instances
     messageBus,
     agentScorer,

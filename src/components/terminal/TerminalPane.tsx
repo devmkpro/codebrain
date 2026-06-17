@@ -230,7 +230,7 @@ export function TerminalPane({
     if (event.target.closest(".xterm")) activatePane();
   }, [activatePane]);
 
-  /** Force-fit + redraw + sync dims to PTY (mirrors Overclock's recoverTerminalRender). */
+  /** Force-fit + redraw + sync dims to PTY. */
   const recoverTerminalRender = React.useCallback((options: { refresh?: boolean; follow?: boolean } = {}) => {
     const shouldRefresh = options.refresh ?? true;
     const shouldFollow = options.follow ?? (followOutputRef.current && !userPausedFollowRef.current);

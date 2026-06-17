@@ -1,5 +1,5 @@
 /**
- * MissionWizard — Wizard de criação de missão estilo Overclock.
+ * MissionWizard — Wizard de criação de missão.
  * 3 steps: Escolha modo → Configura providers/squad → Review e criar.
  */
 import React from 'react';

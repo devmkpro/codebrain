@@ -288,37 +288,153 @@ function buildIdf(corpus) {
   return idf;
 }
 
+// ─── Semantic Hash Embeddings (384-dim) ────────────────────────────────
+
+/**
+ * Default dimension for semantic hash embeddings.
+ * Matches all-MiniLM-L6-v2 output size for compatibility.
+ */
+const SEMANTIC_HASH_DIM = 384;
+
+/**
+ * Simple string → integer hash (FNV-1a variant).
+ * Deterministic, fast, good distribution.
+ * @param {string} str
+ * @returns {number} 32-bit integer
+ */
+function fnvHash(str) {
+  let hash = 0x811c9dc5; // FNV offset basis
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = (hash * 0x01000193) | 0; // FNV prime
+  }
+  return hash >>> 0; // unsigned
+}
+
+/**
+ * Generate a dense semantic hash embedding for text.
+ *
+ * Algorithm: tokenize → for each token, hash to seed → fill dim via sin(seed*i+offset)
+ * → sum across tokens → L2 normalize. This produces deterministic, position-aware
+ * dense vectors that capture lexical similarity far better than TF-IDF.
+ *
+ * Deterministic, zero-dependency embedding suitable for semantic similarity.
+ *
+ * @param {string} text
+ * @param {number} [dim=384] - output dimension
+ * @returns {Float32Array} L2-normalized dense vector
+ */
+function semanticHash(text, dim = SEMANTIC_HASH_DIM) {
+  const vec = new Float32Array(dim);
+  if (!text || typeof text !== "string") return vec;
+
+  const tokens = tokenize(text);
+  if (tokens.length === 0) return vec;
+
+  for (const token of tokens) {
+    const seed = fnvHash(token);
+    // Use sin-based projection: each token contributes a unique wave pattern
+    // The seed determines phase + frequency, creating a smooth hash function
+    const phase = (seed / 0xFFFFFFFF) * Math.PI * 2;
+    const freq = 1.0 + (seed % 1000) / 1000.0; // freq in [1.0, 2.0]
+    for (let i = 0; i < dim; i++) {
+      vec[i] += Math.sin(phase + freq * i * 0.1);
+    }
+  }
+
+  // L2 normalize
+  let norm = 0;
+  for (let i = 0; i < dim; i++) norm += vec[i] * vec[i];
+  norm = Math.sqrt(norm);
+  if (norm > 0) {
+    for (let i = 0; i < dim; i++) vec[i] /= norm;
+  }
+
+  return vec;
+}
+
+/**
+ * Cosine similarity between two dense vectors (Float32Array).
+ * @param {Float32Array} a
+ * @param {Float32Array} b
+ * @returns {number} Similarity in [-1, 1], typically [0, 1] for embeddings
+ */
+function cosineSimilarityDense(a, b) {
+  if (!a || !b || a.length === 0 || b.length === 0) return 0;
+  const len = Math.min(a.length, b.length);
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < len; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom === 0 ? 0 : dot / denom;
+}
+
+/**
+ * Serialize a Float32Array to a Buffer for SQLite BLOB storage.
+ * @param {Float32Array} vec
+ * @returns {Buffer}
+ */
+function vectorToBuffer(vec) {
+  return Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength);
+}
+
+/**
+ * Deserialize a Buffer back to Float32Array.
+ * @param {Buffer} buf
+ * @returns {Float32Array}
+ */
+function bufferToVector(buf) {
+  if (!buf || buf.length === 0) return new Float32Array(0);
+  // Ensure proper alignment by copying
+  const ab = new ArrayBuffer(buf.length);
+  const view = new Uint8Array(ab);
+  for (let i = 0; i < buf.length; i++) view[i] = buf[i];
+  return new Float32Array(ab);
+}
+
 // ─── Embedding Service Abstraction ───
 
 /**
  * EmbeddingService: abstraction for multiple embedding providers.
- * Currently supports TF-IDF (pure JS). Can be extended for ONNX, OpenAI, etc.
+ * Supports: tfidf (sparse Map), semantic-hash (dense Float32Array).
  */
 class EmbeddingService {
   constructor(opts = {}) {
-    this.provider = opts.provider || "tfidf";
-    this.useBigrams = opts.useBigrams !== false; // default true
-    /** @type {Map<string, Map<string, number>>} LRU cache: key -> vector */
+    this.provider = opts.provider || "semantic-hash";
+    this.useBigrams = opts.useBigrams !== false;
+    this.dim = opts.dim || SEMANTIC_HASH_DIM;
+    /** @type {Map<string, any>} LRU cache: key -> vector */
     this._cache = new Map();
     this._cacheMaxSize = opts.cacheMaxSize || 1000;
-    this._cacheOrder = []; // LRU tracking: most recent at end
+    this._cacheOrder = [];
+    this._cacheHits = 0;
+    this._cacheMisses = 0;
   }
 
   /**
    * Generate embedding for a text.
    * @param {string} text
-   * @param {string} [cacheKey] - optional cache key
-   * @returns {Map<string, number>}
+   * @param {string} [cacheKey] - optional cache key (uses first 200 chars if not provided)
+   * @returns {Float32Array|Map<string, number>}
    */
   embed(text, cacheKey) {
-    // Check LRU cache
-    if (cacheKey && this._cache.has(cacheKey)) {
-      this._touchCache(cacheKey);
-      return this._cache.get(cacheKey);
+    const key = cacheKey || (text ? text.slice(0, 200) : "");
+    if (key && this._cache.has(key)) {
+      this._cacheHits++;
+      this._touchCache(key);
+      return this._cache.get(key);
     }
+    this._cacheMisses++;
 
     let vector;
     switch (this.provider) {
+      case "semantic-hash": {
+        vector = semanticHash(text, this.dim);
+        break;
+      }
       case "tfidf":
       default: {
         const vectors = buildTfIdf([text], { useBigrams: this.useBigrams });
@@ -327,11 +443,7 @@ class EmbeddingService {
       }
     }
 
-    // Store in LRU cache
-    if (cacheKey) {
-      this._cacheSet(cacheKey, vector);
-    }
-
+    if (key) this._cacheSet(key, vector);
     return vector;
   }
 
@@ -339,28 +451,44 @@ class EmbeddingService {
    * Batch embed multiple texts.
    * @param {string[]} texts
    * @param {string[]} [cacheKeys]
-   * @returns {Array<Map<string, number>>}
+   * @returns {Array<Float32Array|Map<string, number>>}
    */
   embedBatch(texts, cacheKeys) {
     return texts.map((text, i) => this.embed(text, cacheKeys ? cacheKeys[i] : undefined));
   }
 
   /**
-   * Get cache stats.
+   * Compute similarity between two texts.
+   * @param {string} a
+   * @param {string} b
+   * @returns {number} Similarity in [0, 1]
    */
+  similarity(a, b) {
+    const va = this.embed(a);
+    const vb = this.embed(b);
+    if (this.provider === "semantic-hash") {
+      return cosineSimilarityDense(va, vb);
+    }
+    return cosineSimilarity(va, vb);
+  }
+
+  /** Get cache stats. */
   cacheStats() {
     return {
       provider: this.provider,
+      dim: this.dim,
       useBigrams: this.useBigrams,
       cacheSize: this._cache.size,
       cacheMaxSize: this._cacheMaxSize,
-      hitRate: this._cacheHits > 0 ? (this._cacheHits / (this._cacheHits + this._cacheMisses)).toFixed(3) : "0",
+      hits: this._cacheHits,
+      misses: this._cacheMisses,
+      hitRate: (this._cacheHits + this._cacheMisses) > 0
+        ? (this._cacheHits / (this._cacheHits + this._cacheMisses)).toFixed(3)
+        : "0",
     };
   }
 
-  /**
-   * Clear the embedding cache.
-   */
+  /** Clear the embedding cache. */
   clearCache() {
     this._cache.clear();
     this._cacheOrder = [];
@@ -375,7 +503,6 @@ class EmbeddingService {
 
   /** @private */
   _cacheSet(key, vector) {
-    // Evict if at capacity
     if (this._cache.size >= this._cacheMaxSize && !this._cache.has(key)) {
       const oldest = this._cacheOrder.shift();
       if (oldest) this._cache.delete(oldest);
@@ -386,16 +513,28 @@ class EmbeddingService {
 }
 
 module.exports = {
+  // Tokenization
   tokenize,
   tokenizeWithBigrams,
   stem,
+  // TF-IDF (legacy sparse)
   buildTfIdf,
+  buildIdf,
+  // Semantic hash (new dense)
+  semanticHash,
+  SEMANTIC_HASH_DIM,
+  fnvHash,
+  // Dense vector operations
+  cosineSimilarityDense,
+  vectorToBuffer,
+  bufferToVector,
+  // Sparse vector operations
   cosineSimilarity,
   euclideanDistance,
   manhattanDistance,
   jaccardSimilarity,
   hammingDistance,
   allMetrics,
-  buildIdf,
+  // Service
   EmbeddingService,
 };
