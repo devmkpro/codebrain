@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.11.2",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "MCP server auto-repair — stale stdio paths, comment crash, __dirname resolution"
+      }
+    ]
+  },
+  {
     "version": "1.11.0",
     "date": "junho 2026",
     "highlights": [
