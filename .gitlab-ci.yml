@@ -119,18 +119,27 @@ github-release:
   before_script:
     - apk add --no-cache curl
   script:
-    - TAG="${CI_COMMIT_TAG}"
-    - echo "Creating GitHub Release: ${TAG} for user ${GITHUB_USER}"
-    - >
-      curl -w "\nHTTP:%{http_code}" -o /tmp/release.json -X POST
-      -H "Authorization: token ${GITHUB_TOKEN}"
-      -H "Accept: application/vnd.github.v3+json"
-      "https://api.github.com/repos/${GITHUB_USER}/codebrain/releases"
-      -d "{\"tag_name\":\"${TAG}\",\"name\":\"Codebrain ${TAG}\",\"body\":\"Release ${TAG}\",\"draft\":false,\"prerelease\":false}"
-    - RELEASE_ID=$(grep -o '"id":[0-9]*' /tmp/release.json | head -1 | grep -o '[0-9]*')
-    - echo "Release ID: ${RELEASE_ID}"
-    - test -n "${RELEASE_ID}" || { cat /tmp/release.json; exit 1; }
-    - "for f in dist/*.AppImage dist/*.deb dist/*.exe dist/latest-linux.yml dist/latest.yml; do [ -f \"$f\" ] || continue; FN=$(basename \"$f\"); echo \"Uploading ${FN}...\"; curl -w \"HTTP:%{http_code}\n\" -o /dev/null -X POST -H \"Authorization: token ${GITHUB_TOKEN}\" -H \"Content-Type: application/octet-stream\" \"https://uploads.github.com/repos/${GITHUB_USER}/codebrain/releases/${RELEASE_ID}/assets?name=${FN}\" --data-binary \"@${f}\"; done"
-    - echo "Done: GitHub Release ${TAG}"
+    - |
+      TAG="${CI_COMMIT_TAG}"
+      echo "Creating GitHub Release: ${TAG} for ${GITHUB_USER}"
+      curl -w "\nHTTP:%{http_code}" -o /tmp/release.json -X POST \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/${GITHUB_USER}/codebrain/releases" \
+        -d "{\"tag_name\":\"${TAG}\",\"name\":\"Codebrain ${TAG}\",\"body\":\"Release ${TAG}\",\"draft\":false,\"prerelease\":false}"
+      RELEASE_ID=$(grep -o '"id":[0-9]*' /tmp/release.json | head -1 | grep -o '[0-9]*')
+      echo "Release ID: ${RELEASE_ID}"
+      if [ -z "${RELEASE_ID}" ]; then cat /tmp/release.json; exit 1; fi
+      for f in dist/*.AppImage dist/*.deb dist/*.exe dist/latest-linux.yml dist/latest.yml; do
+        [ -f "$f" ] || continue
+        FN=$(basename "$f")
+        echo "Uploading ${FN}..."
+        curl -w "HTTP:%{http_code}\n" -o /dev/null -X POST \
+          -H "Authorization: token ${GITHUB_TOKEN}" \
+          -H "Content-Type: application/octet-stream" \
+          "https://uploads.github.com/repos/${GITHUB_USER}/codebrain/releases/${RELEASE_ID}/assets?name=${FN}" \
+          --data-binary "@${f}"
+      done
+      echo "Done: GitHub Release ${TAG}"
   only:
     - tags
