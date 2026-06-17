@@ -91,10 +91,11 @@ mirror-github:
   stage: mirror
   tags:
     - local
-  image: alpine/git
+  image: alpine:latest
   variables:
     GIT_STRATEGY: clone
   before_script:
+    - apk add --no-cache git
     - git config --global user.email "ci@codebrain.dev"
     - git config --global user.name "Codebrain CI"
   script:
