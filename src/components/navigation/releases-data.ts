@@ -14,6 +14,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.12.0",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add 5 browser request MCP tools (log, search, stats, export, clear) + CDP request interception improvements"
+      },
+      {
+        "kind": "feat",
+        "text": "add SQLite-backed browser request logger — auto-intercepts and persists all HTTP requests for scraping analysis"
+      }
+    ]
+  },
+  {
     "version": "1.11.3",
     "date": "junho 2026",
     "highlights": [
