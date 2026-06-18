@@ -2,6 +2,14 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.12.0] — 2026-06-17
+
+### Features
+- **SQLite-backed browser request logger**: New `request-logger.js` module that auto-intercepts and persists ALL HTTP requests to SQLite for scraping analysis
+- **5 new MCP tools for browser requests**: `browser_requests_log` (query all captured requests with filters), `browser_requests_search` (full-text search across request/response bodies), `browser_requests_stats` (statistics by method, status, top sites), `browser_requests_export` (JSON/CSV export), `browser_requests_clear` (clear log)
+- **CDP request interception improvements**: Enhanced `cdp-client.js` with better request capture and forwarding
+- **261 total MCP tools** (was 244)
+
 ## [1.11.3] — 2026-06-17
 
 ### Fixes

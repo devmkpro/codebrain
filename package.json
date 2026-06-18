@@ -1,7 +1,7 @@
 {
   "name": "codebrain",
   "productName": "Codebrain",
-  "version": "1.11.3",
+  "version": "1.12.0",
   "description": "Electron shell â€” React UI + IPC layer for Codebrain App",
   "homepage": "https://gitlab.com/maikeofc18/codebrain",
   "author": {
@@ -36,7 +36,7 @@
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "autoprefixer": "^10.5.0",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^12.11.1",
     "clsx": "^2.1.1",
     "discord-rpc": "^4.0.1",
     "electron-log": "^5.4.3",
