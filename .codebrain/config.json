@@ -1,8 +1,0 @@
-{
-  "favoritePane": {
-    "providerId": "mimo-claude",
-    "model": "mimo-v2.5-pro",
-    "agent": "claude"
-  },
-  "accessMode": "write_external"
-}

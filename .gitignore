@@ -71,6 +71,9 @@ electron.vite.config.*.mjs
 # ── Codebrain workspace data ─────────────────────────────────────────────────
 .codebrain/worktrees/*
 .codebrain/tmp/*
+.codebrain/config.json
+.codebrain/session-snapshot.json
+.codebrain/screenshots/
 *.screenshot.*
 *.png
 
