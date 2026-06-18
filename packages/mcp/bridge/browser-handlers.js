@@ -369,8 +369,7 @@ function createBrowserHandlers(opts) {
     async browserScreenshotElement(selector, paneId) {
       const isCdp = await ensureBrowserMode();
       if (isCdp && nativeHandlers) {
-        // CDP doesn't have element screenshot — use eval to get bounds, then screenshot
-        return { ok: false, error: "Element screenshot not supported in CDP mode — use browser_screenshot with full_page" };
+        return nativeHandlers.screenshotElement(selector);
       }
       if (!opts.saveScreenshotElement)
         throw new Error("screenshot not available");
@@ -637,6 +636,55 @@ function createBrowserHandlers(opts) {
       return nativeHandlers.browserBatch(actions);
     },
 
+    // ── Claude in Chrome parity features ────────────────────────────────
+    async browserUploadFile(args) {
+      await ensureBrowserMode();
+      if (!nativeHandlers) {
+        return { ok: false, error: "browser_upload_file requires native Chrome (start with browser_launch)" };
+      }
+      return nativeHandlers.uploadFile(args);
+    },
+
+    async browserUploadImage(args) {
+      await ensureBrowserMode();
+      if (!nativeHandlers) {
+        return { ok: false, error: "browser_upload_image requires native Chrome (start with browser_launch)" };
+      }
+      return nativeHandlers.uploadImage(args);
+    },
+
+    async browserResizeWindow(args) {
+      await ensureBrowserMode();
+      if (!nativeHandlers) {
+        return { ok: false, error: "browser_resize_window requires native Chrome (start with browser_launch)" };
+      }
+      return nativeHandlers.resizeWindow(args);
+    },
+
+    async browserGifCreator(args) {
+      await ensureBrowserMode();
+      if (!nativeHandlers) {
+        return { ok: false, error: "browser_gif_creator requires native Chrome" };
+      }
+      return nativeHandlers.gifCreator(args);
+    },
+
+    async browserShortcutsList() {
+      await ensureBrowserMode();
+      if (!nativeHandlers) {
+        return { ok: false, error: "browser_shortcuts_list requires native Chrome" };
+      }
+      return nativeHandlers.shortcutsList();
+    },
+
+    async browserShortcutsExecute(args) {
+      await ensureBrowserMode();
+      if (!nativeHandlers) {
+        return { ok: false, error: "browser_shortcuts_execute requires native Chrome" };
+      }
+      return nativeHandlers.shortcutsExecute(args);
+    },
+
     // ── Pane persistence (webview mode compat) ─────────────────────────
     async recordBrowserPane(paneId) {
       if (paneId) {
@@ -724,6 +772,68 @@ function createBrowserHandlers(opts) {
       })()`;
 
       return browserCmd("eval", { javascript: script, paneId });
+    },
+
+    // ═══════════════════════════════════════════════════════════════════
+    // REQUEST LOG — SQLite-backed auto-intercept (always-on)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * browser_requests_log — Query captured requests from SQLite.
+     * Returns requests with full details: URL, method, status, headers, body, timing.
+     */
+    async browserRequestsLog(args) {
+      const cdpClient = opts.cdpClient;
+      if (!cdpClient?._requestLogger) {
+        return { ok: false, error: "Request logger not available. Ensure better-sqlite3 is installed." };
+      }
+      return cdpClient._requestLogger.query(args || {});
+    },
+
+    /**
+     * browser_requests_search — Search requests by URL, body content, etc.
+     */
+    async browserRequestsSearch(args) {
+      const cdpClient = opts.cdpClient;
+      if (!cdpClient?._requestLogger) {
+        return { ok: false, error: "Request logger not available." };
+      }
+      return cdpClient._requestLogger.query({ search: args.query, limit: args.limit, url_filter: args.url });
+    },
+
+    /**
+     * browser_requests_stats — Get statistics about captured requests.
+     */
+    async browserRequestsStats() {
+      const cdpClient = opts.cdpClient;
+      if (!cdpClient?._requestLogger) {
+        return { ok: false, error: "Request logger not available." };
+      }
+      return cdpClient._requestLogger.stats();
+    },
+
+    /**
+     * browser_requests_export — Export captured requests as JSON or CSV.
+     */
+    async browserRequestsExport(args) {
+      const cdpClient = opts.cdpClient;
+      if (!cdpClient?._requestLogger) {
+        return { ok: false, error: "Request logger not available." };
+      }
+      const format = (args && args.format) || "json";
+      if (format === "csv") return cdpClient._requestLogger.exportCsv(args);
+      return cdpClient._requestLogger.exportJson(args);
+    },
+
+    /**
+     * browser_requests_clear — Clear all captured requests from SQLite.
+     */
+    async browserRequestsClear() {
+      const cdpClient = opts.cdpClient;
+      if (!cdpClient?._requestLogger) {
+        return { ok: false, error: "Request logger not available." };
+      }
+      return cdpClient._requestLogger.clear();
     },
   };
 }

@@ -2374,6 +2374,57 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     }
   );
 
+  // ── Request Log (SQLite-backed auto-intercept) ──────────────────────────
+  server.tool(
+    "mcp__codebrain__browser_requests_log",
+    "Query ALL captured HTTP requests from SQLite (auto-intercepted, always-on). Returns full request+response details: URL, method, status, headers, body, timing, site URL. Filter by url_filter, method, status, since_ms, site_url. Default limit: 100.",
+    { url_filter: z.string().optional().describe("URL substring filter"), method: z.string().optional().describe("HTTP method filter (GET, POST, etc)"), status: z.number().optional().describe("HTTP status code filter"), site_url: z.string().optional().describe("Site URL filter"), since_ms: z.number().optional().describe("Only requests after this timestamp (ms)"), limit: z.number().optional().describe("Max results (default 100)"), offset: z.number().optional().describe("Pagination offset") },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsLog(args)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_requests_search",
+    "Search captured requests by text content (URL, request body, response body). Full-text search across all stored data.",
+    { query: z.string().describe("Search text"), url: z.string().optional().describe("URL filter"), limit: z.number().optional().describe("Max results (default 50)") },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsSearch(args)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_requests_stats",
+    "Get statistics about all captured requests: total count, by method, by status, top sites, recent requests.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsStats()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_requests_export",
+    "Export captured requests as JSON or CSV. Use for bulk analysis or sharing.",
+    { format: z.enum(["json", "csv"]).optional().describe("Export format (default: json)"), limit: z.number().optional().describe("Max requests to export (default 10000)") },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsExport(args)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__browser_requests_clear",
+    "Clear all captured requests from the SQLite log.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsClear()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
   // ── JavaScript Eval ─────────────────────────────────────────────────────
   server.tool(
     "mcp__codebrain__browser_eval",
@@ -2514,6 +2565,91 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     },
     async (args) => {
       try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserBatch(args.actions)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_upload_file — Upload files to file input ───────────────
+  server.tool(
+    "mcp__codebrain__browser_upload_file",
+    "Upload files to a file input element using base64-encoded content. Works with <input type='file'> elements. Requires Chrome CDP.",
+    {
+      selector: z.string().describe("CSS selector for the file input element"),
+      files: z.array(z.object({
+        name: z.string().describe("File name (e.g. 'document.pdf')"),
+        content: z.string().describe("Base64-encoded file content"),
+        mimeType: z.string().optional().describe("MIME type (e.g. 'application/pdf', 'image/png')"),
+      })).describe("Array of files to upload"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserUploadFile(args)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_upload_image — Upload image to element ─────────────────
+  server.tool(
+    "mcp__codebrain__browser_upload_image",
+    "Upload an image to an element (file input or drop zone). Creates a File object from base64 data and dispatches appropriate events. Useful for chat interfaces with image upload. Requires Chrome CDP.",
+    {
+      selector: z.string().describe("Target element selector (file input or drop zone)"),
+      image_data: z.string().describe("Base64-encoded image data"),
+      mime_type: z.string().optional().describe("MIME type (default: 'image/png')"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserUploadImage(args)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_resize_window — Resize browser window ──────────────────
+  server.tool(
+    "mcp__codebrain__browser_resize_window",
+    "Resize the browser window to specific dimensions. Requires Chrome CDP.",
+    {
+      width: z.number().describe("New width in pixels"),
+      height: z.number().describe("New height in pixels"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserResizeWindow(args)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_gif_creator — GIF recording ────────────────────────────
+  server.tool(
+    "mcp__codebrain__browser_gif_creator",
+    "Manage GIF recording of browser actions. Actions: start_recording, stop_recording, export, clear. NOTE: Full GIF recording requires the Claude Chrome extension's offscreen document — this is a stub that returns status info.",
+    {
+      action: z.enum(["start_recording", "stop_recording", "export", "clear"]).describe("GIF action to perform"),
+      frame_delay_ms: z.number().optional().describe("Delay between frames in ms (default: 200)"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGifCreator(args)) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_shortcuts_list — List shortcuts ────────────────────────
+  server.tool(
+    "mcp__codebrain__browser_shortcuts_list",
+    "List available browser shortcuts/bookmarks. NOTE: Full shortcuts require the Claude Chrome extension — this returns available navigation shortcuts.",
+    {},
+    async () => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserShortcutsList()) }] }; }
+      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+    }
+  );
+
+  // ── browser_shortcuts_execute — Execute shortcut ───────────────────
+  server.tool(
+    "mcp__codebrain__browser_shortcuts_execute",
+    "Execute a saved shortcut/bookmark. NOTE: Full shortcuts require the Claude Chrome extension — use browser_navigate as alternative.",
+    {
+      shortcut_id: z.string().describe("Shortcut ID to execute"),
+    },
+    async (args) => {
+      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserShortcutsExecute(args)) }] }; }
       catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );

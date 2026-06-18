@@ -71,6 +71,12 @@ class CDPClient {
     this._reconnectAttempts = 0;
     this._maxReconnectAttempts = 5;
     this._reconnectTimer = null;
+    // Auto-request logger (SQLite)
+    this._requestLogger = null;
+    try {
+      const { getRequestLogger } = require("./request-logger.js");
+      this._requestLogger = getRequestLogger();
+    } catch {}
   }
 
   /**
@@ -317,7 +323,7 @@ class CDPClient {
   }
 
   /**
-   * Handle CDP events — buffer for console/network tools.
+   * Handle CDP events — buffer for console/network tools + auto-log to SQLite.
    */
   _handleEvent(msg) {
     // Only buffer known event types
@@ -339,6 +345,52 @@ class CDPClient {
         this._events = this._events.slice(-1000);
       }
     }
+
+    // Auto-log network events to SQLite
+    if (this._requestLogger) {
+      try {
+        if (msg.method === "Network.requestWillBeSent") {
+          this._requestLogger.logRequest(msg);
+        } else if (msg.method === "Network.responseReceived") {
+          this._requestLogger.logResponse(msg);
+          // Auto-fetch response body for API calls
+          this._autoCaptureResponseBody(msg).catch(() => {});
+        } else if (msg.method === "Network.loadingFinished") {
+          this._requestLogger.logLoadingFinished(msg);
+        } else if (msg.method === "Network.loadingFailed") {
+          this._requestLogger.logLoadingFailed(msg);
+        }
+      } catch {}
+    }
+  }
+
+  /**
+   * Auto-capture response body for interesting requests (JSON, API calls).
+   */
+  async _autoCaptureResponseBody(msg) {
+    if (!this._requestLogger || !this.connected) return;
+    try {
+      const params = msg.params || {};
+      const resp = params.response || {};
+      const contentType = resp.headers?.["content-type"] || "";
+      const url = resp.url || "";
+
+      // Only capture bodies for JSON/API responses (skip images, fonts, etc.)
+      const shouldCapture = contentType.includes("json")
+        || url.includes("/api/")
+        || url.includes("graphql")
+        || url.includes(".json");
+
+      if (!shouldCapture) return;
+
+      const requestId = params.requestId;
+      if (!requestId) return;
+
+      const bodyResult = await this.send("Network.getResponseBody", { requestId });
+      if (bodyResult && bodyResult.body) {
+        this._requestLogger.logResponseBody(requestId, bodyResult.body);
+      }
+    } catch {}
   }
 
   /**

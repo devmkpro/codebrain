@@ -379,25 +379,11 @@ function createNativeChromeHandlers(cdpClient) {
         const areaB = b.bounds.w * b.bounds.h;
         return areaA <= areaB ? a : b;
       });
-      // Click it using coordinates (works for any element type including links)
+      // Click using CDP Input domain (native, fast, works with SPAs)
       const cx = best.center[0];
       const cy = best.center[1];
-      await _injectCursor();
-      await _moveCursorTo(cx, cy);
-      // Use CDP for reliable click (especially for <a> tags that need real navigation)
-      if (cdpClient && cdpClient.send) {
-        await cdpClient.send("Input.dispatchMouseEvent", { type: "mousePressed", x: cx, y: cy, button: "left", clickCount: 1 });
-        await cdpClient.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: cx, y: cy, button: "left", clickCount: 1 });
-      } else {
-        // Fallback: dispatch synthetic events
-        await evalJS(`(() => {
-          const el = document.elementFromPoint(${cx}, ${cy});
-          if (!el) throw new Error('No element at coordinates');
-          ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
-            el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: ${cx}, clientY: ${cy}, button: 0 }));
-          });
-        })()`);
-      }
+      await cdpClient.send("Input.dispatchMouseEvent", { type: "mousePressed", x: cx, y: cy, button: "left", clickCount: 1 });
+      await cdpClient.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: cx, y: cy, button: "left", clickCount: 1 });
       return { ok: true, clicked: best };
     },
 
@@ -426,49 +412,33 @@ function createNativeChromeHandlers(cdpClient) {
     // ─── DOM Interaction ───────────────────────────────────────────────
 
     async click(selector) {
-      // Scroll into view and get center coordinates
+      // Get coordinates via single Runtime.evaluate
       const coords = await evalJSON(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) throw new Error('Element not found: ' + ${JSON.stringify(selector)});
         el.scrollIntoView({ block: 'center', behavior: 'instant' });
         const rect = el.getBoundingClientRect();
-        return { cx: rect.x + rect.width / 2, cy: rect.y + rect.height / 2 };
+        return { cx: Math.round(rect.x + rect.width / 2), cy: Math.round(rect.y + rect.height / 2) };
       })()`);
-      // Animate phantom cursor to element
-      await _injectCursor();
-      await _moveCursorTo(coords.cx, coords.cy);
-      // Perform click
-      await evalJS(`(() => {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        const rect = el.getBoundingClientRect();
-        const cx = rect.x + rect.width / 2;
-        const cy = rect.y + rect.height / 2;
-        ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
-          el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0 }));
-        });
-      })()`);
-      return { ok: true };
+      // Use CDP Input domain (native, works with React SPAs, no synthetic events)
+      await cdpClient.send("Input.dispatchMouseEvent", {
+        type: "mousePressed", x: coords.cx, y: coords.cy, button: "left", clickCount: 1,
+      });
+      await cdpClient.send("Input.dispatchMouseEvent", {
+        type: "mouseReleased", x: coords.cx, y: coords.cy, button: "left", clickCount: 1,
+      });
+      return { ok: true, x: coords.cx, y: coords.cy };
     },
 
     async fill(selector, value, clearFirst) {
-      // Get element center for cursor animation
-      const coords = await evalJSON(`(() => {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) throw new Error('Element not found');
-        el.scrollIntoView({ block: 'center', behavior: 'instant' });
-        const rect = el.getBoundingClientRect();
-        return { cx: rect.x + rect.width / 2, cy: rect.y + rect.height / 2 };
-      })()`);
-      // Animate phantom cursor to input
-      await _injectCursor();
-      await _moveCursorTo(coords.cx, coords.cy);
-      // Perform fill
+      // Single Runtime.evaluate: scroll + focus + set value + dispatch events
       const encodedExpr = _safeEncodeForJS(value);
       const result = await evalJSON(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) return { ok: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
         if (el.disabled) return { ok: false, error: 'Element is disabled: ' + ${JSON.stringify(selector)} };
         if (el.readOnly) return { ok: false, error: 'Element is readonly: ' + ${JSON.stringify(selector)} };
+        el.scrollIntoView({ block: 'center', behavior: 'instant' });
         el.focus();
         if (${!!clearFirst}) { el.value = ''; }
         el.value = ${encodedExpr};
@@ -530,30 +500,22 @@ function createNativeChromeHandlers(cdpClient) {
     async hover(selector) {
       const coords = await evalJSON(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) throw new Error('Element not found');
+        if (!el) throw new Error('Element not found: ' + ${JSON.stringify(selector)});
         el.scrollIntoView({ block: 'center', behavior: 'instant' });
         const rect = el.getBoundingClientRect();
-        return { cx: rect.x + rect.width / 2, cy: rect.y + rect.height / 2 };
+        return { cx: Math.round(rect.x + rect.width / 2), cy: Math.round(rect.y + rect.height / 2) };
       })()`);
-      await _injectCursor();
-      await _moveCursorTo(coords.cx, coords.cy);
-      await evalJS(`(() => {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        const rect = el.getBoundingClientRect();
-        const cx = rect.x + rect.width / 2;
-        const cy = rect.y + rect.height / 2;
-        el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: cx, clientY: cy }));
-        el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, clientX: cx, clientY: cy }));
-      })()`);
-      return { ok: true };
+      // Use CDP Input domain (native mouseMoved, triggers real hover states)
+      await cdpClient.send("Input.dispatchMouseEvent", {
+        type: "mouseMoved", x: coords.cx, y: coords.cy,
+      });
+      return { ok: true, x: coords.cx, y: coords.cy };
     },
 
     // ─── Coordinate Interaction ────────────────────────────────────────
 
     async clickAt(x, y, button) {
       const btn = button === "right" ? 2 : button === "middle" ? 1 : 0;
-      await _injectCursor();
-      await _moveCursorTo(x, y);
       await cdpClient.send("Input.dispatchMouseEvent", {
         type: "mousePressed",
         x,
@@ -572,8 +534,6 @@ function createNativeChromeHandlers(cdpClient) {
     },
 
     async hoverAt(x, y) {
-      await _injectCursor();
-      await _moveCursorTo(x, y);
       await cdpClient.send("Input.dispatchMouseEvent", {
         type: "mouseMoved",
         x,
@@ -1266,6 +1226,203 @@ function createNativeChromeHandlers(cdpClient) {
      */
     async getPausedRequests() {
       return cdpClient._fetchPaused || [];
+    },
+
+    // ============================================================
+    // FEATURES PORTED FROM CLAUDE IN CHROME (v1.0.75)
+    // ============================================================
+
+    /**
+     * uploadFile — Upload files to a file input element.
+     * Uses base64-encoded content to create File objects and set them on the input.
+     *
+     * @param {Object} args
+     * @param {string} args.selector - CSS selector for the file input element
+     * @param {Array<{name: string, content: string, mimeType: string}>} args.files - Files to upload (content is base64)
+     */
+    async uploadFile(args) {
+      const { selector, files } = args;
+      if (!selector) throw new Error("selector required");
+      if (!files || !files.length) throw new Error("files array required");
+
+      const result = await evalJS(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return JSON.stringify({ error: "Element not found: ${selector}" });
+        if (el.tagName !== 'INPUT' || el.type !== 'file') return JSON.stringify({ error: "Element is not a file input" });
+
+        const filesData = ${JSON.stringify(files)};
+        const dt = new DataTransfer();
+
+        for (const f of filesData) {
+          const binaryStr = atob(f.content);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          const file = new File([bytes], f.name, { type: f.mimeType || 'application/octet-stream' });
+          dt.items.add(file);
+        }
+
+        el.files = dt.files;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return JSON.stringify({ ok: true, filesSet: filesData.length, fileName: filesData.map(f => f.name) });
+      })()`);
+      return JSON.parse(result);
+    },
+
+    /**
+     * uploadImage — Upload an image to an element (e.g., for image input in chat interfaces).
+     * Creates a File object from base64 data and dispatches drag/drop or input events.
+     *
+     * @param {Object} args
+     * @param {string} args.selector - Target element selector (drop zone or file input)
+     * @param {string} args.image_data - Base64 encoded image data
+     * @param {string} [args.mime_type] - MIME type (default: image/png)
+     */
+    async uploadImage(args) {
+      const { selector, image_data, mime_type } = args;
+      if (!selector) throw new Error("selector required");
+      if (!image_data) throw new Error("image_data required");
+
+      const mime = mime_type || "image/png";
+      const result = await evalJS(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return JSON.stringify({ error: "Element not found: ${selector}" });
+
+        const b64 = ${JSON.stringify(image_data)};
+        const binaryStr = atob(b64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const file = new File([bytes], 'image.png', { type: ${JSON.stringify(mime)} });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+
+        // If it's a file input, set files directly
+        if (el.tagName === 'INPUT' && el.type === 'file') {
+          el.files = dt.files;
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return JSON.stringify({ ok: true, method: 'file_input', fileName: 'image.png' });
+        }
+
+        // Otherwise, simulate drag-and-drop
+        const dragEnter = new DragEvent('dragenter', { bubbles: true, dataTransfer: dt });
+        const dragOver = new DragEvent('dragover', { bubbles: true, dataTransfer: dt });
+        const drop = new DragEvent('drop', { bubbles: true, dataTransfer: dt });
+        el.dispatchEvent(dragEnter);
+        el.dispatchEvent(dragOver);
+        el.dispatchEvent(drop);
+        return JSON.stringify({ ok: true, method: 'drag_drop', fileName: 'image.png' });
+      })()`);
+      return JSON.parse(result);
+    },
+
+    /**
+     * resizeWindow — Resize the browser window.
+     * Uses CDP Browser domain to change window dimensions.
+     *
+     * @param {Object} args
+     * @param {number} args.width - New width in pixels
+     * @param {number} args.height - New height in pixels
+     */
+    async resizeWindow(args) {
+      const { width, height } = args;
+      if (!width || !height) throw new Error("width and height required");
+
+      const { windowId } = await cdpClient.send("Browser.getWindowForTarget");
+      await cdpClient.send("Browser.setWindowBounds", {
+        windowId,
+        bounds: { width, height },
+      });
+      return { ok: true, width, height };
+    },
+
+    /**
+     * screenshotElement — Capture screenshot of a specific element via CDP.
+     * Uses DOM.querySelector to find the element, gets its bounding box,
+     * then captures with clip parameter.
+     *
+     * @param {string} selector - CSS selector for the target element
+     */
+    async screenshotElement(selector) {
+      if (!selector) throw new Error("selector required");
+
+      // Get element bounding box via JS
+      const bounds = await evalJSON(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, text: el.textContent?.substring(0, 500) };
+      })()`);
+
+      if (!bounds) throw new Error(`Element not found: ${selector}`);
+      if (bounds.width === 0 || bounds.height === 0) throw new Error(`Element has zero dimensions: ${selector}`);
+
+      // Capture screenshot with clip to element bounds
+      const result = await cdpClient.send("Page.captureScreenshot", {
+        format: "png",
+        clip: {
+          x: Math.max(0, bounds.x),
+          y: Math.max(0, bounds.y),
+          width: Math.min(bounds.width, 4096),
+          height: Math.min(bounds.height, 4096),
+          scale: 1,
+        },
+      });
+
+      // Save to file
+      const fs = require("fs");
+      const path = require("path");
+      const screenshotsDir = path.join(process.cwd(), ".codebrain", "screenshots");
+      if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
+      const filename = `element-${Date.now()}.png`;
+      const filepath = path.join(screenshotsDir, filename);
+      fs.writeFileSync(filepath, Buffer.from(result.data, "base64"));
+
+      return {
+        ok: true,
+        path: filepath,
+        filename,
+        width: Math.round(bounds.width),
+        height: Math.round(bounds.height),
+        text: bounds.text,
+      };
+    },
+
+    /**
+     * gifCreator — GIF recording stub.
+     * Full GIF recording requires the Chrome extension's offscreen document.
+     */
+    async gifCreator(args) {
+      return {
+        ok: false,
+        note: "GIF recording requires the Claude Chrome extension's offscreen document. Use browser_screenshot for static captures.",
+        action: args?.action || "unknown",
+      };
+    },
+
+    /**
+     * shortcutsList — Shortcuts stub.
+     * Full shortcuts require the Chrome extension's bookmark system.
+     */
+    async shortcutsList() {
+      return {
+        shortcuts: [],
+        note: "Shortcuts require the Claude Chrome extension. Use browser_navigate for direct URL navigation.",
+      };
+    },
+
+    /**
+     * shortcutsExecute — Shortcuts execution stub.
+     */
+    async shortcutsExecute(args) {
+      return {
+        ok: false,
+        note: "Shortcuts require the Claude Chrome extension. Use browser_navigate instead.",
+        shortcut_id: args?.shortcut_id,
+      };
     },
   };
 }
