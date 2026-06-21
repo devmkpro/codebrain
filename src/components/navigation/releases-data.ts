@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.12.1",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "inter-agent communication overhaul — bracketed paste, handoff pokeOrchestrator, pane_wait_many"
+      }
+    ]
+  },
+  {
     "version": "1.12.0",
     "date": "junho 2026",
     "highlights": [
