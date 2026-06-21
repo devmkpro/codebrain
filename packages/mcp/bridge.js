@@ -218,27 +218,12 @@ function createMCPBridge(ptyManager, opts = {}) {
     } catch {}
   });
 
-  // ── Sync: broadcast "agent finished" when a pane goes idle ─────────────
-  // Only broadcast when there is meaningful summary content (not empty idle pings).
-  // This prevents the feedback loop: idle → broadcast → agent responds → idle → loop.
-  const idleBroadcastDebounce = new Map();
-  ptyManager.on("idle", ({ paneId, idle }) => {
-    try {
-      const now = Date.now();
-      const last = idleBroadcastDebounce.get(paneId) || 0;
-      if (now - last < 30000) return; // debounce 30s
-      idleBroadcastDebounce.set(paneId, now);
-      const workspace = opts.getCurrentWorkspacePath?.() || null;
-      // Build a brief summary from last output lines — ONLY broadcast if meaningful
-      const lastLines = idle?.lastOutput?.slice(-3) || [];
-      const summary = lastLines.join(" ").replace(/\x1b\[[0-9;]*m/g, "").trim().slice(0, 200);
-      if (!summary) return; // ← skip empty/idle-only broadcasts — this breaks the loop
-      const label = paneLabels.get(paneId) || paneId.slice(0, 8);
-      const role = roleMap.get(paneId) || "worker";
-      const content = `Agente "${label}" (${role}) finalizou trabalho. Últimas linhas: ${summary}`;
-      sendAgentNotification(ptyManager, paneLabels, paneId, content, "update", messageBus, workspace);
-    } catch {}
-  });
+  // ── Idle broadcast DISABLED ────────────────────────────────────────────
+  // Previously broadcast a "agent finished" notification to all panes on idle.
+  // This was a primary source of agent loops: idle → broadcast → agent sees
+  // notification → responds → goes idle → broadcast → loop.
+  // Workers now report completion via handoff_submit, which uses pokeOrchestrator
+  // (serialized, targeted write to the orchestrator only) instead of broadcasting.
 
   // ── Auto-inject pane_read_messages REMOVED ──────────────────────────────
   // Previously this hook injected "pane_read_messages(paneId)" into stdin on
@@ -293,12 +278,18 @@ function createMCPBridge(ptyManager, opts = {}) {
 
   // ── Text Loop Recovery on idle (MiMo-inspired) ─────────────────────────────
   // When a pane goes idle, check if its output text has been repeating.
+  // SKIP orchestrators — they legitimately produce similar-looking outputs between
+  // tool calls during multi-step tasks (e.g. "Executando teste 1...", "Executando teste 2...")
+  // and get false positives. Only flag workers doing true repetitive loops.
   ptyManager.on("idle", ({ paneId, idle }) => {
     try {
       const store = opts.memoryStore;
       if (!store?.recordTextOutput || !idle?.lastOutput) return;
+      // Skip orchestrator panes — false positive rate is too high for coordinating agents
+      const role = roleMap.get(paneId) || "worker";
+      if (role === "orchestrator") return;
       const outputText = Array.isArray(idle.lastOutput) ? idle.lastOutput.join("\n") : String(idle.lastOutput);
-      if (outputText.length < 50) return; // Skip very short outputs
+      if (outputText.length < 80) return; // Skip very short outputs
       const result = store.recordTextOutput(paneId, outputText);
       if (result.isLooping && result.recoveryCount <= 2) {
         const warning = result.recoveryCount === 1
@@ -312,11 +303,15 @@ function createMCPBridge(ptyManager, opts = {}) {
 
   // ── Enhanced Step Signature Loop Detection on idle ──────────────────────────
   // Uses stableStringify for key-order-independent comparison.
+  // SKIP orchestrators — they legitimately call the same tools (pane_write, pane_wait_idle)
+  // multiple times across different workers and get false positives.
   if (opts.memoryStore?.recordStepSignature) {
     ptyManager.on("idle", ({ paneId, idle }) => {
       try {
         const store = opts.memoryStore;
         if (!store?.recordStepSignature || !idle?.lastOutput) return;
+        const role = roleMap.get(paneId) || "worker";
+        if (role === "orchestrator") return;
         const outputText = Array.isArray(idle.lastOutput) ? idle.lastOutput.join("\n") : String(idle.lastOutput);
         const toolCalls = outputText.match(/mcp__codebrain__(\w+)/g);
         if (!toolCalls || toolCalls.length < 2) return;
@@ -496,13 +491,8 @@ function createMCPBridge(ptyManager, opts = {}) {
         const role = roleMap.get(paneId) || "worker";
         const workspace = opts.getCurrentWorkspacePath?.() || null;
         store.upsertAgent({ paneId, label, role, model, providerId, status: "active", workspace });
-        // Notify all other agents that a new peer joined
-        const agentDesc = [label && `"${label}"`, role, model && `(${model})`].filter(Boolean).join(" ");
-        sendAgentNotification(
-          ptyManager, paneLabels, paneId,
-          `Novo agente entrou no workspace: ${agentDesc} — paneId: ${paneId}. Quando finalizar sua tarefa, notifique-o via pane_send_message.`,
-          "update", messageBus, workspace
-        );
+        // NOTE: Removed sendAgentNotification on pane_spawned — broadcasting to all
+        // panes caused agents to react and loop. Agents discover peers via pane_list().
         // Update context files with new agent info
         if (workspace && opts.updateContextFiles) {
           try { opts.updateContextFiles(workspace); } catch {}
@@ -516,14 +506,8 @@ function createMCPBridge(ptyManager, opts = {}) {
         store.updateAgentStatus({ paneId, status: "exited" });
         // Update actor registry on exit
         try { store.actorUpdateStatus?.({ paneId, status: 'idle', lastOutcome: 'success' }); } catch {}
-        // Notify others that this agent exited
-        const label = paneLabels.get(paneId) || paneId.slice(0, 8);
-        const workspace = opts.getCurrentWorkspacePath?.() || null;
-        sendAgentNotification(
-          ptyManager, paneLabels, paneId,
-          `Agente "${label}" (${paneId}) saiu do workspace. Adapte-se se dependia deste agente.`,
-          "update", messageBus, workspace
-        );
+        // NOTE: Removed sendAgentNotification on pane_exited — broadcasting caused
+        // other agents to react unnecessarily. The orchestrator detects exits via pane_list().
         // Update context files to remove exited agent
         if (workspace && opts.updateContextFiles) {
           try { opts.updateContextFiles(workspace); } catch {}
@@ -645,14 +629,16 @@ function createMCPBridge(ptyManager, opts = {}) {
       } catch {}
       // Fire hook event
       try { opts.hooksManager?.fire?.("file_written", { path: relPath, size: result.size }); } catch {}
-      // Notify all other agents about the file change (same workspace only)
-      sendAgentNotification(
-        ptyManager, paneLabels, "system",
-        `File changed: ${relPath} (${result.size || 0}B) -- search memory for "file-changed-${relPath}" for details`,
-        "update",
-        messageBus,
-        ws
-      );
+      // NOTE: Removed sendAgentNotification on file_write — broadcasting every file
+      // change interrupted agents mid-task. File changes are tracked in shared memory
+      // (key: file-changed-<path>) and agents read them via memory_search() proactively.
+      // sendAgentNotification(
+      //   ptyManager, paneLabels, "system",
+      //   `File changed: ${relPath} (${result.size || 0}B) -- search memory for "file-changed-${relPath}" for details`,
+      //   "update",
+      //   messageBus,
+      //   ws
+      // );
     }
     return result;
   };
@@ -674,18 +660,9 @@ function createMCPBridge(ptyManager, opts = {}) {
       }
       // Fire hook event
       try { opts.hooksManager?.fire?.("memory_written", { key: args.key, type: args.type, agent_id: args.agent_id }); } catch {}
-      // Notify all other agents about what was learned and where it was saved
-      const typeLabel = args.type || "working";
-      const agentLabel = args.agent_id || "agent";
-      const contentSummary = typeof args.content === "string" ? args.content.slice(0, 150) : "";
-      const contentPreview = contentSummary.length < (args.content?.length || 0) ? contentSummary + "..." : contentSummary;
-      sendAgentNotification(
-        ptyManager, paneLabels, agentLabel,
-        `Agent "${agentLabel}" learned something and saved it: [${typeLabel}] key="${args.key}" -- ${contentPreview} -- access via memory_search("${args.key}") or memory_read(key="${args.key}")`,
-        "update",
-        messageBus,
-        args.workspace || opts.getCurrentWorkspacePath?.() || undefined
-      );
+      // NOTE: Removed sendAgentNotification on memory_write — broadcasting every
+      // memory write caused constant interruptions. Agents read shared memory
+      // proactively via memory_search() instead of being pushed notifications.
     }
     return result;
   };

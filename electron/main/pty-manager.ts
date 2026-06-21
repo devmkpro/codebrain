@@ -643,15 +643,20 @@ export class PtyManager extends EventEmitter {
    * Write text to PTY stdin while suppressing the echo from the output.
    * The PTY normally echoes stdin back as output — this method tracks the
    * sent text so the onData handler can filter it out from the output events.
+   *
+   * If useBracketedPaste=true, wraps the data in bracketed paste escape codes
+   * (\x1b[200~ ... \x1b[201~) so readline treats \n as literal newlines instead
+   * of Enter keypresses. This preserves multi-line prompt formatting.
    */
-  writeSilent(paneId: string, data: string): void {
+  writeSilent(paneId: string, data: string, useBracketedPaste = false): void {
     const state = this.panes.get(paneId);
     if (!state) return;
     const cleanText = data.replace(/\r/g, "").replace(/\n/g, "");
     if (cleanText.length > 0) {
       this.pendingEcho.set(paneId, { cleanText, consumed: 0, time: Date.now() });
     }
-    (state.pty as any).write(data);
+    const payload = useBracketedPaste ? `\x1b[200~${data}\x1b[201~` : data;
+    (state.pty as any).write(payload);
   }
 
   hasPane(paneId: string): boolean {

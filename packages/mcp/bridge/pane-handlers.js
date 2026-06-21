@@ -15,12 +15,20 @@ const MEMORY_PROTOCOL_PREFIX = `
 • SPAWN + WAIT: use pane_spawn_and_wait() when you need the result inline (blocks until idle, parses return header). Use pane_spawn() for fire-and-forget.
 • KILL CASCADE: use pane_kill_cascade(paneId) to kill a pane AND all its registered children at once.
 • ACTOR STATUS: use actor_status(paneId) or actor_list() to check turn count, stuck detection, and parent hierarchy.
-• MESSAGING: Use pane_write(text, submit=true) for ALL inter-agent communication. It injects text directly into the agent's prompt and submits. NEVER use pane_send_message (it only shows a yellow notification that the agent may miss).
+• TASK COMPLETION: When you finish a task assigned by the orchestrator, call mcp__codebrain__handoff_submit({paneId:"<your pane id>", summary:"...", status:"done"|"blocked"|"error", artifacts:[...]}) as your VERY LAST action. The orchestrator will be notified automatically. NEVER try to pane_write back to the orchestrator yourself.
 • WAIT BEFORE SEND: Always call pane_wait_idle(paneId) BEFORE pane_write to ensure the agent is at its prompt. If busy, pane_write interrupts the current task.
-• MESSAGES: Call mcp__codebrain__pane_read_messages proactively to check for messages from other agents (legacy pane_send_message inbox).
 • Skipping memory = INCOMPLETE TASK. The system tracks whether you used memory tools.
 ──────────────────────────────────────────
 `.trim();
+
+/**
+ * Worker contract footer — auto-appended to task writes (>80 chars) to
+ * ensure workers always terminate with handoff_submit instead of going idle.
+ * Inspired by Overclock's WORKER_CONTRACT_FOOTER pattern.
+ */
+const WORKER_CONTRACT_FOOTER = `
+
+— Worker contract: when you finish this task, call mcp__codebrain__handoff_submit({ paneId: "<your_pane_id>", summary: "...", status: "done"|"blocked"|"error", artifacts: [...] }) as your VERY LAST action. The orchestrator is waiting on your result; simply going idle does NOT signal completion.`;
 
 // Stuck detection: 5 minutes without output → fire event
 const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
@@ -32,6 +40,8 @@ const STUCK_SCAN_INTERVAL_MS = 60 * 1000;
 function createPaneHandlers(ptyManager, opts) {
   const roleMap = opts.roleMap || new Map();
   const idleWaiters = new Map();
+  // Serializes pokeOrchestrator writes per worker pane to avoid race conditions
+  const handoffPokeChain = new Map();
 
   // ── Update turn count in actor registry when pane produces output ──────────
   // ptyManager emits: ("output", paneId, data) — note positional args, not object
@@ -177,17 +187,31 @@ function createPaneHandlers(ptyManager, opts) {
           hasMemoryActivity: false,
         });
       }
-      // Sanitize newlines — readline treats \n as Enter, causing premature submission
-      const sanitized = finalText.replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/\r/g, "");
-      ptyManager.writeSilent(paneId, sanitized);
+      // ── Worker contract footer (auto-append for task writes) ──────────────
+      // Appended when: text is long enough to be a task (>80 chars),
+      // does NOT already contain handoff_submit, and this is a submit write.
+      // Inspired by Overclock's WORKER_CONTRACT_FOOTER pattern.
+      if (
+        submit &&
+        finalText.length > 80 &&
+        !finalText.includes("handoff_submit")
+      ) {
+        finalText = finalText + WORKER_CONTRACT_FOOTER;
+      }
+      // ── Bracketed paste mode: preserves multi-line formatting ────────────
+      // Instead of sanitizing newlines to spaces (which destroys prompt structure),
+      // wrap the text in \x1b[200~ ... \x1b[201~ so readline treats \n as literal
+      // newlines inside the paste — not as Enter keypresses.
+      // Normalize \r\n → \n but keep \n intact for the agent to read structure.
+      const pasteText = finalText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      // writeSilent with useBracketedPaste=true — suppresses echo + uses paste mode
+      ptyManager.writeSilent(paneId, pasteText, true);
       if (submit) {
         // Send Enter as a separate write after a delay so readline can finish
         // processing pasted text before receiving the submit signal.
-        // Sending sanitized+"\r" as one chunk causes readline to buffer the \r
-        // inside paste-mode and never submit.
-        // Delay scales with text length: large prompts need more time for the
-        // shell to process all characters before it can handle the Enter key.
-        const delay = Math.min(3000, Math.max(100, 100 + sanitized.length * 0.5));
+        // Bracketed paste mode closes with \x1b[201~ then we send \r to submit.
+        // Delay scales with text length: large prompts need more time to process.
+        const delay = Math.min(3000, Math.max(150, 150 + pasteText.length * 0.3));
         await new Promise((r) => setTimeout(r, delay));
         ptyManager.write(paneId, "\r");
       }
@@ -254,6 +278,45 @@ function createPaneHandlers(ptyManager, opts) {
         const result = store.submitHandoff({ paneId, summary, status, artifacts, workspace });
         // Fire hook event
         try { opts.hooksManager?.fire?.("handoff_submitted", { paneId, status, summary: summary.slice(0, 100) }); } catch {}
+
+        // ── pokeOrchestrator: notify the orchestrator automatically ────────
+        // Find the orchestrator pane (role === "orchestrator") and inject the
+        // result as a system message. This is the key pattern from Overclock:
+        // workers NEVER write to the orchestrator directly — the MCP server
+        // delivers the result asynchronously, serialized with delays.
+        // This breaks the bidirectional conversation loop completely.
+        try {
+          const workerLabel = opts.paneLabels?.get(paneId) || paneId.slice(0, 8);
+          const artifactStr = (artifacts && artifacts.length > 0)
+            ? ` Artifacts: ${artifacts.join(", ")}.`
+            : "";
+          const msg = `[squad] Worker "${workerLabel}" (pane ${paneId.slice(0, 8)}) finished — status=${status}. ${summary}${artifactStr} Use handoff_wait or handoff_list to get the full result, then continue the pipeline.`;
+
+          // Find orchestrator pane(s) — serialize writes to avoid race conditions
+          const orchestratorPaneId = (() => {
+            for (const [pid, role] of roleMap) {
+              if (role === "orchestrator" && ptyManager.hasPane(pid)) return pid;
+            }
+            return null;
+          })();
+
+          if (orchestratorPaneId) {
+            // Serialize: chain onto previous poke promise to avoid simultaneous writes
+            const prevChain = handoffPokeChain.get(paneId) ?? Promise.resolve();
+            const nextChain = prevChain.then(async () => {
+              if (!ptyManager.hasPane(orchestratorPaneId)) return;
+              // Write message text silently (no echo)
+              ptyManager.writeSilent(orchestratorPaneId, msg);
+              // Wait 500ms then submit (Enter) — same as Overclock's pokeOrchestrator
+              await new Promise(r => setTimeout(r, 500));
+              if (!ptyManager.hasPane(orchestratorPaneId)) return;
+              ptyManager.write(orchestratorPaneId, "\r");
+              await new Promise(r => setTimeout(r, 350));
+            });
+            handoffPokeChain.set(paneId, nextChain);
+          }
+        } catch {}
+
         return result;
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -387,6 +450,66 @@ function createPaneHandlers(ptyManager, opts) {
       if (!store?.actorRenderForAgent) return { ok: true, text: '' };
       const ws = workspace || opts.getCurrentWorkspacePath?.() || undefined;
       return store.actorRenderForAgent({ workspace: ws });
+    },
+
+    /**
+     * Block until any/all of the listed panes go idle OR submit a handoff.
+     * Returns as soon as the returnOn condition is met.
+     * Eliminates the model-driven polling loop of repeated pane_wait_idle calls.
+     * Inspired by Overclock's pane_wait_many(returnOn="any").
+     */
+    async waitManyPanes({ paneIds, returnOn = "any", timeoutMs = 300000, matchStrings = [] }) {
+      if (!Array.isArray(paneIds) || paneIds.length === 0) return { ok: false, error: "paneIds required" };
+
+      const deadline = Date.now() + timeoutMs;
+      const pollMs = 500;
+      const idleSet = new Set();
+
+      // Subscribe to idle events for fast detection
+      const onIdle = ({ paneId }) => {
+        if (paneIds.includes(paneId)) idleSet.add(paneId);
+      };
+      ptyManager.on("idle", onIdle);
+
+      try {
+        while (Date.now() < deadline) {
+          // Also check handoff submissions as a completion signal
+          const store = opts.memoryStore;
+          const handoffIds = new Set();
+          if (store?.getHandoff) {
+            for (const pid of paneIds) {
+              const h = store.getHandoff({ paneId: pid });
+              if (h.ok && h.handoff) handoffIds.add(pid);
+            }
+          }
+
+          // Check matchStrings in recent output
+          const matchedIds = new Set();
+          if (matchStrings.length > 0) {
+            for (const pid of paneIds) {
+              if (!ptyManager.hasPane(pid)) continue;
+              const lines = ptyManager.read(pid, 30);
+              const text = lines.join("\n");
+              if (matchStrings.some(s => text.includes(s))) matchedIds.add(pid);
+            }
+          }
+
+          const doneIds = new Set([...idleSet, ...handoffIds, ...matchedIds]);
+
+          if (returnOn === "any" && doneIds.size > 0) {
+            return { ok: true, done: [...doneIds], remaining: paneIds.filter(p => !doneIds.has(p)), returnOn };
+          }
+          if (returnOn === "all" && paneIds.every(p => doneIds.has(p))) {
+            return { ok: true, done: [...doneIds], remaining: [], returnOn };
+          }
+
+          await new Promise(r => setTimeout(r, pollMs));
+        }
+        // Timeout
+        return { ok: true, done: [...idleSet], remaining: paneIds.filter(p => !idleSet.has(p)), timedOut: true };
+      } finally {
+        ptyManager.off("idle", onIdle);
+      }
     },
 
     async writeManyPanes({ paneIds, text, submit = true }) {

@@ -2757,24 +2757,27 @@ function createMemoryStore(dbPath) {
       // Normalize: lowercase, strip whitespace, remove common prefixes, truncate
       let normalized = output.toLowerCase().trim();
       normalized = normalized.replace(/^(let me|i'll|okay|sure|alright|here'?s?|now|so)[,\s]+/i, '');
-      normalized = normalized.slice(0, 200);
-      if (normalized.length < 20) return { isLooping: false };
+      // Use 400 chars for comparison — 200 was too short, causing false positives
+      // when similar-but-not-identical outputs matched on the truncated prefix
+      normalized = normalized.slice(0, 400);
+      if (normalized.length < 30) return { isLooping: false };
 
       let buf = this._textLoopBuffers.get(paneId);
       if (!buf) { buf = { outputs: [], recoveryCount: 0 }; }
       buf.outputs.push(normalized);
-      if (buf.outputs.length > 5) buf.outputs.shift();
+      if (buf.outputs.length > 6) buf.outputs.shift();
 
       this._textLoopBuffers.set(paneId, buf);
 
-      // Check if 3 consecutive outputs are identical
-      if (buf.outputs.length >= 3) {
-        const last3 = buf.outputs.slice(-3);
-        if (last3.every(o => o === last3[0])) {
+      // Require 5 consecutive identical outputs before flagging (was 3 — too aggressive,
+      // caused false positives during multi-step orchestration where outputs look similar)
+      if (buf.outputs.length >= 5) {
+        const last5 = buf.outputs.slice(-5);
+        if (last5.every(o => o === last5[0])) {
           buf.recoveryCount++;
           this._textLoopBuffers.set(paneId, buf);
           const suggestion = buf.recoveryCount === 1
-            ? 'MILD: Try a completely different approach. Your last 3 outputs were identical.'
+            ? 'MILD: Try a completely different approach. Your last 5 outputs were identical.'
             : 'STRONG: Abandon your current plan entirely and ask the user for guidance.';
           return { isLooping: true, recoveryCount: buf.recoveryCount, suggestion };
         }

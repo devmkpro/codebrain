@@ -418,10 +418,35 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ── mcp__codebrain__pane_wait_many ────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__pane_wait_many",
+    "Block until any or all of the listed worker panes go idle or submit a handoff. Use instead of polling pane_wait_idle in a loop — one call handles multiple workers efficiently. returnOn='any' returns as soon as the first worker finishes; returnOn='all' waits for every worker.",
+    {
+      paneIds:      z.array(z.string()).describe("Worker pane IDs to watch."),
+      returnOn:     z.enum(["any", "all"]).optional().describe("'any' = return on first completion (default), 'all' = wait for every worker."),
+      timeoutMs:    z.number().optional().describe("Max wait time in ms (default 300000 = 5 min)."),
+      matchStrings: z.array(z.string()).optional().describe("Optional text patterns — if any pane's recent output contains one, it counts as done."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.waitManyPanes({
+          paneIds: args.paneIds,
+          returnOn: args.returnOn || "any",
+          timeoutMs: args.timeoutMs || 300000,
+          matchStrings: args.matchStrings || [],
+        });
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
   // ── mcp__codebrain__handoff_submit ────────────────────────────────────────
   server.tool(
     "mcp__codebrain__handoff_submit",
-    "Worker calls this as its LAST action to report a structured result. The orchestrator uses handoff_wait to collect these results.",
+    "Worker calls this as its VERY LAST action when a task is complete. Automatically notifies the orchestrator pane with a [squad] message — no pane_write needed. The orchestrator can also use handoff_wait/handoff_list to poll results.",
     {
       paneId:    z.string().describe("The worker's pane ID."),
       summary:   z.string().describe("Brief summary of what was accomplished or what blocked progress."),
@@ -498,7 +523,7 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__pane_send_message ──────────────────────────────────────
   server.tool(
     "mcp__codebrain__pane_send_message",
-    "Send a message to another agent pane. Use this for ALL inter-agent coordination: notify a worker about API changes, send a task result to the orchestrator, or ask a question to another worker. The recipient sees a yellow notification in their terminal and MUST respond.",
+    "Send a message to another agent pane. type='task' wakes the recipient immediately (submits a new turn — use for assigning work). type='update'/'question'/'result' shows a yellow banner but does NOT interrupt the recipient (they read it via pane_read_messages on their next turn). NEVER use for task completion reporting — use handoff_submit instead.",
     {
       from:    z.string().describe("Your pane ID (sender)."),
       to:      z.string().describe("Target pane ID (recipient)."),
@@ -568,15 +593,23 @@ function createCodebrainMCPServer(bridge) {
             });
           }
         } catch {}
-        // Inject a compact notification into the recipient's PTY stdin (echo-suppressed).
-        // This makes the agent aware of the message so it calls pane_read_messages.
-        // Uses writeSilent (not injectOutput) so the CLI agent actually receives it on stdin.
+        // Deliver message to recipient's PTY stdin.
+        // Strategy depends on message type:
+        //   "task" → pane_write with submit=true: wakes the agent immediately (like a new user turn)
+        //   other  → writeSilent without submit: yellow banner visible but agent is NOT interrupted
+        //            (agent reads it proactively via pane_read_messages on its next turn)
         try {
-          if (typeof bridge.messagePane === "function") {
-            const shortFrom = args.from.slice(0, 8);
-            const typeLabel = msgType.toUpperCase();
-            const preview = args.content.length > 120 ? args.content.slice(0, 120) + "..." : args.content;
-            const injectMsg = `\n\x1b[33m[MESSAGE from ${shortFrom} | ${typeLabel}] ${preview}\x1b[0m\nUse pane_read_messages to read the full message.\n`;
+          const shortFrom = args.from.slice(0, 8);
+          const typeLabel = msgType.toUpperCase();
+          const preview = args.content.length > 200 ? args.content.slice(0, 200) + "..." : args.content;
+
+          if (msgType === "task" && typeof bridge.writePane === "function") {
+            // "task" messages wake the recipient — full pane_write with submit
+            const wakeMsg = `[MESSAGE from ${shortFrom} | TASK] ${args.content}`;
+            await bridge.writePane(args.to, wakeMsg, true);
+          } else if (typeof bridge.messagePane === "function") {
+            // Info/update/question/result — silent banner, no submit, no interruption
+            const injectMsg = `\n\x1b[33m[MESSAGE from ${shortFrom} | ${typeLabel}] ${preview}\x1b[0m\n`;
             await bridge.messagePane(args.to, injectMsg);
           }
         } catch {}
