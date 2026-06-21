@@ -2,6 +2,18 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.12.1] — 2026-06-21
+
+### Fixes
+- **fix: pane_write usa bracketed paste** — preserva formatação multi-linha (antes sanitizava `\n` → espaço, colapsando prompts em uma linha só)
+- **fix: handoff_submit auto-notifica orquestrador** — `pokeOrchestrator` injeta `[squad] Worker X finished` diretamente no PTY do orquestrador via Promise chain serializada (500ms + 350ms delay), eliminando necessidade de polling manual
+- **fix: pane_send_message type="task" acorda o receptor** — agora usa `pane_write` com submit=true para tasks; outros types continuam como banner silencioso sem interromper
+- **fix: idle broadcast removido** — `sendAgentNotification` em `pane_spawned`, `pane_exited`, `memory_write`, `file_write` e `idle` removidos — eram fonte primária de loops entre agentes
+- **fix: loop detector não dispara em orquestrador** — text loop e step signature detectors agora pulam panes com role="orchestrator" (falso positivo durante multi-step orchestration)
+- **fix: threshold do loop detector** — 3 → 5 outputs idênticos consecutivos + janela de comparação 200 → 400 chars
+- **new: pane_wait_many** — novo tool que bloqueia até any/all workers ficarem idle ou submeterem handoff, com suporte a matchStrings. Elimina polling manual de múltiplos workers (262 total MCP tools)
+- **new: WORKER_CONTRACT_FOOTER** — appendado automaticamente em todo pane_write de task (>80 chars) instruindo worker a chamar handoff_submit como última ação
+
 ## [1.12.0] — 2026-06-17
 
 ### Features
