@@ -409,6 +409,46 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
     // Add the binary's directory to PATH so sibling binaries are findable at runtime
     prependWindowsRuntimePath(resolved);
 
+    // Handle the NVM-on-Windows case: `where claude` returns claude.exe directly (not claude.cmd),
+    // but the .exe is a Node.js wrapper (no PE32 MZ header) that fails with ERR_UNKNOWN_FILE_EXTENSION
+    // when Node.js v24+ tries to import it via the ESM loader.
+    // In this case, look for a .cmd shim in the same directory and use that path instead.
+    if (/\.exe$/i.test(resolved)) {
+      try {
+        const buf = Buffer.alloc(2);
+        const fd = nodefs.openSync(resolved, "r");
+        nodefs.readSync(fd, buf, 0, 2, 0);
+        nodefs.closeSync(fd);
+        const isNativePE = buf[0] === 0x4d && buf[1] === 0x5a; // "MZ" header
+        if (!isNativePE) {
+          // Not a native PE32 binary — try to find a .cmd shim in the same directory
+          const base = resolved.replace(/\.exe$/i, "");
+          const cmdPath = base + ".cmd";
+          const batPath = base + ".bat";
+          const shimPath = nodefs.existsSync(cmdPath) ? cmdPath : nodefs.existsSync(batPath) ? batPath : null;
+          if (shimPath) {
+            log.info(`[pty] Non-native .exe detected (no MZ), rerouting to .cmd shim: ${shimPath}`);
+            resolved = shimPath;
+          } else {
+            // No .cmd found — try resolving via node directly using the package's main script
+            // Look for the JS entry point in the same bin/ directory
+            const binDir = nodepath.dirname(resolved);
+            const binName = nodepath.basename(base);
+            const jsScript = [
+              nodepath.join(binDir, binName + ".js"),
+              nodepath.join(binDir, binName),
+            ].find(p => nodefs.existsSync(p));
+            if (jsScript) {
+              const nodeBinary = which("node") ?? process.env["NODE"] ?? "node";
+              log.info(`[pty] Non-native .exe, using node script: ${nodeBinary} ${jsScript}`);
+              return { binary: nodeBinary, args: [jsScript, ...defaults.args, ...extraArgs], fellBackToOpenClaude };
+            }
+            log.warn(`[pty] Non-native .exe and no .cmd/.js fallback found: ${resolved}`);
+          }
+        }
+      } catch {}
+    }
+
     if (/\.(cmd|bat)$/i.test(resolved)) {
       // Step 1: try .exe variant (avoids cmd.exe wrapper — faster, no quoting issues)
       // Only use the .exe if it's a genuine native PE32 binary (magic bytes "MZ" = 0x4D 0x5A).
