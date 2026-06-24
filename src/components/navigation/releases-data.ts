@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.12.2",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "skip non-native .exe shims on Windows — check MZ header before using .exe variant"
+      }
+    ]
+  },
+  {
     "version": "1.12.1",
     "date": "junho 2026",
     "highlights": [
