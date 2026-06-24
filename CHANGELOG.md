@@ -2,6 +2,11 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.12.2] — 2026-06-24
+
+### Fixes
+- **fix: Windows .exe shim detection** — ao resolver binários no Windows, verifica magic bytes MZ antes de usar o `.exe`. CLIs instalados via NVM (ex: `@anthropic-ai/claude-code`) geram `claude.exe` que é um wrapper Node.js sem header PE32 — usá-lo diretamente causava `ERR_UNKNOWN_FILE_EXTENSION` no ESM loader. Agora o Codebrain pula para o Step 2 (shim `.cmd`) nesses casos.
+
 ## [1.12.1] — 2026-06-21
 
 ### Fixes
