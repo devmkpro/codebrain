@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.12.3",
+    "date": "junho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "handle non-native .exe CLIs on Windows NVM — reroute to .cmd shim"
+      }
+    ]
+  },
+  {
     "version": "1.12.2",
     "date": "junho 2026",
     "highlights": [
