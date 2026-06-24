@@ -411,10 +411,21 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
 
     if (/\.(cmd|bat)$/i.test(resolved)) {
       // Step 1: try .exe variant (avoids cmd.exe wrapper — faster, no quoting issues)
+      // Only use the .exe if it's a genuine native PE32 binary (magic bytes "MZ" = 0x4D 0x5A).
+      // Some CLIs (e.g. @anthropic-ai/claude-code on NVM) ship a Node.js wrapper with a .exe
+      // extension that fails when spawned directly — Node's ESM loader rejects ".exe" extension.
       const exePath = resolved.replace(/\.(cmd|bat)$/i, ".exe");
       try {
         if (nodefs.existsSync(exePath)) {
-          return { binary: exePath, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
+          const buf = Buffer.alloc(2);
+          const fd = nodefs.openSync(exePath, "r");
+          nodefs.readSync(fd, buf, 0, 2, 0);
+          nodefs.closeSync(fd);
+          const isNativePE = buf[0] === 0x4d && buf[1] === 0x5a; // "MZ" header
+          if (isNativePE) {
+            return { binary: exePath, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
+          }
+          log.info(`[pty] Skipping non-native .exe (no MZ header): ${exePath}`);
         }
       } catch {}
 
