@@ -2,6 +2,11 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.12.3] — 2026-06-24
+
+### Fixes
+- **fix: ERR_UNKNOWN_FILE_EXTENSION no Windows com NVM** — quando `where claude` retorna `claude.exe` diretamente (NVM), o arquivo pode ser um wrapper Node.js sem header PE32 MZ. O Codebrain agora detecta isso antes do branch `.cmd/.bat`, e redireciona para: (1) shim `.cmd`/`.bat` na mesma pasta, (2) script `.js` via `node`, evitando o crash do ESM loader no Node.js v24.
+
 ## [1.12.2] — 2026-06-24
 
 ### Fixes
