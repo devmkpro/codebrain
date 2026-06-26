@@ -14,9 +14,9 @@
  *  but the server still starts with all other tools.
  */
 
-const path = require("path");
-const os = require("os");
-const { EventEmitter } = require("events");
+const path = require("node:path");
+const os = require("node:os");
+const { EventEmitter } = require("node:events");
 const { createCodebrainMCPServer, registerBrowserTools } = require("./index.js");
 const { createMCPBridge } = require("./bridge.js");
 

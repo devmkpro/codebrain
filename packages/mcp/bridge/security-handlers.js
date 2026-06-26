@@ -6,9 +6,9 @@
  * Results stored in memory for tracking across sessions.
  */
 
-const fs = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+const { execSync } = require("node:child_process");
 
 // ─── Secret Patterns ─────────────────────────────────────────────────
 

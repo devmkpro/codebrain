@@ -1,8 +1,8 @@
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
+const fs = require("node:fs");
+const path = require("node:path");
+const os = require("node:os");
 
 const GLOBAL_SKILLS_DIR = path.join(os.homedir(), ".codebrain", "skills");
 // Legacy alias kept for backward compat

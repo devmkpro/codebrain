@@ -13,12 +13,12 @@
  * - Auto-launch Chrome if not running
  */
 
-const http = require("http");
+const http = require("node:http");
 const WebSocket = require("ws");
-const path = require("path");
-const os = require("os");
-const { spawn, execSync } = require("child_process");
-const fs = require("fs");
+const path = require("node:path");
+const os = require("node:os");
+const { spawn, execSync } = require("node:child_process");
+const fs = require("node:fs");
 
 // Portable Chromium bundled with Codebrain — resolved relative to this file
 // Path: <codebrain-root>/local/chromium/chrome-win/chrome.exe
@@ -591,7 +591,7 @@ class CDPClient {
 
     try {
       await new Promise((resolve, reject) => {
-        const https = require("https");
+        const https = require("node:https");
 
         function get(url, redirects) {
           redirects = redirects || 0;
@@ -631,13 +631,13 @@ class CDPClient {
     try {
       if (isWin) {
         // Use PowerShell Expand-Archive
-        const { execSync: exec } = require("child_process");
+        const { execSync: exec } = require("node:child_process");
         exec(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force"`, {
           timeout: 120000,
           windowsHide: true,
         });
       } else {
-        const { execSync: exec } = require("child_process");
+        const { execSync: exec } = require("node:child_process");
         exec(`unzip -o "${zipPath}" -d "${destDir}"`, { timeout: 120000 });
       }
     } catch (err) {

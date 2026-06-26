@@ -18,9 +18,9 @@
  * 5. Extracts usage data from responses and reports via callback
  */
 
-const http = require("http");
-const https = require("https");
-const { URL } = require("url");
+const http = require("node:http");
+const https = require("node:https");
+const { URL } = require("node:url");
 
 const LOG_PREFIX = "[API Proxy]";
 

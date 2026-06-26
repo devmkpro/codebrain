@@ -11,8 +11,8 @@
  * is delegated to the LSP server manager in the main process.
  */
 
-const path = require("path");
-const fs = require("fs");
+const path = require("node:path");
+const fs = require("node:fs");
 
 function createLSPHandlers(opts) {
   // Language server registry: language → { pid, capabilities }

@@ -91,11 +91,11 @@ export async function spawnPaneInternal(
   try {
     // Smart cwd resolution: explicit > most active pane workspace > global > home
     let cwd = config.cwd;
-    if (!cwd || cwd === require("os").homedir()) {
+    if (!cwd || cwd === require("node:os").homedir()) {
       // Find the workspace with the most active panes (most likely the caller's workspace)
       const wsCounts = new Map<string, number>();
       for (const [, cfg] of ctx.paneConfigs) {
-        if (cfg.cwd && cfg.cwd !== require("os").homedir()) {
+        if (cfg.cwd && cfg.cwd !== require("node:os").homedir()) {
           wsCounts.set(cfg.cwd, (wsCounts.get(cfg.cwd) ?? 0) + 1);
         }
       }

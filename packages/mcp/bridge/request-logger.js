@@ -16,9 +16,9 @@
  * - WAL mode for concurrent reads
  */
 
-const path = require("path");
-const fs = require("fs");
-const os = require("os");
+const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
 
 let Database;
 try {

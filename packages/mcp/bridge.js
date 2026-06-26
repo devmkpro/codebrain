@@ -1,8 +1,8 @@
 "use strict";
 
-const path = require("path");
-const fs = require("fs");
-const os = require("os");
+const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
 
 const { createPaneHandlers } = require("./bridge/pane-handlers.js");
 const { createBrowserHandlers } = require("./bridge/browser-handlers.js");

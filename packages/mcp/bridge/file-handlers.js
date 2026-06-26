@@ -1,8 +1,8 @@
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
+const fs = require("node:fs");
+const path = require("node:path");
+const os = require("node:os");
 
 /**
  * File and system bridge handlers for MCP tools.
@@ -191,7 +191,7 @@ function createFileHandlers(opts) {
      * Get system information.
      */
     async systemInfo() {
-      const os = require("os");
+      const os = require("node:os");
       return {
         ok: true,
         platform: os.platform(),
@@ -212,7 +212,7 @@ function createFileHandlers(opts) {
      * Get diagnostics: pane health, MCP status, provider status.
      */
     async systemDiagnostics() {
-      const os = require("os");
+      const os = require("node:os");
       const panes = opts.ptyManager?.list?.() || [];
       const roleMap = opts.roleMap || new Map();
       const paneLabels = opts.paneLabels || new Map();

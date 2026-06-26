@@ -39,7 +39,7 @@ export function registerMiscHandlers(ctx: AppContext): void {
         version: require("electron").app.getVersion(),
         platform: process.platform,
         arch: process.arch,
-        osRelease: require("os").release(),
+        osRelease: require("node:os").release(),
       },
       workspace: { active: null },
       providers: getEnhancedProviders(ctx),

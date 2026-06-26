@@ -20,9 +20,9 @@
  */
 
 import esbuild from "esbuild";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -44,7 +44,7 @@ async function build() {
       outfile: outFile,
       format: "cjs",
       platform: "node",
-      target: "node18",
+      target: "node24",
       sourcemap: false,
       minify: false,
       // Native modules must stay external — they can't be bundled

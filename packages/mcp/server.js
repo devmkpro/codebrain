@@ -1,9 +1,9 @@
 "use strict";
 
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
+const http = require("node:http");
+const fs = require("node:fs");
+const path = require("node:path");
+const os = require("node:os");
 const { randomUUID } = require("node:crypto");
 const { createCodebrainMCPServer, registerBrowserTools, registerFetchTools, registerMRTools } = require("./index.js");
 const { createMCPBridge } = require("./bridge.js");

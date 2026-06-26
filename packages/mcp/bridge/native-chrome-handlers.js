@@ -1373,8 +1373,8 @@ function createNativeChromeHandlers(cdpClient) {
       });
 
       // Save to file
-      const fs = require("fs");
-      const path = require("path");
+      const fs = require("node:fs");
+      const path = require("node:path");
       const screenshotsDir = path.join(process.cwd(), ".codebrain", "screenshots");
       if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
       const filename = `element-${Date.now()}.png`;

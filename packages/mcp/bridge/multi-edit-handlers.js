@@ -5,7 +5,7 @@
  * Batch multiple edit operations on a single file in one tool call.
  */
 
-const fs = require("fs");
+const fs = require("node:fs");
 
 function createMultiEditHandlers(opts) {
   return {

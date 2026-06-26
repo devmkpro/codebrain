@@ -6,7 +6,7 @@
  * Supports view change for primary rotation.
  */
 
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 
 // ─── PBFT Phases ───
 const PHASE = {

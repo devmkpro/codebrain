@@ -5,10 +5,10 @@
  * Track file state via separate git dir, support revert/unrevert with diff computation.
  */
 
-const { execSync } = require("child_process");
-const path = require("path");
-const fs = require("fs");
-const os = require("os");
+const { execSync } = require("node:child_process");
+const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
 
 const SNAPSHOTS_DIR = path.join(os.homedir(), ".codebrain", "snapshots");
 

@@ -6,9 +6,9 @@
  * validates quality with 13 rules and per-section token budgets.
  */
 
-const path = require("path");
-const fs = require("fs");
-const os = require("os");
+const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
 
 const CHECKPOINTS_DIR = path.join(os.homedir(), ".codebrain", "checkpoints");
 

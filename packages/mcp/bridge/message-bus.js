@@ -6,7 +6,7 @@
  * circular buffer rate tracking, and queue eviction.
  */
 
-const { EventEmitter } = require("events");
+const { EventEmitter } = require("node:events");
 
 const PRIORITY_ORDER = { urgent: 0, high: 1, normal: 2, low: 3 };
 const DEFAULT_ACK_TIMEOUT = 5000;

@@ -3,7 +3,7 @@
  * Create a GitLab release and upload update files to the Package Registry.
  * Uses only Node.js built-in modules (no dependencies).
  */
-import { readFileSync, readdirSync } from "fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 const API_URL = process.env.CI_API_V4_URL;
 const PROJECT_ID = process.env.CI_PROJECT_ID;

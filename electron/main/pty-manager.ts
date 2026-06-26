@@ -268,17 +268,34 @@ function quoteWindowsCmdArg(arg: string): string {
  * Without outer quotes, args containing spaces (e.g. JSON --settings) break cmd.exe parsing.
  */
 function buildWindowsCmdLine(resolved: string, args: string[]): string[] {
-  // Quote path: "C:\path\to\file.cmd"
-  const quotedPath = `"${resolved}"`;
-  // Quote args that contain spaces with \" escaping for cmd.exe /s
-  const quotedArgs = args.map(a => {
-    if (!a.includes(" ")) return a;
-    // Escape inner quotes for cmd.exe /s context: " → \"
-    return `"${a.replace(/"/g, '\\"')}"`;
-  });
-  const inner = ["call", quotedPath, ...quotedArgs].join(" ");
-  // Wrap entire command in outer quotes — cmd.exe /s will strip these
-  return ["/d", "/s", "/c", `"${inner.replace(/"/g, '\\"')}"`];
+  // When we can't avoid cmd.exe (no .cmd→.js shim available), write a temp .cmd script.
+  // Strategy for --settings: Claude CLI accepts `--settings <file-or-json>`.
+  // Write the JSON to a temp file and pass the file path — avoids all cmd.exe quoting issues.
+  const tmpDir = nodepath.join(nodeos.tmpdir(), "codebrain-cmd");
+  if (!nodefs.existsSync(tmpDir)) nodefs.mkdirSync(tmpDir, { recursive: true });
+  const tmpScript = nodepath.join(tmpDir, `run-${Date.now()}-${Math.random().toString(36).slice(2)}.cmd`);
+
+  // Separate --settings from other args — write JSON to a temp file
+  const settingsIdx = args.indexOf("--settings");
+  const settingsJson = settingsIdx >= 0 ? args[settingsIdx + 1] : null;
+  const otherArgs = settingsIdx >= 0
+    ? args.filter((_, i) => i !== settingsIdx && i !== settingsIdx + 1)
+    : args;
+
+  // Write settings JSON to a temp file so cmd.exe can't mangle the quotes
+  let settingsFile: string | null = null;
+  if (settingsJson) {
+    settingsFile = nodepath.join(tmpDir, `settings-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+    nodefs.writeFileSync(settingsFile, settingsJson, "utf8");
+  }
+
+  const scriptLines = [
+    "@echo off",
+    `call "${resolved}" ${otherArgs.map(a => `"${a.replace(/"/g, '""')}"`).join(" ")}${settingsFile ? ` --settings "${settingsFile}"` : ""}`,
+  ];
+  nodefs.writeFileSync(tmpScript, scriptLines.join("\r\n"), "utf8");
+  // tmpScript path has no spaces (it's in %TEMP%), so no quoting needed.
+  return ["/d", "/s", "/c", tmpScript];
 }
 
 /**
@@ -322,8 +339,13 @@ function windowsNodeScriptFromShim(shimPath: string): string | null {
       // Get last capture group (handles optional groups)
       const rawPath = (match[match.length - 1] ?? "")
         .replace(/%(?:~)?dp0%?\\/gi, "")   // strip %dp0%\ and %~dp0\
-        .replace(/^\.\//, "");
+        .replace(/^\.\//, "")
+        .replace(/^"|"$/g, "");              // strip surrounding quotes
       if (!rawPath) continue;
+      // Reject .exe files — they may be Node.js SEA wrappers (e.g. claude.exe)
+      // that fail with ERR_UNKNOWN_FILE_EXTENSION under Node.js 24+ ESM loader.
+      // Only .js and extensionless scripts are valid Node.js entry points.
+      if (/\.exe$/i.test(rawPath)) continue;
       const resolved = nodepath.isAbsolute(rawPath)
         ? rawPath
         : nodepath.join(shimDir, rawPath);
@@ -451,23 +473,14 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
 
     if (/\.(cmd|bat)$/i.test(resolved)) {
       // Step 1: try .exe variant (avoids cmd.exe wrapper — faster, no quoting issues)
-      // Only use the .exe if it's a genuine native PE32 binary (magic bytes "MZ" = 0x4D 0x5A).
-      // Some CLIs (e.g. @anthropic-ai/claude-code on NVM) ship a Node.js wrapper with a .exe
-      // extension that fails when spawned directly — Node's ESM loader rejects ".exe" extension.
-      const exePath = resolved.replace(/\.(cmd|bat)$/i, ".exe");
-      try {
-        if (nodefs.existsSync(exePath)) {
-          const buf = Buffer.alloc(2);
-          const fd = nodefs.openSync(exePath, "r");
-          nodefs.readSync(fd, buf, 0, 2, 0);
-          nodefs.closeSync(fd);
-          const isNativePE = buf[0] === 0x4d && buf[1] === 0x5a; // "MZ" header
-          if (isNativePE) {
-            return { binary: exePath, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
-          }
-          log.info(`[pty] Skipping non-native .exe (no MZ header): ${exePath}`);
-        }
-      } catch {}
+      // Some CLIs (e.g. @anthropic-ai/claude-code) ship a Node.js SEA (Single Executable
+      // Application) wrapper with a .exe extension. These have MZ headers but are NOT
+      // native binaries — they fail with ERR_UNKNOWN_FILE_EXTENSION under Node.js 24+.
+      // There's no reliable heuristic to distinguish them from real native PE binaries,
+      // so we always prefer the .cmd shim when it exists. The .cmd shim is what npm
+      // created and is guaranteed to work.
+      // Only try .exe directly if no .cmd/.bat exists (edge case). When both exist,
+      // skip the .exe optimization and fall through to the .cmd/node-shim path.
 
       // Step 1.5: detect .cmd shims that invoke PowerShell (e.g. cursor-agent.cmd → cursor-agent.ps1)
       // Run powershell.exe directly to bypass cmd.exe quoting issues.

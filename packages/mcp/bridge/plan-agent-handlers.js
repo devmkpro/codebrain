@@ -6,9 +6,9 @@
  * Cannot edit files — only reads, analyzes, and produces a plan document.
  */
 
-const path = require("path");
-const fs = require("fs");
-const os = require("os");
+const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
 
 const PLANS_DIR = path.join(os.homedir(), ".codebrain", "plans");
 

@@ -2,9 +2,9 @@
 
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { z } = require("zod");
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
+const fs = require("node:fs");
+const path = require("node:path");
+const os = require("node:os");
 
 // ── Token-aware truncation helpers ───────────────────────────────────────────
 // These prevent massive MCP responses from flooding the LLM context window.

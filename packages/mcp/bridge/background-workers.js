@@ -6,8 +6,8 @@
  * cache-aware heartbeat (270s), and max 5 concurrent workers.
  */
 
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 // Optional vector-store for pattern similarity calculations
 let tokenize = null, cosineSimilarity = null;
@@ -163,7 +163,7 @@ class WorkerManager {
     this.opts = opts;
     this.alerts = [];
     this.statePath = opts.statePath || path.join(
-      opts.dataDir || path.join(require("os").homedir(), ".codebrain"),
+      opts.dataDir || path.join(require("node:os").homedir(), ".codebrain"),
       "worker-state.json"
     );
 
@@ -904,7 +904,7 @@ class WorkerManager {
   _gitStatus() {
     const cwd = this.opts.getCurrentWorkspacePath?.() || process.cwd();
     try {
-      const { execSync } = require("child_process");
+      const { execSync } = require("node:child_process");
       const status = execSync("git status --porcelain", {
         cwd, encoding: "utf-8", timeout: 5000, windowsHide: true,
       }).trim();
@@ -937,7 +937,7 @@ class WorkerManager {
 
   _cleanCache() {
     let cleaned = 0;
-    const msgDir = path.join(require("os").homedir(), ".codebrain", "messages");
+    const msgDir = path.join(require("node:os").homedir(), ".codebrain", "messages");
     try {
       if (fs.existsSync(msgDir)) {
         const panes = fs.readdirSync(msgDir);
