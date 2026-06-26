@@ -299,6 +299,40 @@ function buildWindowsCmdLine(resolved: string, args: string[]): string[] {
 }
 
 /**
+ * Cleanup old temp scripts and settings files from %TEMP%/codebrain-cmd/.
+ * Removes files older than 1 hour to avoid accumulation while not deleting
+ * files that might still be in use by a running process.
+ */
+function cleanupTempScripts(): void {
+  if (!IS_WIN) return;
+  const tmpDir = nodepath.join(nodeos.tmpdir(), "codebrain-cmd");
+  try {
+    if (!nodefs.existsSync(tmpDir)) return;
+    const files = nodefs.readdirSync(tmpDir);
+    const maxAge = 60 * 60 * 1000; // 1 hour
+    const now = Date.now();
+    let cleaned = 0;
+    for (const file of files) {
+      if (/^(run-.*\.cmd|settings-.*\.json)$/.test(file)) {
+        const filePath = nodepath.join(tmpDir, file);
+        try {
+          const stat = nodefs.statSync(filePath);
+          if (now - stat.mtimeMs > maxAge) {
+            nodefs.unlinkSync(filePath);
+            cleaned++;
+          }
+        } catch { /* ignore individual file errors */ }
+      }
+    }
+    // Remove directory if empty
+    if (cleaned > 0) {
+      const remaining = nodefs.readdirSync(tmpDir);
+      if (remaining.length === 0) nodefs.rmdirSync(tmpDir);
+    }
+  } catch { /* ignore cleanup errors */ }
+}
+
+/**
  * Read a Windows npm .cmd shim and extract the underlying Node.js script path.
  * Returns null if the shim doesn't follow the standard npm pattern.
  */
@@ -540,6 +574,7 @@ export class PtyManager extends EventEmitter {
 
   constructor() {
     super();
+    cleanupTempScripts();
     this.idleDetector.on("idle", ({ paneId, lastOutput }: { paneId: string; lastOutput: string[] }) => {
       this.emit("idle", { paneId, idle: { lastOutput } });
     });
