@@ -15,6 +15,16 @@ export interface Release {
 export const RELEASES: Release[] = [
   {
     "version": "1.12.3",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "Node.js 24 compatibility — node: prefix, SEA .exe handling, settings file passing"
+      }
+    ]
+  },
+  {
+    "version": "1.12.3",
     "date": "junho 2026",
     "highlights": [
       {
