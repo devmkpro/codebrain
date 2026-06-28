@@ -15,10 +15,6 @@ function createTextLoopRecovery(opts) {
         if (!store?.recordTextOutput) return { ok: false, error: "recordTextOutput not available" };
         const result = store.recordTextOutput(paneId, output || "");
         if (result.isLooping) {
-          const warning = result.recoveryCount === 1
-            ? "\n⚠️ TEXT LOOP (mild): Your last 3 outputs were identical. Try a COMPLETELY different approach — different tool, different file, different strategy.\n"
-            : "\n🚨 TEXT LOOP (strong): STOP immediately. Abandon your current plan entirely and ask the user for help.\n";
-          try { opts.ptyManager?.write(paneId, warning, false); } catch {}
           return { ok: true, isLooping: true, recoveryCount: result.recoveryCount, suggestion: result.suggestion, maxRecoveriesReached: result.recoveryCount >= 2 };
         }
         return { ok: true, isLooping: false };

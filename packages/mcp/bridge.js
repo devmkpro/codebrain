@@ -292,10 +292,6 @@ function createMCPBridge(ptyManager, opts = {}) {
       if (outputText.length < 80) return; // Skip very short outputs
       const result = store.recordTextOutput(paneId, outputText);
       if (result.isLooping && result.recoveryCount <= 2) {
-        const warning = result.recoveryCount === 1
-          ? "\n⚠️ TEXT LOOP: Your recent outputs are identical. Try a completely different approach.\n"
-          : "\n🚨 TEXT LOOP (strong): STOP. Ask the user for guidance.\n";
-        try { ptyManager.write(paneId, warning, false); } catch {}
         console.warn(`[bridge] TEXT LOOP: pane ${paneId.slice(0,8)} recovery #${result.recoveryCount}`);
       }
     } catch {}

@@ -134,10 +134,14 @@ export function TerminalPane({
   const followOutputRef = React.useRef(true);
   const userPausedFollowRef = React.useRef(false);
 
+  const handleRightMouseDownCapture = React.useCallback((e: React.MouseEvent) => {
+    if (e.button === 2) {
+      savedSelectionRef.current = termRef.current?.getSelection() ?? '';
+    }
+  }, []);
+
   const handleContextMenu = React.useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    // Capture selection before xterm loses focus when menu opens
-    savedSelectionRef.current = termRef.current?.getSelection() ?? '';
 
     const rect = e.currentTarget.getBoundingClientRect();
     // Account for CSS zoom: getBoundingClientRect returns zoomed values,
@@ -345,7 +349,7 @@ export function TerminalPane({
       }
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
-        navigator.clipboard.readText().then(text => {
+        (window.codeBrainApp?.app.readFromClipboard() ?? Promise.resolve("")).then(text => {
           if (text) window.codeBrainApp?.pty.write(currentPane.id, text);
         }).catch(() => { });
         return false;
@@ -354,7 +358,7 @@ export function TerminalPane({
         const sel = term.getSelection();
         if (sel) {
           e.preventDefault();
-          navigator.clipboard.writeText(sel).catch(() => { });
+          window.codeBrainApp?.app.copyToClipboard(sel);
           return false;
         }
       }
@@ -590,7 +594,7 @@ export function TerminalPane({
             ? "border-indigo-500/40"
             : "border-indigo-500/40 shadow-[0_0_12px_rgba(99,102,241,0.1)]"
         : "border-white/5 hover:border-white/10"
-    } rounded-lg overflow-hidden bg-black ${lowGpuMode ? "" : "backdrop-blur"} ${lowGpuMode ? "" : "transition-all duration-300"} relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onContextMenu={handleContextMenu}>
+    } rounded-lg overflow-hidden bg-black ${lowGpuMode ? "" : "backdrop-blur"} ${lowGpuMode ? "" : "transition-all duration-300"} relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onMouseDownCapture={handleRightMouseDownCapture} onContextMenu={handleContextMenu}>
 
     <AnimatePresence>
       {contextMenu && (
