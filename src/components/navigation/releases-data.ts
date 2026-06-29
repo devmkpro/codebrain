@@ -14,9 +14,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.12.3",
-    "date": "em desenvolvimento",
+    "version": "1.12.4",
+    "date": "junho 2026",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "clipboard IPC consistency, right-click selection loss, and text loop terminal noise"
+      },
       {
         "kind": "fix",
         "text": "Node.js 24 compatibility — node: prefix, SEA .exe handling, settings file passing"
