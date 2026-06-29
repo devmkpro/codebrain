@@ -2,6 +2,15 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.12.4] — 2026-06-29
+
+### Fixes
+- **fix: Node.js 24 compatibility** — `node:` prefix for built-in modules, SEA `.exe` detection, and settings file passing via environment variable instead of argv (avoids ESM loader errors)
+- **fix: clipboard IPC consistency, right-click selection loss, and text loop terminal noise** — unified clipboard handling across IPC boundaries, prevented right-click from clearing text selection, suppressed noisy loop detection output in terminal
+
+### Other
+- **chore: cleanup temp scripts on PtyManager startup** — removes leftover temp files from previous sessions
+
 ## [1.12.3] — 2026-06-24
 
 ### Fixes
