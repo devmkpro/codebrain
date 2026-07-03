@@ -2,6 +2,15 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.13.0] — 2026-07-03
+
+### Features
+- **feat: remove MR/PR review feature** — removed 2054 lines across 23 files. Deleted mr-handlers, mr-review-store, MrFixModal, register-mr-review IPC, registerMRTools from MCP, mr_poll background worker, and all MR references from prompts and UI. 257 total MCP tools.
+
+### Fixes
+- **fix: spawn system — worker config injection, role mapping, OpenRouter routing, duplicate guard** — orchestrator now receives worker config (providerId, model) in system prompt instead of invisible env var; workers get correct role (ui-tester prompt); OpenRouter google/* models route via OpenAI adapter; duplicate guard checks provider/model, not just label
+- **fix: React getSnapshot infinite loop and duplicate key warnings** — stable empty array references in Grid.tsx and MissionSidebar.tsx Zustand selectors; deduplicate registryIndex by id in SettingsPage marketplace
+
 ## [1.12.4] — 2026-06-29
 
 ### Fixes
