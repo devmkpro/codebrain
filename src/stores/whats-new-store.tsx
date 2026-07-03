@@ -26,9 +26,7 @@ export const useWhatsNewStore = create<WhatsNewStore>((set, get) => ({
     set({ shown: false, lastSeenVersion: version });
   },
 
-  shouldShow: (currentVersion: string) => {
-    if (!currentVersion) return false;
-    const lastSeen = get().lastSeenVersion;
-    return lastSeen !== currentVersion;
+  shouldShow: (_currentVersion: string) => {
+    return false;
   },
 }));
