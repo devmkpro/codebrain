@@ -4,17 +4,6 @@ import { useRouter } from "../../lib/router";
 
 // ─── Icons (inline SVGs to avoid external deps) ─────────────────────────────
 
-function GitMergeIcon({ size = 24, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <circle cx="18" cy="18" r="3" />
-      <circle cx="6" cy="6" r="3" />
-      <path d="M6 21V9a9 9 0 0 0 9 9" />
-    </svg>
-  );
-}
-
 function XIcon({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -183,15 +172,15 @@ function FeatureItem({
 
 // ─── Demo text constants (built with String.fromCodePoint for safety) ─────────
 
-const DEMO1_TEXT = `${LDQUO}Revise o MR #42${RDQUO}`;
+const DEMO1_TEXT = `${LDQUO}Spawn um squad com haiku backend e gemini flash frontend${RDQUO}`;
 const DEMO1_RESPONSE =
-  "Analisando diff de 12 arquivos..." +
-  `\n\n  ${EMOJI_CHECK} 3 findings de segurança` +
-  `\n  ${EMOJI_WARN} 2 sugestões de performance` +
-  `\n  ${EMOJI_BULB} 1 melhoria de legibilidade`;
+  "Criando workers..." +
+  `\n\n  ${EMOJI_CHECK} backend: claude-haiku (OAuth)` +
+  `\n  ${EMOJI_CHECK} frontend: gemini-3-flash (API)` +
+  `\n  ${EMOJI_CHECK} ui-tester: gemini-3-flash-lite (API)`;
 
-const DEMO2_TEXT = `${LDQUO}Revise o PR #15 e comente no GitHub${RDQUO}`;
-const DEMO2_RESPONSE = `Review postado com 5 comentários inline ${EMOJI_CHECKMARK}`;
+const DEMO2_TEXT = `${LDQUO}Troque o backend para opus${RDQUO}`;
+const DEMO2_RESPONSE = `Worker re-spawnado com claude-opus-4-7 ${EMOJI_CHECKMARK}`;
 
 // ─── Main modal ──────────────────────────────────────────────────────────────
 
@@ -306,17 +295,17 @@ export function WhatsNewModal({
                   border: "1px solid rgba(139,92,246,0.2)",
                 }}
               >
-                <GitMergeIcon size={32} className="text-violet-400" />
+                <BotIcon size={32} className="text-violet-400" />
               </div>
             </div>
 
             {/* Title + subtitle */}
             <div className="space-y-1.5">
               <h2 className="text-[22px] font-bold text-white tracking-tight">
-                Code Review com IA: BETA
+                Spawn Multi-Provider Corrigido
               </h2>
               <p className="text-[13px] text-slate-400 leading-relaxed max-w-[420px] mx-auto">
-                O Codebrain agora revisa seus Merge Requests e Pull Requests automaticamente
+                Squads agora respeitam o provider e modelo configurado para cada worker
               </p>
             </div>
           </div>
