@@ -14,6 +14,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.13.0",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "React getSnapshot infinite loop and duplicate key warnings"
+      },
+      {
+        "kind": "feat",
+        "text": "remove MR/PR review feature — -2054 lines across 23 files"
+      },
+      {
+        "kind": "fix",
+        "text": "spawn system — worker config injection, role mapping, OpenRouter routing, duplicate guard"
+      }
+    ]
+  },
+  {
     "version": "1.12.4",
     "date": "junho 2026",
     "highlights": [
