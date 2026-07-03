@@ -12,6 +12,8 @@ import { MissionWizard } from "../missions/MissionWizard";
 import { useSpawnPane } from "../../hooks/useSpawnPane";
 import { Sparkles } from "lucide-react";
 
+const EMPTY_ARRAY: any[] = [];
+
 export function Grid({ workspacePath } = {} as any) {
   const allPanes = usePanesStore(s => s.panes) as any[];
   const activePaneId = usePanesStore(s => s.activePaneId);
@@ -33,7 +35,7 @@ export function Grid({ workspacePath } = {} as any) {
   }, [ws, ensureMission]);
 
   // Auto-open wizard when workspace opens with no panes
-  const missions = useMissionsStore(s => ws ? (s.missionsByWorkspace[ws] ?? []) : []);
+  const missions = useMissionsStore(s => ws ? (s.missionsByWorkspace[ws] ?? EMPTY_ARRAY) : EMPTY_ARRAY);
   const activeMissions = React.useMemo(() => missions.filter(m => m.status !== 'archived'), [missions]);
   const wsPaneCount = React.useMemo(
     () => allPanes.filter(p => (p.workspacePath ?? p.cwd) === ws).length,

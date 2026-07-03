@@ -19,7 +19,6 @@ import {
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
 import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
-import { useMrReviewStore } from '../../stores/mr-review-store';
 
 type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'advanced';
 
@@ -254,7 +253,12 @@ export function SettingsPage() {
   const [mrAutoReview, setMrAutoReview] = useState(false);
   const [mrReviewProvider, setMrReviewProvider] = useState('');
   const [mrReviewModel, setMrReviewModel] = useState('');
-  const { detectedWorkspaces, loading: mrLoading, fetchAllowed, toggleWorkspace, allowedWorkspaces } = useMrReviewStore();
+  // MR review store removed — use local defaults
+  const detectedWorkspaces: any[] = [];
+  const mrLoading = false;
+  const fetchAllowed = () => {};
+  const toggleWorkspace = () => {};
+  const allowedWorkspaces: any[] = [];
   const [skillBusy,   setSkillBusy]   = useState(false);
   // Marketplace
   const [registryIndex, setRegistryIndex] = useState<any[]>([]);
@@ -1154,6 +1158,7 @@ export function SettingsPage() {
               ) : (
                 <div className="space-y-1.5 max-h-[320px] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                   {registryIndex
+                    .filter((item: any, idx: number, arr: any[]) => arr.findIndex((x: any) => x.id === item.id) === idx)
                     .filter(item => {
                       if (marketCategory !== 'all' && item.type !== marketCategory) return false;
                       if (marketSearch.trim()) {

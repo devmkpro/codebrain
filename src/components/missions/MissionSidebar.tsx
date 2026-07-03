@@ -16,6 +16,8 @@ interface MissionSidebarProps {
   workspacePath: string;
 }
 
+const EMPTY_MISSIONS: any[] = [];
+
 export function MissionSidebar({ workspacePath }: MissionSidebarProps) {
   const [collapsed, setCollapsed] = React.useState(() => {
     try { return localStorage.getItem(STORAGE_KEY) === '1'; } catch { return false; }
@@ -28,7 +30,7 @@ export function MissionSidebar({ workspacePath }: MissionSidebarProps) {
   const selectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Store
-  const allMissions = useMissionsStore(s => s.missionsByWorkspace[workspacePath] ?? []);
+  const allMissions = useMissionsStore(s => s.missionsByWorkspace[workspacePath] ?? EMPTY_MISSIONS);
   const missions = React.useMemo(() => allMissions.filter(m => m.status !== 'archived'), [allMissions]);
   const activeMissionId = useMissionsStore(s => s.activeMissionByWorkspace[workspacePath]);
   const setActiveMission = useMissionsStore(s => s.setActiveMission);
