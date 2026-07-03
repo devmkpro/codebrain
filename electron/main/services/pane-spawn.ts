@@ -374,10 +374,22 @@ export async function spawnPaneInternal(
             env["ANTHROPIC_MODEL"] = model;
             if (!args.includes("--model")) args.push("--model", model);
             log.info(`[spawnPaneInternal] OpenRouter Anthropic model: setting ANTHROPIC_BASE_URL → ${env["ANTHROPIC_BASE_URL"]}`);
+          } else if (model?.startsWith("google/")) {
+            // OpenRouter's OpenAI-compatible endpoint handles Google models natively.
+            // The Gemini adapter uses Google's own API format which is incompatible,
+            // so we force the OpenAI adapter via OPENAI_BASE_URL + --provider openai.
+            env["OPENAI_BASE_URL"] = provider?.baseUrl || "https://openrouter.ai/api/v1";
+            env["OPENAI_API_KEY"] = openaiKey;
+            env["OPENAI_MODEL"] = model;
+            if (!args.includes("--model")) args.push("--model", model);
+            if (!args.includes("--provider")) args.push("--provider", "openai");
+            log.info(`[spawnPaneInternal] OpenRouter Google model: forcing OpenAI adapter → ${env["OPENAI_BASE_URL"]}`);
+          } else if (model?.includes("/")) {
+            // Other slash-models on OpenRouter (meta-llama/*, deepseek/*, etc.)
+            // Already handled by OPENAI_BASE_URL set earlier — just ensure model is passed.
+            if (!args.includes("--model")) args.push("--model", model);
+            log.info(`[spawnPaneInternal] OpenRouter slash-model "${model}" → using OpenAI adapter`);
           }
-          // Note: google/ models on OpenRouter use OpenAI-compatible format too,
-          // but Gemini adapter uses a different API format. We skip GEMINI_BASE_URL
-          // override to avoid format mismatch. Users should use OpenAI-format models.
         }
       } else if (isAnthropicCompat) {
         // ── spawn pattern (2026-06-04) ───────────────────────────────────

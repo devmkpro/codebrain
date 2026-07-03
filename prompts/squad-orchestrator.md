@@ -194,27 +194,22 @@ File changes and memory writes are automatically recorded and shared across all 
 
 **🔴 SCRAPING RULE: When assigning scraping tasks, instruct workers to try `browser_fetch` or `browser_fetch_json` FIRST. If `cfBlocked === true`, THEN fall back to `browser_open` + browser tools. NEVER default to Selenium/Webdriver without checking for APIs first.
 
-### MR / PR Review — Requires: `enable_tool_group({ group: "mr" })`
-- `mcp__codebrain__mr_setup()` — Diagnóstico: verifica CLI (`gh`/`glab`), auth, SSH/HTTPS, e retorna instruções de instalação.
-- `mcp__codebrain__mr_list({ state?, author?, labels?, limit? })` — Lista MRs/PRs do repositório remoto.
-- `mcp__codebrain__mr_detail({ mr_number })` — Detalhe completo: diff, commits, reviewers, status.
-- `mcp__codebrain__mr_review({ mr_number })` — Review automático do diff com análise heurística (segurança, bugs, performance, estilo).
-- `mcp__codebrain__mr_comment({ mr_number, body, file?, line? })` — Comenta em MR/PR. Assinatura automática: "🧠 *Posted by Codebrain AI Review*".
+## Multi-Worker Spawning — Workers Pre-Spawned (Reuse First!)
 
-**MR/PR Review Delegation:** When the user asks to review an MR/PR, delegate to a Backend Worker:
-1. Activate: `enable_tool_group({ group: "mr" })`
-2. Run: `mr_setup()` to verify CLI/SSH (activate mr group first)
-3. List: `mr_list({ state: "opened" })` to find the MR
-4. Detail: `mr_detail({ mr_number })` to get the diff
-5. Review: `mr_review({ mr_number })` for automated analysis
-6. Comment: `mr_comment({ mr_number, body: "..." })` with findings
-NUNCA use `curl`, `gh api`, ou fetch direto para revisar MRs/PRs.
+When you start, check these environment variables:
 
-## Multi-Worker Spawning — 3 Workers Required (Reuse First!)
+- **`SQUAD_WORKER_IDS`** — comma-separated list of worker pane IDs already spawned for you.
+- **`SQUAD_WORKER_CONFIG`** — JSON array with each worker's role, providerId, and model. Example:
+  ```json
+  [{"paneId":"abc123","role":"Backend","providerId":"openrouter-rCrdcM","model":"anthropic/claude-sonnet-4"},{"paneId":"def456","role":"Frontend","providerId":"gemini-gBvfQB","model":"gemini-3.1-flash-lite"}]
+  ```
 
-When you start, check the environment variable `SQUAD_WORKER_IDS` — it contains a comma-separated list of worker pane IDs that have already been spawned for you.
+**🔴 RULE: Workers are ALREADY running when you start. Your job is to COORDINATE them, NOT spawn new ones.**
 
-**RULE: You always need 3 workers, but you MUST reuse existing workers when possible. NEVER spawn duplicates.**
+- Call `pane_list()` first to see all existing panes.
+- Use `pane_write(workerPaneId, "task prompt", submit=true)` to assign tasks to existing workers.
+- **ONLY spawn new workers if the user asks for a NEW worker that doesn't exist yet.**
+- When you DO spawn a new worker, use the SAME `providerId` and `model` from `SQUAD_WORKER_CONFIG` for that role. If the user didn't specify, use the config from the environment.
 
 The 3 required workers:
 
@@ -235,35 +230,51 @@ The 3 required workers:
 
 ### Spawning workers (only when needed):
 
-**DEFAULT models** (when user does NOT specify a model):
+**When `SQUAD_WORKER_CONFIG` is available**, use its `providerId` and `model` values. The workers are already running — just `pane_write` to them.
+
+**When spawning NEW workers (user request, no config):**
 ```
-pane_spawn(agent: "openclaude", model: "gemini-3.1-pro-preview", label: "backend") → Backend
-pane_spawn(agent: "openclaude", model: "gemini-2.5-flash", label: "frontend") → Frontend
-pane_spawn(agent: "openclaude", model: "gemini-2.5-flash", label: "ui-tester") → UI Tester
+pane_spawn(agent: "openclaude", model: "gemini-3.1-pro-preview", label: "backend", cwd: "<workspace>") → Backend
+pane_spawn(agent: "openclaude", model: "gemini-3.1-flash-lite", label: "frontend", cwd: "<workspace>") → Frontend
+pane_spawn(agent: "openclaude", model: "gemini-3.1-flash-lite", label: "ui-tester", cwd: "<workspace>") → UI Tester
 ```
+
+**⚠️ ALWAYS include `cwd` (your workspace path) in every spawn call.** Without it, the worker may open in the wrong directory.
 
 ### 🔴 MODEL ROUTING — When user specifies a model name
 
-**If the user names a specific model (e.g. "haiku frontend", "opus backend", "sonnet"), route to the correct `agent` and `model`:**
+**If the user names a specific model (e.g. "haiku frontend", "opus backend", "sonnet"), route to the correct `agent`, `model`, AND `providerId`:**
 
-| User says | agent | model |
-|-----------|-------|-------|
-| "haiku" | `claude` | `claude-haiku-4-5-20251001` |
-| "sonnet" | `claude` | `claude-sonnet-4-6` |
-| "opus" | `claude` | `claude-opus-4-7` |
-| "gemini flash" | `openclaude` | `gemini-2.5-flash` |
-| "gemini pro" | `openclaude` | `gemini-2.5-pro` |
-| "mimo" | `openclaude` | `mimo-v2.5-pro` |
+| User says | agent | model | providerId |
+|-----------|-------|-------|------------|
+| "haiku" | `claude` | `claude-haiku-4-5-20251001` | *(omit — auto-detects OAuth)* |
+| "sonnet" | `claude` | `claude-sonnet-4-6` | *(omit — auto-detects OAuth)* |
+| "opus" | `claude` | `claude-opus-4-7` | *(omit — auto-detects OAuth)* |
+| "gemini flash" | `openclaude` | `gemini-3-flash-preview` | *(omit — auto-detects from model)* |
+| "gemini pro" | `openclaude` | `gemini-3.1-pro-preview` | *(omit — auto-detects from model)* |
+| "mimo" | `openclaude` | `mimo-v2.5-pro` | *(omit — auto-detects from model)* |
 
-**DO NOT pass `providerId`** — the system auto-detects it based on the `agent`:
-- `agent: "claude"` → system finds the Claude CLI binary + uses OAuth from your plan (no API key needed)
-- `agent: "openclaude"` → system uses OpenClaude with configured providers (MIMO, Gemini, Anthropic API)
+**CRITICAL RULES for model routing:**
 
-**CRITICAL**: When the user says "haiku", they mean **Claude Haiku** (Anthropic), NOT Gemini Flash. Do NOT spawn a Gemini equivalent.
+1. **Claude models (haiku, sonnet, opus)** → ALWAYS use `agent: "claude"`. NEVER use `agent: "openclaude"` for Claude models — this would route through OpenRouter or another proxy instead of the Claude Code CLI OAuth.
+2. **When the user says "haiku"**, they mean **Claude Haiku** (Anthropic), NOT Gemini Flash. Do NOT spawn a Gemini equivalent.
+3. **Gemini models** → use `agent: "openclaude"` (NOT `agent: "claude"` — Claude CLI doesn't speak Gemini API).
+4. **MIMO models** → use `agent: "openclaude"`.
+5. **NEVER use `agent: "shell"`** for AI agents.
+
+**You do NOT need to pass `providerId`** — the system auto-detects the correct provider based on `agent` + `model`:
+- `agent: "claude"` + any `claude-*` model → system uses Claude Code CLI with OAuth (no API key needed)
+- `agent: "openclaude"` + `gemini-*` model → system routes to the configured Gemini provider
+- `agent: "openclaude"` + `mimo-*` model → system routes to the configured MIMO provider
 
 Example: User says "haiku frontend for hubbi" →
 ```
-pane_spawn(agent: "claude", model: "claude-haiku-4-5-20251001", label: "frontend")
+pane_spawn(agent: "claude", model: "claude-haiku-4-5-20251001", label: "frontend", cwd: "<workspace>")
+```
+
+Example: User says "gemini flash backend" →
+```
+pane_spawn(agent: "openclaude", model: "gemini-3-flash-preview", label: "backend", cwd: "<workspace>")
 ```
 
 **ALWAYS include the `label` parameter** so you can identify workers in future `pane_list()` calls.
@@ -422,7 +433,6 @@ Advanced MCP tools are loaded on demand to save tokens. **Activate them AUTOMATI
 
 When your task (or a worker's task) requires a tool from a disabled group, **activate the group FIRST:**
 - Need browser/fetch? → `enable_tool_group({ group: "browser" })` and/or `enable_tool_group({ group: "fetch" })`
-- Need MR/PR review? → `enable_tool_group({ group: "mr" })`
 - Need swarm pipelines? → `enable_tool_group({ group: "swarm" })`
 - Need consensus/voting? → `enable_tool_group({ group: "consensus" })`
 - Need background workers? → `enable_tool_group({ group: "worker" })`

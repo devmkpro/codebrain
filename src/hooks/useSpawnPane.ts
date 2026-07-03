@@ -128,14 +128,24 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
     const workers = squad.workers ?? (squad.worker ? [squad.worker] : []);
     const workerPaneIds: string[] = [];
 
+    // Map user-defined role names to system prompt roles
+    const resolveRole = (roleName: string): string | undefined => {
+      const lower = (roleName || "").toLowerCase().trim();
+      if (lower.includes("ui-tester") || lower.includes("ui tester") || lower.includes("tester")) return "ui-tester";
+      if (lower.includes("orchestrator")) return "orchestrator";
+      // backend, frontend, worker → undefined (uses default worker prompt)
+      return undefined;
+    };
+
     for (const w of workers) {
       const provider = providers.find(p => p.id === w.providerId);
       const agent = w.agent ?? provider?.host ?? "openclaude";
       const validModel = resolveValidModel(w.providerId, w.model);
-      const workerResult = await window.codeBrainApp?.pty.spawn({ agent, cwd: activeWorkspace, activityId, providerId: w.providerId, model: validModel, permissionMode });
+      const role = resolveRole(w.role);
+      const workerResult = await window.codeBrainApp?.pty.spawn({ agent, cwd: activeWorkspace, activityId, providerId: w.providerId, model: validModel, permissionMode, role });
       if (!workerResult?.ok || !workerResult.paneId) continue;
       workerPaneIds.push(workerResult.paneId);
-      addPane({ id: workerResult.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: w.providerId, model: validModel, externallySpawned: true } as any);
+      addPane({ id: workerResult.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: w.providerId, model: validModel, externallySpawned: true, label: w.role } as any);
     }
 
     if (workerPaneIds.length === 0) return;
@@ -143,9 +153,33 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
     const orchProvider = providers.find(p => p.id === squad.orchestrator.providerId);
     const orchAgent = squad.orchestrator.agent ?? orchProvider?.host ?? "openclaude";
     const validOrchModel = resolveValidModel(squad.orchestrator.providerId, squad.orchestrator.model);
+
+    // Build worker config JSON so the orchestrator knows each worker's provider/model.
+    // Inject into sessionContext (system prompt) — LLMs can't read env vars reliably.
+    const workerConfig = workers.map((w: any, i: number) => ({
+      paneId: workerPaneIds[i],
+      role: w.role,
+      providerId: w.providerId,
+      model: resolveValidModel(w.providerId, w.model),
+    }));
+
+    const sessionContext = `## SQUAD_WORKER_CONFIG — Workers Already Running
+
+The following workers are ALREADY spawned and running. Use their paneId to \`pane_write\` tasks directly. DO NOT spawn new workers with the same roles.
+
+\`\`\`json
+${JSON.stringify(workerConfig, null, 2)}
+\`\`\`
+
+**When spawning a REPLACEMENT worker** (if one crashes), use the SAME providerId and model from the config above for that role.`;
+
     const orchResult = await window.codeBrainApp?.pty.spawn({
       agent: orchAgent, cwd: activeWorkspace, activityId, providerId: squad.orchestrator.providerId,
-      model: validOrchModel, permissionMode, env: { SQUAD_WORKER_IDS: workerPaneIds.join(","), SQUAD_ACTIVITY_ID: activityId },
+      model: validOrchModel, permissionMode, sessionContext,
+      env: {
+        SQUAD_WORKER_IDS: workerPaneIds.join(","),
+        SQUAD_ACTIVITY_ID: activityId,
+      },
     });
     if (orchResult?.ok && orchResult.paneId) {
       addPane({ id: orchResult.paneId, agent: orchAgent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: squad.orchestrator.providerId, model: validOrchModel, externallySpawned: true } as any);

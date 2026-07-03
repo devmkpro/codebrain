@@ -108,6 +108,7 @@ function createPaneHandlers(ptyManager, opts) {
     async spawnPane({ agent, cwd, providerId, model, label, description, parentPaneId }) {
       try {
         // ── Duplicate guard: if a pane with this label already exists and is alive, reuse it ──
+        // BUT only if providerId+model match — otherwise the user wants a different provider.
         if (label && opts.paneLabels) {
           for (const [existingPaneId, existingLabel] of opts.paneLabels) {
             if (existingLabel === label) {
@@ -115,16 +116,24 @@ function createPaneHandlers(ptyManager, opts) {
               const panes = ptyManager.list();
               const pane = panes.find(p => p.paneId === existingPaneId);
               if (pane && pane.status !== "exited") {
-                return {
-                  ok: true,
-                  paneId: existingPaneId,
-                  reused: true,
-                  label,
-                  message: `Reusing existing "${label}" pane (${existingPaneId}). It is already active.`,
-                };
+                // Check if provider/model match — if not, don't reuse (user wants different provider)
+                const providerMatch = !providerId || !pane.providerId || pane.providerId === providerId;
+                const modelMatch = !model || !pane.model || pane.model === model;
+                if (providerMatch && modelMatch) {
+                  return {
+                    ok: true,
+                    paneId: existingPaneId,
+                    reused: true,
+                    label,
+                    message: `Reusing existing "${label}" pane (${existingPaneId}). It is already active.`,
+                  };
+                }
+                // Label matches but provider/model differ — remove stale label, spawn new
+                opts.paneLabels.delete(existingPaneId);
+              } else {
+                // Pane exited — remove stale label
+                opts.paneLabels.delete(existingPaneId);
               }
-              // Pane exited — remove stale label
-              opts.paneLabels.delete(existingPaneId);
             }
           }
         }
