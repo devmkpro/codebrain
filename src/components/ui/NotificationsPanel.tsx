@@ -184,16 +184,6 @@ const NotificationsPanel = React.forwardRef<HTMLDivElement, { onClose: () => voi
                     {n.body && (
                       <p className="mt-0.5 font-mono text-[10px] text-slate-500 leading-relaxed line-clamp-2">{n.body}</p>
                     )}
-                    {n.mr_url && (
-                      <a
-                        href={n.mr_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-[9px] font-mono text-indigo-400 hover:text-indigo-300 hover:underline transition-colors"
-                      >
-                        <ExternalLink size={8} /> Abrir MR
-                      </a>
-                    )}
                   </div>
 
                   {/* dismiss */}

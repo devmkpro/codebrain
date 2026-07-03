@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const { randomUUID } = require("node:crypto");
-const { createCodebrainMCPServer, registerBrowserTools, registerFetchTools, registerMRTools } = require("./index.js");
+const { createCodebrainMCPServer, registerBrowserTools, registerFetchTools } = require("./index.js");
 const { createMCPBridge } = require("./bridge.js");
 
 // ── Session tracking with activity timestamps ──

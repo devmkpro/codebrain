@@ -57,16 +57,6 @@ function buildMcpBridge(ctx: AppContext) {
     },
     getCurrentWorkspacePath: () => ctx.currentWorkspacePath,
     setCurrentWorkspacePath: (ws: string) => { ctx.currentWorkspacePath = ws; },
-    clearReviewingState: () => {
-      (ctx as any)._mrReviewActive = false;
-      (ctx as any)._mrReviewActiveWorkspaces = new Set();
-    },
-    sendFindings: (data: { mrId: number; workspace: string; findings: string[]; summary: string; title: string; sourceBranch: string; targetBranch: string }) => {
-      safeSend(ctx, "mr_review:findings", data);
-    },
-    sendReviewError: (data: { workspace: string; error: string; quickFix?: string }) => {
-      safeSend(ctx, "mr_review:error", data);
-    },
     memoryStore: ctx.memoryStore,
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
@@ -94,7 +84,7 @@ function buildMcpBridge(ctx: AppContext) {
         return null;
       }
     },
-    emitNotification: (data: { type: string; title: string; body?: string; level?: string; mr_id?: number; mr_url?: string; provider?: string }) => {
+    emitNotification: (data: { type: string; title: string; body?: string; level?: string; provider?: string }) => {
       try {
         const store = ctx.memoryStore;
         if (!store) return;

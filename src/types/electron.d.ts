@@ -259,8 +259,6 @@ export interface StoredNotification {
   title: string;
   body?: string;
   level: string;
-  mr_id?: number;
-  mr_url?: string;
   provider?: string;
   read: boolean;
   created_at: number;
@@ -555,15 +553,6 @@ export interface CodebrainApp {
     markAllRead: () => Promise<{ ok: boolean; error?: string }>;
     dismiss: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
     clear: () => Promise<{ ok: boolean; error?: string }>;
-  };
-  mrReview: {
-    status: () => Promise<{ ok: boolean; reviewing?: boolean; activeWorkspaces?: string[]; allowedWorkspaces?: string[]; autoReview?: boolean; error?: string }>;
-    allowed: () => Promise<{ ok: boolean; workspaces?: Array<{ path: string; name: string; allowed: boolean }>; error?: string }>;
-    setAllowed: (args: { workspaces: string[] }) => Promise<{ ok: boolean; error?: string }>;
-    trigger: (args: { workspace: string }) => Promise<{ ok: boolean; message?: string; error?: string }>;
-    applyFixes: (args: { workspace: string; mrId: number; findings: string; sourceBranch?: string }) => Promise<{ ok: boolean; paneId?: string; error?: string }>;
-    onFindings: (cb: (data: { mrId: number; workspace: string; findings: string[]; summary: string; title: string; sourceBranch: string; targetBranch: string }) => void) => () => void;
-    onError: (cb: (data: { workspace: string; error: string; quickFix?: string }) => void) => () => void;
   };
   notify: (title: string, body: string) => void;
   log: {

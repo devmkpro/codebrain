@@ -31,7 +31,6 @@ const WORKER_DEFINITIONS = [
   { name: "cache",     intervalMs: 60 * 60 * 1000,   description: "Clean expired messages and stale cache entries", priority: "background" },
   { name: "swarm",     intervalMs: 1 * 60 * 1000,    description: "Monitor swarm health and detect stalled workers", priority: "high" },
   { name: "heartbeat", intervalMs: CACHE_HEARTBEAT_INTERVAL, description: "Cache-aware heartbeat for prompt cache optimization (270s)", priority: "background" },
-  { name: "mr_poll",   intervalMs: 5 * 60 * 1000,    description: "Auto-review new MRs when mr_auto_review is enabled", priority: "normal" },
 ];
 
 // ─── On-Demand Trigger Definitions (12 triggers) ───
@@ -591,7 +590,6 @@ class WorkerManager {
         case "cache": result = this._cleanCache(); break;
         case "swarm": result = this._swarmMonitor(); break;
         case "heartbeat": result = this._cacheHeartbeat(); break;
-        case "mr_poll": result = this._mrPoll(opts); break;
         default: result = { message: "no implementation" };
       }
 

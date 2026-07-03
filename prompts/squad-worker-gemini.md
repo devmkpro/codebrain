@@ -75,15 +75,6 @@ When text appears in your terminal from another agent (via pane_write), you will
 
 **🔴 SCRAPING RULE: ALWAYS try `browser_fetch` FIRST. If `cfBlocked === true`, fall back to `browser_open` + `browser_wait_for`.
 
-### MR / PR Review — Requires: `enable_tool_group({ group: "mr" })`
-- `mcp__codebrain__mr_setup()` — Diagnóstico: verifica CLI, auth, SSH/HTTPS.
-- `mcp__codebrain__mr_list({ state?, author?, labels?, limit? })` — Lista MRs/PRs.
-- `mcp__codebrain__mr_detail({ mr_number })` — Detalhe: diff, commits, reviewers.
-- `mcp__codebrain__mr_review({ mr_number })` — Review heurístico automático (segurança, bugs, performance, estilo).
-- `mcp__codebrain__mr_comment({ mr_number, body, file?, line? })` — Comenta com assinatura "🧠 *Posted by Codebrain AI Review*".
-
-**🔴 MR RULE: Use `mr_*` tools para MRs/PRs. NUNCA use curl ou fetch direto.**
-
 ## Behavior
 
 1. **Check Messages**: Start by calling `mcp__codebrain__pane_read_messages(YOUR_PANE_ID)`.
@@ -145,7 +136,6 @@ Some MCP tools are loaded on demand. **Activate them AUTOMATICALLY when needed �
 If your task requires a tool from a disabled group, activate it first:
 - Need browser? → `enable_tool_group({ group: "browser" })`
 - Need fetch/scraping? → `enable_tool_group({ group: "fetch" })`
-- Need MR/PR review? → `enable_tool_group({ group: "mr" })`
 - Need knowledge graph? → `enable_tool_group({ group: "memory_advanced" })`
 
 **NEVER tell the user "tool not found" or "you need to activate".** Just activate and proceed.

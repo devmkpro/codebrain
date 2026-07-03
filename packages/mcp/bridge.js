@@ -17,7 +17,6 @@ const { createSkillHandlers } = require("./bridge/skill-handlers.js");
 const { createKanbanHandlers } = require("./bridge/kanban-handlers.js");
 const { createMissionHandlers } = require("./bridge/mission-handlers.js");
 const { createFetchHandlers } = require("./bridge/fetch-handlers.js");
-const { createMRHandlers } = require("./bridge/mr-handlers.js");
 
 // ── MiMo-Code Features (25 new features) ───────────────────────────────────
 const { createCompactionHandlers } = require("./bridge/compaction-handlers.js");
@@ -528,11 +527,6 @@ function createMCPBridge(ptyManager, opts = {}) {
   const kanbanHandlers = createKanbanHandlers({ ...opts });
   const missionHandlers = createMissionHandlers({ ...opts });
   const fetchHandlers = createFetchHandlers(opts);
-  const mrHandlers = createMRHandlers({
-    getOAuthToken: opts.getOAuthToken,
-    getBotToken: opts.getBotToken,
-    emitNotification: opts.emitNotification,
-  });
 
   // Gap-closing handlers
   const autoMemoryHandlers = createAutoMemoryHandlers({ memoryStore: opts.memoryStore });
@@ -579,8 +573,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     console.log("[bridge] Actor stuck detection scanner started (60s interval, 5min threshold)");
   }
 
-  // Wire mrHandlers + configStore + paneHandlers into WorkerManager for mr_poll worker
-  workerManager.opts.mrHandlers = mrHandlers;
+  // Wire configStore + paneHandlers into WorkerManager
   workerManager.opts.configStore = opts.configStore;
   workerManager.opts.emitNotification = opts.emitNotification;
   workerManager.opts.paneHandlers = paneHandlers;
@@ -680,7 +673,6 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...kanbanHandlers,
     ...missionHandlers,
     ...fetchHandlers,
-    ...mrHandlers,
     ...agentHandlers,
     // ── MiMo-Code Feature Handlers (25 new features) ──────────────────────
     ...compactionHandlers,
