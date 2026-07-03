@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.13.1",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "remove WhatsNew modal — disable shouldShow, strip Review Bot section"
+      }
+    ]
+  },
+  {
     "version": "1.13.0",
     "date": "julho 2026",
     "highlights": [
