@@ -19,6 +19,10 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "fix",
+        "text": "update WhatsNewModal — remove MR review theme, show spawn fixes"
+      },
+      {
+        "kind": "fix",
         "text": "React getSnapshot infinite loop and duplicate key warnings"
       },
       {
