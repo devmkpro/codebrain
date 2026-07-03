@@ -2,6 +2,11 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.13.1] — 2026-07-03
+
+### Fixes
+- Remove Review Bot onboarding screen from WhatsNewModal
+
 ## [1.13.0] — 2026-07-03
 
 ### Features
