@@ -33,6 +33,13 @@ export function resolveProvider(
   let model = config.model;
   let provider: any = null;
 
+  // ── Read preferredAgent from configStore (set by user in Settings/Header) ──
+  let preferredAgent: string | undefined;
+  try {
+    const cfg = ctx.configStore?.get?.() as Record<string, unknown> | undefined;
+    preferredAgent = (cfg?.preferredAgent as string) || undefined;
+  } catch {}
+
   // ── Early exit: shell agent needs no provider ──────────────────────────────
   if (agent === "shell") {
     return { agent, provider: null, providerId: null, model: undefined };
@@ -253,6 +260,23 @@ export function resolveProvider(
       // Fall back to first provider of matching type (e.g. direct Anthropic API key)
       if (!provider) {
         provider = allProviders.find((p: any) => p.type === targetType) ?? null;
+      }
+
+      // ── preferredAgent tiebreaker: switch provider if user's preferred CLI has this model ──
+      // When model matches multiple providers (e.g. mimo-v2.5-pro in mimo-EYRZH3 AND mimo-claude),
+      // prefer the provider whose host matches preferredAgent. This handles the case where
+      // type-based lookup picks mimo-compat (openclaude) but user wants claude CLI.
+      if (provider && preferredAgent && provider.host !== preferredAgent) {
+        // Search ALL enhanced providers + virtual providers for same model with matching host
+        const preferredCandidate = allProviders.find((p: any) =>
+          p.host === preferredAgent &&
+          (p.models ?? []).includes(model!) &&
+          p.id !== provider.id
+        );
+        if (preferredCandidate) {
+          log.info(`[resolveProvider] preferredAgent="${preferredAgent}" → switching from "${provider.id}" (host=${provider.host}) to "${preferredCandidate.id}" (host=${preferredCandidate.host}) for model "${model}"`);
+          provider = preferredCandidate;
+        }
       }
       // Fallback: if no direct provider found (e.g. anthropic-compat unavailable),
       // try OpenRouter or any openai-compat provider that might proxy the model.

@@ -4,6 +4,7 @@ import { usePanesStore } from "../stores/panes-store";
 import { useBrowserStore } from "../stores/browser-store";
 import { useNavStore } from "../stores/nav-store";
 import { notify } from "../lib/notify";
+import { resolveSpawnTarget } from "../lib/resolve-spawn-target";
 
 export function useSpawnPane(activeWorkspace: string | undefined) {
   const addPane = usePanesStore(s => s.addPane);
@@ -41,63 +42,37 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
   const handleAddPane = (providerId?: string, model?: string) => {
     if (!activeWorkspace) return;
     const explicit = providerId !== undefined || model !== undefined;
-    let nextProviderId = explicit ? providerId : favoritePane?.providerId;
-    // If no favoritePane model, use per-provider default from localStorage
+    const rawPid = explicit ? providerId : favoritePane?.providerId;
     const providerDefaultModels: Record<string, string> = (() => {
       try { return JSON.parse(localStorage.getItem('codebrain.providerDefaultModels') ?? '{}'); } catch { return {}; }
     })();
-    const rawModel = explicit ? model : (favoritePane?.model ?? (nextProviderId ? providerDefaultModels[nextProviderId] : undefined));
-    const nextModel = rawModel;
+    const rawModel = explicit ? model : (favoritePane?.model ?? (rawPid ? providerDefaultModels[rawPid] : undefined));
+    const preferredAgent = (() => { try { return localStorage.getItem('codebrain.preferredAgent') || undefined; } catch { return undefined; } })();
 
-    // If model is given but provider is not, resolve provider from the model name.
-    // This prevents falling back to MIMO when the user picks a Claude/Gemini model
-    // but the providerId is undefined (e.g. claude-oauth virtual provider).
-    if (nextModel && !nextProviderId) {
-      const lowerModel = nextModel.toLowerCase();
-      for (const p of providers) {
-        if (p.models?.includes(nextModel)) {
-          nextProviderId = p.id;
-          break;
-        }
-      }
-      // Fallback by model prefix if not found in any provider's model list
-      if (!nextProviderId) {
-        if (lowerModel.startsWith("claude-") || lowerModel.startsWith("opus-") || lowerModel.startsWith("sonnet-") || lowerModel.startsWith("haiku-")) {
-          const anthropic = providers.find(p => p.type === "anthropic-compat" || p.type === "oauth");
-          if (anthropic) nextProviderId = anthropic.id;
-        } else if (lowerModel.startsWith("gemini-")) {
-          const gemini = providers.find(p => p.type === "gemini-compat");
-          if (gemini) nextProviderId = gemini.id;
-        } else if (lowerModel.startsWith("mimo-")) {
-          const mimo = providers.find(p => p.type === "mimo-compat");
-          if (mimo) nextProviderId = mimo.id;
-        } else if (lowerModel.startsWith("gpt-") || lowerModel.startsWith("o")) {
-          const openai = providers.find(p => p.type === "openai-compat");
-          if (openai) nextProviderId = openai.id;
-        }
-      }
-    }
+    const target = resolveSpawnTarget({
+      providerId: rawPid,
+      model: rawModel,
+      providers,
+      preferredAgent,
+      providerDefaultModels,
+      explicit,
+      favoriteAgent: favoritePane?.agent,
+    });
 
-    const provider = nextProviderId ? providers.find(p => p.id === nextProviderId) : null;
-    const agent = explicit
-      ? provider?.host ?? (provider?.type === "oauth" ? "claude" : "openclaude")
-      : favoritePane?.agent ?? provider?.host ?? "openclaude";
-    const spawnEnv: Record<string, string> = {
-      ...(nextModel ? { ANTHROPIC_MODEL: nextModel, MODEL: nextModel } : {}),
-    };
+    const envKeys = Object.keys(target.env);
     window.codeBrainApp?.pty.spawn({
-      agent,
+      agent: target.agent,
       cwd: activeWorkspace,
-      providerId: nextProviderId,
-      model: nextModel,
+      providerId: target.providerId,
+      model: target.model,
       permissionMode,
-      ...(Object.keys(spawnEnv).length > 0 ? { env: spawnEnv } : {}),
+      ...(envKeys.length > 0 ? { env: target.env } : {}),
     }).then(result => {
       if (!result?.ok || !result.paneId) {
         notify("Erro ao abrir pane", result?.error ?? "spawn retornou erro", "error");
         return;
       }
-      addPane({ id: result.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: nextProviderId, model: nextModel, permissionMode, externallySpawned: true });
+      addPane({ id: result.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: target.providerId, model: target.model, permissionMode, externallySpawned: true });
     }).catch(err => {
       notify("Erro ao abrir pane", String(err), "error");
     });
@@ -127,6 +102,8 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
     const activityId = nanoid(8);
     const workers = squad.workers ?? (squad.worker ? [squad.worker] : []);
     const workerPaneIds: string[] = [];
+    const preferredAgent = (() => { try { return localStorage.getItem('codebrain.preferredAgent') || undefined; } catch { return undefined; } })();
+    const providerDefaultModels: Record<string, string> = (() => { try { return JSON.parse(localStorage.getItem('codebrain.providerDefaultModels') ?? '{}'); } catch { return {}; } })();
 
     // Map user-defined role names to system prompt roles
     const resolveRole = (roleName: string): string | undefined => {
@@ -138,21 +115,29 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
     };
 
     for (const w of workers) {
-      const provider = providers.find(p => p.id === w.providerId);
-      const agent = w.agent ?? provider?.host ?? "openclaude";
-      const validModel = resolveValidModel(w.providerId, w.model);
+      const target = resolveSpawnTarget({
+        providerId: w.providerId,
+        model: resolveValidModel(w.providerId, w.model),
+        providers,
+        preferredAgent,
+        providerDefaultModels,
+      });
       const role = resolveRole(w.role);
-      const workerResult = await window.codeBrainApp?.pty.spawn({ agent, cwd: activeWorkspace, activityId, providerId: w.providerId, model: validModel, permissionMode, role });
+      const workerResult = await window.codeBrainApp?.pty.spawn({ agent: target.agent, cwd: activeWorkspace, activityId, providerId: target.providerId, model: target.model, permissionMode, role });
       if (!workerResult?.ok || !workerResult.paneId) continue;
       workerPaneIds.push(workerResult.paneId);
-      addPane({ id: workerResult.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: w.providerId, model: validModel, externallySpawned: true, label: w.role } as any);
+      addPane({ id: workerResult.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: target.providerId, model: target.model, externallySpawned: true, label: w.role } as any);
     }
 
     if (workerPaneIds.length === 0) return;
 
-    const orchProvider = providers.find(p => p.id === squad.orchestrator.providerId);
-    const orchAgent = squad.orchestrator.agent ?? orchProvider?.host ?? "openclaude";
-    const validOrchModel = resolveValidModel(squad.orchestrator.providerId, squad.orchestrator.model);
+    const orchTarget = resolveSpawnTarget({
+      providerId: squad.orchestrator.providerId,
+      model: resolveValidModel(squad.orchestrator.providerId, squad.orchestrator.model),
+      providers,
+      preferredAgent,
+      providerDefaultModels,
+    });
 
     // Build worker config JSON so the orchestrator knows each worker's provider/model.
     // Inject into sessionContext (system prompt) — LLMs can't read env vars reliably.
@@ -174,15 +159,15 @@ ${JSON.stringify(workerConfig, null, 2)}
 **When spawning a REPLACEMENT worker** (if one crashes), use the SAME providerId and model from the config above for that role.`;
 
     const orchResult = await window.codeBrainApp?.pty.spawn({
-      agent: orchAgent, cwd: activeWorkspace, activityId, providerId: squad.orchestrator.providerId,
-      model: validOrchModel, permissionMode, sessionContext,
+      agent: orchTarget.agent, cwd: activeWorkspace, activityId, providerId: orchTarget.providerId,
+      model: orchTarget.model, permissionMode, sessionContext,
       env: {
         SQUAD_WORKER_IDS: workerPaneIds.join(","),
         SQUAD_ACTIVITY_ID: activityId,
       },
     });
     if (orchResult?.ok && orchResult.paneId) {
-      addPane({ id: orchResult.paneId, agent: orchAgent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: squad.orchestrator.providerId, model: validOrchModel, externallySpawned: true } as any);
+      addPane({ id: orchResult.paneId, agent: orchTarget.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: orchTarget.providerId, model: orchTarget.model, externallySpawned: true } as any);
     }
   };
 

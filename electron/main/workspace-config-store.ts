@@ -31,7 +31,9 @@ export function workspaceAccessInstruction(workspacePath: string, mode: AccessMo
     `- Primary workspace: ${workspacePath}`,
   ];
   if (mode === "read_external") {
-    lines.push("- Mode: read_external. Edit only files inside the primary workspace; read-only access is allowed outside.");
+    lines.push("- Mode: read_external. Read-only access is allowed outside the primary workspace.");
+    lines.push("- 🔴 PROHIBIDO: You MUST NOT write, edit, create, or delete files outside the primary workspace. This includes Write, Edit, MultiEdit tool calls targeting paths outside the workspace root.");
+    lines.push("- If you need to write outside the workspace, tell the user to change the access mode to write_external in Settings first.");
   } else {
     lines.push("- Mode: write_external. Read and edit files inside and outside the primary workspace.");
   }

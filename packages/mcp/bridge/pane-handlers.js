@@ -24,7 +24,7 @@ const MEMORY_PROTOCOL_PREFIX = `
 /**
  * Worker contract footer — auto-appended to task writes (>80 chars) to
  * ensure workers always terminate with handoff_submit instead of going idle.
- * Inspired by Overclock's WORKER_CONTRACT_FOOTER pattern.
+ * Ensures workers always terminate via handoff_submit instead of going idle silently.
  */
 const WORKER_CONTRACT_FOOTER = `
 
@@ -33,6 +33,8 @@ const WORKER_CONTRACT_FOOTER = `
 // Stuck detection: 5 minutes without output → fire event
 const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
 const STUCK_SCAN_INTERVAL_MS = 60 * 1000;
+// Idle unproductive: worker idle >2min with no task in_progress
+const IDLE_UNPRODUCTIVE_THRESHOLD_S = 120;
 
 /**
  * Pane-related bridge handlers (spawn, read, write, list, idle, roles, messages).
@@ -76,6 +78,98 @@ function createPaneHandlers(ptyManager, opts) {
     } catch {}
   });
 
+  // ── Watchdog dedup state ──────────────────────────────────────────────────
+  // Tracks which workers have already been alerted about (paneId:state → true)
+  const watchdogAlerted = new Map();
+
+  /**
+   * Poke the orchestrator of a worker's mission with a watchdog alert.
+   * Uses the same serialized writeSilent pattern as handoff's pokeOrchestrator.
+   * Deduplicates: only alerts once per paneId+state until the state changes.
+   */
+  function watchdogPokeOrchestrator(workerPaneId, state, label, durationSec) {
+    const dedupKey = `${workerPaneId}:${state}`;
+    if (watchdogAlerted.has(dedupKey)) return;
+    watchdogAlerted.set(dedupKey, true);
+
+    const workerLabel = label || opts.paneLabels?.get(workerPaneId) || workerPaneId.slice(0, 8);
+    const shortId = workerPaneId.slice(0, 8);
+    const msg = `[watchdog] Worker "${workerLabel}" (pane ${shortId}) parou — status=${state}, sem atividade há ~${durationSec}s. Verifique com pane_read/actor_status e decida: respawn (swarm_respawn), reassign task, ou seguir sem ele.`;
+
+    // Find orchestrator — same logic as handoffSubmit pokeOrchestrator
+    const orchestratorPaneId = (() => {
+      try {
+        const store = opts.memoryStore;
+        if (store?.getActorRole && store?.findOrchestrator) {
+          const workerRole = store.getActorRole({ paneId: workerPaneId });
+          if (workerRole.ok && workerRole.missionId) {
+            const orchs = store.findOrchestrator({ missionId: workerRole.missionId });
+            if (orchs.ok && orchs.count >= 1) {
+              const pid = orchs.orchestrators[0];
+              if (ptyManager.hasPane(pid)) return pid;
+            }
+          }
+        }
+      } catch {}
+      for (const [pid, role] of roleMap) {
+        if (role === "orchestrator" && ptyManager.hasPane(pid)) return pid;
+      }
+      return null;
+    })();
+
+    if (!orchestratorPaneId) return;
+
+    // Serialize using the same handoffPokeChain to avoid collision
+    const prevChain = handoffPokeChain.get(workerPaneId) ?? Promise.resolve();
+    const nextChain = prevChain.then(async () => {
+      if (!ptyManager.hasPane(orchestratorPaneId)) return;
+      ptyManager.writeSilent(orchestratorPaneId, msg);
+      await new Promise(r => setTimeout(r, 500));
+      if (!ptyManager.hasPane(orchestratorPaneId)) return;
+      ptyManager.write(orchestratorPaneId, "\r");
+      await new Promise(r => setTimeout(r, 350));
+    });
+    handoffPokeChain.set(workerPaneId, nextChain);
+  }
+
+  // Clear dedup when a worker produces new output (state changed)
+  ptyManager.on("output", (paneId) => {
+    // Remove all dedup entries for this paneId so future stalls re-alert
+    for (const key of watchdogAlerted.keys()) {
+      if (key.startsWith(paneId + ":")) watchdogAlerted.delete(key);
+    }
+  });
+
+  // ── Watchdog: poke orchestrator when a worker exits unexpectedly ──────────
+  ptyManager.on("exit", (paneId, exitCode) => {
+    try {
+      // Only alert for workers (not orchestrators, not shell, not browser)
+      const store = opts.memoryStore;
+      let isWorker = false;
+      let label = opts.paneLabels?.get(paneId) || "";
+      try {
+        if (store?.getActorRole) {
+          const role = store.getActorRole({ paneId });
+          if (role?.ok && role?.role === "worker") isWorker = true;
+          if (role?.ok && role?.role === "orchestrator") return; // don't alert about orchestrator itself
+        }
+      } catch {}
+      // Fallback: check roleMap
+      if (!isWorker) {
+        const role = roleMap.get(paneId);
+        if (role === "orchestrator") return;
+        if (role === "worker") isWorker = true;
+      }
+      // Skip shell and browser panes
+      if (!isWorker) {
+        const agent = opts.paneConfigs?.get?.(paneId)?.agent;
+        if (agent === "shell" || !agent) return;
+      }
+
+      watchdogPokeOrchestrator(paneId, 'exited', label, 0);
+    } catch {}
+  });
+
   // ── Stuck detection fiber (scans every 60s) ────────────────────────────────
   const stuckScanTimer = setInterval(() => {
     try {
@@ -96,17 +190,144 @@ function createPaneHandlers(ptyManager, opts) {
             stuckDuration: Date.now() - actor.last_turn_time,
           });
         } catch {}
+        // Watchdog: poke the orchestrator about this stuck worker
+        const stuckDurationSec = Math.round((Date.now() - (actor.last_turn_time || Date.now())) / 1000);
+        watchdogPokeOrchestrator(actor.pane_id, 'stuck', actor.label || actor.agent, stuckDurationSec);
       }
+
+      // ── Watchdog: detect "idle unproductive" workers ──────────────────────
+      // Workers that are idle but have NO task in_progress in the kanban board.
+      // These are workers waiting for work or that lost their task context.
+      // Threshold: IDLE_UNPRODUCTIVE_THRESHOLD_MS (default 120s = 2min).
+      try {
+        if (store?.listKanbanTasks) {
+          const allPanes = ptyManager.list();
+          for (const pane of allPanes) {
+            if (pane.status !== 'idle') continue;
+            // Skip non-workers
+            const role = roleMap.get(pane.paneId);
+            if (role === 'orchestrator' || role === undefined) continue;
+            const agent = opts.paneConfigs?.get?.(pane.paneId)?.agent;
+            if (agent === 'shell' || agent === 'browser' || !agent) continue;
+
+            // Check last turn time
+            let actorData = null;
+            try { actorData = store.getActorRole?.({ paneId: pane.paneId }); } catch {}
+            const lastTurn = actorData?.last_turn_time || 0;
+            const idleSec = lastTurn > 0 ? Math.round((Date.now() - lastTurn) / 1000) : 999;
+            if (idleSec < IDLE_UNPRODUCTIVE_THRESHOLD_S) continue;
+
+            // Check if worker has any task in_progress
+            const tasks = store.listKanbanTasks({ assigned_to: pane.paneId, column: 'in_progress', limit: 5 });
+            if (tasks?.ok && tasks.tasks && tasks.tasks.length > 0) continue; // has active task, skip
+
+            // Worker is idle + no active task → poke orchestrator
+            const label = opts.paneLabels?.get(pane.paneId) || pane.paneId.slice(0, 8);
+            watchdogPokeOrchestrator(pane.paneId, 'idle_unproductive', label, idleSec);
+          }
+        }
+      } catch {}
     } catch {}
   }, STUCK_SCAN_INTERVAL_MS);
   // Prevent the interval from keeping Node.js alive when the app exits
   if (stuckScanTimer.unref) stuckScanTimer.unref();
 
+  // ── Find idle worker helper ──────────────────────────────────────────────
+  // Scans actor_registry for a worker that is:
+  //   - role=worker, status=idle (not running/stuck/cancelled)
+  //   - pane is still alive in ptyManager
+  //   - has NO kanban task with column=in_progress assigned to it
+  //   - matches model/providerId/agent (if specified)
+  //   - not in excludePaneIds
+  // Returns the best candidate (lowest turn_count) or null.
+  function findIdleWorker({ model, providerId, agent, excludePaneIds = [] } = {}) {
+    try {
+      const store = opts.memoryStore;
+      if (!store?.actorList) return null;
+      const { actors } = store.actorList({ status: "idle", includeTerminal: true });
+      if (!actors || actors.length === 0) return null;
+
+      const excludeSet = new Set(excludePaneIds);
+      const panesAlive = ptyManager.list();
+      const aliveIds = new Set(panesAlive.map(p => p.paneId));
+
+      // Collect kanban tasks in_progress to exclude busy workers
+      let busyPaneIds = new Set();
+      try {
+        const { tasks } = store.listKanbanTasks({ column: "in_progress", limit: 500 });
+        if (tasks) {
+          for (const t of tasks) {
+            if (t.assigned_to) busyPaneIds.add(t.assigned_to);
+          }
+        }
+      } catch {}
+
+      const candidates = [];
+      for (const actor of actors) {
+        // Must be a worker
+        if (actor.role !== "worker") continue;
+        // Must be idle (not running/stuck/cancelled)
+        if (actor.status !== "idle") continue;
+        // Pane must still be alive
+        if (!aliveIds.has(actor.pane_id)) continue;
+        // Not in exclude list
+        if (excludeSet.has(actor.pane_id)) continue;
+        // Must not have an in_progress kanban task
+        if (busyPaneIds.has(actor.pane_id)) continue;
+        // Model match (if specified): exact match or both undefined
+        if (model && actor.model && actor.model !== model) continue;
+        // Provider match (if specified): exact match or actor has none
+        if (providerId && actor.provider_id && actor.provider_id !== providerId) continue;
+        // Agent match (if specified): exact match or actor has none
+        if (agent && actor.agent && actor.agent !== agent) continue;
+
+        candidates.push(actor);
+      }
+
+      if (candidates.length === 0) return null;
+
+      // Prefer the worker with lowest turn_count (least used)
+      candidates.sort((a, b) => (a.turn_count || 0) - (b.turn_count || 0));
+      return candidates[0];
+    } catch {
+      return null;
+    }
+  }
+
   return {
     roleMap,
+    findIdleWorker,
 
-    async spawnPane({ agent, cwd, providerId, model, label, description, parentPaneId }) {
+    async spawnPane({ agent, cwd, providerId, model, label, description, parentPaneId, reuseIdle = true }) {
       try {
+        // ── Idle worker reuse: find a compatible idle worker before spawning ──
+        // If reuseIdle is enabled (default) and no explicit NEW label is provided,
+        // try to find an idle worker with matching model/provider instead of spawning.
+        if (reuseIdle) {
+          const idleWorker = findIdleWorker({ model, providerId, agent });
+          if (idleWorker) {
+            // Update label/description if provided (rebrand the reused worker)
+            if (label && opts.paneLabels) {
+              opts.paneLabels.set(idleWorker.pane_id, label);
+            }
+            // Register in actor registry with new task context
+            try {
+              const workspace = opts.getCurrentWorkspacePath?.() || null;
+              opts.memoryStore?.actorRegister?.({
+                paneId: idleWorker.pane_id, parentPaneId: parentPaneId || null,
+                agent, label, description, workspace, cwd, providerId, model,
+              });
+            } catch {}
+            return {
+              ok: true,
+              paneId: idleWorker.pane_id,
+              reused: true,
+              label: label || null,
+              message: `Reused idle worker ${idleWorker.pane_id.slice(0, 8)} (turns: ${idleWorker.turn_count || 0}). No new pane spawned.`,
+            };
+          }
+        }
+
         // ── Duplicate guard: if a pane with this label already exists and is alive, reuse it ──
         // BUT only if providerId+model match — otherwise the user wants a different provider.
         if (label && opts.paneLabels) {
@@ -199,7 +420,7 @@ function createPaneHandlers(ptyManager, opts) {
       // ── Worker contract footer (auto-append for task writes) ──────────────
       // Appended when: text is long enough to be a task (>80 chars),
       // does NOT already contain handoff_submit, and this is a submit write.
-      // Inspired by Overclock's WORKER_CONTRACT_FOOTER pattern.
+      // Auto-append contract footer to long task writes.
       if (
         submit &&
         finalText.length > 80 &&
@@ -244,16 +465,32 @@ function createPaneHandlers(ptyManager, opts) {
     },
 
     async listPanes(paneLabels) {
-      return ptyManager.list().map((p) => ({
-        ...p,
-        role: roleMap.get(p.paneId) || "worker",
-        label: paneLabels.get(p.paneId) || p.agent,
-      }));
+      return ptyManager.list().map((p) => {
+        const base = {
+          ...p,
+          role: roleMap.get(p.paneId) || "worker",
+          label: paneLabels.get(p.paneId) || p.agent,
+        };
+        // Enrich with store data (role + mission_id from actor_registry)
+        try {
+          const store = opts.memoryStore;
+          if (store?.getActorRole) {
+            const storeRole = store.getActorRole({ paneId: p.paneId });
+            if (storeRole.ok) {
+              base.role = storeRole.role || base.role;
+              base.mission_id = storeRole.missionId || null;
+            }
+          }
+        } catch {}
+        return base;
+      });
     },
 
-    async setRole(paneId, role) {
+    async setRole(paneId, role, missionId) {
       roleMap.set(paneId, role);
-      return { ok: true, paneId, role };
+      // Persist to actor_registry SQLite
+      try { opts.memoryStore?.setActorRole?.({ paneId, role, missionId }); } catch {}
+      return { ok: true, paneId, role, missionId: missionId || null };
     },
 
     async notifyPane(paneId, message) {
@@ -288,12 +525,32 @@ function createPaneHandlers(ptyManager, opts) {
         // Fire hook event
         try { opts.hooksManager?.fire?.("handoff_submitted", { paneId, status, summary: summary.slice(0, 100) }); } catch {}
 
+        // ── Auto-complete tasks assigned to this worker ─────────────────────
+        // When a worker submits handoff, move its assigned kanban tasks to done/review.
+        try {
+          if (store.listKanbanTasks && store.moveKanbanTask) {
+            const actorRole = store.getActorRole?.({ paneId });
+            const missionId = actorRole?.ok ? actorRole.missionId : null;
+            if (missionId) {
+              const assignedTasks = store.listKanbanTasks({ mission_id: missionId, assigned_to: paneId, limit: 10 });
+              if (assignedTasks?.ok) {
+                const targetColumn = status === "done" ? "done" : "review";
+                for (const task of (assignedTasks.tasks || [])) {
+                  if (task.column_name !== "done" && task.column_name !== targetColumn) {
+                    try { store.moveKanbanTask({ id: task.id, column: targetColumn }); } catch {}
+                  }
+                }
+              }
+            }
+          }
+        } catch {}
+
         // ── pokeOrchestrator: notify the orchestrator automatically ────────
         // Find the orchestrator pane (role === "orchestrator") and inject the
-        // result as a system message. This is the key pattern from Overclock:
-        // workers NEVER write to the orchestrator directly — the MCP server
-        // delivers the result asynchronously, serialized with delays.
-        // This breaks the bidirectional conversation loop completely.
+        // result as a system message. Workers NEVER write to the orchestrator
+        // directly — the MCP server delivers the result asynchronously,
+        // serialized with delays. This breaks the bidirectional conversation
+        // loop completely.
         try {
           const workerLabel = opts.paneLabels?.get(paneId) || paneId.slice(0, 8);
           const artifactStr = (artifacts && artifacts.length > 0)
@@ -301,8 +558,23 @@ function createPaneHandlers(ptyManager, opts) {
             : "";
           const msg = `[squad] Worker "${workerLabel}" (pane ${paneId.slice(0, 8)}) finished — status=${status}. ${summary}${artifactStr} Use handoff_wait or handoff_list to get the full result, then continue the pipeline.`;
 
-          // Find orchestrator pane(s) — serialize writes to avoid race conditions
+          // Find orchestrator pane — store-first (mission-aware), fallback to roleMap
           const orchestratorPaneId = (() => {
+            // 1. Try store-based lookup (mission-aware)
+            try {
+              const store = opts.memoryStore;
+              if (store?.getActorRole && store?.findOrchestrator) {
+                const workerRole = store.getActorRole({ paneId });
+                if (workerRole.ok && workerRole.missionId) {
+                  const orchs = store.findOrchestrator({ missionId: workerRole.missionId });
+                  if (orchs.ok && orchs.count >= 1) {
+                    const pid = orchs.orchestrators[0];
+                    if (ptyManager.hasPane(pid)) return pid;
+                  }
+                }
+              }
+            } catch {}
+            // 2. Fallback: scan roleMap for any orchestrator
             for (const [pid, role] of roleMap) {
               if (role === "orchestrator" && ptyManager.hasPane(pid)) return pid;
             }
@@ -316,7 +588,7 @@ function createPaneHandlers(ptyManager, opts) {
               if (!ptyManager.hasPane(orchestratorPaneId)) return;
               // Write message text silently (no echo)
               ptyManager.writeSilent(orchestratorPaneId, msg);
-              // Wait 500ms then submit (Enter) — same as Overclock's pokeOrchestrator
+              // Wait 500ms then submit (Enter) — serialized chain prevents race
               await new Promise(r => setTimeout(r, 500));
               if (!ptyManager.hasPane(orchestratorPaneId)) return;
               ptyManager.write(orchestratorPaneId, "\r");
@@ -398,11 +670,12 @@ function createPaneHandlers(ptyManager, opts) {
      * Returns the pane output after completion.
      * @param {number} timeoutMs - Max wait time (default 10 minutes)
      */
-    async paneSpawnAndWait({ agent, cwd, providerId, model, label, description, parentPaneId, timeoutMs = 600_000 }) {
-      // 1. Spawn
-      const spawnResult = await this.spawnPane({ agent, cwd, providerId, model, label, description, parentPaneId });
+    async paneSpawnAndWait({ agent, cwd, providerId, model, label, description, parentPaneId, reuseIdle = true, timeoutMs = 600_000 }) {
+      // 1. Spawn (or reuse idle worker)
+      const spawnResult = await this.spawnPane({ agent, cwd, providerId, model, label, description, parentPaneId, reuseIdle });
       if (!spawnResult.paneId) return { ok: false, error: spawnResult.error || 'spawn failed' };
       const { paneId } = spawnResult;
+      const reused = spawnResult.reused || false;
 
       // 2. Wait for idle with timeout
       const waitResult = await this.waitPaneIdle(paneId, timeoutMs);
@@ -448,7 +721,26 @@ function createPaneHandlers(ptyManager, opts) {
       const store = opts.memoryStore;
       if (!store?.actorList) return { ok: false, error: 'actor registry not available' };
       const ws = workspace || opts.getCurrentWorkspacePath?.() || undefined;
-      return store.actorList({ workspace: ws, includeTerminal });
+      const result = store.actorList({ workspace: ws, includeTerminal });
+      // Enrich each actor with 'available' field:
+      // available = worker + idle + no kanban task in_progress assigned
+      if (result.ok && result.actors) {
+        let busyPaneIds = new Set();
+        try {
+          const { tasks } = store.listKanbanTasks({ column: "in_progress", limit: 500 });
+          if (tasks) {
+            for (const t of tasks) {
+              if (t.assigned_to) busyPaneIds.add(t.assigned_to);
+            }
+          }
+        } catch {}
+        for (const actor of result.actors) {
+          actor.available = actor.role === "worker"
+            && actor.status === "idle"
+            && !busyPaneIds.has(actor.pane_id);
+        }
+      }
+      return result;
     },
 
     /**
@@ -465,7 +757,7 @@ function createPaneHandlers(ptyManager, opts) {
      * Block until any/all of the listed panes go idle OR submit a handoff.
      * Returns as soon as the returnOn condition is met.
      * Eliminates the model-driven polling loop of repeated pane_wait_idle calls.
-     * Inspired by Overclock's pane_wait_many(returnOn="any").
+     * Blocks until any/all panes go idle or submit a handoff.
      */
     async waitManyPanes({ paneIds, returnOn = "any", timeoutMs = 300000, matchStrings = [] }) {
       if (!Array.isArray(paneIds) || paneIds.length === 0) return { ok: false, error: "paneIds required" };
