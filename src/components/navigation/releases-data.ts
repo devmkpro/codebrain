@@ -14,6 +14,28 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.14.0",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "Files panel, terminal selection, and fresh-workspace statusline"
+      },
+      {
+        "kind": "feat",
+        "text": "unified top header, brand refresh, and Review Bot removal"
+      },
+      {
+        "kind": "feat",
+        "text": "idle-worker reuse, preferred agent tie-breaker, and silent watchdog"
+      },
+      {
+        "kind": "feat",
+        "text": "mission-scoped orchestration, task board, and role badges"
+      }
+    ]
+  },
+  {
     "version": "1.13.1",
     "date": "julho 2026",
     "highlights": [
