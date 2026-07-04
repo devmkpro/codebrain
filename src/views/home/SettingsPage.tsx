@@ -19,15 +19,16 @@ import {
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
 import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
+import { HOST_LABELS } from '../../lib/resolve-spawn-target';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'preferredAgent' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       onClick={() => onChange(!enabled)}
-      className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${enabled ? 'bg-[#4F46E5]' : 'bg-white/10 hover:bg-white/15'}`}
+      className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${enabled ? 'bg-[#5855e5]' : 'bg-white/10 hover:bg-white/15'}`}
     >
       <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
     </button>
@@ -41,7 +42,7 @@ function Stepper({ value, onIncrease, onDecrease, onReset, unit = '' }: {
   return (
     <div className="flex items-center gap-2">
       {onDecrease && <button onClick={onDecrease} className="w-6 h-6 rounded bg-white/5 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center text-[14px] transition-colors">−</button>}
-      <span className="font-mono text-[12px] text-[#4F46E5] w-14 text-center">{value}{unit}</span>
+      <span className="font-mono text-[12px] text-[#5855e5] w-14 text-center">{value}{unit}</span>
       {onIncrease && <button onClick={onIncrease} className="w-6 h-6 rounded bg-white/5 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center text-[14px] transition-colors">+</button>}
       {onReset && <button onClick={onReset} className="text-[9px] font-mono text-slate-600 hover:text-slate-400 transition-colors">reset</button>}
     </div>
@@ -57,9 +58,9 @@ function SectionCard({ id, icon, title, badge, children, active, onToggle }: {
     <div className="rounded-xl border border-white/5 bg-[#0A0A0B]/50 overflow-hidden">
       <button onClick={() => onToggle(id)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition-colors">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#4F46E5]/10 border border-[#4F46E5]/20 flex items-center justify-center text-[#4F46E5]">{icon}</div>
+          <div className="w-8 h-8 rounded-lg bg-[#5855e5]/10 border border-[#5855e5]/20 flex items-center justify-center text-[#5855e5]">{icon}</div>
           <span className="text-[12px] font-bold text-slate-200">{title}</span>
-          {badge && <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#4F46E5]/10 text-indigo-400 uppercase tracking-widest border border-indigo-500/20">{badge}</span>}
+          {badge && <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#5855e5]/10 text-indigo-400 uppercase tracking-widest border border-indigo-500/20">{badge}</span>}
         </div>
         {active ? <ChevronDown size={13} className="text-slate-500" /> : <ChevronRight size={13} className="text-slate-700" />}
       </button>
@@ -109,7 +110,7 @@ function AddEnvVarRow({ onAdd }: { onAdd: (key: string, value: string) => void }
         value={key}
         onChange={e => setKey(e.target.value)}
         placeholder="KEY"
-        className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors"
+        className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40 transition-colors"
         onKeyDown={e => e.key === 'Enter' && handleAdd()}
       />
       <input
@@ -117,7 +118,7 @@ function AddEnvVarRow({ onAdd }: { onAdd: (key: string, value: string) => void }
         value={value}
         onChange={e => setValue(e.target.value)}
         placeholder="value"
-        className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors"
+        className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40 transition-colors"
         onKeyDown={e => e.key === 'Enter' && handleAdd()}
       />
       <button
@@ -296,6 +297,7 @@ export function SettingsPage() {
   const [defaultModel, setDefaultModel] = useState('');
   const [spawnMsg, setSpawnMsg] = useState<string | null>(null);
   const [providerDefaultModels, setProviderDefaultModels] = useState<Record<string, string>>({});
+  const [preferredAgent, setPreferredAgent] = useState<string | null>(null);
 
   // Terminal settings
   const fontSize         = useTerminalSettings(s => s.fontSize);
@@ -389,6 +391,7 @@ export function SettingsPage() {
       .then((cfg: any) => {
         if (cfg && typeof cfg.globalEnv === 'object' && cfg.globalEnv) setGlobalEnv(cfg.globalEnv as Record<string, string>);
         if (cfg?.discordClientId) setDiscordClientId(cfg.discordClientId);
+        if (cfg?.preferredAgent) setPreferredAgent(cfg.preferredAgent);
         if (cfg?.notifications) {
           if (cfg.notifications.onTaskComplete !== undefined) setNotifOnTaskComplete(cfg.notifications.onTaskComplete);
           if (cfg.notifications.onMessage !== undefined) setNotifOnMessage(cfg.notifications.onMessage);
@@ -533,11 +536,10 @@ export function SettingsPage() {
           { id: 'marketplace'    as Section, icon: <Store size={12} />,    label: 'Marketplace' },
           { id: 'notifications'  as Section, icon: <Bell size={12} />,     label: 'Notificações' },
           { id: 'discord'        as Section, icon: <Gamepad2 size={12} />, label: 'Discord'   },
-          { id: 'oauth'          as Section, icon: <Link size={12} />,     label: 'Review Bot' },
           { id: 'advanced'       as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
         ] as const).map(({ id, icon, label }) => (
           <button key={id} onClick={() => toggleSection(id)}
-            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-[11px] transition-all ${open.includes(id) ? 'bg-[#4F46E5]/10 border border-[#4F46E5]/20 text-indigo-300' : 'text-slate-500 hover:bg-white/5 border border-transparent hover:border-white/5 hover:text-slate-300'}`}
+            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-[11px] transition-all ${open.includes(id) ? 'bg-[#5855e5]/10 border border-[#5855e5]/20 text-indigo-300' : 'text-slate-500 hover:bg-white/5 border border-transparent hover:border-white/5 hover:text-slate-300'}`}
           >{icon}{label}</button>
         ))}
 
@@ -575,7 +577,7 @@ export function SettingsPage() {
               <p className="text-[10px] text-slate-500 mt-0.5">Configurações aplicadas em tempo real</p>
             </div>
             <button onClick={handleSave}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-bold uppercase tracking-widest transition-all ${saved ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400' : 'bg-[#4F46E5] text-white hover:bg-[#4338CA]'}`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-bold uppercase tracking-widest transition-all ${saved ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400' : 'bg-[#5855e5] text-white hover:bg-[#4a47d6]'}`}
             >
               {saved ? <><CheckCircle2 size={12} />Salvo!</> : <><Save size={12} />Salvar</>}
             </button>
@@ -587,14 +589,14 @@ export function SettingsPage() {
               <Stepper value={fontSize} unit="px" onIncrease={increaseFontSize} onDecrease={decreaseFontSize} onReset={resetFontSize} />
             </Row>
             <div>
-              <input type="range" min={MIN_SIZE} max={MAX_SIZE} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="w-full h-1 bg-white/5 rounded-full appearance-none accent-[#4F46E5]" />
+              <input type="range" min={MIN_SIZE} max={MAX_SIZE} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="w-full h-1 bg-white/5 rounded-full appearance-none accent-[#5855e5]" />
               <div className="flex justify-between text-[9px] text-slate-700 mt-1"><span>{MIN_SIZE}px</span><span>{MAX_SIZE}px</span></div>
             </div>
             <Divider />
 
             <Row label="Família de Fonte">
               <select value={fontFamily} onChange={e => setFontFamily(e.target.value)}
-                className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer hover:border-white/20 transition-colors"
+                className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer hover:border-white/20 transition-colors"
               >
                 {FONT_OPTIONS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
               </select>
@@ -615,7 +617,7 @@ export function SettingsPage() {
               <Stepper value={`${(appZoom * 100).toFixed(0)}%`} onIncrease={increaseAppZoom} onDecrease={decreaseAppZoom} onReset={resetAppZoom} />
             </Row>
             <div>
-              <input type="range" min={50} max={200} step={10} value={Math.round(appZoom * 100)} onChange={e => useTerminalSettings.setState({ appZoom: Math.max(0.5, Math.min(3, Number(e.target.value) / 100)) })} className="w-full h-1 bg-white/5 rounded-full appearance-none accent-[#4F46E5]" />
+              <input type="range" min={50} max={200} step={10} value={Math.round(appZoom * 100)} onChange={e => useTerminalSettings.setState({ appZoom: Math.max(0.5, Math.min(3, Number(e.target.value) / 100)) })} className="w-full h-1 bg-white/5 rounded-full appearance-none accent-[#5855e5]" />
               <div className="flex justify-between text-[9px] text-slate-700 mt-1"><span>50%</span><span>200%</span></div>
             </div>
             <Divider />
@@ -649,7 +651,7 @@ export function SettingsPage() {
               <select
                 value={scrollbackSize}
                 onChange={e => setScrollbackSize(Number(e.target.value))}
-                className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer hover:border-white/20 transition-colors"
+                className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer hover:border-white/20 transition-colors"
               >
                 {SCROLLBACK_OPTIONS.map(o => (
                   <option key={o.id} value={o.value}>{o.label}</option>
@@ -665,7 +667,7 @@ export function SettingsPage() {
                 <select
                   value={defaultShellPath ?? ''}
                   onChange={e => setDefaultShell(e.target.value || null)}
-                  className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer hover:border-white/20 transition-colors max-w-[200px] truncate"
+                  className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer hover:border-white/20 transition-colors max-w-[200px] truncate"
                 >
                   <option value="">Sistema padrão</option>
                   {shells.map(s => <option key={s} value={s}>{s}</option>)}
@@ -723,6 +725,45 @@ export function SettingsPage() {
             ><RefreshCw size={11} /> Recarregar Providers</button>
           </SectionCard>
 
+          {/* ── Agent/CLI Preferido ──────────────────────────────────── */}
+          <SectionCard id="preferredAgent" icon={<Cpu size={13} />} title="Agent/CLI Preferido" active={open.includes('preferredAgent')} onToggle={toggleSection}>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              Desempata qual CLI usar quando um modelo existe em múltiplos providers.
+              Ex: <span className="font-mono text-slate-400">mimo-v2.5-pro</span> está no OpenClaude e no Claude Code CLI — a preferência decide.
+            </p>
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">CLI Preferido</label>
+                <select
+                  value={preferredAgent ?? ''}
+                  onChange={e => {
+                    const val = e.target.value || null;
+                    setPreferredAgent(val);
+                    if (val) localStorage.setItem('codebrain.preferredAgent', val);
+                    else localStorage.removeItem('codebrain.preferredAgent');
+                    window.dispatchEvent(new CustomEvent('preferred-agent-changed', { detail: { preferredAgent: val } }));
+                    // Persist to appConfig
+                    (window as any).codeBrainApp?.appConfig?.get?.().then((cfg: any) => {
+                      (window as any).codeBrainApp?.appConfig?.set?.({ ...cfg, preferredAgent: val ?? undefined });
+                    }).catch(() => {});
+                  }}
+                  className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer"
+                >
+                  <option value="">Automático (nenhum)</option>
+                  <option value="claude">Claude Code CLI</option>
+                  <option value="openclaude">OpenClaude</option>
+                  <option value="gemini">Gemini CLI</option>
+                  <option value="codex">Codex</option>
+                </select>
+              </div>
+              <p className="text-[9px] text-slate-600 font-mono">
+                {preferredAgent
+                  ? `Ativo: ${HOST_LABELS[preferredAgent] ?? preferredAgent}`
+                  : 'Nenhum — usa o primeiro provider que casar com o modelo.'}
+              </p>
+            </div>
+          </SectionCard>
+
           {/* ── Spawn Padrão ─────────────────────────────────────────── */}
           <SectionCard id="spawn" icon={<Monitor size={13} />} title="Spawn Padrão" badge="Por Workspace" active={open.includes('spawn')} onToggle={toggleSection}>
             <p className="text-[10px] text-slate-500 leading-relaxed">
@@ -739,7 +780,7 @@ export function SettingsPage() {
                     const p = providers.find((p: any) => p.id === e.target.value);
                     setDefaultModel(providerDefaultModels[e.target.value] ?? p?.models?.[0] ?? '');
                   }}
-                  className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer"
+                  className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer"
                 >
                   <option value="">— Sem preferência —</option>
                   {providers.map((p: any) => (
@@ -756,7 +797,7 @@ export function SettingsPage() {
                     <select
                       value={defaultModel}
                       onChange={e => setDefaultModel(e.target.value)}
-                      className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer"
+                      className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer"
                     >
                       {models.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
@@ -788,7 +829,7 @@ export function SettingsPage() {
                       setTimeout(() => setSpawnMsg(null), 2500);
                     }
                   }}
-                  className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#4F46E5] text-white rounded-lg hover:bg-[#4338CA] transition-colors"
+                  className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#5855e5] text-white rounded-lg hover:bg-[#4a47d6] transition-colors"
                 >Salvar Padrão</button>
                 {spawnMsg && <span className={`font-mono text-[10px] ${spawnMsg.startsWith('Erro') ? 'text-red-400' : 'text-emerald-400'}`}>{spawnMsg}</span>}
               </div>
@@ -811,7 +852,7 @@ export function SettingsPage() {
                               setProviderDefaultModels(next);
                               localStorage.setItem('codebrain.providerDefaultModels', JSON.stringify(next));
                             }}
-                            className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 outline-none focus:border-[#4F46E5] appearance-none cursor-pointer"
+                            className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer"
                           >
                             {models.map(m => <option key={m} value={m}>{m}</option>)}
                           </select>
@@ -825,7 +866,7 @@ export function SettingsPage() {
                               setProviderDefaultModels(next);
                               localStorage.setItem('codebrain.providerDefaultModels', JSON.stringify(next));
                             }}
-                            className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 placeholder-slate-700 outline-none focus:border-[#4F46E5] transition-colors"
+                            className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 placeholder-slate-700 outline-none focus:border-[#5855e5] transition-colors"
                           />
                         )}
                       </div>
@@ -858,7 +899,7 @@ export function SettingsPage() {
                       const next = { ...globalEnv, [key]: e.target.value };
                       setGlobalEnv(next);
                     }}
-                    className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40 transition-colors"
+                    className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40 transition-colors"
                   />
                   <button
                     onClick={() => {
@@ -889,7 +930,7 @@ export function SettingsPage() {
                     setTimeout(() => setEnvMsg(null), 2500);
                   }
                 }}
-                className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#4F46E5] text-white rounded-lg hover:bg-[#4338CA] transition-colors"
+                className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#5855e5] text-white rounded-lg hover:bg-[#4a47d6] transition-colors"
               >
                 Salvar Env Vars
               </button>
@@ -948,7 +989,7 @@ export function SettingsPage() {
               <button
                 onClick={handleSkillToggle}
                 disabled={skillBusy || skillStatus === null}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-40 ${skillStatus?.installed ? 'border border-red-500/20 text-red-400 hover:bg-red-500/5' : 'bg-[#4F46E5] text-white hover:bg-[#4338CA]'}`}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-40 ${skillStatus?.installed ? 'border border-red-500/20 text-red-400 hover:bg-red-500/5' : 'bg-[#5855e5] text-white hover:bg-[#4a47d6]'}`}
               >
                 {skillBusy ? '…' : skillStatus?.installed ? 'Desinstalar' : 'Instalar'}
               </button>
@@ -1233,7 +1274,7 @@ export function SettingsPage() {
                                 ? item.scope === 'codebrain'
                                   ? 'border border-white/10 text-slate-500 hover:text-red-400 hover:border-red-500/20'
                                   : 'border border-emerald-500/20 text-emerald-400/60 cursor-default'
-                                : 'bg-[#4F46E5] text-white hover:bg-[#4338CA]'
+                                : 'bg-[#5855e5] text-white hover:bg-[#4a47d6]'
                             }`}
                           >
                             {isInstalling ? '…' : isInstalled ? '✓ Instalado' : 'Instalar'}
@@ -1549,637 +1590,6 @@ export function SettingsPage() {
             {discordMsg && <p className="text-[10px] text-slate-400 mt-1">{discordMsg}</p>}
           </SectionCard>
 
-          {/* ── Review Bot (OAuth) ──────────────────────────────────────── */}
-          <SectionCard id="oauth" icon={<Link size={13} />} title="Review Bot" badge="OAuth" active={open.includes('oauth')} onToggle={toggleSection}>
-            <p className="text-[10px] text-slate-500 leading-relaxed mb-3">
-              Conecte sua conta do GitLab ou GitHub como um <strong className="text-slate-300">bot de review</strong>.
-              Os comentários de MR/PR aparecerão no nome do aplicativo (ex: "Codebrain Review Bot"), não no seu usuário pessoal.
-            </p>
-
-            {/* Status badges */}
-            <div className="flex gap-3 mb-4">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
-                <Globe size={12} className="text-orange-400" />
-                <span className="text-[10px] text-slate-400">GitLab:</span>
-                <div className={`w-2 h-2 rounded-full ${oauthStatus?.gitlab?.connected ? 'bg-emerald-400' : 'bg-red-500/60'}`} />
-                <span className={`text-[10px] font-medium ${oauthStatus?.gitlab?.connected ? 'text-emerald-400' : 'text-slate-600'}`}>
-                  {oauthStatus?.gitlab?.connected ? `Conectado${oauthStatus.gitlab.account ? ' — ' + oauthStatus.gitlab.account : ''}` : 'Não conectado'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
-                <Globe size={12} className="text-slate-300" />
-                <span className="text-[10px] text-slate-400">GitHub:</span>
-                <div className={`w-2 h-2 rounded-full ${oauthStatus?.github?.connected ? 'bg-emerald-400' : 'bg-red-500/60'}`} />
-                <span className={`text-[10px] font-medium ${oauthStatus?.github?.connected ? 'text-emerald-400' : 'text-slate-600'}`}>
-                  {oauthStatus?.github?.connected ? `Conectado${oauthStatus.github.account ? ' — ' + oauthStatus.github.account : ''}` : 'Não conectado'}
-                </span>
-              </div>
-            </div>
-
-            {oauthError && (
-              <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 mb-3">
-                <p className="text-[10px] text-red-400 flex items-center gap-1.5"><AlertTriangle size={10} /> {oauthError}</p>
-              </div>
-            )}
-
-            {/* ═══════════════════════════════════════════════════════════
-               GITLAB TUTORIAL
-            ═══════════════════════════════════════════════════════════ */}
-            <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 overflow-hidden mb-4">
-              <button
-                onClick={() => setTutorialOpen(p => ({ ...p, gitlab: !p.gitlab }))}
-                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-orange-500/10 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Globe size={13} className="text-orange-400" />
-                  <span className="text-[11px] font-bold text-orange-300">Tutorial — GitLab OAuth App</span>
-                </div>
-                {tutorialOpen.gitlab
-                  ? <ChevronDown size={13} className="text-orange-400" />
-                  : <ChevronRight size={13} className="text-orange-400" />}
-              </button>
-
-              {tutorialOpen.gitlab && (
-                <div className="px-3 pb-3 space-y-3 border-t border-orange-500/10">
-                  <p className="text-[10px] text-slate-500 leading-relaxed mt-2">
-                    Siga os passos abaixo para criar um OAuth Application no GitLab. Leva menos de 2 minutos.
-                  </p>
-
-                  {/* Step 1 */}
-                  <div className="flex gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[9px] font-bold text-orange-300">1</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold text-slate-300">Abra a página de Applications do GitLab</p>
-                      <p className="text-[10px] text-slate-500">
-                        Clique no link abaixo ou copie e cole no navegador:
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <a
-                          href="https://gitlab.com/-/user_settings/applications"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-orange-500/15 border border-orange-500/25 text-orange-300 text-[10px] font-mono hover:bg-orange-500/25 transition-colors"
-                        >
-                          <ExternalLink size={10} /> gitlab.com/-/user_settings/applications
-                        </a>
-                        <button
-                          onClick={() => copyToClipboard('https://gitlab.com/-/user_settings/applications', 'gitlab-url')}
-                          className="p-1.5 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                          title="Copiar URL"
-                        >
-                          {copiedField === 'gitlab-url'
-                            ? <Check size={10} className="text-emerald-400" />
-                            : <Copy size={10} className="text-slate-500" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Step 2 */}
-                  <div className="flex gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[9px] font-bold text-orange-300">2</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold text-slate-300">Clique em <span className="text-orange-300">"Add new application"</span></p>
-                      <p className="text-[10px] text-slate-500">
-                        Fica no canto superior direito da página.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Step 3 */}
-                  <div className="flex gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[9px] font-bold text-orange-300">3</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold text-slate-300">Preencha o formulário</p>
-                      <div className="p-2.5 rounded-md bg-black/20 border border-white/5 space-y-2">
-                        <div className="flex items-start gap-2">
-                          <span className="text-[9px] font-mono text-orange-400 w-24 shrink-0 pt-0.5">Name</span>
-                          <span className="text-[10px] text-slate-400">Qualquer nome, ex: <code className="text-orange-300 bg-orange-500/10 px-1 rounded">Codebrain Review Bot</code></span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-[9px] font-mono text-orange-400 w-24 shrink-0 pt-0.5">Redirect URI</span>
-                          <div className="flex items-center gap-1.5">
-                            <code className="text-[10px] text-orange-300 bg-orange-500/10 px-1.5 py-0.5 rounded font-mono">http://127.0.0.1:19876/callback</code>
-                            <button
-                              onClick={() => copyToClipboard('http://127.0.0.1:19876/callback', 'gitlab-redirect')}
-                              className="p-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                              title="Copiar Redirect URI"
-                            >
-                              {copiedField === 'gitlab-redirect'
-                                ? <Check size={9} className="text-emerald-400" />
-                                : <Copy size={9} className="text-slate-500" />}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-[9px] font-mono text-orange-400 w-24 shrink-0 pt-0.5">Confidential</span>
-                          <span className="text-[10px] text-slate-400">Marque <code className="text-orange-300 bg-orange-500/10 px-1 rounded">✓ Yes</code> (é uma aplicação server-side)</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-[9px] font-mono text-orange-400 w-24 shrink-0 pt-0.5">Scopes</span>
-                          <span className="text-[10px] text-slate-400">Marque <code className="text-orange-300 bg-orange-500/10 px-1 rounded">api</code> (acesso completo à API para criar notas em MRs)</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Step 4 */}
-                  <div className="flex gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[9px] font-bold text-orange-300">4</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold text-slate-300">Clique em <span className="text-orange-300">"Save application"</span></p>
-                      <p className="text-[10px] text-slate-500">
-                        O GitLab mostrará o <strong className="text-slate-300">Application ID</strong> e o <strong className="text-slate-300">Secret</strong>.
-                        Copie ambos e cole nos campos abaixo.
-                      </p>
-                      <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
-                        <AlertTriangle size={10} className="text-amber-400 shrink-0 mt-0.5" />
-                        <p className="text-[10px] text-amber-400">O <strong>Secret</strong> só aparece uma vez! Salve-o agora ou terá que gerar um novo.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* GitLab input fields */}
-            <div className="space-y-2 mb-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Globe size={12} className="text-orange-400" />
-                <span className="text-[10px] font-bold text-orange-300 uppercase tracking-widest">GitLab</span>
-                {oauthStatus?.gitlab?.connected && (
-                  <span className="text-[9px] text-emerald-400 ml-auto">✓ Conectado</span>
-                )}
-              </div>
-              <div>
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Application ID</label>
-                <input
-                  type="text"
-                  value={gitlabClientId}
-                  onChange={e => { setGitlabClientId(e.target.value); setOauthError(null); }}
-                  placeholder="Ex: 1a2b3c4d5e6f..."
-                  className="mt-1 w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-orange-500/50"
-                  disabled={oauthStatus?.gitlab?.connected}
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Secret</label>
-                <input
-                  type="password"
-                  value={gitlabClientSecret}
-                  onChange={e => { setGitlabClientSecret(e.target.value); setOauthError(null); }}
-                  placeholder="Ex: glpat-xxxxxxxxxxxxxxxxxxxx"
-                  className="mt-1 w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-orange-500/50"
-                  disabled={oauthStatus?.gitlab?.connected}
-                />
-              </div>
-              <div className="flex gap-2">
-                {!oauthStatus?.gitlab?.connected ? (
-                  <button
-                    onClick={() => handleOAuthConnect('gitlab')}
-                    disabled={oauthBusy === 'gitlab'}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600/20 border border-orange-500/30 text-orange-300 text-[10px] font-bold uppercase tracking-widest hover:bg-orange-600/30 disabled:opacity-50 transition-all"
-                  >
-                    <Lock size={10} />
-                    {oauthBusy === 'gitlab' ? 'Conectando...' : 'Conectar GitLab'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleOAuthDisconnect('gitlab')}
-                    disabled={oauthBusy === 'gitlab'}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600/15 border border-red-500/25 text-red-400 text-[10px] font-bold uppercase tracking-widest hover:bg-red-600/25 disabled:opacity-50 transition-all"
-                  >
-                    <X size={10} /> Desconectar
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="border-t border-white/5 my-4" />
-
-            {/* ═══════════════════════════════════════════════════════════
-               GITHUB TUTORIAL
-            ═══════════════════════════════════════════════════════════ */}
-            <div className="rounded-lg border border-slate-500/20 bg-slate-500/5 overflow-hidden mb-4">
-              <button
-                onClick={() => setTutorialOpen(p => ({ ...p, github: !p.github }))}
-                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-500/10 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Globe size={13} className="text-slate-300" />
-                  <span className="text-[11px] font-bold text-slate-300">Tutorial — GitHub OAuth App</span>
-                </div>
-                {tutorialOpen.github
-                  ? <ChevronDown size={13} className="text-slate-400" />
-                  : <ChevronRight size={13} className="text-slate-400" />}
-              </button>
-
-              {tutorialOpen.github && (
-                <div className="px-3 pb-3 space-y-3 border-t border-slate-500/10">
-                  <p className="text-[10px] text-slate-500 leading-relaxed mt-2">
-                    Siga os passos abaixo para criar um OAuth App no GitHub. Leva menos de 2 minutos.
-                  </p>
-
-                  {/* Step 1 */}
-                  <div className="flex gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-slate-500/20 border border-slate-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[9px] font-bold text-slate-300">1</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold text-slate-300">Abra a página de criação de OAuth App</p>
-                      <div className="flex items-center gap-2">
-                        <a
-                          href="https://github.com/settings/apps/new"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-500/15 border border-slate-500/25 text-slate-300 text-[10px] font-mono hover:bg-slate-500/25 transition-colors"
-                        >
-                          <ExternalLink size={10} /> github.com/settings/apps/new
-                        </a>
-                        <button
-                          onClick={() => copyToClipboard('https://github.com/settings/apps/new', 'github-url')}
-                          className="p-1.5 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                          title="Copiar URL"
-                        >
-                          {copiedField === 'github-url'
-                            ? <Check size={10} className="text-emerald-400" />
-                            : <Copy size={10} className="text-slate-500" />}
-                        </button>
-                      </div>
-                      <p className="text-[9px] text-slate-600">Vá em Settings → Developer settings → OAuth Apps → New OAuth App</p>
-                    </div>
-                  </div>
-
-                  {/* Step 2 */}
-                  <div className="flex gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-slate-500/20 border border-slate-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[9px] font-bold text-slate-300">2</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold text-slate-300">Preencha o formulário</p>
-                      <div className="p-2.5 rounded-md bg-black/20 border border-white/5 space-y-2">
-                        <div className="flex items-start gap-2">
-                          <span className="text-[9px] font-mono text-slate-400 w-32 shrink-0 pt-0.5">Application name</span>
-                          <span className="text-[10px] text-slate-400">Qualquer nome, ex: <code className="text-slate-300 bg-slate-500/10 px-1 rounded">Codebrain Review Bot</code></span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-[9px] font-mono text-slate-400 w-32 shrink-0 pt-0.5">Homepage URL</span>
-                          <div className="flex items-center gap-1.5">
-                            <code className="text-[10px] text-slate-300 bg-slate-500/10 px-1.5 py-0.5 rounded font-mono">https://github.com</code>
-                            <button
-                              onClick={() => copyToClipboard('https://github.com', 'github-homepage')}
-                              className="p-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                              title="Copiar"
-                            >
-                              {copiedField === 'github-homepage'
-                                ? <Check size={9} className="text-emerald-400" />
-                                : <Copy size={9} className="text-slate-500" />}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-[9px] font-mono text-slate-400 w-32 shrink-0 pt-0.5">Authorization callback URL</span>
-                          <div className="flex items-center gap-1.5">
-                            <code className="text-[10px] text-slate-300 bg-slate-500/10 px-1.5 py-0.5 rounded font-mono">http://127.0.0.1:19876/callback</code>
-                            <button
-                              onClick={() => copyToClipboard('http://127.0.0.1:19876/callback', 'github-callback')}
-                              className="p-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                              title="Copiar Redirect URI"
-                            >
-                              {copiedField === 'github-callback'
-                                ? <Check size={9} className="text-emerald-400" />
-                                : <Copy size={9} className="text-slate-500" />}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Step 3 */}
-                  <div className="flex gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-slate-500/20 border border-slate-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[9px] font-bold text-slate-300">3</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold text-slate-300">Clique em <span className="text-slate-200">"Register application"</span></p>
-                      <p className="text-[10px] text-slate-500">
-                        Na próxima página, copie o <strong className="text-slate-300">Client ID</strong>.
-                        O GitHub usa <strong className="text-slate-300">Device Flow</strong>, então não é necessário gerar um Client Secret.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 flex items-start gap-2">
-                    <Info size={10} className="text-indigo-400 shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-indigo-300">
-                      O GitHub usa <strong>Device Flow</strong>: ao conectar, uma janela do navegador abrirá pedindo autorização.
-                      Você verá um código para confirmar no site do GitHub.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* GitHub input fields */}
-            <div className="space-y-2 mb-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Globe size={12} className="text-slate-300" />
-                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">GitHub</span>
-                {oauthStatus?.github?.connected && (
-                  <span className="text-[9px] text-emerald-400 ml-auto">✓ Conectado</span>
-                )}
-              </div>
-              <div>
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Client ID</label>
-                <input
-                  type="text"
-                  value={githubClientId}
-                  onChange={e => { setGithubClientId(e.target.value); setOauthError(null); }}
-                  placeholder="Ex: Iv1.abc123def456..."
-                  className="mt-1 w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-slate-400/30"
-                  disabled={oauthStatus?.github?.connected}
-                />
-              </div>
-              <div className="flex gap-2">
-                {!oauthStatus?.github?.connected ? (
-                  <button
-                    onClick={() => handleOAuthConnect('github')}
-                    disabled={oauthBusy === 'github'}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-600/20 border border-slate-500/30 text-slate-300 text-[10px] font-bold uppercase tracking-widest hover:bg-slate-600/30 disabled:opacity-50 transition-all"
-                  >
-                    <Lock size={10} />
-                    {oauthBusy === 'github' ? 'Conectando...' : 'Conectar GitHub'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleOAuthDisconnect('github')}
-                    disabled={oauthBusy === 'github'}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600/15 border border-red-500/25 text-red-400 text-[10px] font-bold uppercase tracking-widest hover:bg-red-600/25 disabled:opacity-50 transition-all"
-                  >
-                    <X size={10} /> Desconectar
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="border-t border-white/5 my-4" />
-
-            {/* ── Bot Token (PAT) for Review Comments ─────────────────────── */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Lock size={12} className="text-amber-400" />
-                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Token do Bot (para comentários)</span>
-              </div>
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                Para que os comentários de review apareçam como <strong className="text-slate-300">@codebrain-bot</strong> em vez do seu nome,
-                cole um <strong className="text-slate-300">Project Access Token</strong> com role <strong className="text-slate-300">Owner</strong> ou <strong className="text-slate-300">Maintainer</strong> abaixo.
-              </p>
-              <p className="text-[10px] text-slate-600">
-                GitLab: Project → Settings → Access Tokens → Role: <strong className="text-slate-400">Owner</strong> → Scopes: <strong className="text-slate-400">api</strong>
-              </p>
-
-              {/* GitLab Bot Token */}
-              <div>
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">GitLab Bot Token</label>
-                <div className="flex gap-2 mt-1">
-                  <input
-                    type="password"
-                    value={gitlabBotToken}
-                    onChange={e => setGitlabBotToken(e.target.value)}
-                    placeholder="glpat-xxxxxxxxxxxxxxxxxxxx (Project Access Token)"
-                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500/30"
-                  />
-                  <button
-                    onClick={async () => {
-                      setBotTokenSaving('gitlab');
-                      setBotTokenSaved(null);
-                      try {
-                        await (window as any).codeBrainApp?.appConfig?.set?.({ gitlab_bot_token: gitlabBotToken.trim() });
-                        setBotTokenSaved('gitlab');
-                        setTimeout(() => setBotTokenSaved(null), 2000);
-                      } catch {}
-                      setBotTokenSaving(null);
-                    }}
-                    disabled={botTokenSaving === 'gitlab'}
-                    className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
-                      botTokenSaved === 'gitlab'
-                        ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
-                        : botTokenSaving === 'gitlab'
-                        ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400 animate-pulse'
-                        : 'bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20'
-                    }`}
-                  >
-                    {botTokenSaved === 'gitlab' ? '✓ Salvo' : botTokenSaving === 'gitlab' ? 'Salvando...' : 'Salvar'}
-                  </button>
-                </div>
-              </div>
-
-              {/* GitHub Bot Token */}
-              <div>
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">GitHub Bot Token</label>
-                <div className="flex gap-2 mt-1">
-                  <input
-                    type="password"
-                    value={githubBotToken}
-                    onChange={e => setGithubBotToken(e.target.value)}
-                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500/30"
-                  />
-                  <button
-                    onClick={async () => {
-                      setBotTokenSaving('github');
-                      setBotTokenSaved(null);
-                      try {
-                        await (window as any).codeBrainApp?.appConfig?.set?.({ github_bot_token: githubBotToken.trim() });
-                        setBotTokenSaved('github');
-                        setTimeout(() => setBotTokenSaved(null), 2000);
-                      } catch {}
-                      setBotTokenSaving(null);
-                    }}
-                    disabled={botTokenSaving === 'github'}
-                    className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
-                      botTokenSaved === 'github'
-                        ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
-                        : botTokenSaving === 'github'
-                        ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400 animate-pulse'
-                        : 'bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20'
-                    }`}
-                  >
-                    {botTokenSaved === 'github' ? '✓ Salvo' : botTokenSaving === 'github' ? 'Salvando...' : 'Salvar'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-white/5 my-4" />
-
-            {/* ── Auto-Review Toggle ─────────────────────────────────────── */}
-            <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5">
-              <div className="space-y-0.5">
-                <p className="text-[11px] font-bold text-slate-300">Review Automático de MRs</p>
-                <p className="text-[10px] text-slate-500 leading-relaxed">
-                  Quando ativado, o Codebrain revisa automaticamente novos MRs e posta comentários.
-                  Quando desativado, só revisa quando você pedir explicitamente.
-                </p>
-              </div>
-              <Toggle
-                enabled={mrAutoReview}
-                onChange={async (v) => {
-                  setMrAutoReview(v);
-                  try {
-                    await (window as any).codeBrainApp?.appConfig?.set?.({ mr_auto_review: v });
-                  } catch {}
-                }}
-              />
-            </div>
-
-            {/* ── Review Model / Provider ─────────────────────────────────── */}
-            {mrAutoReview && (
-              <div className="mt-2 p-3 rounded-lg bg-white/[0.02] border border-white/5 space-y-2">
-                <p className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
-                  <Cpu size={12} className="text-violet-400" />
-                  Modelo para Review
-                </p>
-                <p className="text-[10px] text-slate-500 leading-relaxed">
-                  Escolha qual modelo de IA será usado para analisar os diffs e gerar comentários de review.
-                </p>
-                <div className="flex gap-2">
-                  <select
-                    value={mrReviewProvider}
-                    onChange={async (e) => {
-                      const val = e.target.value;
-                      setMrReviewProvider(val);
-                      setMrReviewModel(''); // Reset model when provider changes
-                      try {
-                        await (window as any).codeBrainApp?.appConfig?.set?.({ mr_review_provider: val, mr_review_model: '' });
-                      } catch {}
-                    }}
-                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono focus:outline-none focus:border-violet-500/30 appearance-none cursor-pointer"
-                  >
-                    <option value="">Provider...</option>
-                    {providers.map((p: any) => (
-                      <option key={p.id} value={p.id}>{p.label || p.id}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={mrReviewModel}
-                    onChange={async (e) => {
-                      const val = e.target.value;
-                      setMrReviewModel(val);
-                      try {
-                        await (window as any).codeBrainApp?.appConfig?.set?.({ mr_review_model: val });
-                      } catch {}
-                    }}
-                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono focus:outline-none focus:border-violet-500/30 appearance-none cursor-pointer"
-                  >
-                    <option value="">Modelo...</option>
-                    {(providers.find((p: any) => p.id === mrReviewProvider)?.models ?? []).map((m: string) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-                {mrReviewProvider && mrReviewModel && (
-                  <p className="text-[10px] text-emerald-400/70 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    {providers.find((p: any) => p.id === mrReviewProvider)?.label || mrReviewProvider} → {mrReviewModel}
-                  </p>
-                )}
-                {!mrReviewProvider && (
-                  <p className="text-[10px] text-amber-500/60 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    Configure um modelo para que o review funcione.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* ── Per-Workspace Repo Permissions ─────────────────────────── */}
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
-                  <FolderGit2 size={12} className="text-emerald-400" />
-                  Repositórios Permitidos
-                </p>
-                <button
-                  onClick={() => fetchAllowed()}
-                  disabled={mrLoading}
-                  className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1"
-                >
-                  <RefreshCw size={10} className={mrLoading ? 'animate-spin' : ''} />
-                  Detectar
-                </button>
-              </div>
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                Por padrão, nenhum repositório é permitido. Ative apenas os que deseja que o Codebrain revise automaticamente.
-              </p>
-
-              {mrLoading && detectedWorkspaces.length === 0 ? (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-white/[0.02] border border-white/5">
-                  <RefreshCw size={12} className="text-slate-500 animate-spin" />
-                  <span className="text-[10px] text-slate-500">Detectando repositórios git...</span>
-                </div>
-              ) : detectedWorkspaces.length === 0 ? (
-                <div className="p-3 rounded-lg bg-white/[0.02] border border-white/5 text-center">
-                  <FolderGit2 size={16} className="text-slate-600 mx-auto mb-1" />
-                  <p className="text-[10px] text-slate-500">Nenhum repositório git detectado.</p>
-                  <p className="text-[10px] text-slate-600">Abra um workspace com repositório git e clique em Detectar.</p>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {detectedWorkspaces.map((ws) => {
-                    const isAllowed = allowedWorkspaces.includes(ws.path);
-                    return (
-                      <div
-                        key={ws.path}
-                        className={`flex items-center justify-between gap-3 p-2.5 rounded-lg border transition-all ${
-                          isAllowed
-                            ? 'bg-emerald-500/5 border-emerald-500/20'
-                            : 'bg-white/[0.02] border-white/5 hover:border-white/10'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                            isAllowed ? 'bg-emerald-500/15' : 'bg-slate-600/20'
-                          }`}>
-                            <GitPullRequest size={13} className={isAllowed ? 'text-emerald-400' : 'text-slate-500'} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className={`text-[11px] font-semibold truncate ${isAllowed ? 'text-emerald-300' : 'text-slate-400'}`}>
-                              {ws.name}
-                            </p>
-                            <p className="text-[9px] text-slate-600 truncate">{ws.path}</p>
-                          </div>
-                        </div>
-                        <Toggle
-                          enabled={isAllowed}
-                          onChange={() => toggleWorkspace(ws.path)}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Info footer */}
-            <div className="p-2.5 rounded-lg bg-indigo-500/5 border border-indigo-500/15 flex items-start gap-2 mt-3">
-              <Info size={11} className="text-indigo-400 shrink-0 mt-0.5" />
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                Os tokens são criptografados com AES-256 e salvos localmente no SQLite.
-                Nenhum dado sai da sua máquina. Se desconectar, o Codebrain volta a usar o CLI (gh/glab) como fallback.
-              </p>
-            </div>
-          </SectionCard>
-
           {/* ── Avançado ─────────────────────────────────────────────── */}
           <SectionCard id="advanced" icon={<Shield size={13} />} title="Avançado" badge="Cuidado" active={open.includes('advanced')} onToggle={toggleSection}>
             <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/15 flex items-start gap-2.5">
@@ -2242,8 +1652,8 @@ export function SettingsPage() {
         </div>
 
         <div className="mt-auto">
-          <div className="p-3 rounded-lg bg-[#4F46E5]/5 border border-[#4F46E5]/10 flex items-start gap-2">
-            <Info size={11} className="text-[#4F46E5] shrink-0 mt-0.5" />
+          <div className="p-3 rounded-lg bg-[#5855e5]/5 border border-[#5855e5]/10 flex items-start gap-2">
+            <Info size={11} className="text-[#5855e5] shrink-0 mt-0.5" />
             <p className="text-[9px] text-slate-600 leading-relaxed">Todas as configurações são salvas automaticamente via Zustand + localStorage.</p>
           </div>
         </div>

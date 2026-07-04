@@ -302,7 +302,7 @@ export function MissionWizard({ open, onClose, workspacePath, onCreated }: Missi
           <button
             onClick={step === 'review' ? handleCreate : () => setStep(step === 'mode' ? 'config' : 'review')}
             disabled={!canProceed}
-            className="flex items-center gap-1 rounded-lg bg-[#4F46E5] border border-indigo-500/30 px-4 py-1.5 font-mono text-[11px] font-bold text-white hover:bg-[#4338CA] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex items-center gap-1 rounded-lg bg-[#5855e5] border border-indigo-500/30 px-4 py-1.5 font-mono text-[11px] font-bold text-white hover:bg-[#4a47d6] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {step === 'review' ? 'Criar Missão' : <>Próximo <ChevronRight size={12} /></>}
           </button>

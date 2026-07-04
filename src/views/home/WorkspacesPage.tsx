@@ -23,11 +23,11 @@ function OpenWorkspaceCard({ tab, idx, panes, onSwitch, onClose }: any) {
   const isActive  = useNavStore.getState().activeTabIndex === idx && !useNavStore.getState().onHome;
 
   return (
-    <div className={`p-4 rounded-xl border transition-all ${isActive ? 'border-[#4F46E5]/40 bg-[#4F46E5]/5 ring-1 ring-[#4F46E5]/10' : 'border-white/5 bg-[#0A0A0B]/60 hover:border-white/10'}`}>
+    <div className={`p-4 rounded-xl border transition-all ${isActive ? 'border-[#5855e5]/40 bg-[#5855e5]/5 ring-1 ring-[#5855e5]/10' : 'border-white/5 bg-[#0A0A0B]/60 hover:border-white/10'}`}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isActive ? 'bg-[#4F46E5]/20 border border-[#4F46E5]/30' : 'bg-white/5 border border-white/10'}`}>
-            <Server size={15} className={isActive ? 'text-[#4F46E5]' : 'text-slate-500'} />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isActive ? 'bg-[#5855e5]/20 border border-[#5855e5]/30' : 'bg-white/5 border border-white/10'}`}>
+            <Server size={15} className={isActive ? 'text-[#5855e5]' : 'text-slate-500'} />
           </div>
           <div>
             <p className="text-[12px] font-bold text-slate-200 truncate max-w-[160px]">{name}</p>
@@ -71,8 +71,8 @@ function OpenWorkspaceCard({ tab, idx, panes, onSwitch, onClose }: any) {
         onClick={() => onSwitch(idx)}
         className={`w-full py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
           isActive
-            ? 'bg-[#4F46E5] text-white hover:bg-[#4338CA]'
-            : 'border border-white/10 text-slate-400 hover:border-[#4F46E5]/30 hover:text-slate-300'
+            ? 'bg-[#5855e5] text-white hover:bg-[#4a47d6]'
+            : 'border border-white/10 text-slate-400 hover:border-[#5855e5]/30 hover:text-slate-300'
         }`}
       >
         <Activity size={11} /> {isActive ? 'Ativo' : 'Ir para Workspace'}
@@ -232,7 +232,7 @@ export function WorkspacesPage() {
             <button
               onClick={() => handleOpen()}
               disabled={launching}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#4F46E5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4338CA] disabled:opacity-60 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#5855e5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4a47d6] disabled:opacity-60 transition-colors"
             >
               <Plus size={12} /> {launching ? 'Abrindo…' : 'Novo'}
             </button>
@@ -245,7 +245,7 @@ export function WorkspacesPage() {
                 <p className="text-[13px] font-bold text-slate-600">Nenhum workspace aberto</p>
                 <p className="text-[10px] text-slate-700 mt-1">Abra uma pasta para começar</p>
               </div>
-              <button onClick={() => handleOpen()} className="px-4 py-2 rounded-lg bg-[#4F46E5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4338CA] transition-colors">
+              <button onClick={() => handleOpen()} className="px-4 py-2 rounded-lg bg-[#5855e5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4a47d6] transition-colors">
                 Abrir Workspace
               </button>
             </div>

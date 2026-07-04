@@ -96,7 +96,7 @@ export function Grid({ workspacePath } = {} as any) {
           {/* Primary CTA */}
           <button
             onClick={() => setWizardOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-5 py-2.5 font-mono text-[11px] font-bold text-white hover:bg-[#4338CA] transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#5855e5] px-5 py-2.5 font-mono text-[11px] font-bold text-white hover:bg-[#4a47d6] transition-colors"
           >
             <Sparkles size={14} /> Nova Missão
           </button>

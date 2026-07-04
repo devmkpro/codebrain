@@ -137,7 +137,7 @@ export function SquadModal({
       <div className="bg-[#0c0c14] border border-white/10 rounded-xl shadow-2xl w-[520px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
           <div className="flex items-center gap-2">
-            <Users size={14} strokeWidth={1.5} className="text-[#4F46E5]" />
+            <Users size={14} strokeWidth={1.5} className="text-[#5855e5]" />
             <h2 className="font-mono text-[12px] font-bold text-white tracking-wider">NEW SQUAD</h2>
           </div>
           <button onClick={onClose} className="text-slate-600 hover:text-red-400 transition-colors cursor-pointer">
@@ -146,9 +146,9 @@ export function SquadModal({
         </div>
 
         {/* Workspace selector — always shown at top */}
-        <div className="px-4 py-3 border-b border-white/[0.06] bg-[#4F46E5]/[0.03]">
+        <div className="px-4 py-3 border-b border-white/[0.06] bg-[#5855e5]/[0.03]">
           <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#4F46E5]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#5855e5]" />
             Workspace para o squad
           </p>
           {tabs.length === 0 ? (
@@ -167,16 +167,16 @@ export function SquadModal({
                     onClick={() => setSelectedWorkspace(tab.workspacePath)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
                       isSelected
-                        ? 'border-[#4F46E5]/40 bg-[#4F46E5]/10 text-indigo-200'
+                        ? 'border-[#5855e5]/40 bg-[#5855e5]/10 text-indigo-200'
                         : 'border-white/5 bg-white/[0.02] text-slate-400 hover:border-white/10 hover:text-slate-300'
                     }`}
                   >
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-[#4F46E5]' : 'bg-slate-700'}`} />
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-[#5855e5]' : 'bg-slate-700'}`} />
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-[11px] font-bold truncate">{label}</p>
                       <p className="font-mono text-[9px] text-slate-600 truncate">{tab.workspacePath}</p>
                     </div>
-                    {isSelected && <span className="font-mono text-[8px] uppercase tracking-widest text-[#4F46E5] shrink-0">selecionado</span>}
+                    {isSelected && <span className="font-mono text-[8px] uppercase tracking-widest text-[#5855e5] shrink-0">selecionado</span>}
                   </button>
                 );
               })}
@@ -256,7 +256,7 @@ export function SquadModal({
                 <button
                   onClick={handleSaveAndSpawn}
                   disabled={!effectiveWorkspace || tabs.length === 0}
-                  className="flex-1 py-2 rounded-lg font-mono text-[11px] font-bold bg-[#4F46E5] text-white hover:bg-[#4338CA] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="flex-1 py-2 rounded-lg font-mono text-[11px] font-bold bg-[#5855e5] text-white hover:bg-[#4a47d6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   {!effectiveWorkspace ? 'Selecione um workspace ↑' : 'SAVE & SPAWN'}
                 </button>

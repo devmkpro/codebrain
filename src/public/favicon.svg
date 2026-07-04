@@ -1,0 +1,12 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Codebrain">
+  <title>Codebrain</title>
+  <rect width="200" height="200" fill="none"/>
+  <!-- Outer brain/pill shape -->
+  <path d="M70 60 C 50 60, 40 80, 40 100 C 40 130, 60 150, 100 150 C 140 150, 160 130, 160 100 C 160 80, 150 60, 130 60 Z" fill="none" stroke="#5855e5" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Center divider -->
+  <path d="M100 60 L100 150" fill="none" stroke="#5855e5" stroke-width="12" stroke-linecap="round"/>
+  <!-- Left chevron < -->
+  <path d="M75 90 L65 100 L75 110" fill="none" stroke="#5855e5" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Right chevron > -->
+  <path d="M125 90 L135 100 L125 110" fill="none" stroke="#5855e5" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

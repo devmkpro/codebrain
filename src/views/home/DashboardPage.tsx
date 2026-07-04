@@ -28,7 +28,7 @@ function folderName(p: string) {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-function StatCard({ icon, label, value, sub, color = '#4F46E5' }: { icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: string }) {
+function StatCard({ icon, label, value, sub, color = '#5855e5' }: { icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: string }) {
   return (
     <div className="p-4 rounded-xl border border-white/5 bg-[#0A0A0B]/60 flex flex-col gap-2 hover:border-white/10 hover:bg-[#0A0A0B]/80 transition-all group cursor-default">
       <div className="flex items-center gap-2" style={{ color }}>

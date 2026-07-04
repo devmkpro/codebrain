@@ -6,7 +6,7 @@ import {
   ChevronRight, ChevronDown, Home, Mic, MicOff, Volume2,
   Shield, Lock, Unlock, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, History,
   Bell, Search, Download, FileJson, UserCircle2,
-  GitPullRequest,
+  GitPullRequest, SlidersHorizontal,
 } from 'lucide-react';
 import { Logo } from '../auth/Logo';
 import { Link, useRouter } from '../../lib/router';
@@ -34,6 +34,7 @@ import { useNotificationsStore } from '../../stores/notifications-store';
 import { notify } from '../../lib/notify';
 import { PerfHUD } from './PerfHUD';
 import { LibreWizard } from '../squads/LibreWizard';
+import { resolveSpawnTarget, HOST_LABELS } from '../../lib/resolve-spawn-target';
 
 // ─── Shared modal-state hook ──────────────────────────────────────────────────
 function useModals() {
@@ -103,6 +104,166 @@ function IconBtn({
 // ─── Divider ─────────────────────────────────────────────────────────────────
 const VDiv = () => <div className="w-px h-5 bg-violet-500/10 shrink-0 self-center" />;
 
+// ─── Shared global-action controls (used by BOTH Home & Workspace headers) ────
+// Reads/writes the same preferredAgent as HomeHeader — single source of truth.
+function PreferredAgentDropdown() {
+  const [preferredAgent, setPreferredAgent] = React.useState<string | null>(() => {
+    try { return localStorage.getItem('codebrain.preferredAgent') || null; } catch { return null; }
+  });
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handler = (e: any) => setPreferredAgent(e?.detail?.preferredAgent ?? null);
+    window.addEventListener('preferred-agent-changed', handler);
+    return () => window.removeEventListener('preferred-agent-changed', handler);
+  }, []);
+  React.useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const pick = (host: string | null) => {
+    setPreferredAgent(host);
+    if (host) localStorage.setItem('codebrain.preferredAgent', host);
+    else localStorage.removeItem('codebrain.preferredAgent');
+    window.dispatchEvent(new CustomEvent('preferred-agent-changed', { detail: { preferredAgent: host } }));
+    (window as any).codeBrainApp?.appConfig?.get?.().then((cfg: any) => {
+      (window as any).codeBrainApp?.appConfig?.set?.({ ...cfg, preferredAgent: host ?? undefined });
+    }).catch(() => {});
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(v => !v)}
+        className={`flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[9px] font-mono font-bold uppercase tracking-widest transition-all cursor-pointer ${
+          preferredAgent ? 'border-indigo-500/30 text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10' : 'border-white/10 text-slate-600 hover:text-slate-400 hover:border-white/20'
+        }`}
+        title="Agent/CLI Preferido"
+      >
+        <Cpu size={10} />
+        {preferredAgent ? HOST_LABELS[preferredAgent]?.split(' ')[0] ?? preferredAgent : 'Auto'}
+        <ChevronDown size={9} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-[#12121A] border border-white/10 shadow-2xl py-1 z-[100]">
+          {[null, 'claude', 'openclaude', 'gemini', 'codex'].map(host => (
+            <button key={host ?? 'auto'} onClick={() => pick(host)}
+              className={`w-full text-left px-3 py-1.5 text-[10px] font-mono transition-colors ${
+                preferredAgent === host ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              {host ? HOST_LABELS[host] : 'Automático (nenhum)'}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProvidersButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-violet-300 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all cursor-pointer"
+      title="Providers"
+    ><Zap size={11} /> Providers</button>
+  );
+}
+
+function SquadButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-violet-300 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all cursor-pointer"
+      title="Squad"
+    ><Users size={11} /> Squad</button>
+  );
+}
+
+// Compact single-button menu for the WorkspaceHeader so the global actions
+// (Providers / Preferred Agent / Squad) don't crowd the bar or hide the tabs.
+function GlobalActionsMenu({ onProviders, onSquad }: { onProviders: () => void; onSquad: () => void }) {
+  const [open, setOpen] = React.useState(false);
+  const [preferredAgent, setPreferredAgent] = React.useState<string | null>(() => {
+    try { return localStorage.getItem('codebrain.preferredAgent') || null; } catch { return null; }
+  });
+  const ref = React.useRef<HTMLDivElement>(null);
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null);
+
+  React.useEffect(() => {
+    if (!open || !btnRef.current) { setMenuPos(null); return; }
+    const r = btnRef.current.getBoundingClientRect();
+    setMenuPos({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
+  }, [open]);
+
+  React.useEffect(() => {
+    const handler = (e: any) => setPreferredAgent(e?.detail?.preferredAgent ?? null);
+    window.addEventListener('preferred-agent-changed', handler);
+    return () => window.removeEventListener('preferred-agent-changed', handler);
+  }, []);
+  React.useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const setAgent = (host: string | null) => {
+    setPreferredAgent(host);
+    if (host) localStorage.setItem('codebrain.preferredAgent', host);
+    else localStorage.removeItem('codebrain.preferredAgent');
+    window.dispatchEvent(new CustomEvent('preferred-agent-changed', { detail: { preferredAgent: host } }));
+    (window as any).codeBrainApp?.appConfig?.get?.().then((cfg: any) => {
+      (window as any).codeBrainApp?.appConfig?.set?.({ ...cfg, preferredAgent: host ?? undefined });
+    }).catch(() => {});
+  };
+
+  return (
+    <div ref={ref} className="relative flex items-stretch">
+      <button
+        ref={btnRef}
+        onClick={() => setOpen(v => !v)}
+        className={`px-3 flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest focus:outline-none transition-all cursor-pointer ${open ? 'text-violet-300 bg-violet-500/10' : 'text-slate-600 hover:text-violet-300 hover:bg-violet-500/[0.06]'}`}
+        title="Providers · Agent Preferido · Squad"
+      >
+        <SlidersHorizontal size={13} strokeWidth={1.8} />
+        <ChevronDown size={9} />
+      </button>
+      {open && menuPos && (
+        <div
+          style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
+          className="w-56 rounded-xl bg-[#12121A] border border-white/10 shadow-2xl py-1.5 z-[99999]">
+          <button onClick={() => { onProviders(); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-slate-300 hover:bg-white/5 transition-colors">
+            <Zap size={12} className="text-violet-400" /> Providers
+          </button>
+          <button onClick={() => { onSquad(); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-slate-300 hover:bg-white/5 transition-colors">
+            <Users size={12} className="text-violet-400" /> Squad
+          </button>
+          <div className="my-1 border-t border-white/[0.06]" />
+          <div className="px-3 py-1 text-[9px] font-mono uppercase tracking-widest text-slate-600 flex items-center gap-1.5">
+            <Cpu size={10} /> Agent/CLI Preferido
+          </div>
+          {[null, 'claude', 'openclaude', 'gemini', 'codex'].map(host => (
+            <button key={host ?? 'auto'} onClick={() => setAgent(host)}
+              className={`w-full text-left px-3 py-1.5 text-[10px] font-mono transition-colors ${
+                preferredAgent === host ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              {host ? HOST_LABELS[host] : 'Automático (nenhum)'}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Home Header ─────────────────────────────────────────────────────────────
 function HomeHeader() {
   const { route, navigate } = useRouter();
@@ -113,6 +274,29 @@ function HomeHeader() {
 
   const m = useModals();
   const [showAccount, setShowAccount] = React.useState(false);
+  const [preferredAgent, setPreferredAgent] = React.useState<string | null>(() => {
+    try { return localStorage.getItem('codebrain.preferredAgent') || null; } catch { return null; }
+  });
+  const [showPrefAgent, setShowPrefAgent] = React.useState(false);
+  const prefAgentRef = React.useRef<HTMLDivElement>(null);
+
+  // Sync with Settings changes
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.preferredAgent !== undefined) setPreferredAgent(detail.preferredAgent);
+    };
+    window.addEventListener('preferred-agent-changed', handler);
+    return () => window.removeEventListener('preferred-agent-changed', handler);
+  }, []);
+
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    if (!showPrefAgent) return;
+    const h = (e: MouseEvent) => { if (prefAgentRef.current && !prefAgentRef.current.contains(e.target as Node)) setShowPrefAgent(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [showPrefAgent]);
   const [profile, setProfile] = React.useState<any>(null);
   const accountRef = React.useRef<HTMLDivElement>(null);
 
@@ -169,15 +353,14 @@ function HomeHeader() {
           {/* Notification bell */}
           <NotificationsBell />
 
-          {/* Providers */}
-          <button onClick={() => m.openProviders('list')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-violet-300 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all cursor-pointer"
-          ><Zap size={11} /> Providers</button>
+          {/* Providers (shared) */}
+          <ProvidersButton onClick={() => m.openProviders('list')} />
 
-          {/* Squad */}
-          <button onClick={() => m.setShowSquadWizard(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-violet-300 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all cursor-pointer"
-          ><Users size={11} /> Squad</button>
+          {/* Preferred Agent dropdown (shared) */}
+          <PreferredAgentDropdown />
+
+          {/* Squad (shared) */}
+          <SquadButton onClick={() => m.setShowSquadWizard(true)} />
 
           {/* Libre Mode */}
           <button onClick={() => m.setShowLibreWizard(true)}
@@ -326,6 +509,8 @@ function useWorkspaceSquadSpawner() {
     if (!workspace) return;
     const activityId = nanoid(8);
     const pty = (window as any).codeBrainApp?.pty;
+    const preferredAgent = (() => { try { return localStorage.getItem('codebrain.preferredAgent') || undefined; } catch { return undefined; } })();
+    const providerDefaultModels: Record<string, string> = (() => { try { return JSON.parse(localStorage.getItem('codebrain.providerDefaultModels') ?? '{}'); } catch { return {}; } })();
 
     // ── Detect role from worker label ──
     const detectRole = (label: string): string => {
@@ -338,29 +523,37 @@ function useWorkspaceSquadSpawner() {
     const workers = squad.workers ?? (squad.worker ? [squad.worker] : []);
     const workerIds: string[] = [];
     for (const w of workers) {
-      const prov = providers.find(p => p.id === w.providerId);
-      const agent = w.agent ?? prov?.host ?? 'openclaude';
-      const validModel = resolveValidModel(w.providerId, w.model);
+      const target = resolveSpawnTarget({
+        providerId: w.providerId,
+        model: resolveValidModel(w.providerId, w.model),
+        providers,
+        preferredAgent,
+        providerDefaultModels,
+      });
       const role = detectRole(w.role ?? '');
-      const r = await pty.spawn({ agent, cwd: workspace, activityId, providerId: w.providerId, model: validModel, permissionMode: permMode, role });
+      const r = await pty.spawn({ agent: target.agent, cwd: workspace, activityId, providerId: target.providerId, model: target.model, permissionMode: permMode, role });
       if (!r?.ok || !r.paneId) continue;
       workerIds.push(r.paneId);
-      addPane({ id: r.paneId, agent, cwd: workspace, workspacePath: workspace, activityId, providerId: w.providerId, model: validModel, externallySpawned: true });
+      addPane({ id: r.paneId, agent: target.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: target.providerId, model: target.model, externallySpawned: true });
     }
     if (!workerIds.length) return;
 
     // ── Spawn orchestrator with role=orchestrator ──
-    const orchProv = providers.find(p => p.id === squad.orchestrator.providerId);
-    const orchAgent = squad.orchestrator.agent ?? orchProv?.host ?? 'openclaude';
-    const validOrchModel = resolveValidModel(squad.orchestrator.providerId, squad.orchestrator.model);
+    const orchTarget = resolveSpawnTarget({
+      providerId: squad.orchestrator.providerId,
+      model: resolveValidModel(squad.orchestrator.providerId, squad.orchestrator.model),
+      providers,
+      preferredAgent,
+      providerDefaultModels,
+    });
     const orchRes = await pty.spawn({
-      agent: orchAgent, cwd: workspace, activityId,
-      providerId: squad.orchestrator.providerId, model: validOrchModel,
+      agent: orchTarget.agent, cwd: workspace, activityId,
+      providerId: orchTarget.providerId, model: orchTarget.model,
       permissionMode: permMode, role: 'orchestrator',
       env: { SQUAD_WORKER_IDS: workerIds.join(','), SQUAD_ACTIVITY_ID: activityId }
     });
     if (orchRes?.ok && orchRes.paneId)
-      addPane({ id: orchRes.paneId, agent: orchAgent, cwd: workspace, workspacePath: workspace, activityId, providerId: squad.orchestrator.providerId, model: validOrchModel, externallySpawned: true });
+      addPane({ id: orchRes.paneId, agent: orchTarget.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: orchTarget.providerId, model: orchTarget.model, externallySpawned: true });
 
     // Switch to the workspace tab after spawning
     const tabIdx = useNavStore.getState().tabs.findIndex((t: any) => t.workspacePath === workspace);
@@ -376,7 +569,7 @@ function FilesNavBar({ workspacePath }: { workspacePath: string }) {
     <div className="h-9 border-b border-white/5 bg-[#0F0F13]/80 flex items-center px-4 gap-2 shrink-0 overflow-x-auto"
       style={{ scrollbarWidth: 'none' } as React.CSSProperties}
     >
-      <FolderTree size={12} className="text-[#4F46E5] shrink-0" />
+      <FolderTree size={12} className="text-[#5855e5] shrink-0" />
       <div className="flex items-center gap-1 min-w-0">
         {parts.map((p, i) => (
           <React.Fragment key={i}>
@@ -473,29 +666,22 @@ function PaneMenu({
     onClose();
     navigateInActiveTab({ kind: 'workspace' });
     const explicit = providerId !== undefined || model !== undefined;
-    let nextPid = explicit ? providerId : favoritePane.current?.providerId;
-    const nextMod = explicit ? model : favoritePane.current?.model;
+    const rawPid = explicit ? providerId : favoritePane.current?.providerId;
+    const rawModel = explicit ? model : favoritePane.current?.model;
+    const preferredAgent = (() => { try { return localStorage.getItem('codebrain.preferredAgent') || undefined; } catch { return undefined; } })();
 
-    // If model is given but provider is not, resolve provider from the model name.
-    if (nextMod && !nextPid) {
-      for (const p of providers) {
-        if (p.models?.includes(nextMod)) { nextPid = p.id; break; }
-      }
-      if (!nextPid) {
-        const lower = nextMod.toLowerCase();
-        if (lower.startsWith("claude-")) { const ap = providers.find(p => p.type === "anthropic-compat" || p.type === "oauth"); if (ap) nextPid = ap.id; }
-        else if (lower.startsWith("gemini-")) { const gp = providers.find(p => p.type === "gemini-compat"); if (gp) nextPid = gp.id; }
-        else if (lower.startsWith("mimo-")) { const mp = providers.find(p => p.type === "mimo-compat"); if (mp) nextPid = mp.id; }
-      }
-    }
+    const target = resolveSpawnTarget({
+      providerId: rawPid,
+      model: rawModel,
+      providers,
+      preferredAgent,
+      explicit,
+      favoriteAgent: favoritePane.current?.agent,
+    });
 
-    const prov = nextPid ? providers.find(p => p.id === nextPid) : null;
-    const agent = explicit
-      ? prov?.host ?? (prov?.type === 'oauth' ? 'claude' : 'openclaude')
-      : favoritePane.current?.agent ?? prov?.host ?? 'openclaude';
-    const env: Record<string, string> = { ...(prov?.env ?? {}), ...(nextMod ? { ANTHROPIC_MODEL: nextMod, MODEL: nextMod } : {}) };
-    (window as any).codeBrainApp?.pty.spawn({ agent, cwd: activeWorkspace, providerId: nextPid, model: nextMod, permissionMode, ...(Object.keys(env).length ? { env } : {}) })
-      .then((r: any) => { if (r?.ok && r.paneId) addPane({ id: r.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: nextPid, model: nextMod, permissionMode, externallySpawned: true }); })
+    const envKeys = Object.keys(target.env);
+    (window as any).codeBrainApp?.pty.spawn({ agent: target.agent, cwd: activeWorkspace, providerId: target.providerId, model: target.model, permissionMode, ...(envKeys.length ? { env: target.env } : {}) })
+      .then((r: any) => { if (r?.ok && r.paneId) addPane({ id: r.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: target.providerId, model: target.model, permissionMode, externallySpawned: true }); })
       .catch(() => { });
   };
 
@@ -833,11 +1019,6 @@ function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
       </button>
     </div>
   );
-}
-
-// ─── MR Review Indicator (removed — feature deprecated) ────────────────────
-function MrReviewIndicator({ activeWorkspace }: { activeWorkspace?: string }) {
-  return null;
 }
 
 // ─── Workspace Access Mode Selector ──────────────────────────────────────────
@@ -1251,13 +1432,17 @@ function WorkspaceHeader() {
           {/* MCP Port Indicator */}
           <McpPortIndicator />
 
-          {/* MR Review Indicator */}
-          <MrReviewIndicator activeWorkspace={activeWorkspace} />
-
           {/* Audio / Voice mode indicator */}
           {activeWorkspace && audioConfig && (
             <AudioIndicator audioConfig={audioConfig} audioModeBusy={audioModeBusy} onToggleMode={handleToggleAudioMode} />
           )}
+
+          {/* Global actions grouped into a single compact menu (keeps the bar uncluttered) */}
+          <VDiv />
+          <GlobalActionsMenu
+            onProviders={() => m.openProviders('list')}
+            onSquad={() => m.setShowSquadWizard(true)}
+          />
 
           {/* Libre Mode */}
           {activeWorkspace && (

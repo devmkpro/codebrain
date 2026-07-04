@@ -288,7 +288,7 @@ export function WorkspaceView({
     {showSessionLoading && (
       <div className="flex-1 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 px-6 text-center">
-          <div className="w-6 h-6 rounded-full border-2 border-[#4F46E5]/20 border-t-[#4F46E5] animate-spin" />
+          <div className="w-6 h-6 rounded-full border-2 border-[#5855e5]/20 border-t-[#5855e5] animate-spin" />
           <p className="font-mono text-[11px] text-slate-500 uppercase tracking-widest">
             Carregando sessões…
           </p>
@@ -299,7 +299,7 @@ export function WorkspaceView({
               </p>
               <button
                 onClick={handleNew}
-                className="px-4 py-2 rounded-lg bg-[#4F46E5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4338CA] transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-[#5855e5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4a47d6] transition-colors cursor-pointer"
               >
                 Abrir pane agora
               </button>
@@ -362,7 +362,7 @@ export function WorkspaceView({
                 </p>
                 <button
                   onClick={handleNew}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4F46E5]/10 border border-[#4F46E5]/20 text-indigo-400 text-[10px] font-bold uppercase tracking-widest hover:bg-[#4F46E5]/20 transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#5855e5]/10 border border-[#5855e5]/20 text-indigo-400 text-[10px] font-bold uppercase tracking-widest hover:bg-[#5855e5]/20 transition-all cursor-pointer"
                 >
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                   Nova
@@ -379,7 +379,7 @@ export function WorkspaceView({
                       <button
                         key={pane.id}
                         onClick={() => handleResumeSingle(pane)}
-                        className="group w-full text-left p-4 rounded-xl border border-white/5 bg-[#0A0A0B]/60 hover:border-[#4F46E5]/30 hover:bg-[#4F46E5]/5 transition-all cursor-pointer"
+                        className="group w-full text-left p-4 rounded-xl border border-white/5 bg-[#0A0A0B]/60 hover:border-[#5855e5]/30 hover:bg-[#5855e5]/5 transition-all cursor-pointer"
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2 flex-wrap">

@@ -5,7 +5,7 @@
   --font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas,
     "Cascadia Code", "Courier New", monospace;
 
-  --color-codebrain-accent: #6366f1;
+  --color-codebrain-accent: #706de8;
   --color-codebrain-accent-soft: #818cf8;
   --color-codebrain-purple: #a855f7;
   --color-codebrain-bg: #000000;
@@ -162,7 +162,7 @@ html, body, #root {
 .light [class*="hover:border-white/10"]:hover  { border-color: rgba(30,30,70,0.18) !important; }
 .light [class*="hover:border-white/20"]:hover  { border-color: rgba(30,30,70,0.24) !important; }
 .light [class*="hover:bg-[#0"]:hover     { background: #ededf6 !important; }
-.light [class*="hover:bg-[#4F46E5]/5"]:hover  { background: #eeeffd !important; }
+.light [class*="hover:bg-[#5855e5]/5"]:hover  { background: #eeeffd !important; }
 
 /* ══ DIVIDES ════════════════════════════════════════════════════ */
 .light .divide-white\/5 > :not([hidden]) ~ :not([hidden])  { border-color: rgba(30,30,70,0.12) !important; }
@@ -187,29 +187,29 @@ html, body, #root {
 .light .bg-black\/70 { background: rgba(0,0,0,0.45) !important; }
 
 /* ══ INDIGO ACCENT ══════════════════════════════════════════════ */
-.light .text-indigo-300       { color: #4f46e5 !important; }
-.light .text-indigo-400       { color: #4338ca !important; }
+.light .text-indigo-300       { color: #5855e5 !important; }
+.light .text-indigo-400       { color: #4a47d6 !important; }
 .light .text-indigo-500       { color: #3730a3 !important; }
-.light .hover\:text-indigo-300:hover { color: #4f46e5 !important; }
-.light .hover\:text-indigo-400:hover { color: #4338ca !important; }
+.light .hover\:text-indigo-300:hover { color: #5855e5 !important; }
+.light .hover\:text-indigo-400:hover { color: #4a47d6 !important; }
 
 /* ══ PRIMARY BUTTONS — keep white text on indigo bg ═════════════ */
-.light [class*="bg-[#4F46E5]"] { background: #6366f1 !important; }
-.light [class*="bg-[#4F46E5]/"] { background: rgba(99,102,241,0.15) !important; }
-.light [class*="bg-[#4338CA]"] { background: #4f46e5 !important; }
-.light [class*="bg-[#4F46E5]"] .text-white,
-.light [class*="bg-[#4F46E5]"][class*="text-white"],
-.light [class*="bg-[#4338CA]"][class*="text-white"],
+.light [class*="bg-[#5855e5]"] { background: #706de8 !important; }
+.light [class*="bg-[#5855e5]/"] { background: rgba(88,85,229,0.15) !important; }
+.light [class*="bg-[#4a47d6]"] { background: #5855e5 !important; }
+.light [class*="bg-[#5855e5]"] .text-white,
+.light [class*="bg-[#5855e5]"][class*="text-white"],
+.light [class*="bg-[#4a47d6]"][class*="text-white"],
 .light [class*="bg-indigo-500"][class*="text-white"] {
   color: #ffffff !important;
 }
-.light [class*="hover:bg-[#4338CA]"]:hover { background: #4f46e5 !important; }
-.light [class*="hover:bg-[#4F46E5]"]:hover { background: #6366f1 !important; }
+.light [class*="hover:bg-[#4a47d6]"]:hover { background: #5855e5 !important; }
+.light [class*="hover:bg-[#5855e5]"]:hover { background: #706de8 !important; }
 
 /* Indigo opacity variants — preserve transparency in light mode */
-.light [class*="bg-indigo-500/"] { background: rgba(99,102,241,0.12) !important; }
-.light [class*="border-[#4F46E5]/"] { border-color: rgba(99,102,241,0.25) !important; }
-.light [class*="border-indigo-500/"] { border-color: rgba(99,102,241,0.25) !important; }
+.light [class*="bg-indigo-500/"] { background: rgba(88,85,229,0.12) !important; }
+.light [class*="border-[#5855e5]/"] { border-color: rgba(88,85,229,0.25) !important; }
+.light [class*="border-indigo-500/"] { border-color: rgba(88,85,229,0.25) !important; }
 
 /* ══ VIOLET/PURPLE accent (squad, settings badge) ═══════════════ */
 .light [class*="bg-[#9d4edd]"]  { background: rgba(157,78,221,0.15) !important; }
@@ -234,14 +234,14 @@ html, body, #root {
 /* ══ SLIDERS ════════════════════════════════════════════════════ */
 .light input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
-  background: rgba(99,102,241,0.28);
+  background: rgba(88,85,229,0.28);
   border-radius: 9999px;
 }
 .light input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 16px; height: 16px; border-radius: 50%;
-  background: #6366f1; margin-top: -6px; cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.20), 0 0 0 2px rgba(99,102,241,0.22);
+  background: #706de8; margin-top: -6px; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.20), 0 0 0 2px rgba(88,85,229,0.22);
 }
 
 /* ══ STATUS COLORS — WCAG AA-compliant for light bg ════════════ */
@@ -267,7 +267,7 @@ html, body, #root {
 .light [class*="bg-red-500/"]       { background: rgba(239,68,68,0.08) !important; }
 .light [class*="bg-violet-500/5"]   { background: rgba(139,92,246,0.08) !important; }
 .light [class*="bg-violet-500/[0.04]"] { background: rgba(139,92,246,0.06) !important; }
-.light [class*="bg-indigo-500/[0.05]"] { background: rgba(99,102,241,0.08) !important; }
+.light [class*="bg-indigo-500/[0.05]"] { background: rgba(88,85,229,0.08) !important; }
 
 /* CostPanel / alert borders */
 .light [class*="border-yellow-500/20"]  { border-color: rgba(161,98,7,0.25) !important; }
@@ -277,8 +277,8 @@ html, body, #root {
 /* ══ HOVER on violet / indigo borders ═══════════════════════════ */
 .light [class*="hover:border-violet-500"]:hover  { border-color: rgba(139,92,246,0.35) !important; }
 .light [class*="hover:bg-violet-500/5"]:hover    { background: rgba(139,92,246,0.08) !important; }
-.light [class*="hover:border-[#4F46E5]"]:hover   { border-color: rgba(99,102,241,0.35) !important; }
-.light [class*="hover:bg-[#4F46E5]/5"]:hover     { background: rgba(99,102,241,0.08) !important; }
+.light [class*="hover:border-[#5855e5]"]:hover   { border-color: rgba(88,85,229,0.35) !important; }
+.light [class*="hover:bg-[#5855e5]/5"]:hover     { background: rgba(88,85,229,0.08) !important; }
 .light [class*="hover:text-[#00d9ff]"]:hover     { color: #0891b2 !important; }
 .light [class*="hover:bg-[#00d9ff]"]:hover       { background: rgba(8,145,178,0.08) !important; }
 .light [class*="hover:text-red-400"]:hover       { color: #b91c1c !important; }
@@ -297,7 +297,7 @@ html, body, #root {
 /* Gradient buttons — keep text white */
 .light [class*="from-violet-600"][class*="to-indigo-600"] { color: #ffffff !important; }
 .light [class*="from-violet-600"][class*="to-indigo-600"]:hover {
-  --tw-gradient-from: #7c3aed; --tw-gradient-to: #6366f1;
+  --tw-gradient-from: #7c3aed; --tw-gradient-to: #706de8;
 }
 .light [class*="bg-gradient-to-r"] .text-white,
 .light [class*="bg-gradient-to-r"][class*="text-white"] { color: #ffffff !important; }
