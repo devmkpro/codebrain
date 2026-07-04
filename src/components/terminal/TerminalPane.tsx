@@ -72,6 +72,7 @@ import { ProviderBadge } from "../panes/ProviderBadge";
 import { PaneIdBadge } from "../panes/PaneIdBadge";
 import { PaneTokenBadge } from "../panes/PaneTokenBadge";
 import { MissionBadge } from "../panes/MissionBadge";
+import { RoleBadge } from "../panes/RoleBadge";
 import { SavedContextPanel } from "../panes/SavedContextPanel";
 
 /** Wait for xterm cols/rows to stabilize across animation frames before syncing to PTY. */
@@ -128,8 +129,6 @@ export function TerminalPane({
   const [envValue, setEnvValue] = React.useState('');
   const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
   const savedSelectionRef = React.useRef('');
-  const termElementRef = React.useRef<HTMLElement | null>(null);
-  const zoomFixHandlerRef = React.useRef<((e: MouseEvent) => void) | null>(null);
   const lastPtySizeRef = React.useRef<{ cols: number; rows: number } | null>(null);
   const followOutputRef = React.useRef(true);
   const userPausedFollowRef = React.useRef(false);
@@ -271,41 +270,9 @@ export function TerminalPane({
 
     term.open(containerRef.current);
 
-    // Fix text selection with CSS body zoom.
-    // With body.style.zoom = Z:
-    //   - clientX/clientY are in physical/unzoomed coords (NOT scaled)
-    //   - getBoundingClientRect() returns zoomed coords (scaled by Z)
-    // So: clientX - rect.left gives wrong delta because one is zoomed, one isn't.
-    // Fix: override getBoundingClientRect to un-zoom left/top (position only).
-    // Width/height must stay unmodified — xterm uses them for cell size calculation.
-    const el = (term as any).element as HTMLElement | undefined;
-    if (el) {
-      termElementRef.current = el;
-      const origGetBCR = el.getBoundingClientRect.bind(el);
-      let cachedZoom = parseFloat(document.body.style.zoom) || 1;
-      const updateZoom = () => { cachedZoom = parseFloat(document.body.style.zoom) || 1; };
-      const zoomObserver = new MutationObserver(updateZoom);
-      zoomObserver.observe(document.body, { attributes: true, attributeFilter: ['style'] });
-      (el as any).__zoomObserver = zoomObserver;
-      el.getBoundingClientRect = () => {
-        const r = origGetBCR();
-        if (cachedZoom === 1) return r;
-        // Un-zoom only the position (left/top/x/y) — keep size as-is.
-        // clientX is unzoomed, rect.left is zoomed → divide rect position by zoom.
-        const left = r.left / cachedZoom;
-        const top = r.top / cachedZoom;
-        return {
-          left, top, x: left, y: top,
-          right: left + r.width,
-          bottom: top + r.height,
-          width: r.width,
-          height: r.height,
-          toJSON: () => r.toJSON(),
-        };
-      };
-    }
-
     // No addon renderer — xterm 6.0.0 uses its built-in DOM renderer (stable, no GPU deps)
+    // Zoom is now handled natively via webContents.setZoomFactor (IPC app:set-zoom),
+    // which keeps clientX/Y and getBoundingClientRect in the same coordinate space.
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -443,13 +410,6 @@ export function TerminalPane({
     return () => {
       const term = termRef.current;
       if (term) {
-        const el = termElementRef.current;
-        if (el) {
-          (el as any).__zoomObserver?.disconnect();
-          delete (el as any).__zoomObserver;
-        }
-        termElementRef.current = null;
-        zoomFixHandlerRef.current = null;
         term.dispose();
         termRef.current = null;
         fitAddonRef.current = null;
@@ -647,6 +607,7 @@ export function TerminalPane({
           <ProviderBadge providerId={pane.providerId} model={pane.model} agent={pane.agent} />
           <PaneIdBadge paneId={pane.id} />
           <MissionBadge missionId={pane.missionId} workspacePath={pane.workspacePath ?? pane.cwd} />
+          <RoleBadge paneId={pane.id} agent={pane.agent} />
           <PaneTokenBadge paneId={pane.id} isRunning={pane.status === "running"} />
         </div>
         {/* Right-side action buttons */}
@@ -749,7 +710,7 @@ export function TerminalPane({
                         value={envKey}
                         onChange={e => setEnvKey(e.target.value)}
                         placeholder="KEY"
-                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40"
+                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40"
                         onKeyDown={e => e.key === 'Enter' && handleSaveEnvVar()}
                         autoFocus
                       />
@@ -758,14 +719,14 @@ export function TerminalPane({
                         value={envValue}
                         onChange={e => setEnvValue(e.target.value)}
                         placeholder="value"
-                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#4F46E5]/40"
+                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40"
                         onKeyDown={e => e.key === 'Enter' && handleSaveEnvVar()}
                       />
                       <div className="flex gap-1.5">
                         <button
                           onClick={handleSaveEnvVar}
                           disabled={!envKey.trim()}
-                          className="flex-1 px-2 py-1 rounded bg-[#4F46E5] text-white text-[9px] font-bold uppercase tracking-widest hover:bg-[#4338CA] disabled:opacity-30 transition-colors"
+                          className="flex-1 px-2 py-1 rounded bg-[#5855e5] text-white text-[9px] font-bold uppercase tracking-widest hover:bg-[#4a47d6] disabled:opacity-30 transition-colors"
                         >
                           Salvar + Export
                         </button>

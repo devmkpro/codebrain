@@ -513,7 +513,7 @@ function createMCPBridge(ptyManager, opts = {}) {
   paneHandlers.roleMap = roleMap;
 
   const browserHandlers = createBrowserHandlers(opts);
-  const todoHandlers = createTodoHandlers();
+  const todoHandlers = createTodoHandlers({ memoryStore: opts.memoryStore });
   const memoryHandlers = createMemoryHandlers({ ...opts, paneLabels });
   const swarmHandlers = createSwarmHandlers(ptyManager, { ...opts, paneLabels, roleMap, agentScorer });
   const fileHandlers = createFileHandlers({ ...opts, paneLabels, roleMap, ptyManager });

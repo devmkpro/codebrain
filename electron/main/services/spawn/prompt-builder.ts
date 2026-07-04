@@ -310,6 +310,44 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
   if (rolePrompt) sysPrompt += `\n\n---\n\n${rolePrompt}`;
   if (sessionContext) sysPrompt += `\n\n---\n\n${sessionContext}`;
 
+  // Mission bootstrap — auto-discovery for non-orchestrator panes
+  if (role !== "orchestrator") {
+    sysPrompt += `\n\n## Missão — Bootstrap obrigatório
+
+No início da sua primeira ação, chame \`mcp__codebrain__mcp__codebrain__mission_context({ paneId: "${paneId}" })\`.
+- Se **action='adopt'**: você é worker do orquestrador retornado. Reporte a ele via \`handoff_submit\` ao terminar.
+- Se **action='ask_if_orchestrator'**: use \`mcp__codebrain__mcp__codebrain__question_ask\` perguntando ao usuário se você é o orquestrador desta missão. Se sim, chame:
+\`\`\`
+mcp__codebrain__mcp__codebrain__pane_set_role({ paneId: "${paneId}", role: "orchestrator" })
+\`\`\`
+e crie/associe a missão com \`mcp__codebrain__mcp__codebrain__mission_create\` / \`mcp__codebrain__mcp__codebrain__mission_set\`.
+
+### 🔴 TASK BOARD — OBRIGATÓRIO
+
+Após descobrir sua missão, chame \`task_list({ mission_id: "..." })\`.
+1. Procure uma task com \`assigned_to\` = seu paneId (\`${paneId}\`)
+2. Se encontrou → \`task_move({ id, column: "in_progress" })\` ANTES de começar a trabalhar
+3. Se NÃO encontrou → \`handoff_submit({ paneId: "${paneId}", summary: "No task assigned", status: "blocked" })\` e AGUARDE o orquestrador
+4. NUNCA trabalhe sem uma task atribuída a você. O board é a fonte única de verdade.
+5. Ao terminar → \`task_move({ id, column: "done" })\` + \`handoff_submit\`
+6. Após completar, seu status volta para **idle**. O orquestrador pode delegar novas tasks a você via \`actor_list()\` + \`task_assign\`. Você NÃO precisa ser re-spawnado — permaneça disponível para novas tasks do board.
+
+Coordenação é pull-based via board, não conversa bidirecional.`;
+  } else {
+    // Orchestrator gets the non-execution reminder in MISSION_BOOTSTRAP too
+    sysPrompt += `\n\n## Missão — Orquestrador
+
+Chame \`mcp__codebrain__mcp__codebrain__mission_context({ paneId: "${paneId}" })\` para descobrir ou criar sua missão.
+
+### Regras obrigatórias:
+1. **CRIE tasks** (\`mcp__codebrain__mcp__codebrain__task_create\` com mission_id) para CADA subtask ANTES de delegar a workers
+2. **Atribua tasks** (\`mcp__codebrain__mcp__codebrain__task_assign\`) ao paneId do worker responsável
+3. **NUNCA execute** o trabalho você mesmo — delegue SEMPRE (veja a seção "VOCÊ NÃO EXECUTA" no topo)
+4. Acompanhe progresso via \`mcp__codebrain__mcp__codebrain__task_list({ mission_id })\` e \`mcp__codebrain__mcp__codebrain__handoff_wait\`
+5. **Contador de confirmações:** para executar direto, o usuário DEVE confirmar 2x. Use \`mcp__codebrain__mcp__codebrain__actor_set_metadata({ paneId: "${paneId}", metadata: { execution_confirmed: true, confirmations: 2 } })\` após as 2 confirmações. Sem isso, recuse e delegue.
+6. **🔴 REUSE PRIMEIRO:** ANTES de \`pane_spawn\`, chame \`actor_list()\`. Se algum worker tem \`available: true\`, DELEGUE a ele (\`task_assign\` + \`pane_write\`). Só spawne se NÃO houver worker idle compatível.`;
+  }
+
   // Providers section — clean format for user-facing questions
   const providersInfo = configuredProviders
     .map((p: any) => {

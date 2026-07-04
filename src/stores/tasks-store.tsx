@@ -1,29 +1,34 @@
 ﻿import React from "react";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
-// useTasksStore
+// useTasksStore — backed by kanban_tasks (persistent, mission-scoped)
 export const useTasksStore = create(set => ({
-  list: [],
-  activeTaskId: null,
+  list: [] as any[],
+  activeTaskId: null as string | null,
   visible: false,
   load: async () => {
-    const state = (await window.codeBrainApp?.tasks?.list?.()) ?? {
-      list: [],
-      activeTaskId: null
-    };
-    set({
-      list: state.list ?? [],
-      activeTaskId: state.activeTaskId ?? null
-    });
+    try {
+      // Read workspace from active tab
+      const navStore = (await import("./nav-store")).useNavStore.getState();
+      const tabs = navStore.tabs as any[];
+      const tab = tabs[navStore.activeTabIndex];
+      const workspace = tab?.workspacePath as string | undefined;
+      const state = await window.codeBrainApp?.tasks?.list?.({ workspace });
+      set({
+        list: state?.tasks ?? [],
+        activeTaskId: state?.activeTaskId ?? null,
+      });
+    } catch {
+      set({ list: [], activeTaskId: null });
+    }
   },
-  setState: state => set({
-    list: state.list ?? [],
-    activeTaskId: state.activeTaskId ?? null
+  setState: (state: any) => set({
+    list: state.tasks ?? state.list ?? [],
+    activeTaskId: state.activeTaskId ?? null,
   }),
-  toggle: () => set(s => ({
-    visible: !s.visible
-  }))
+  toggle: () => set((s: any) => ({
+    visible: !s.visible,
+  })),
 }));
 export function subscribeTaskUpdates() {
   const off = window.codeBrainApp?.tasks?.onUpdated?.(state => {

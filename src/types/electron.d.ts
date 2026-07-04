@@ -110,12 +110,20 @@ export interface SkillManifest {
 
 export interface Task {
   id: string;
+  name?: string;
   label: string;
   status: "pending" | "running" | "done" | "error";
+  column?: string;
+  priority?: string;
+  assigned_to?: string;
+  description?: string;
+  mission_id?: string;
+  result?: string;
   workspacePath?: string;
   paneId?: string;
   activityId?: string;
   createdAt: number;
+  updatedAt?: number;
 }
 
 export interface TasksState {
@@ -129,6 +137,7 @@ export interface WorkspaceConfig {
 export interface AppConfig {
   theme?: "dark" | "light";
   autoRestore?: boolean;
+  preferredAgent?: string;
   notifications?: {
     onTaskComplete?: boolean;
     onMessage?: boolean;
@@ -303,6 +312,7 @@ export interface CodebrainApp {
     readFromClipboard: () => Promise<string>;
     onReloadShortcut: (callback: () => void) => () => void;
     reloadShell: () => Promise<void>;
+    setZoomFactor: (factor: number) => Promise<number>;
   };
   auth: {
     status: () => Promise<AuthStatus>;
@@ -334,6 +344,7 @@ export interface CodebrainApp {
     detach: (paneId: string) => Promise<{ ok: boolean; error?: string }>;
     list: () => Promise<PtyInfo[]>;
     resize: (paneId: string, cols: number, rows: number) => Promise<void>;
+    getRole: (paneId: string) => Promise<{ ok: boolean; role: string | null; missionId: string | null; error?: string }>;
     onOutput: (callback: (paneId: string, data: string, echo?: boolean) => void) => () => void;
     onExit: (callback: (paneId: string, exitCode: number) => void) => () => void;
     onPaneAdded: (callback: (info: PtyInfo) => void) => () => void;
@@ -462,7 +473,7 @@ export interface CodebrainApp {
     setClientId: (clientId: string) => Promise<{ ok: boolean; error?: string }>;
   };
   tasks: {
-    list: () => Promise<Task[]>;
+    list: (opts?: { workspace?: string; mission_id?: string }) => Promise<{ tasks: Task[]; activeTaskId?: string | null }>;
     onUpdated: (cb: (state: TasksState) => void) => () => void;
   };
   squads: {

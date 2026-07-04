@@ -493,6 +493,19 @@ function createMemoryStore(dbPath) {
     `).run(now, now);
   } catch {}
 
+  // Idempotent column migrations (SQLite has no ADD COLUMN IF NOT EXISTS).
+  // Wrapped individually so a re-run (column already present) is a no-op.
+  const addColumn = (table, colDef) => {
+    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef}`); } catch {}
+  };
+  addColumn("actor_registry", "role TEXT DEFAULT 'worker'");
+  addColumn("actor_registry", "mission_id TEXT");
+  addColumn("actor_registry", "metadata TEXT");
+  addColumn("kanban_tasks", "mission_id TEXT");
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_actor_mission ON actor_registry(mission_id)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_actor_role ON actor_registry(role)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_kanban_mission ON kanban_tasks(mission_id)`); } catch {}
+
   // ── Knowledge Graph + Vector Store ────────────────────────────────────────
   let knowledgeGraph;
   try {
@@ -1664,15 +1677,15 @@ function createMemoryStore(dbPath) {
      * Create a kanban task.
      * @param {{ title: string, description?: string, column?: string, priority?: string, assigned_to?: string, workspace?: string }} opts
      */
-    createKanbanTask({ title, description = "", column = "inbox", priority = "normal", assigned_to, workspace }) {
+    createKanbanTask({ title, description = "", column = "inbox", priority = "normal", assigned_to, workspace, mission_id }) {
       if (!title) return { ok: false, error: "title is required" };
       const validColumns = ["inbox", "assigned", "in_progress", "review", "done"];
       if (!validColumns.includes(column)) return { ok: false, error: `column must be one of: ${validColumns.join(", ")}` };
       const id = `ktask_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       db.prepare(`
-        INSERT INTO kanban_tasks (id, title, description, column_name, priority, assigned_to, workspace)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(id, title, description, column, priority, assigned_to || null, workspace || null);
+        INSERT INTO kanban_tasks (id, title, description, column_name, priority, assigned_to, workspace, mission_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, title, description, column, priority, assigned_to || null, workspace || null, mission_id || null);
       return { ok: true, id, column };
     },
 
@@ -1696,12 +1709,13 @@ function createMemoryStore(dbPath) {
      * List kanban tasks with optional filters.
      * @param {{ column?: string, assigned_to?: string, workspace?: string, limit?: number }} opts
      */
-    listKanbanTasks({ column, assigned_to, workspace, limit = 50 } = {}) {
+    listKanbanTasks({ column, assigned_to, workspace, limit = 50, mission_id } = {}) {
       let query = "SELECT * FROM kanban_tasks WHERE 1=1";
       const params = [];
       if (column) { query += " AND column_name = ?"; params.push(column); }
       if (assigned_to) { query += " AND assigned_to = ?"; params.push(assigned_to); }
       if (workspace) { query += " AND workspace = ?"; params.push(workspace); }
+      if (mission_id) { query += " AND mission_id = ?"; params.push(mission_id); }
       query += " ORDER BY updated_at DESC LIMIT ?";
       params.push(limit);
       const rows = db.prepare(query).all(...params);
@@ -1821,6 +1835,94 @@ function createMemoryStore(dbPath) {
       if (!id) return { ok: false, error: "id is required" };
       const res = db.prepare("DELETE FROM missions WHERE id = ?").run(id);
       return { ok: true, deleted: res.changes > 0 };
+    },
+
+    // ── Actor Role & Mission Methods ───────────────────────────────────────
+
+    /**
+     * Set or update actor role and mission association.
+     * Does UPDATE first; if 0 rows changed, does INSERT (actor may not be registered yet).
+     * @param {{ paneId: string, role: string, missionId?: string }} opts
+     */
+    setActorRole({ paneId, role, missionId }) {
+      if (!paneId) return { ok: false, error: "paneId is required" };
+      if (!role) return { ok: false, error: "role is required" };
+      try {
+        const result = db.prepare(`
+          UPDATE actor_registry
+          SET role = ?, mission_id = COALESCE(?, mission_id), time_updated = unixepoch()
+          WHERE pane_id = ?
+        `).run(role, missionId || null, paneId);
+        if (result.changes === 0) {
+          // Actor not yet in registry — insert minimal row
+          db.prepare(`
+            INSERT INTO actor_registry (pane_id, role, mission_id, status)
+            VALUES (?, ?, ?, 'idle')
+          `).run(paneId, role, missionId || null);
+        }
+        return { ok: true, paneId, role, missionId: missionId || null };
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    },
+
+    /**
+     * Get actor role and mission association.
+     * @param {{ paneId: string }} opts
+     */
+    getActorRole({ paneId }) {
+      if (!paneId) return { ok: false, error: "paneId is required" };
+      try {
+        const row = db.prepare(
+          "SELECT role, mission_id, status FROM actor_registry WHERE pane_id = ?"
+        ).get(paneId);
+        if (!row) return { ok: false, error: "actor not found" };
+        return { ok: true, role: row.role, missionId: row.mission_id, status: row.status };
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    },
+
+    /**
+     * Find active orchestrator(s) for a mission or workspace.
+     * @param {{ missionId?: string, workspace?: string }} opts
+     */
+    findOrchestrator({ missionId, workspace } = {}) {
+      try {
+        let query = "SELECT pane_id FROM actor_registry WHERE role = 'orchestrator' AND status IN ('pending', 'running', 'idle')";
+        const params = [];
+        if (missionId) {
+          query += " AND mission_id = ?";
+          params.push(missionId);
+        } else if (workspace) {
+          query += " AND workspace = ?";
+          params.push(workspace);
+        }
+        const rows = db.prepare(query).all(...params);
+        return { ok: true, orchestrators: rows.map(r => r.pane_id), count: rows.length };
+      } catch (err) {
+        return { ok: false, error: err.message, orchestrators: [], count: 0 };
+      }
+    },
+
+    /**
+     * Resolve the most recently updated active mission for a workspace.
+     * @param {{ workspace?: string }} opts
+     */
+    resolveActiveMission({ workspace } = {}) {
+      try {
+        let query = "SELECT * FROM missions WHERE status = 'active'";
+        const params = [];
+        if (workspace) {
+          query += " AND workspace = ?";
+          params.push(workspace);
+        }
+        query += " ORDER BY updated_at DESC LIMIT 1";
+        const row = db.prepare(query).get(...params);
+        return { ok: true, mission: row || null };
+      } catch (err) {
+        return { ok: false, error: err.message, mission: null };
+      }
     },
 
     // ── Notifications ─────────────────────────────────────────────────────────
@@ -2047,6 +2149,34 @@ function createMemoryStore(dbPath) {
           WHERE pane_id = ?
         `).run(now, now, paneId);
         return { ok: true };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Get actor metadata (JSON stored in metadata column).
+     */
+    actorGetMetadata({ paneId }) {
+      try {
+        const row = db.prepare("SELECT metadata FROM actor_registry WHERE pane_id = ?").get(paneId);
+        if (!row) return { ok: false, error: "actor not found" };
+        let meta = {};
+        try { meta = JSON.parse(row.metadata || "{}"); } catch {}
+        return { ok: true, metadata: meta };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+
+    /**
+     * Set (merge) actor metadata. Pass partial object to merge with existing.
+     */
+    actorSetMetadata({ paneId, metadata }) {
+      try {
+        const row = db.prepare("SELECT metadata FROM actor_registry WHERE pane_id = ?").get(paneId);
+        let existing = {};
+        try { existing = JSON.parse(row?.metadata || "{}"); } catch {}
+        const merged = { ...existing, ...metadata };
+        db.prepare("UPDATE actor_registry SET metadata = ?, time_updated = ? WHERE pane_id = ?")
+          .run(JSON.stringify(merged), Date.now(), paneId);
+        return { ok: true, metadata: merged };
       } catch (e) { return { ok: false, error: e.message }; }
     },
 

@@ -75,7 +75,7 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__pane_spawn ─────────────────────────────────────────────
   server.tool(
     "mcp__codebrain__pane_spawn",
-    "Open a NEW VISIBLE terminal pane in the CodeBrain workspace grid. Use this instead of your built-in background agent tool if you want the user to see the progress. Returns the paneId.",
+    "Open a NEW VISIBLE terminal pane in the CodeBrain workspace grid, OR reuse an idle worker if one is compatible (default: reuseIdle=true). Returns paneId + reused flag. ALWAYS check actor_list() first to see available workers before spawning.",
     {
       cwd:          z.string().optional().describe("Working directory for the new pane. STRONGLY RECOMMENDED — always pass your workspace path here to ensure the pane opens in the correct project. If omitted, the system guesses from active panes."),
       agent:        z.string().optional().describe("Agent binary: claude, codex, gemini, openclaude, shell. Defaults to claude."),
@@ -84,6 +84,7 @@ function createCodebrainMCPServer(bridge) {
       label:        z.string().optional().describe("A short label to identify this pane in pane_list (e.g. 'backend', 'frontend', 'ui-tester'). Helps the orchestrator reuse existing workers."),
       description:  z.string().optional().describe("Short description of the task this pane will perform. Stored in actor registry for status/monitoring."),
       parentPaneId: z.string().optional().describe("The pane_id of the parent/orchestrator that spawned this pane. Used for cancel cascade and hierarchy tracking."),
+      reuseIdle:    z.boolean().optional().default(true).describe("If true (default), automatically reuse a compatible idle worker instead of spawning a new pane. Set to false to force a new spawn."),
     },
     async (args) => {
       try {
@@ -95,13 +96,16 @@ function createCodebrainMCPServer(bridge) {
           label:        args.label,
           description:  args.description,
           parentPaneId: args.parentPaneId,
+          reuseIdle:    args.reuseIdle ?? true,
         });
 
         const paneId = result?.paneId;
         if (!paneId || result?.error) {
           return { content: [{ type: "text", text: `error: ${result?.error ?? "spawn failed"}` }], isError: true };
         }
-        return { content: [{ type: "text", text: JSON.stringify({ paneId, ok: true, reused: result.reused || false }) }] };
+        const out = { paneId, ok: true, reused: result.reused || false };
+        if (result.message) out.message = result.message;
+        return { content: [{ type: "text", text: JSON.stringify(out) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -120,6 +124,7 @@ function createCodebrainMCPServer(bridge) {
       label:        z.string().optional().describe("Label to identify this pane."),
       description:  z.string().min(1).describe("Short description of the task (3-5 words). Required."),
       parentPaneId: z.string().optional().describe("Parent orchestrator pane_id for hierarchy tracking."),
+      reuseIdle:    z.boolean().optional().default(true).describe("If true (default), reuse a compatible idle worker instead of spawning new."),
       timeout_ms:   z.number().int().positive().optional().describe("Max wait time in milliseconds (default 600000 = 10 min)."),
     },
     async (args) => {
@@ -132,6 +137,7 @@ function createCodebrainMCPServer(bridge) {
           label:        args.label,
           description:  args.description,
           parentPaneId: args.parentPaneId,
+          reuseIdle:    args.reuseIdle ?? true,
           timeoutMs:    args.timeout_ms,
         });
         if (!result.ok) return { content: [{ type: "text", text: `error: ${result.error}` }], isError: true };
@@ -186,7 +192,7 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__actor_list ────────────────────────────────────────────
   server.tool(
     "mcp__codebrain__actor_list",
-    "List all active actors (panes) in the current workspace from the persistent registry. Shows status, turn count, parent hierarchy, and stuck detection. More detailed than pane_list.",
+    "List all active actors (panes) in the current workspace from the persistent registry. Shows status, turn count, parent hierarchy, stuck detection, and 'available' field (true = idle worker with no in_progress task, ready for delegation). More detailed than pane_list.",
     {
       include_terminal: z.boolean().optional().describe("Include already-completed panes (default false — only active ones)."),
     },
@@ -194,6 +200,41 @@ function createCodebrainMCPServer(bridge) {
       try {
         const result = bridge.actorList({ includeTerminal: args.include_terminal });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
+  // ── mcp__codebrain__worker_find_idle ──────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__worker_find_idle",
+    "Find an idle worker that is available for a new task. Returns the best candidate (lowest turn count) or null if none available. A worker is 'available' when: role=worker, status=idle, no kanban task in_progress assigned to it.",
+    {
+      model:      z.string().optional().describe("Filter by model (e.g. 'mimo-v2.5-pro'). Omit to match any model."),
+      providerId: z.string().optional().describe("Filter by provider ID. Omit to match any provider."),
+      agent:      z.string().optional().describe("Filter by agent binary (e.g. 'openclaude'). Omit to match any agent."),
+    },
+    async (args) => {
+      try {
+        const candidate = bridge.findIdleWorker({
+          model: args.model,
+          providerId: args.providerId,
+          agent: args.agent,
+        });
+        if (!candidate) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: true, found: false, message: "No idle worker available matching criteria." }) }] };
+        }
+        return { content: [{ type: "text", text: JSON.stringify({
+          ok: true,
+          found: true,
+          paneId: candidate.pane_id,
+          model: candidate.model,
+          providerId: candidate.provider_id,
+          agent: candidate.agent,
+          turnCount: candidate.turn_count || 0,
+          message: `Idle worker ${candidate.pane_id.slice(0, 8)} available (${candidate.model || 'any model'}, ${candidate.turn_count || 0} turns). Use pane_write to delegate a task.`,
+        }) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -280,10 +321,11 @@ function createCodebrainMCPServer(bridge) {
     {
       paneId: z.string().describe("The target pane ID (from pane_list or pane_spawn)."),
       role:   z.enum(["worker", "orchestrator"]).describe('Role to assign: "worker" or "orchestrator".'),
+      mission_id: z.string().optional().describe("Optional mission ID to associate this pane with."),
     },
     async (args) => {
       try {
-        const result = await bridge.setRole(args.paneId, args.role);
+        const result = await bridge.setRole(args.paneId, args.role, args.mission_id);
         if (!result?.ok) {
           return { content: [{ type: "text", text: `error: ${result?.error ?? "unknown error"}` }], isError: true };
         }
@@ -1574,6 +1616,13 @@ function createCodebrainMCPServer(bridge) {
     server.tool("mcp__codebrain__mission_list", "List missions with optional status filter.", { status: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
     server.tool("mcp__codebrain__mission_set", "Update mission metadata.", { id: z.string(), updates: z.object({ title: z.string().optional(), summary: z.string().optional(), worktreePath: z.string().optional(), status: z.string().optional(), metadata: z.string().optional() }) }, async ({ id, updates }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionSet({ id, updates }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
     server.tool("mcp__codebrain__mission_delete", "Delete a mission.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionDelete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mcp__codebrain__mission_context", "Auto-discover mission context for a pane. Resolves active mission, finds orchestrator, and determines role. Call on worker boot.", { paneId: z.string().describe("Your pane ID"), workspace: z.string().optional().describe("Workspace path filter"), mission_id: z.string().optional().describe("Specific mission ID (resolves active if omitted)") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionContext({ paneId: args.paneId, workspace: args.workspace, missionId: args.mission_id }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mcp__codebrain__task_create", "Create a kanban task for mission coordination. Columns: inbox, assigned, in_progress, review, done.", { title: z.string().describe("Task title"), description: z.string().optional(), column: z.string().optional(), priority: z.string().optional(), assigned_to: z.string().optional(), workspace: z.string().optional(), mission_id: z.string().optional().describe("Mission ID to scope this task") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskCreate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mcp__codebrain__task_list", "List kanban tasks with optional filters. Use mission_id to scope to a mission.", { column: z.string().optional(), assigned_to: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional(), mission_id: z.string().optional().describe("Filter by mission ID") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mcp__codebrain__task_move", "Move a kanban task to a different column.", { id: z.string(), column: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskMove(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mcp__codebrain__task_complete", "Complete a kanban task with optional result.", { id: z.string(), result: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskComplete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mcp__codebrain__task_assign", "Assign a kanban task to a pane/agent.", { id: z.string(), paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskAssign(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mcp__codebrain__task_delete", "Delete a kanban task.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskDelete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
   ];
 
   // ════════════════════════════════════════════════════════════════════════════

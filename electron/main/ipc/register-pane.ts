@@ -32,10 +32,25 @@ export function registerPaneHandlers(ctx: AppContext): void {
   });
 
   // pty:list filters out detached panes so the main window doesn't re-add them
-  ipcMain.handle("pty:list", async () => ({
-    ok: true,
-    panes: ctx.ptyManager.list().filter(p => !ctx.detachedPaneIds.has(p.paneId)),
-  }));
+  ipcMain.handle("pty:list", async () => {
+    const panes = ctx.ptyManager.list().filter(p => !ctx.detachedPaneIds.has(p.paneId));
+    // Enrich with role + mission_id from actor_registry (for RoleBadge/MissionBadge)
+    try {
+      const store = ctx.memoryStore;
+      if (store?.getActorRole) {
+        for (const p of panes) {
+          try {
+            const roleInfo = store.getActorRole({ paneId: p.paneId });
+            if (roleInfo?.ok) {
+              (p as any).role = roleInfo.role || undefined;
+              (p as any).mission_id = roleInfo.missionId || undefined;
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+    return { ok: true, panes };
+  });
 
   ipcMain.handle("pty:resize", async (_event, paneId: string, cols: number, rows: number) => {
     try { ctx.ptyManager.resize(paneId, cols, rows); return { ok: true }; }
@@ -84,6 +99,20 @@ export function registerPaneHandlers(ctx: AppContext): void {
     });
 
     return { ok: true };
+  });
+
+  // ── Get pane role from actor_registry ───────────────────────────────────────
+  ipcMain.handle("pane:getRole", async (_event, paneId: string) => {
+    try {
+      const store = ctx.memoryStore;
+      if (store?.getActorRole) {
+        const entry = store.getActorRole({ paneId });
+        return { ok: true, role: entry?.role ?? null, missionId: entry?.mission_id ?? null };
+      }
+      return { ok: true, role: null, missionId: null };
+    } catch (err) {
+      return { ok: false, role: null, missionId: null, error: String(err) };
+    }
   });
 
   // ── Hibernate pane (kill PTY but keep config for revival) ──────────────────

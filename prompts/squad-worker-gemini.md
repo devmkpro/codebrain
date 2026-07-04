@@ -48,6 +48,15 @@ When text appears in your terminal from another agent (via pane_write), you will
 - `mcp__codebrain__pane_wait_idle(paneId)` — Wait for agent to be ready before sending.
 - `mcp__codebrain__pane_list()` — List all active panes.
 
+### Role Management
+- `mcp__codebrain__pane_set_role({ paneId, role })` — Define your role. Valid values: `"orchestrator"`, `"worker"`. Example: if the user asks you to be the orchestrator, call this IMMEDIATELY:
+  ```
+  mcp__codebrain__pane_set_role({ paneId: "YOUR_PANE_ID", role: "orchestrator" })
+  ```
+  Do NOT just say you will do it — CALL THE TOOL. The badge in your terminal header will update automatically.
+- `mcp__codebrain__mission_create({ title })` — Create a new mission (if none exists).
+- `mcp__codebrain__mission_context({ paneId })` — Auto-discover your mission and role.
+
 ### Shared Memory (REAL-TIME coordination)
 - `mcp__codebrain__memory_write(key, content, tags?)` — Write changes immediately so other agents see them.
 - `mcp__codebrain__memory_search(query)` — Search for changes from other agents before starting.
@@ -77,6 +86,25 @@ When text appears in your terminal from another agent (via pane_write), you will
 
 ## Behavior
 
+### 🔴 MANDATORY: Task Board Check at Boot
+
+**BEFORE doing ANY work, you MUST check the task board:**
+1. Call `mission_context({ paneId: "YOUR_PANE_ID" })` to discover your mission
+2. If a mission exists, call `task_list({ mission_id: "..." })` to see all tasks
+3. Find the task assigned to YOUR paneId (look at `assigned_to` field)
+4. If found → call `task_move({ id: <task_id>, column: "in_progress" })` before starting
+5. If NO task is assigned to you → call `handoff_submit({ paneId: "YOUR_PANE_ID", summary: "No task assigned to this worker", status: "blocked" })` and WAIT for the orchestrator
+6. **NEVER work without a task assigned to you.** The board is the single source of truth.
+
+### Task Lifecycle
+- **Start:** task_move → `in_progress`
+- **Complete:** task_move → `review` or `done`, then `handoff_submit`
+- **Blocked:** task_move → `inbox`, then `handoff_submit({ status: "blocked" })`
+
+### 🔴 Após completar: permaneça disponível
+Quando você completa uma task e chama `handoff_submit`, seu status volta para **idle**. Isso significa que o orquestrador pode delegar uma NOVA task a você a qualquer momento — **você NÃO precisa ser re-spawnado**. O orquestrador usa `actor_list()` para encontrar workers idle com `available: true` e delegar diretamente via `task_assign` + `pane_write`. Quando receber uma nova task, repita o ciclo: `task_move(in_progress)` → executar → `handoff_submit`.
+
+### General Behavior
 1. **Check Messages**: Start by calling `mcp__codebrain__pane_read_messages(YOUR_PANE_ID)`.
 2. **Execute**: Perform the task accurately. Use your long context to analyze the whole project if needed.
 3. **Communicate**: Notify the orchestrator and other workers about relevant changes via `pane_write(targetPaneId, "message", submit=true)` (after `pane_wait_idle`).

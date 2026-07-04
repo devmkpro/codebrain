@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
       return () => ipcRenderer.off("app:reload-shortcut", handler);
     },
     reloadShell: () => ipcRenderer.invoke("app:reload-shell"),
+    setZoomFactor: (factor: number) => ipcRenderer.invoke("app:set-zoom", factor),
   },
 
   auth: {
@@ -114,6 +115,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     detach: (paneId: string) => ipcRenderer.invoke("pty:detach", paneId),
     list: () => ipcRenderer.invoke("pty:list"),
     resize: (paneId: string, cols: number, rows: number) => ipcRenderer.invoke("pty:resize", paneId, cols, rows),
+    getRole: (paneId: string) => ipcRenderer.invoke("pane:getRole", paneId),
     onOutput: (callback: (paneId: string, data: string, echo?: boolean) => void) => {
       ensurePtyOutputListener();
       ptyOutputCallbacks.add(callback);

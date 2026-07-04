@@ -24,6 +24,8 @@ export interface Pane {
   providerId?: string;
   model?: string;
   permissionMode?: string;
+  role?: string;
+  mission_id?: string;
 }
 
 // Layout tree types for the grid system
