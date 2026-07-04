@@ -67,12 +67,10 @@ export function NotificationsBell() {
   const handleToggle = () => {
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      // Compensate for CSS body zoom: getBoundingClientRect returns zoomed coords
-      // but fixed positioning uses unzoomed viewport coords.
-      const zoom = parseFloat(document.body.style.zoom) || 1;
+      // Native Electron zoom keeps all coordinates in the same space — no compensation needed.
       setAnchor({
-        top: (rect.bottom + 6) / zoom,
-        right: (window.innerWidth - rect.right) / zoom,
+        top: rect.bottom + 6,
+        right: window.innerWidth - rect.right,
       });
     }
     setOpen(v => !v);

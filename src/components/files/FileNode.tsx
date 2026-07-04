@@ -22,7 +22,9 @@ export function FileNode({
     if (next && children === null) {
       setLoading(true);
       const res = await window.codeBrainApp?.files?.list(workspacePath, entry.path);
-      setChildren(res?.ok && res.items ? res.items : []);
+      // Accept both { ok, items } contract and raw array (legacy/backwards compat)
+      const items = Array.isArray(res) ? res : (res?.items ?? []);
+      setChildren(items);
       setLoading(false);
     }
   }, [entry, open, children, workspacePath, onFileClick]);

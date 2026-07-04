@@ -271,11 +271,13 @@ export function App() {
     const safeZoom = Math.max(0.5, Math.min(2, appZoom));
     if (safeZoom !== appZoom) {
       useTerminalSettings.setState({ appZoom: 1 });
-      document.body.style.zoom = '';
+      window.codeBrainApp?.app?.setZoomFactor(1);
       return;
     }
-    // Only set zoom when not 1 — avoid shrinking the default layout
-    document.body.style.zoom = appZoom === 1 ? '' : String(appZoom);
+    // Native Electron zoom — scales the whole page without breaking
+    // CSS coordinate math (unlike document.body.style.zoom which
+    // causes getBoundingClientRect and clientX to use different scales).
+    window.codeBrainApp?.app?.setZoomFactor(safeZoom);
   }, [appZoom]);
   React.useEffect(() => {
     window.codeBrainApp?.app?.version().then(v2 => {
@@ -397,7 +399,7 @@ export function App() {
         <AuthGate>
           <div className="flex flex-col h-full bg-[#0B0B0E] items-center justify-center">
             <div className="flex items-center gap-3">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#4F46E5] animate-pulse" />
+              <div className="w-1.5 h-1.5 rounded-full bg-[#5855e5] animate-pulse" />
               <span className="font-mono text-[10px] text-slate-400 uppercase tracking-widest">Carregando…</span>
             </div>
           </div>

@@ -100,13 +100,17 @@ export function registerWorkspaceHandlers(ctx: AppContext): void {
     try {
       const dir = subPath ? path.join(wsPath, subPath) : wsPath;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
-      return entries.map((e) => ({
+      const items = entries.map((e) => ({
         name: e.name,
         path: path.join(dir, e.name),
         isDirectory: e.isDirectory(),
         extension: e.isFile() ? path.extname(e.name) : undefined,
       }));
-    } catch { return []; }
+      return { ok: true, items };
+    } catch (err) {
+      console.error("[files:list] Failed:", err);
+      return { ok: false, items: [], error: String(err) };
+    }
   });
 
   ipcMain.handle("files:read", async (_event, wsPath: string, relPath: string) => {

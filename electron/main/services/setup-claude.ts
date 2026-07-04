@@ -68,8 +68,43 @@ function getStdioPath(): string {
 }
 
 /**
- * Lightweight version sync — only updates codebrain.version and env.CODEBRAIN_VERSION
- * in ~/.claude/settings.json from package.json. Safe to call on every provider change.
+ * Resolve the Codebrain project root — where package.json and packages/mcp/index.js live.
+ * Works in both dev mode (app.getAppPath()) and packaged mode (process.resourcesPath).
+ */
+function getCodebrainRoot(): string {
+  if (app.isPackaged) return process.resourcesPath;
+  return app.getAppPath();
+}
+
+/**
+ * Get the real version from package.json (never "unknown").
+ */
+function getRealVersion(): string | null {
+  try {
+    const pkgPath = path.join(getCodebrainRoot(), "package.json");
+    return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version ?? null;
+  } catch { return null; }
+}
+
+/**
+ * Get the real MCP tool count by counting `server.tool(` in packages/mcp/index.js (never 0).
+ */
+function getRealTotalTools(): number {
+  try {
+    const indexJs = path.join(getCodebrainRoot(), "packages", "mcp", "index.js");
+    const src = fs.readFileSync(indexJs, "utf-8");
+    return (src.match(/server\.tool\(/g) || []).length;
+  } catch { return 0; }
+}
+
+/**
+ * Sync version + totalTools in ~/.claude/settings.json from real project values.
+ * Called on every startup and on provider change. Safe to call repeatedly.
+ *
+ * IMPORTANT: This is the ONLY place where global settings get the real values.
+ * The bundled .claude/settings.json is committed with placeholders ("unknown"/0)
+ * because version and tool count are only known at runtime. This function
+ * overwrites any placeholder values with the real computed values.
  */
 export function syncClaudeSettingsVersion(): void {
   try {
@@ -77,25 +112,38 @@ export function syncClaudeSettingsVersion(): void {
     const settingsDest = path.join(userClaudeDir, "settings.json");
     if (!fs.existsSync(settingsDest)) return;
 
-    const userSettings: Record<string, unknown> = JSON.parse(fs.readFileSync(settingsDest, "utf-8"));
-    const pkgPath = app.isPackaged
-      ? path.join(process.resourcesPath, "app.asar", "package.json")
-      : path.resolve(__dirname, "..", "..", "..", "package.json");
-    const pkgVersion = JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version;
-    if (!pkgVersion) return;
+    const userSettings: Record<string, any> = JSON.parse(fs.readFileSync(settingsDest, "utf-8"));
+    const pkgVersion = getRealVersion();
+    const totalTools = getRealTotalTools();
+
+    if (!pkgVersion && totalTools === 0) return;
 
     let changed = false;
-    if (userSettings.codebrain && (userSettings.codebrain as any).version !== pkgVersion) {
-      (userSettings.codebrain as any).version = pkgVersion;
-      changed = true;
+
+    // Sync version (never accept "unknown")
+    if (pkgVersion) {
+      if (userSettings.codebrain && userSettings.codebrain.version !== pkgVersion) {
+        userSettings.codebrain.version = pkgVersion;
+        changed = true;
+      }
+      if (userSettings.env && userSettings.env.CODEBRAIN_VERSION !== pkgVersion) {
+        userSettings.env.CODEBRAIN_VERSION = pkgVersion;
+        changed = true;
+      }
     }
-    if (userSettings.env && (userSettings.env as any).CODEBRAIN_VERSION !== pkgVersion) {
-      (userSettings.env as any).CODEBRAIN_VERSION = pkgVersion;
-      changed = true;
+
+    // Sync totalTools (never accept 0 if we can count real tools)
+    if (totalTools > 0 && userSettings.codebrain) {
+      if (!userSettings.codebrain.mcp) userSettings.codebrain.mcp = {};
+      if (userSettings.codebrain.mcp.totalTools !== totalTools) {
+        userSettings.codebrain.mcp.totalTools = totalTools;
+        changed = true;
+      }
     }
+
     if (changed) {
       fs.writeFileSync(settingsDest, JSON.stringify(userSettings, null, 2), "utf-8");
-      log.info(`[setup-claude] Synced version ${pkgVersion} to ~/.claude/settings.json`);
+      log.info(`[setup-claude] Synced version ${pkgVersion}, ${totalTools} tools to ~/.claude/settings.json`);
     }
   } catch (err) {
     log.warn("[setup-claude] Version sync failed (non-fatal):", err);
@@ -252,41 +300,45 @@ export function setupClaudeIntegration(): void {
         changed = true;
       }
 
-      // Always sync codebrain section version from package.json
-      if (bundledSettings.codebrain) {
-        const pkgVersion = (() => {
-          try {
-            const pkgPath = isPackaged
-              ? path.join(process.resourcesPath, "app.asar", "package.json")
-              : path.resolve(__dirname, "..", "..", "..", "package.json");
-            return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version ?? bundledSettings.codebrain.version;
-          } catch { return bundledSettings.codebrain.version; }
-        })();
+      // Always sync codebrain section — version + totalTools from REAL values
+      // IMPORTANT: NEVER spread bundledSettings.codebrain as-is because it contains
+      // placeholder values ("unknown"/0) that are committed to the repo. Always
+      // compute from package.json and index.js at runtime.
+      {
+        const pkgVersion = getRealVersion();
+        const totalTools = getRealTotalTools();
 
         if (!userSettings.codebrain) {
-          userSettings.codebrain = { ...bundledSettings.codebrain, version: pkgVersion };
+          // Create fresh codebrain section with REAL values (not bundled placeholders)
+          userSettings.codebrain = {
+            version: pkgVersion || "unknown",
+            mcp: { totalTools: totalTools || 0 },
+          };
           changed = true;
-        } else if ((userSettings.codebrain as any).version !== pkgVersion) {
-          (userSettings.codebrain as any).version = pkgVersion;
-          changed = true;
+        } else {
+          // Update existing — only overwrite if current value is a placeholder
+          const cb = userSettings.codebrain as any;
+          if (pkgVersion && (cb.version === "unknown" || !cb.version || cb.version !== pkgVersion)) {
+            cb.version = pkgVersion;
+            changed = true;
+          }
+          if (!cb.mcp) cb.mcp = {};
+          if (totalTools > 0 && (cb.mcp.totalTools === 0 || !cb.mcp.totalTools)) {
+            cb.mcp.totalTools = totalTools;
+            changed = true;
+          }
         }
       }
 
-      // Always sync CODEBRAIN_VERSION env var from package.json
-      if (bundledSettings.env) {
-        const pkgVersion = (() => {
-          try {
-            const pkgPath = isPackaged
-              ? path.join(process.resourcesPath, "app.asar", "package.json")
-              : path.resolve(__dirname, "..", "..", "..", "package.json");
-            return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version ?? bundledSettings.env.CODEBRAIN_VERSION;
-          } catch { return bundledSettings.env.CODEBRAIN_VERSION; }
-        })();
-
-        if (!userSettings.env) userSettings.env = {};
-        if ((userSettings.env as any).CODEBRAIN_VERSION !== pkgVersion) {
-          (userSettings.env as any).CODEBRAIN_VERSION = pkgVersion;
-          changed = true;
+      // Always sync CODEBRAIN_VERSION env var from package.json (never "unknown")
+      {
+        const pkgVersion = getRealVersion();
+        if (pkgVersion) {
+          if (!userSettings.env) userSettings.env = {};
+          if ((userSettings.env as any).CODEBRAIN_VERSION !== pkgVersion) {
+            (userSettings.env as any).CODEBRAIN_VERSION = pkgVersion;
+            changed = true;
+          }
         }
       }
 

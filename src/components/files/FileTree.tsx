@@ -12,7 +12,9 @@ export function FileTree({
     setItems(null);
     window.codeBrainApp?.files?.list(workspacePath).then(res => {
       if (cancelled) return;
-      setItems(res?.ok && res.items ? res.items : []);
+      // Accept both { ok, items } contract and raw array (legacy/backwards compat)
+      const items = Array.isArray(res) ? res : (res?.items ?? []);
+      setItems(items);
     });
     return () => {
       cancelled = true;

@@ -28,9 +28,8 @@ export function createWindow(): BrowserWindow {
     },
   });
 
-  // Always reset native webview zoom — prevents accumulated zoom from previous sessions
+  // Reset zoom level on load — zoom factor is controlled by renderer via IPC (app:set-zoom)
   win.webContents.once("did-finish-load", () => {
-    win.webContents.setZoomFactor(1);
     win.webContents.setZoomLevel(0);
   });
 
@@ -63,17 +62,9 @@ export function createWindow(): BrowserWindow {
       return;
     }
 
-    // Ctrl+= / Ctrl++ / Ctrl+- / Ctrl+0 → handled by renderer JS (appZoom).
-    // Prevent Electron from also applying its own native webview zoom on top.
+    // Ctrl+= / Ctrl++ / Ctrl+- / Ctrl+0 → handled by renderer JS (appZoom → IPC app:set-zoom).
+    // The renderer is the single source of truth for zoom factor.
     if (cmdOrCtrl && !input.alt && (input.key === "=" || input.key === "+" || input.key === "-" || input.key === "_" || input.key === "0")) {
-      // Block the native zoom behavior but still let the keydown reach the renderer.
-      // We do this by immediately resetting the zoom after Electron would apply it.
-      setImmediate(() => {
-        if (!win.isDestroyed()) {
-          win.webContents.setZoomFactor(1);
-          win.webContents.setZoomLevel(0);
-        }
-      });
       return; // don't preventDefault — let JS handler in renderer fire
     }
 

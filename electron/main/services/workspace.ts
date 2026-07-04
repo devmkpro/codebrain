@@ -46,6 +46,19 @@ export function touchWorkspace(ctx: AppContext, wsPath: string): void {
 }
 
 /**
+ * Count MCP tools by counting `server.tool(` occurrences in packages/mcp/index.js.
+ * Returns the real count, or 0 if the file can't be read.
+ */
+function countMcpTools(projectRoot?: string): number {
+  try {
+    const root = projectRoot || path.join(__dirname, "..", "..", "..");
+    const indexJs = path.join(root, "packages", "mcp", "index.js");
+    const src = fs.readFileSync(indexJs, "utf-8");
+    return (src.match(/server\.tool\(/g) || []).length;
+  } catch { return 0; }
+}
+
+/**
  * Generate and write Codebrain context files for a workspace.
  * Creates .claude/codebrain-context.md and .gemini/codebrain-context.md
  * with active agent info, MCP tools availability, and project metadata.
@@ -54,6 +67,7 @@ export function writeContextFiles(ctx: AppContext, wsPath: string): void {
   try {
     const now = new Date().toISOString();
     const wsName = path.basename(wsPath);
+    const totalTools = countMcpTools();
 
     // Gather active agents from paneConfigs
     const agents: string[] = [];
@@ -83,7 +97,7 @@ export function writeContextFiles(ctx: AppContext, wsPath: string): void {
 ${agentsSection}
 
 ## MCP Tools Available
-This workspace has access to the Codebrain MCP server with 97+ tools.
+This workspace has access to the Codebrain MCP server with ${totalTools || "97+"} tools.
 Use memory_search, pattern_list, pane_list to coordinate with other agents.
 
 ## Project Info
@@ -140,6 +154,7 @@ export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo, p
   const port = mcpInfo?.port ?? 61010;
   const sseUrl = mcpInfo?.sseUrl ?? `http://127.0.0.1:${port}/sse`;
   const httpUrl = mcpInfo?.streamableHttpUrl ?? `http://127.0.0.1:${port}/mcp`;
+  const totalTools = countMcpTools(projectRoot);
 
   // Resolve stdio path once for all workspace configs
   const stdioPath = getStdioPathForWorkspace(projectRoot);
@@ -165,7 +180,7 @@ export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo, p
 This workspace is managed by Codebrain (multi-agent IDE).
 
 ## MCP Server
-The Codebrain MCP server exposes 97+ tools for agent coordination:
+The Codebrain MCP server exposes ${totalTools || "97+"} tools for agent coordination:
 - **HTTP (Streamable):** ${httpUrl}
 - **SSE:** ${sseUrl}
 
