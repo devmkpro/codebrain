@@ -2,6 +2,24 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.14.0] — 2026-07-04
+
+### Features
+- Mission-scoped orchestration: `mission_context` auto-discovery, roles persisted in the actor registry, and a mandatory mission task board (kanban) that the Tasks panel now reads
+- Role badge in the terminal header (Orchestrator / Worker) with live updates
+- Agent/CLI preferred selector — Settings section + header control; used as tie-breaker across all spawn paths (including MCP `pane_spawn`)
+- Silent worker watchdog — the mission's orchestrator is notified in the background when a worker stalls or exits, without touching the user's input
+- Idle-worker reuse: `worker_find_idle` + spawn now reuses an available idle worker of the same model instead of spawning a new pane
+- Orchestrator-as-coordinator guardrails (delegate-first, cost-aware, requires double confirmation to execute directly)
+- Unified top header: shared Providers / Preferred Agent / Squad controls across Home and Workspace, grouped into a compact menu in the workspace bar so tabs stay visible
+- New Codebrain brand assets (icons, logo, wordmark) and primary color refresh to #5855e5
+
+### Fixes
+- Files panel showed "empty" — corrected the `files:list` IPC contract
+- Terminal text selection misaligned — migrated app zoom to native `setZoomFactor`, removing the coordinate hacks
+- Statusline showed `v?` / `MCP 0 tools` in freshly opened workspaces — real version + tool count now synced (265 tools) and provisioned per workspace
+- Removed the obsolete "Review Bot" settings menu
+
 ## [1.13.1] — 2026-07-03
 
 ### Fixes
