@@ -76,6 +76,7 @@ export interface SpawnPaneConfig {
   permissionMode?: string;
   claudeSessionId?: string;
   squadOrchestratorWorkerId?: string;
+  parentPaneId?: string;
   role?: string;
   sessionContext?: string;
   env?: Record<string, string>;
@@ -914,6 +915,23 @@ export async function spawnPaneInternal(
       missionId: config.missionId,
     });
     ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
+
+    // Register in actor_registry with its role so RoleBadge (pane:getRole) shows
+    // ORQ for orchestrators spawned from the UI (Libre/Squad). Without this, the
+    // registry row defaults to role='worker' and the badge is wrong.
+    try {
+      (ctx as any).memoryStore?.actorRegister?.({
+        paneId,
+        parentPaneId: config.parentPaneId,
+        agent,
+        cwd,
+        workspace: ctx.currentWorkspacePath,
+        providerId: providerId ?? undefined,
+        model: model ?? undefined,
+        role: config.role || "worker",
+        missionId: config.missionId,
+      });
+    } catch {}
 
     safeSend(ctx, "pane:added", {
       paneId,

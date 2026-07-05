@@ -6,7 +6,8 @@ import {
   ChevronRight, ChevronDown, Home, Mic, MicOff, Volume2,
   Shield, Lock, Unlock, Cpu, MoreHorizontal, FolderTree, ArrowLeft, Database, History,
   Bell, Search, Download, FileJson, UserCircle2,
-  GitPullRequest, SlidersHorizontal,
+  GitPullRequest, SlidersHorizontal, Smartphone,
+  Clock, UtensilsCrossed,
 } from 'lucide-react';
 import { Logo } from '../auth/Logo';
 import { Link, useRouter } from '../../lib/router';
@@ -25,6 +26,9 @@ import { useSessionHistoryStore } from '../../stores/session-history-store';
 import { useVoiceStore } from '../../stores/voice-store';
 import { useBrowserStore } from '../../stores/browser-store';
 import { useTerminalSettings } from '../../stores/terminal-settings-store';
+import { useRecipeStore } from '../../stores/recipe-store';
+import { useCronStore } from '../../stores/cron-store';
+import { useRemoteBridgeStore } from '../../stores/remote-bridge-store';
 import { ProvidersModal } from '../providers/ProvidersModal';
 import { SquadModal, SquadWizard } from '../squads/SquadModal';
 import { DiagnosticsModal } from '../diagnostics/DiagnosticsModal';
@@ -272,6 +276,11 @@ function HomeHeader() {
   const authEmail = useAuthStore(s => s.email);
   const activeWorkspace = tabs[(useNavStore(s => s.activeTabIndex))]?.workspacePath as string | undefined;
 
+  const recipesVisible = useRecipeStore(s => s.visible);
+  const toggleRecipes = useRecipeStore(s => s.toggle);
+  const cronVisible = useCronStore(s => s.visible);
+  const toggleCron = useCronStore(s => s.toggle);
+
   const m = useModals();
   const [showAccount, setShowAccount] = React.useState(false);
   const [preferredAgent, setPreferredAgent] = React.useState<string | null>(() => {
@@ -352,6 +361,44 @@ function HomeHeader() {
         <div className="flex items-center gap-2 justify-end" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           {/* Notification bell */}
           <NotificationsBell />
+
+          {/* Remote Playback (mobile control) */}
+          <button
+            onClick={() => useRemoteBridgeStore.getState().toggle()}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-indigo-700/30 text-indigo-500/70 text-[10px] font-bold uppercase tracking-widest hover:text-indigo-300 hover:border-indigo-500/50 hover:bg-indigo-500/10 transition-all cursor-pointer"
+            title="Remote Playback — controle via celular"
+          >
+            <Smartphone size={11} />
+            Remote
+          </button>
+
+          {/* Recipes (harness) */}
+          <button
+            onClick={toggleRecipes}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer ${
+              recipesVisible
+                ? 'border-amber-500/30 text-amber-400 bg-amber-500/10'
+                : 'border-indigo-700/30 text-indigo-500/70 hover:text-indigo-300 hover:border-indigo-500/50 hover:bg-indigo-500/10'
+            }`}
+            title="Recipes — what can I build?"
+          >
+            <UtensilsCrossed size={11} />
+            Recipes
+          </button>
+
+          {/* Cron (scheduled jobs) */}
+          <button
+            onClick={toggleCron}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer ${
+              cronVisible
+                ? 'border-cyan-500/30 text-cyan-400 bg-cyan-500/10'
+                : 'border-indigo-700/30 text-indigo-500/70 hover:text-indigo-300 hover:border-indigo-500/50 hover:bg-indigo-500/10'
+            }`}
+            title="Cron — scheduled autonomous tasks"
+          >
+            <Clock size={11} />
+            Cron
+          </button>
 
           {/* Providers (shared) */}
           <ProvidersButton onClick={() => m.openProviders('list')} />
@@ -445,31 +492,68 @@ function Modals({ modals: m, activeWorkspace }: { modals: ReturnType<typeof useM
   }, [m]);
 
   const addPane = usePanesStore(s => s.addPane);
+  const providers = useProvidersStore(s => s.providers) as any[];
   const permMode = localStorage.getItem('codebrain.permissionMode') ?? 'bypassPermissions';
 
-  const handleLibreSpawn = React.useCallback(async (slots: any[]) => {
+  const handleLibreSpawn = React.useCallback(async (payload: { orchestrator: { providerId: string; model: string }; workers: any[] }) => {
     const workspace = activeWorkspace;
     if (!workspace) return;
     const pty = (window as any).codeBrainApp?.pty;
     if (!pty) return;
     const activityId = nanoid(8);
-    for (const slot of slots) {
+    const preferredAgent = (() => { try { return localStorage.getItem('codebrain.preferredAgent') || undefined; } catch { return undefined; } })();
+    const providerDefaultModels: Record<string, string> = (() => { try { return JSON.parse(localStorage.getItem('codebrain.providerDefaultModels') ?? '{}'); } catch { return {}; } })();
+
+    // ── Spawn workers first ──
+    const workerIds: string[] = [];
+    for (const slot of payload.workers) {
       for (let i = 0; i < slot.count; i++) {
-        const r = await pty.spawn({
-          agent: 'openclaude',
-          cwd: workspace,
-          activityId,
+        const target = resolveSpawnTarget({
           providerId: slot.providerId,
           model: slot.model,
+          providers,
+          preferredAgent,
+          providerDefaultModels,
+        });
+        const r = await pty.spawn({
+          agent: target.agent,
+          cwd: workspace,
+          activityId,
+          providerId: target.providerId,
+          model: target.model,
           permissionMode: permMode,
           role: 'worker',
         });
         if (r?.ok && r.paneId) {
-          addPane({ id: r.paneId, agent: 'openclaude', cwd: workspace, workspacePath: workspace, activityId, providerId: slot.providerId, model: slot.model, externallySpawned: true });
+          workerIds.push(r.paneId);
+          addPane({ id: r.paneId, agent: target.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: target.providerId, model: target.model, externallySpawned: true });
         }
       }
     }
-  }, [activeWorkspace, addPane, permMode]);
+
+    // ── Spawn orchestrator with role=orchestrator + SQUAD_WORKER_IDS ──
+    if (workerIds.length > 0) {
+      const orchTarget = resolveSpawnTarget({
+        providerId: payload.orchestrator.providerId,
+        model: payload.orchestrator.model,
+        providers,
+        preferredAgent,
+        providerDefaultModels,
+      });
+      const orchRes = await pty.spawn({
+        agent: orchTarget.agent,
+        cwd: workspace,
+        activityId,
+        providerId: orchTarget.providerId,
+        model: orchTarget.model,
+        permissionMode: permMode,
+        role: 'orchestrator',
+        env: { SQUAD_WORKER_IDS: workerIds.join(','), SQUAD_ACTIVITY_ID: activityId },
+      });
+      if (orchRes?.ok && orchRes.paneId)
+        addPane({ id: orchRes.paneId, agent: orchTarget.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: orchTarget.providerId, model: orchTarget.model, externallySpawned: true });
+    }
+  }, [activeWorkspace, addPane, permMode, providers]);
 
   return (
     <>
@@ -1182,6 +1266,15 @@ function WorkspaceHeader() {
   const historyVisible = useSessionHistoryStore(s => s.visible);
   const toggleHistory = useSessionHistoryStore(s => s.toggle);
 
+  const recipesVisible = useRecipeStore(s => s.visible);
+  const toggleRecipes = useRecipeStore(s => s.toggle);
+
+  const cronVisible = useCronStore(s => s.visible);
+  const toggleCron = useCronStore(s => s.toggle);
+
+  const remoteVisible = useRemoteBridgeStore(s => s.visible);
+  const toggleRemote = useRemoteBridgeStore(s => s.toggle);
+
   const appZoom = useTerminalSettings(s => s.appZoom);
   const increaseAppZoom = useTerminalSettings(s => s.increaseAppZoom);
   const decreaseAppZoom = useTerminalSettings(s => s.decreaseAppZoom);
@@ -1401,6 +1494,16 @@ function WorkspaceHeader() {
           {/* Usage */}
           {/* History */}
           <IconBtn icon={<History size={15} strokeWidth={1.5} />} label="History" onClick={toggleHistory} active={historyVisible} />
+
+          {/* Recipes (harness) */}
+          <IconBtn icon={<UtensilsCrossed size={15} strokeWidth={1.5} />} label="Recipes" onClick={toggleRecipes} active={recipesVisible} />
+
+          {/* Cron (scheduled jobs) */}
+          <IconBtn icon={<Clock size={15} strokeWidth={1.5} />} label="Cron Jobs" onClick={toggleCron} active={cronVisible} />
+
+          {/* Remote Playback (mobile control) */}
+          <IconBtn icon={<Smartphone size={15} strokeWidth={1.5} />} label="Remote" onClick={toggleRemote} active={remoteVisible} />
+
           <VDiv />
 
           {/* Session Map */}
