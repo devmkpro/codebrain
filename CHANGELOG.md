@@ -2,6 +2,19 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.15.0] — 2026-07-05
+
+### Features
+- Proactive shared memory: new `memory_digest` MCP tool (290 total) returns everything other agents did since your last turn (memories, handoffs, file changes), with per-agent `last_seen_ts` tracking
+- Auto-handoff to memory: every `handoff_submit` now writes a searchable episodic memory so any agent can find a worker's result via `memory_search`
+- Libre Mode redesigned as orchestrator + workers: pick the orchestrator model and how many workers (with their own models); the orchestrator spawns with `role: orchestrator` and is aware of its workers via `SQUAD_WORKER_IDS`
+
+### Fixes
+- MCP failed to start (`Cannot find module '../context'`) — removed a runtime `require` that the bundler could not resolve after flattening
+- Loop-detector warnings leaked into the user's terminal input — warnings now go to the agent inbox, and idempotent read-only tools (digest/search/status polling) are whitelisted so they never false-positive
+- Orchestrators spawned from the UI (Libre/Squad) showed the WORKER badge — `actorRegister` now persists `role`, and UI spawns register their role in the actor registry
+- Removed the Jarvis module and Guided Onboarding entirely (backend, frontend, menus, MCP tools)
+
 ## [1.14.0] — 2026-07-04
 
 ### Features
