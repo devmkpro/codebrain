@@ -1,5 +1,8 @@
 "use strict";
 
+const { buildWakeMessage, buildWakeMessageParts } = require("./handoff-wake-message.js");
+const { clarifyBroadcastPayload } = require("./clarify-broadcast.js");
+
 /**
  * Memory protocol injected into pane_write so the AI agent is
  * constantly reminded to use memory_read/write/search and pattern_write.
@@ -29,6 +32,19 @@ const MEMORY_PROTOCOL_PREFIX = `
 const WORKER_CONTRACT_FOOTER = `
 
 — Worker contract: when you finish this task, call mcp__codebrain__handoff_submit({ paneId: "<your_pane_id>", summary: "...", status: "done"|"blocked"|"error", artifacts: [...] }) as your VERY LAST action. The orchestrator is waiting on your result; simply going idle does NOT signal completion.`;
+
+/**
+ * Orchestrator no-edit warning — injected on first write to orchestrator panes.
+ * Code-level enforcement that the orchestrator MUST NOT edit files.
+ * This reinforces the prompt-based rule with a visible code-level warning.
+ */
+const ORCHESTRATOR_NO_EDIT_BANNER = `
+🚫 ORCHESTRATOR NO-EDIT GUARD (CODE-ENFORCED):
+You are an ORCHESTRATOR. NEVER use Edit/Write/file_write/file_multi_edit/Bash to modify files.
+If you need code changed → task_create + task_assign to a worker + pane_write with instructions.
+Violating this rule wastes tokens, degrades context, and breaks the multi-agent architecture.
+──────────────────────────────────────────
+`.trim();
 
 // Stuck detection: 5 minutes without output → fire event
 const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
@@ -421,10 +437,31 @@ function createPaneHandlers(ptyManager, opts) {
       // Appended when: text is long enough to be a task (>80 chars),
       // does NOT already contain handoff_submit, and this is a submit write.
       // Auto-append contract footer to long task writes.
+      // NOTE: Only for workers — orchestrators get the no-edit banner instead.
+      const paneRole = roleMap.get(paneId) || opts.memoryStore?.getActorRole?.({ paneId })?.role || null;
+      const isOrchestratorPane = paneRole === "orchestrator";
+
+      // ── Orchestrator no-edit banner (code-level enforcement) ───────────
+      // Inject on first write to orchestrator panes. The orchestrator's
+      // prompt already has the rule, but this makes it visible in the
+      // terminal as a code-level guard that cannot be ignored.
+      if (isOrchestratorPane) {
+        const orchState = opts.paneMemoryState?.get(paneId);
+        if (!orchState?.orchestratorBannerInjected) {
+          finalText = ORCHESTRATOR_NO_EDIT_BANNER + "\n\n" + finalText;
+          if (opts.paneMemoryState) {
+            opts.paneMemoryState.set(paneId, {
+              ...(orchState || {}),
+              orchestratorBannerInjected: true,
+            });
+          }
+        }
+      }
       if (
         submit &&
         finalText.length > 80 &&
-        !finalText.includes("handoff_submit")
+        !finalText.includes("handoff_submit") &&
+        !isOrchestratorPane
       ) {
         finalText = finalText + WORKER_CONTRACT_FOOTER;
       }
@@ -525,6 +562,31 @@ function createPaneHandlers(ptyManager, opts) {
         // Fire hook event
         try { opts.hooksManager?.fire?.("handoff_submitted", { paneId, status, summary: summary.slice(0, 100) }); } catch {}
 
+        // ── Auto-record handoff as searchable memory (FASE 2) ─────────────
+        // Every handoff result becomes an episodic memory so other agents can
+        // discover it via memory_search. This makes worker results visible to
+        // the orchestrator and to other workers without explicit pull.
+        try {
+          const ts = Date.now();
+          const agentLabel = opts.paneLabels?.get(paneId) || paneId.slice(0, 8);
+          // Resolve mission_id from actor registry if available
+          let missionTag = "";
+          try {
+            const actorRole = store.getActorRole?.({ paneId });
+            if (actorRole?.ok && actorRole.missionId) missionTag = actorRole.missionId;
+          } catch {}
+          const tags = ["handoff", agentLabel];
+          if (missionTag) tags.push(missionTag);
+          store.write({
+            type: "episodic",
+            key: `handoff-${agentLabel}-${ts}`,
+            content: `[${status.toUpperCase()}] ${summary}`.slice(0, 500),
+            tags,
+            agent_id: paneId,
+            workspace,
+          });
+        } catch {}
+
         // ── Auto-complete tasks assigned to this worker ─────────────────────
         // When a worker submits handoff, move its assigned kanban tasks to done/review.
         try {
@@ -547,16 +609,17 @@ function createPaneHandlers(ptyManager, opts) {
 
         // ── pokeOrchestrator: notify the orchestrator automatically ────────
         // Find the orchestrator pane (role === "orchestrator") and inject the
-        // result as a system message. Workers NEVER write to the orchestrator
-        // directly — the MCP server delivers the result asynchronously,
-        // serialized with delays. This breaks the bidirectional conversation
-        // loop completely.
+        // result as a structured wake message (ported from Overclock).
+        // Uses buildWakeMessage for human-legible output with status glyphs,
+        // item references, and technical pointers.
+        // Clarify entries also get a clarify broadcast payload.
         try {
           const workerLabel = opts.paneLabels?.get(paneId) || paneId.slice(0, 8);
-          const artifactStr = (artifacts && artifacts.length > 0)
-            ? ` Artifacts: ${artifacts.join(", ")}.`
-            : "";
-          const msg = `[squad] Worker "${workerLabel}" (pane ${paneId.slice(0, 8)}) finished — status=${status}. ${summary}${artifactStr} Use handoff_wait or handoff_list to get the full result, then continue the pipeline.`;
+          const squadRole = opts.roleMap?.get(paneId) || workerLabel;
+
+          // Build structured wake message using pure builder (handoff-wake-message.js)
+          const entry = { paneId, summary, status, artifacts };
+          const msg = buildWakeMessage(entry, squadRole);
 
           // Find orchestrator pane — store-first (mission-aware), fallback to roleMap
           const orchestratorPaneId = (() => {
@@ -595,6 +658,16 @@ function createPaneHandlers(ptyManager, opts) {
               await new Promise(r => setTimeout(r, 350));
             });
             handoffPokeChain.set(paneId, nextChain);
+          }
+
+          // ── Clarify broadcast: push suggestions to the orchestrator ─────
+          // When status is awaiting_clarification with suggestions, also
+          // build a structured payload that the UI can render as a card.
+          const clarifyPayload = clarifyBroadcastPayload(entry);
+          if (clarifyPayload) {
+            try {
+              opts.hooksManager?.fire?.("clarify_broadcast", clarifyPayload);
+            } catch {}
           }
         } catch {}
 

@@ -873,6 +873,25 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ── mcp__codebrain__memory_digest ────────────────────────────────────────
+  server.tool(
+    "mcp__codebrain__memory_digest",
+    "Get a concise digest of what changed since your last turn: new memories, handoffs from other agents, and file changes. Call this at the start of every turn to stay aware of what teammates did. Automatically tracks your last-seen timestamp.",
+    {
+      since_ts: z.number().optional().describe("Unix timestamp (seconds) to get changes since. If omitted, uses your agent's last-seen timestamp automatically."),
+      pane_id:  z.string().optional().describe("Your pane ID — used to track your last-seen timestamp. If omitted, returns changes since since_ts or 0."),
+      limit:    z.number().optional().describe("Max items to return (default 15)."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.memoryDigest({ since_ts: args.since_ts, pane_id: args.pane_id, limit: args.limit });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }
+  );
+
   // ══════════════════════════════════════════════════════════════════════════
   // SWARM TOOLS — Multi-agent coordination
   // ══════════════════════════════════════════════════════════════════════════
@@ -1882,6 +1901,195 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ── Transcript Watcher Tools (Overclock port) ──────────────────────────────
+
+  server.tool(
+    "mcp__codebrain__transcript_watcher_start",
+    "Start watching CLI transcripts (Claude Code, Codex) for token usage tracking. Tails JSONL files in ~/.claude/projects/ and ~/.codex/sessions/. Idempotent — safe to call multiple times.",
+    {
+      workspace: z.string().optional().describe("Workspace path to watch (default: current workspace)"),
+      configDir: z.string().optional().describe("CLAUDE_CONFIG_DIR override for multi-account setups"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.transcriptWatcherStart(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__transcript_watcher_stop",
+    "Stop all transcript watchers and release file handles.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.transcriptWatcherStop();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__transcript_watcher_status",
+    "Get transcript watcher diagnostics: which directories are being watched, how many file offsets are tracked, active session-to-pane mappings.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.transcriptWatcherStatus();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__transcript_watcher_token_summary",
+    "Get token usage summary from CLI transcripts. Filter by session, agent, or time range. Returns per-model breakdowns of input/output/cache tokens.",
+    {
+      sessionId: z.string().optional().describe("Filter by session ID"),
+      agentName: z.string().optional().describe("Filter by agent name (e.g. 'pane:ABC123')"),
+      since: z.number().optional().describe("Only include records after this Unix timestamp (ms)"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.transcriptWatcherTokenSummary(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  // ── Remote Bridge Tools (Overclock port) ────────────────────────────────────
+
+  server.tool(
+    "mcp__codebrain__remote_bridge_start",
+    "Start the Remote Bridge WSS server for thin-client (iPhone) control. Generates self-signed TLS cert on first run. Pairing code rotates every 5 min. Default port 8789.",
+    {
+      port: z.number().optional().describe("Port to listen on (default: 8789, or CODEBRAIN_REMOTE_PORT env)"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.remoteBridgeStart(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__remote_bridge_stop",
+    "Stop the Remote Bridge WSS server.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.remoteBridgeStop();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__remote_bridge_status",
+    "Get Remote Bridge status: running state, port, connected/authenticated clients, current pairing code expiry, token count.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.remoteBridgeStatus();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__remote_bridge_pair_code",
+    "Get the current 6-digit pairing code for remote client authentication. Code rotates every 5 minutes.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.remoteBridgePairCode();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__remote_bridge_revoke_tokens",
+    "Revoke all issued remote bridge tokens. Forces all connected devices to re-pair.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.remoteBridgeRevokeTokens();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  // ── Remote Spawn Tools (Overclock port) ─────────────────────────────────────
+
+  server.tool(
+    "mcp__codebrain__remote_spawn_detect_clis",
+    "Detect which agent CLIs (claude, codex, gemini) are available on a remote host via SSH. Validates host alias for safety. Uses BatchMode=yes for fast fail on password-only hosts.",
+    {
+      host: z.string().describe("SSH host alias (from ~/.ssh/config). Only alphanumeric, dots, hyphens allowed."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.remoteSpawnDetectClis(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__remote_spawn_probe",
+    "Probe SSH connectivity to a remote host. Returns reachable status and latency.",
+    {
+      host: z.string().describe("SSH host alias"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.remoteSpawnProbe(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__remote_spawn_parse_ref",
+    "Parse an ssh:// workspace reference into host and path components.",
+    {
+      ref: z.string().describe("SSH URL reference (e.g. ssh://myhost/home/user/project)"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.remoteSpawnParseRef(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
   server.tool(
     "mcp__codebrain__intelligence_consolidate",
     "Run the full intelligence pipeline: RETRIEVE (search memory+patterns), JUDGE (evaluate quality), DISTILL (extract new patterns from trajectories), CONSOLIDATE (promote short-term→long-term, dream, prune stale). One-shot intelligence maintenance pass.",
@@ -1892,6 +2100,217 @@ function createCodebrainMCPServer(bridge) {
     async (args) => {
       try {
         const result = await bridge.intelligenceConsolidate(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  // ── Recipe / Harness MCP Tools ────────────────────────────────────────────────
+  // Auto-discovery of buildable deliverables based on available agents + skills.
+  // Ported from Overclock's harnessAssistant.js (enrichCatalog + proposeRecipes).
+
+  server.tool(
+    "mcp__codebrain__recipe_enrich_catalog",
+    "Classify all installed agents and skills by role (orchestrator/backend/frontend/tester/browser/general) with a short 'when/how to use' blurb. Uses LLM to annotate. Cached for 24h unless force=true.",
+    {
+      model: z.string().optional().describe("Override LLM model for the enrichment pass"),
+      force: z.boolean().optional().default(false).describe("Force re-enrichment even if cached (< 24h)"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.recipeEnrichCatalog(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__recipe_propose",
+    "Propose 2-4 buildable deliverables (recipes) based on available agents, skills, and LLMs. Each recipe is an executable orchestration plan with ordered steps, favorite model, questions for scope, and delivery definition.",
+    {
+      model: z.string().optional().describe("Override LLM model for the proposal pass"),
+      agents: z.array(z.string()).optional().describe("Override agent list (default: detected from system)"),
+      skills: z.array(z.string()).optional().describe("Override skill list (default: installed skills)"),
+      llms: z.array(z.string()).optional().describe("Override LLM list (default: from providers)"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.recipePropose(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__recipe_get_catalog",
+    "Get the cached enriched catalog (agents + skills with roles and blurbs). Returns the last enrichment result without making an LLM call.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.recipeGetCatalog();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__recipe_save",
+    "Save a recipe (orchestration plan) for later use. The recipe can be recalled and executed by the orchestrator.",
+    {
+      recipe: z.object({
+        name: z.string(),
+        deliverable: z.string().optional(),
+        favoriteModel: z.string().optional(),
+        questions: z.array(z.string()).optional(),
+        steps: z.array(z.object({
+          role: z.string(),
+          skill: z.string(),
+          agent: z.string(),
+          model: z.string().optional(),
+          produces: z.string().optional(),
+          parallel: z.boolean().optional(),
+        })).optional(),
+        delivery: z.string().optional(),
+      }).describe("The recipe object to save"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.recipeSave(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__recipe_list",
+    "List all saved recipes (orchestration plans). Returns recipe names, deliverables, and step counts.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.recipeList();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__recipe_delete",
+    "Delete a saved recipe by name.",
+    {
+      name: z.string().describe("Recipe name to delete"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.recipeDelete(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__recipe_ingredients",
+    "List all available ingredients: agents, skills, and LLMs currently configured in the system. Use this to see what's in the 'pantry' before proposing recipes.",
+    {},
+    async () => {
+      try {
+        const result = await bridge.recipeIngredients();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  // ── Cron Jobs (Overclock port) ─────────────────────────────────────────────
+  // Scheduled autonomous spawns. Jobs use 5-field cron expressions and fire
+  // via pane_spawn at the scheduled time. Skip-if-stale: jobs overdue by >5min
+  // are silently skipped (handles laptop-closed case).
+
+  server.tool(
+    "mcp__codebrain__cron_create",
+    "Create a scheduled cron job that spawns a pane at recurring times. Uses standard 5-field cron expressions (minute hour day-of-month month day-of-week, e.g. '*/5 * * * *' for every 5min, '0 9 * * 1-5' for weekdays at 9am). Jobs auto-start their tick loop on creation.",
+    {
+      name: z.string().describe("Human-readable job name (e.g. 'morning-standup', 'hourly-health-check')"),
+      schedule: z.string().describe("5-field cron expression (e.g. '0 9 * * 1-5', '*/30 * * * *')"),
+      task_prompt: z.string().describe("The prompt/task that will be written to the spawned pane"),
+      agent: z.string().optional().describe("Agent binary to use (default: openclaude)"),
+      model: z.string().optional().describe("Model to use for the spawned pane"),
+      label: z.string().optional().describe("Label for the spawned pane (default: cron-<name>)"),
+      workspace: z.string().optional().describe("Workspace path (default: current workspace)"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.cronCreate(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__cron_list",
+    "List all cron jobs. Filter by workspace or status (active/paused). Shows schedule, next fire time, last fire time, and error state.",
+    {
+      workspace: z.string().optional().describe("Filter by workspace path"),
+      status: z.string().optional().describe("Filter by status: 'active' or 'paused'"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.cronList(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__cron_delete",
+    "Delete a cron job by ID. Stops it from firing permanently.",
+    {
+      id: z.string().describe("Cron job ID to delete"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.cronDelete(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "mcp__codebrain__cron_update",
+    "Update a cron job: pause/resume, change schedule, update task prompt, etc. When schedule changes, next_fire_at is recalculated automatically.",
+    {
+      id: z.string().describe("Cron job ID to update"),
+      name: z.string().optional().describe("New name"),
+      schedule: z.string().optional().describe("New 5-field cron expression"),
+      status: z.string().optional().describe("New status: 'active' or 'paused'"),
+      task_prompt: z.string().optional().describe("New task prompt"),
+      agent: z.string().optional().describe("New agent binary"),
+      model: z.string().optional().describe("New model"),
+      label: z.string().optional().describe("New label"),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.cronUpdate(args);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };

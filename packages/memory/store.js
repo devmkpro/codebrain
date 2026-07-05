@@ -502,9 +502,61 @@ function createMemoryStore(dbPath) {
   addColumn("actor_registry", "mission_id TEXT");
   addColumn("actor_registry", "metadata TEXT");
   addColumn("kanban_tasks", "mission_id TEXT");
+  // FASE 1: last_seen_ts for proactive digest tracking per agent
+  addColumn("agents", "last_seen_ts INTEGER DEFAULT 0");
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_actor_mission ON actor_registry(mission_id)`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_actor_role ON actor_registry(role)`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_kanban_mission ON kanban_tasks(mission_id)`); } catch {}
+
+  // ── Token Usage (transcript watcher tracking) ─────────────────────────────
+  // Persists per-message token usage extracted from CLI transcripts (Claude Code, Codex).
+  // Used by cost-tracker for accurate cost display and by transcript watchers for dedup.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS token_usage (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      model               TEXT NOT NULL,
+      session_id          TEXT NOT NULL,
+      task_id             TEXT,
+      agent_name          TEXT,
+      message_id          TEXT,
+      input_tokens        INTEGER NOT NULL DEFAULT 0,
+      output_tokens       INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens   INTEGER NOT NULL DEFAULT 0,
+      cache_write_5m_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_write_1h_tokens INTEGER NOT NULL DEFAULT 0,
+      created_at          INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      UNIQUE(session_id, message_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_token_usage_session ON token_usage(session_id);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_agent ON token_usage(agent_name);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_created ON token_usage(created_at);
+  `);
+
+  // ── Cron Jobs (scheduled autonomous spawns) ─────────────────────────────────
+  // Ported from Overclock sidecar. Jobs are scheduled with 5-field cron expressions.
+  // Skip-if-stale: jobs overdue by >5min are skipped (handles laptop-closed).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cron_jobs (
+      id            TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      schedule      TEXT NOT NULL,
+      status        TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused')),
+      workspace     TEXT,
+      task_prompt   TEXT NOT NULL,
+      agent         TEXT DEFAULT 'openclaude',
+      model         TEXT,
+      label         TEXT,
+      next_fire_at  INTEGER,
+      last_fired_at INTEGER,
+      last_error    TEXT,
+      created_at    INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at    INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cron_status ON cron_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_cron_next_fire ON cron_jobs(next_fire_at);
+    CREATE INDEX IF NOT EXISTS idx_cron_workspace ON cron_jobs(workspace);
+  `);
 
   // ── Knowledge Graph + Vector Store ────────────────────────────────────────
   let knowledgeGraph;
@@ -680,6 +732,26 @@ function createMemoryStore(dbPath) {
       ORDER BY spawned_at DESC LIMIT @limit
     `),
     getAgentByPane: db.prepare(`SELECT * FROM agents WHERE pane_id = ?`),
+    getAgentLastSeenTs: db.prepare(`SELECT last_seen_ts FROM agents WHERE pane_id = ?`),
+    updateAgentLastSeenTs: db.prepare(`UPDATE agents SET last_seen_ts = ? WHERE pane_id = ?`),
+    // Digest: memories created since a timestamp (workspace-scoped)
+    digestMemories: db.prepare(`
+      SELECT 'memory' as source, id, key, type, tags, agent_id, content, created_at
+      FROM memories
+      WHERE created_at > @since_ts
+        AND (@workspace IS NULL OR workspace = @workspace)
+      ORDER BY created_at ASC
+      LIMIT @limit
+    `),
+    // Digest: handoffs submitted since a timestamp (workspace-scoped)
+    digestHandoffs: db.prepare(`
+      SELECT 'handoff' as source, id, pane_id as key, status as type, '[]' as tags, pane_id as agent_id, summary as content, submitted_at as created_at
+      FROM handoffs
+      WHERE submitted_at > @since_ts
+        AND (@workspace IS NULL OR workspace = @workspace)
+      ORDER BY submitted_at ASC
+      LIMIT @limit
+    `),
     // Agent Messages
     insertAgentMessage: db.prepare(`
       INSERT INTO agent_messages (id, from_pane, to_pane, content, type, task_id, parent_id, workspace)
@@ -1624,6 +1696,62 @@ function createMemoryStore(dbPath) {
       return { ok: true, agent: row };
     },
 
+    /**
+     * Get last_seen_ts for an agent (0 if never set).
+     * @param {{ paneId: string }} opts
+     */
+    getAgentLastSeenTs({ paneId }) {
+      if (!paneId) return 0;
+      try {
+        const row = stmts.getAgentLastSeenTs.get(paneId);
+        return row?.last_seen_ts || 0;
+      } catch { return 0; }
+    },
+
+    /**
+     * Update last_seen_ts for an agent (marks digest as consumed).
+     * @param {{ paneId: string, ts?: number }} opts
+     */
+    updateAgentLastSeenTs({ paneId, ts }) {
+      if (!paneId) return;
+      try {
+        stmts.updateAgentLastSeenTs.run(ts || Math.floor(Date.now() / 1000), paneId);
+      } catch {}
+    },
+
+    /**
+     * Digest: return memories + handoffs created since a timestamp.
+     * Merges both sources, sorts by created_at ASC, returns max `limit` items.
+     * @param {{ workspace?: string, since_ts?: number, limit?: number }} opts
+     */
+    digestSince({ workspace, since_ts, limit = 15 } = {}) {
+      const ws = workspace || null;
+      const ts = since_ts || 0;
+      const memRows = stmts.digestMemories.all({ workspace: ws, since_ts: ts, limit });
+      const hoffRows = stmts.digestHandoffs.all({ workspace: ws, since_ts: ts, limit });
+      // Merge + sort by created_at ASC
+      const merged = [...memRows, ...hoffRows].sort((a, b) => a.created_at - b.created_at).slice(0, limit);
+      // Format concise digest lines
+      const lines = merged.map(row => {
+        if (row.source === "handoff") {
+          const label = row.agent_id ? row.agent_id.slice(0, 8) : "?";
+          const preview = (row.content || "").slice(0, 120);
+          return `[handoff] ${label} → ${row.type}: ${preview}`;
+        }
+        // memory
+        const agent = row.agent_id || "system";
+        const tags = row.tags && row.tags !== "[]" ? ` (${row.tags})` : "";
+        const isFileChange = (row.key || "").startsWith("file-changed-");
+        if (isFileChange) {
+          const filePath = row.key.replace("file-changed-", "");
+          return `[file-change] ${filePath} mudou`;
+        }
+        const preview = (row.content || "").slice(0, 100);
+        return `[${row.type}] ${agent} → ${row.key}${tags}: ${preview}`;
+      });
+      return { ok: true, items: merged, lines, count: merged.length, since_ts: ts };
+    },
+
     // ── Agent Messages ───────────────────────────────────────────────────────
 
     /**
@@ -2106,15 +2234,16 @@ function createMemoryStore(dbPath) {
     /**
      * Register a pane in the actor registry. Called on pane spawn.
      */
-    actorRegister({ paneId, parentPaneId, agent, label, description, workspace, cwd, providerId, model }) {
+    actorRegister({ paneId, parentPaneId, agent, label, description, workspace, cwd, providerId, model, role, missionId }) {
       try {
         const now = Date.now();
         db.prepare(`
           INSERT OR REPLACE INTO actor_registry
-            (pane_id, parent_pane_id, agent, label, description, status, workspace, cwd, provider_id, model, time_created, time_updated, last_turn_time)
-          VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+            (pane_id, parent_pane_id, agent, label, description, status, workspace, cwd, provider_id, model, role, mission_id, time_created, time_updated, last_turn_time)
+          VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(paneId, parentPaneId || null, agent || null, label || null, description || null,
-               workspace || null, cwd || null, providerId || null, model || null, now, now, now);
+               workspace || null, cwd || null, providerId || null, model || null,
+               role || 'worker', missionId || null, now, now, now);
         return { ok: true };
       } catch (e) { return { ok: false, error: e.message }; }
     },
@@ -3398,6 +3527,142 @@ function createMemoryStore(dbPath) {
       return { valid: missing.length === 0, missing };
     },
 
+    // ── Cron Jobs ────────────────────────────────────────────────────────────
+    /**
+     * Create a new cron job.
+     * @param {{ name: string, schedule: string, workspace?: string, task_prompt: string, agent?: string, model?: string, label?: string }} opts
+     */
+    createCronJob({ name, schedule, workspace, task_prompt, agent, model, label }) {
+      if (!name || !schedule || !task_prompt) return { ok: false, error: "name, schedule, and task_prompt are required" };
+      const { nextCronAfter } = require("../mcp/bridge/cron-utils.js");
+      const id = `cron_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const now = Date.now();
+      const nextFireAt = nextCronAfter(schedule, now);
+      try {
+        db.prepare(`
+          INSERT INTO cron_jobs (id, name, schedule, status, workspace, task_prompt, agent, model, label, next_fire_at, created_at, updated_at)
+          VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, name, schedule, workspace || null, task_prompt, agent || "openclaude", model || null, label || null, nextFireAt, now, now);
+        return { ok: true, id, nextFireAt };
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    },
+
+    /**
+     * List cron jobs, optionally filtered by workspace or status.
+     * @param {{ workspace?: string, status?: string }} opts
+     */
+    listCronJobs({ workspace, status } = {}) {
+      try {
+        let sql = "SELECT * FROM cron_jobs WHERE 1=1";
+        const params = [];
+        if (workspace) { sql += " AND workspace = ?"; params.push(workspace); }
+        if (status) { sql += " AND status = ?"; params.push(status); }
+        sql += " ORDER BY created_at DESC";
+        const rows = db.prepare(sql).all(...params);
+        return { ok: true, jobs: rows };
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    },
+
+    /**
+     * Get a single cron job by ID.
+     * @param {{ id: string }} opts
+     */
+    getCronJob({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      try {
+        const row = db.prepare("SELECT * FROM cron_jobs WHERE id = ?").get(id);
+        if (!row) return { ok: false, error: "cron job not found" };
+        return { ok: true, job: row };
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    },
+
+    /**
+     * Delete a cron job by ID.
+     * @param {{ id: string }} opts
+     */
+    deleteCronJob({ id }) {
+      if (!id) return { ok: false, error: "id is required" };
+      try {
+        const result = db.prepare("DELETE FROM cron_jobs WHERE id = ?").run(id);
+        if (result.changes === 0) return { ok: false, error: "cron job not found" };
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    },
+
+    /**
+     * Update a cron job's fields.
+     * @param {{ id: string, name?: string, schedule?: string, status?: string, task_prompt?: string, agent?: string, model?: string, label?: string }} opts
+     */
+    updateCronJob({ id, ...fields }) {
+      if (!id) return { ok: false, error: "id is required" };
+      const allowed = ["name", "schedule", "status", "task_prompt", "agent", "model", "label"];
+      const updates = [];
+      const params = [];
+      for (const [key, val] of Object.entries(fields)) {
+        if (allowed.includes(key) && val !== undefined) {
+          updates.push(`${key} = ?`);
+          params.push(val);
+        }
+      }
+      if (updates.length === 0) return { ok: false, error: "no valid fields to update" };
+      updates.push("updated_at = ?");
+      params.push(Date.now());
+      params.push(id);
+      try {
+        const result = db.prepare(`UPDATE cron_jobs SET ${updates.join(", ")} WHERE id = ?`).run(...params);
+        if (result.changes === 0) return { ok: false, error: "cron job not found" };
+        // Recalculate next_fire_at if schedule changed
+        if (fields.schedule) {
+          const { nextCronAfter } = require("../mcp/bridge/cron-utils.js");
+          const nextFireAt = nextCronAfter(fields.schedule, Date.now());
+          db.prepare("UPDATE cron_jobs SET next_fire_at = ? WHERE id = ?").run(nextFireAt, id);
+        }
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    },
+
+    /**
+     * Get all active cron jobs that are due for firing.
+     * Used by the tick loop.
+     */
+    getDueCronJobs() {
+      try {
+        const now = Date.now();
+        const rows = db.prepare(
+          "SELECT * FROM cron_jobs WHERE status = 'active' AND next_fire_at IS NOT NULL AND next_fire_at <= ?"
+        ).all(now);
+        return rows || [];
+      } catch {
+        return [];
+      }
+    },
+
+    /**
+     * Update a cron job after firing (advance next_fire_at, record last_fired_at, optionally set last_error).
+     * @param {{ id: string, nextFireAt?: number, lastError?: string }} opts
+     */
+    markCronFired({ id, nextFireAt, lastError }) {
+      if (!id) return;
+      try {
+        const now = Date.now();
+        db.prepare(`
+          UPDATE cron_jobs
+          SET last_fired_at = ?, next_fire_at = ?, last_error = ?, updated_at = ?
+          WHERE id = ?
+        `).run(now, nextFireAt || null, lastError || null, now, id);
+      } catch {}
+    },
+
     // ── 4.3 Instruction File Hierarchy ─────────────────────────────────────
     /**
      * Find instruction files walking up from a given directory.
@@ -3438,6 +3703,63 @@ function createMemoryStore(dbPath) {
         } catch {}
       }
       return results;
+    },
+
+    // ── Token Usage Recording (for transcript watchers) ─────────────────────
+    /**
+     * Record token usage from a CLI transcript message.
+     * Upserts by (session_id, message_id) to deduplicate streaming rewrites.
+     * @param {Object} usage - { model, session_id, task_id?, agent_name, message_id,
+     *   input_tokens, output_tokens, cache_read_tokens, cache_write_5m_tokens?, cache_write_1h_tokens? }
+     */
+    recordTokenUsage(usage) {
+      if (!usage || !usage.model || !usage.session_id) return;
+      const msgId = usage.message_id || `auto-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        db.prepare(`
+          INSERT INTO token_usage (model, session_id, task_id, agent_name, message_id,
+            input_tokens, output_tokens, cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(session_id, message_id) DO UPDATE SET
+            input_tokens = excluded.input_tokens,
+            output_tokens = excluded.output_tokens,
+            cache_read_tokens = excluded.cache_read_tokens,
+            cache_write_5m_tokens = excluded.cache_write_5m_tokens,
+            cache_write_1h_tokens = excluded.cache_write_1h_tokens
+        `).run(
+          usage.model, usage.session_id, usage.task_id || null,
+          usage.agent_name || null, msgId,
+          usage.input_tokens || 0, usage.output_tokens || 0,
+          usage.cache_read_tokens || 0,
+          usage.cache_write_5m_tokens || 0,
+          usage.cache_write_1h_tokens || 0,
+        );
+      } catch { /* ignore dup / schema mismatch */ }
+    },
+
+    /**
+     * Get token usage summary for a session or agent.
+     */
+    getTokenUsageSummary({ sessionId, agentName, since } = {}) {
+      try {
+        let where = [];
+        let params = [];
+        if (sessionId) { where.push("session_id = ?"); params.push(sessionId); }
+        if (agentName) { where.push("agent_name = ?"); params.push(agentName); }
+        if (since) { where.push("created_at >= ?"); params.push(since); }
+        const clause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+        const rows = db.prepare(`
+          SELECT model, COUNT(*) as message_count,
+            SUM(input_tokens) as total_input,
+            SUM(output_tokens) as total_output,
+            SUM(cache_read_tokens) as total_cache_read,
+            SUM(cache_write_5m_tokens) as total_cache_write_5m,
+            SUM(cache_write_1h_tokens) as total_cache_write_1h
+          FROM token_usage ${clause}
+          GROUP BY model
+        `).all(...params);
+        return { ok: true, data: rows };
+      } catch (e) { return { ok: false, error: e.message }; }
     },
   };
 }

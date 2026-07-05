@@ -49,6 +49,22 @@ function createMemoryHandlers(opts) {
       return store.stats({ workspace: ws });
     },
 
+    async memoryDigest({ since_ts, pane_id, limit }) {
+      const store = getStore();
+      const ws = opts.getCurrentWorkspacePath?.();
+      // Resolve since_ts: explicit arg > agent's last_seen_ts > 0
+      let effectiveTs = since_ts;
+      if (!effectiveTs && pane_id) {
+        effectiveTs = store.getAgentLastSeenTs({ paneId: pane_id });
+      }
+      const result = store.digestSince({ workspace: ws, since_ts: effectiveTs, limit: limit || 15 });
+      // Update last_seen_ts so next call returns only new items
+      if (pane_id && result.ok) {
+        store.updateAgentLastSeenTs({ paneId: pane_id, ts: Math.floor(Date.now() / 1000) });
+      }
+      return result;
+    },
+
     async patternWrite({ pattern_type, description, source_trajectory, quality_score }) {
       const store = getStore();
       return store.writePattern({ pattern_type, description, source_trajectory, quality_score });
