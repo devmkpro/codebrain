@@ -27,6 +27,7 @@ export const useNavStore = create()(persist((set, get) => ({
   tabs: [],
   activeTabIndex: 0,
   onHome: true,
+  showRemotePlayback: false,
   // Computed — recomputed after every set() via the getter pattern below
   get view() {
     const s = get();
@@ -34,6 +35,7 @@ export const useNavStore = create()(persist((set, get) => ({
   },
   // Legacy compat — kept so Breadcrumb / WorkspaceView / etc. don't break
   history: [],
+  setShowRemotePlayback(v) { set({ showRemotePlayback: v }); },
   // ── Actions ────────────────────────────────────────────────────────────
   goHome() {
     set({

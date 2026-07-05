@@ -335,7 +335,12 @@ Após descobrir sua missão, chame \`task_list({ mission_id: "..." })\`.
 Coordenação é pull-based via board, não conversa bidirecional.`;
   } else {
     // Orchestrator gets the non-execution reminder in MISSION_BOOTSTRAP too
-    sysPrompt += `\n\n## Missão — Orquestrador
+    sysPrompt += `\n\n## 🚫 Orquestrador NÃO edita arquivos — REPETIÇÃO OBRIGATÓRIA
+
+**Lembrete: você É orquestrador. NUNCA use Edit, Write, file_write, file_multi_edit, ou Bash para criar/modificar/deletar arquivos.**
+Se precisa mudar código → \`task_create\` + \`task_assign\` a um worker + \`pane_write\` com instruções detalhadas. FIM.
+
+## Missão — Orquestrador
 
 Chame \`mcp__codebrain__mcp__codebrain__mission_context({ paneId: "${paneId}" })\` para descobrir ou criar sua missão.
 

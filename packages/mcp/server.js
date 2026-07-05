@@ -37,6 +37,11 @@ function saveMcpPort(port) {
  */
 async function startMCPServer(ptyManager, opts = {}) {
   const bridge = createMCPBridge(ptyManager, opts);
+  // Expose the enriched bridge back to the caller so IPC handlers (e.g. register-recipe.ts)
+  // can access handler methods via ctx._mcpBridge.
+  // Without this, ctx._mcpBridge only has the basic opts from buildMcpBridge().
+  if (opts._exposeBridge) opts._exposeBridge(bridge);
+
   const mcpServer = createCodebrainMCPServer(bridge);
   // Browser + Fetch tools are now lazy-loaded via enable_tool_group meta-tool
   // to reduce per-request token cost (~62% savings for non-browser sessions)

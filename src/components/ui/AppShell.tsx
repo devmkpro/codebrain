@@ -9,8 +9,12 @@ import { WorkspaceView } from '../workspace/WorkspaceView';
 import { TasksSidebar }  from '../tasks/TasksSidebar';
 import { MemoryPanel }   from '../memory/MemoryPanel';
 import { SessionHistoryPanel } from '../session/SessionHistoryPanel';
+import { CronPanel }     from '../cron/CronPanel';
+import { RemotePlaybackPanel } from '../remote/RemotePlaybackPanel';
+import RecipeSuggestionPanel from '../recipe/RecipeSuggestionPanel';
 import { WhatsNewModal } from '../navigation/WhatsNewModal';
 import { useNavStore }   from '../../stores/nav-store';
+import { ClarifyPrompt } from '../clarify/ClarifyPrompt';
 
 interface Props {
   whatsNewOpen: boolean;
@@ -34,7 +38,6 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
   const onHome       = useNavStore(s => s.onHome);
   const tabs         = useNavStore(s => s.tabs) as any[];
   const activeTabIdx = useNavStore(s => s.activeTabIndex);
-
   return (
     <RouterProvider>
       <div className="flex flex-col bg-[#0B0B0E] text-slate-200 overflow-hidden cb-surface" style={{ height: '100%' }}>
@@ -77,6 +80,9 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
           ))}
 
           <TasksSidebar />
+          <CronPanel />
+          <RemotePlaybackPanel />
+          <RecipeSuggestionPanel />
           <MemoryPanel />
           <SessionHistoryPanel />
         </div>
@@ -86,6 +92,7 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
 
       {/* Modais globais (fora do stacking context do conteúdo) */}
       <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} currentVersion={appVersion} />
+      <ClarifyPrompt />
 
       {workspaceToast && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[9999] animate-in fade-in zoom-in-95 duration-200">

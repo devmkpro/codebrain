@@ -461,11 +461,88 @@ export interface CodebrainApp {
   shells: {
     list: () => Promise<string[]>;
   };
+  recipe: {
+    enrichCatalog: (args?: { model?: string; force?: boolean }) => Promise<{
+      ok: boolean;
+      data?: Array<{ name: string; kind: "agent" | "skill"; role: string; blurb: string }>;
+      cached?: boolean;
+      fallback?: boolean;
+      error?: string;
+    }>;
+    propose: (args?: { model?: string; agents?: string[]; skills?: string[]; llms?: string[] }) => Promise<{
+      ok: boolean;
+      data?: Array<{
+        name: string;
+        deliverable: string;
+        favoriteModel: string;
+        questions: string[];
+        steps: Array<{
+          role: string;
+          skill: string;
+          agent: string;
+          model: string;
+          produces: string;
+          parallel: boolean;
+          gap?: string;
+        }>;
+        delivery: string;
+      }>;
+      error?: string;
+    }>;
+    getCatalog: () => Promise<{
+      ok: boolean;
+      data?: { version: number; updatedAt: string | null; items: Array<{ name: string; kind: string; role: string; blurb: string }> };
+    }>;
+    save: (args: { recipe: any }) => Promise<{ ok: boolean; key?: string; name?: string; error?: string }>;
+    list: () => Promise<{ ok: boolean; data?: any[] }>;
+    delete: (args: { name: string }) => Promise<{ ok: boolean; error?: string }>;
+    ingredients: () => Promise<{
+      ok: boolean;
+      data?: { agents: string[]; skills: string[]; llms: string[] };
+    }>;
+  };
+  cron: {
+    create: (args: { name: string; schedule: string; task_prompt: string; agent?: string; model?: string; label?: string; workspace?: string }) => Promise<{
+      ok: boolean;
+      id?: string;
+      nextFireAt?: number | null;
+      error?: string;
+    }>;
+    list: (args?: { workspace?: string; status?: string }) => Promise<{
+      ok: boolean;
+      jobs?: Array<{
+        id: string;
+        name: string;
+        schedule: string;
+        status: "active" | "paused";
+        workspace: string | null;
+        task_prompt: string;
+        agent: string;
+        model: string | null;
+        label: string | null;
+        next_fire_at: number | null;
+        last_fired_at: number | null;
+        last_error: string | null;
+        created_at: number;
+        updated_at: number;
+      }>;
+      error?: string;
+    }>;
+    delete: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
+    update: (args: { id: string; name?: string; schedule?: string; status?: string; task_prompt?: string; agent?: string; model?: string; label?: string }) => Promise<{ ok: boolean; error?: string }>;
+  };
   cli: {
     detect: () => Promise<{ found: boolean; path?: string }>;
     redetect: () => Promise<{ found: boolean; path?: string }>;
     install: () => Promise<{ ok: boolean; error?: string; info?: object }>;
     installCli: (cli: string) => Promise<{ ok: boolean; error?: string; info?: object }>;
+  };
+  remoteBridge: {
+    start: (args?: { port?: number }) => Promise<{ ok: boolean; data?: { port: number; bindAddr: string; alreadyRunning?: boolean }; error?: string }>;
+    stop: () => Promise<{ ok: boolean; error?: string }>;
+    status: () => Promise<{ ok: boolean; data?: { running: boolean; port: number; bindAddr: string; connectedClients: number; authenticatedClients: number; pairCode: { code: string; expiresAt: number }; tokenCount: number }; error?: string }>;
+    pairCode: () => Promise<{ ok: boolean; data?: { code: string; expiresAt: number }; error?: string }>;
+    revokeTokens: () => Promise<{ ok: boolean; error?: string }>;
   };
   discord: {
     updatePresence: (args: { details: string; state?: string }) => Promise<{ ok: boolean; connected?: boolean; error?: string }>;

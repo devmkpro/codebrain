@@ -245,11 +245,42 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     openClaudeConfigFolder: () => ipcRenderer.invoke("skill:openClaudeConfigFolder"),
   },
 
+  recipe: {
+    enrichCatalog: (args?: { model?: string; force?: boolean }) =>
+      ipcRenderer.invoke("recipe:enrich-catalog", args),
+    propose: (args?: { model?: string; agents?: string[]; skills?: string[]; llms?: string[] }) =>
+      ipcRenderer.invoke("recipe:propose", args),
+    getCatalog: () => ipcRenderer.invoke("recipe:get-catalog"),
+    save: (args: { recipe: any }) => ipcRenderer.invoke("recipe:save", args),
+    list: () => ipcRenderer.invoke("recipe:list"),
+    delete: (args: { name: string }) => ipcRenderer.invoke("recipe:delete", args),
+    ingredients: () => ipcRenderer.invoke("recipe:ingredients"),
+  },
+
+  cron: {
+    create: (args: { name: string; schedule: string; task_prompt: string; agent?: string; model?: string; label?: string; workspace?: string }) =>
+      ipcRenderer.invoke("cron:create", args),
+    list: (args?: { workspace?: string; status?: string }) =>
+      ipcRenderer.invoke("cron:list", args),
+    delete: (args: { id: string }) =>
+      ipcRenderer.invoke("cron:delete", args),
+    update: (args: { id: string; name?: string; schedule?: string; status?: string; task_prompt?: string; agent?: string; model?: string; label?: string }) =>
+      ipcRenderer.invoke("cron:update", args),
+  },
+
   cli: {
     detect: () => ipcRenderer.invoke("cli:detect"),
     redetect: () => ipcRenderer.invoke("cli:redetect"),
     install: () => ipcRenderer.invoke("cli:install"),
     installCli: (cli: string) => ipcRenderer.invoke("cli:install-cli", cli),
+  },
+
+  remoteBridge: {
+    start: (args?: { port?: number }) => ipcRenderer.invoke("remote-bridge:start", args),
+    stop: () => ipcRenderer.invoke("remote-bridge:stop"),
+    status: () => ipcRenderer.invoke("remote-bridge:status"),
+    pairCode: () => ipcRenderer.invoke("remote-bridge:pairCode"),
+    revokeTokens: () => ipcRenderer.invoke("remote-bridge:revokeTokens"),
   },
 
   discord: {
@@ -422,4 +453,5 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
       return () => ipcRenderer.off("update:installing", handler);
     },
   },
+
 });
