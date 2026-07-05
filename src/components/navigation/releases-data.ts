@@ -14,6 +14,28 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.15.0",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "cron, recipes, remote bridge/spawn, and clarify broadcast"
+      },
+      {
+        "kind": "fix",
+        "text": "MCP startup crash and loop-warning leaking into user input"
+      },
+      {
+        "kind": "feat",
+        "text": "Libre Mode as orchestrator + workers with correct role badge"
+      },
+      {
+        "kind": "feat",
+        "text": "proactive shared memory — memory_digest + auto-handoff-to-memory"
+      }
+    ]
+  },
+  {
     "version": "1.14.0",
     "date": "julho 2026",
     "highlights": [
