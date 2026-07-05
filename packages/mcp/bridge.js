@@ -46,6 +46,11 @@ const { createExpandedHooksHandlers } = require("./bridge/hooks-expand-handlers.
 // ── Gap-Closing Features ──────────────────────────────────────────────────
 const { createAutoMemoryHandlers } = require("./bridge/auto-memory-handlers.js");
 const { createSecurityHandlers } = require("./bridge/security-handlers.js");
+const { createTranscriptWatcherHandlers } = require("./bridge/transcript-watcher-handlers.js");
+const { createRecipeHandlers } = require("./bridge/recipe-handlers.js");
+const { createCronHandlers } = require("./bridge/cron-handlers.js");
+const { createRemoteBridgeHandlers } = require("./bridge/remote-bridge-handlers.js");
+const { createRemoteSpawnHandlers } = require("./bridge/remote-spawn-handlers.js");
 
 // ── Auto-notify helpers ─────────────────────────────────────────────────────
 // When agents make changes (file writes, memory writes), other agents are
@@ -246,16 +251,43 @@ function createMCPBridge(ptyManager, opts = {}) {
         if (!toolCalls || toolCalls.length < 2) return;
         // Check if the same tool was called multiple times
         const lastTool = toolCalls[toolCalls.length - 1];
+        // Idempotent read-only / polling tools are LEGITIMATELY called repeatedly
+        // with the same result (digest, search, status polling). They are NOT loops.
+        // Never warn on these — doing so spams the user and punishes correct behavior.
+        const IDEMPOTENT_READ_TOOLS = new Set([
+          "mcp__codebrain__memory_digest",
+          "mcp__codebrain__memory_search",
+          "mcp__codebrain__memory_read",
+          "mcp__codebrain__memory_list",
+          "mcp__codebrain__pane_read",
+          "mcp__codebrain__pane_read_messages",
+          "mcp__codebrain__pane_list",
+          "mcp__codebrain__actor_status",
+          "mcp__codebrain__actor_list",
+          "mcp__codebrain__task_list",
+          "mcp__codebrain__pattern_list",
+          "mcp__codebrain__handoff_wait",
+          "mcp__codebrain__swarm_status",
+          "mcp__codebrain__memory_digest",
+          "mcp__codebrain__memory_write",
+        ]);
+        if (IDEMPOTENT_READ_TOOLS.has(lastTool)) return;
         const recentTools = toolCalls.slice(-3);
         if (recentTools.length >= 3 && recentTools.every(t => t === lastTool)) {
           // Potential loop detected — check if this pattern persists
           const result = store.recordStep({ paneId, toolName: lastTool, toolInput: {} });
           if (result.isLooping) {
             console.warn(`[bridge] LOOP DETECTED: pane ${paneId.slice(0,8)} repeated "${lastTool}" ${result.count}x`);
-            // Inject a gentle warning (the agent will see it on next turn)
+            // Record the warning as an agent message so the recipient sees it on its
+            // NEXT turn via pane_read_messages — do NOT write into the pty stdin, which
+            // corrupts the user's input line and leaks the warning into the prompt.
             try {
-              const warning = `\n⚠️ LOOP WARNING: You appear to be calling "${lastTool}" repeatedly with the same result. Try a different approach or stop.\n`;
-              ptyManager.write(paneId, warning, false);
+              store.saveAgentMessage?.({
+                fromPane: "system",
+                toPane: paneId,
+                content: `⚠️ Loop detected: you called "${lastTool}" ${result.count}x with the same result. Try a different approach or stop.`,
+                type: "update",
+              });
             } catch {}
           }
         }
@@ -532,6 +564,55 @@ function createMCPBridge(ptyManager, opts = {}) {
   const autoMemoryHandlers = createAutoMemoryHandlers({ memoryStore: opts.memoryStore });
   const securityHandlers = createSecurityHandlers({ memoryStore: opts.memoryStore, getCurrentWorkspacePath: opts.getCurrentWorkspacePath });
 
+  // ── Transcript Watchers (Overclock port) ────────────────────────────────
+  const transcriptWatcherHandlers = createTranscriptWatcherHandlers({
+    memoryStore: opts.memoryStore,
+    ptyManager,
+    getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
+    hooksManager: opts.hooksManager,
+  });
+
+  // Auto-start transcript watchers if we have a workspace
+  const _twWorkspace = opts.getCurrentWorkspacePath?.();
+  if (_twWorkspace) {
+    transcriptWatcherHandlers.transcriptWatcherStart({ workspace: _twWorkspace }).catch(() => {});
+  }
+
+  // ── Recipe / Harness Handlers (Overclock port) ──────────────────────────
+  const recipeHandlers = createRecipeHandlers({
+    memoryStore: opts.memoryStore,
+    providerStore: opts.providerStore,
+    providerRegistry: opts.providerRegistry,
+    configStore: opts.configStore,
+    getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
+  });
+
+  // ── Cron Jobs (Overclock port) ────────────────────────────────────────────
+  const cronHandlers = createCronHandlers({
+    memoryStore: opts.memoryStore,
+    spawnPaneFn: opts.spawnPaneFn,
+    getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
+    hooksManager: opts.hooksManager,
+  });
+  // Auto-start cron tick loop (60s interval)
+  cronHandlers.startTickLoop();
+
+  // ── Remote Bridge (Overclock port) — WSS thin-client control ────────────
+  const remoteBridgeHandlers = createRemoteBridgeHandlers({
+    ptyManager,
+    memoryStore: opts.memoryStore,
+    hooksManager: opts.hooksManager,
+    getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
+    dataDir: opts.dataDir || path.join(os.homedir(), ".codebrain"),
+    port: opts.remoteBridgePort || undefined,
+  });
+
+  // ── Remote Spawn (Overclock port) — SSH:// routing ──────────────────────
+  const remoteSpawnHandlers = createRemoteSpawnHandlers({
+    ptyManager,
+    spawnPaneFn: opts.spawnPaneFn,
+  });
+
   // ── MiMo-Code Feature Handlers ──────────────────────────────────────────
   const compactionHandlers = createCompactionHandlers(sharedOpts);
   const stepClassifier = createStepClassifier(sharedOpts);
@@ -692,6 +773,13 @@ function createMCPBridge(ptyManager, opts = {}) {
     // Gap-closing handlers
     ...autoMemoryHandlers,
     ...securityHandlers,
+    ...transcriptWatcherHandlers,
+    // Recipe / Harness (Overclock port)
+    ...recipeHandlers,
+    // Cron jobs (Overclock port)
+    ...cronHandlers,
+    ...remoteBridgeHandlers,
+    ...remoteSpawnHandlers,
     // Expose foundational instances
     messageBus,
     agentScorer,

@@ -4,6 +4,7 @@ import { safeSend } from "../context";
 import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
 import { refreshAllWorkspaces, writeContextFiles } from "./workspace";
+import { PROVIDER_REGISTRY } from "./constants";
 
 // CDP Client for native Chrome browser control
 const { CDPClient } = require("../../packages/mcp/bridge/cdp-client.js");
@@ -58,6 +59,8 @@ function buildMcpBridge(ctx: AppContext) {
     getCurrentWorkspacePath: () => ctx.currentWorkspacePath,
     setCurrentWorkspacePath: (ws: string) => { ctx.currentWorkspacePath = ws; },
     memoryStore: ctx.memoryStore,
+    providerStore: ctx.providerStore,
+    providerRegistry: PROVIDER_REGISTRY,
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
     hooksManager: ctx.hooksManager,
@@ -91,6 +94,17 @@ function buildMcpBridge(ctx: AppContext) {
         store.createNotification(data);
       } catch {}
     },
+    getGoogleKey: () => {
+      try {
+        const providers = ctx.providerStore?.listFull?.() || [];
+        for (const p of providers) {
+          if (p.id && p.id.startsWith("gemini-") && p.env?.GEMINI_API_KEY) return p.env.GEMINI_API_KEY;
+          if ((p as any).compat === "gemini-compat" && p.env?.GEMINI_API_KEY) return p.env.GEMINI_API_KEY;
+        }
+        return null;
+      } catch { return null; }
+    },
+    emitToRenderer: (channel: string, data: any) => { safeSend(ctx, channel, data); },
     roleMap: undefined as any, // Will be set by pane-handlers via bridge composition
   };
 }
@@ -98,6 +112,25 @@ function buildMcpBridge(ctx: AppContext) {
 export async function startMcpServer(ctx: AppContext): Promise<void> {
   const { startMCPServer } = require("../../packages/mcp/server.js");
   const bridge = buildMcpBridge(ctx);
+
+  // Store bridge reference on ctx so IPC handlers (e.g. register-recipe.ts)
+  // can access handler methods. This gets ENRICHED once startMCPServer calls createMCPBridge.
+  (ctx as any)._mcpBridge = bridge;
+
+  // Callback: startMCPServer → createMCPBridge produces a NEW enriched object.
+  // We must update ctx._mcpBridge to the enriched version so IPC handlers find cron, recipes, etc.
+  bridge._exposeBridge = (enriched: any) => {
+    (ctx as any)._mcpBridge = enriched;
+    console.log("[MCP] Enriched bridge stored on ctx._mcpBridge (cron, recipes, etc. available)");
+  };
+
+  // Wire clarify_broadcast hook → IPC to renderer
+  // When a worker submits awaiting_clarification with suggestions, push to the UI.
+  if (ctx.hooksManager) {
+    ctx.hooksManager.on("clarify_broadcast", (payload: any) => {
+      safeSend(ctx, "clarify:request", payload);
+    });
+  }
 
   // _triggerMrPoll is set synchronously inside createMCPBridge (called by startMCPServer).
   // But startMCPServer also starts the HTTP server (async). We need mcpServerReady to
