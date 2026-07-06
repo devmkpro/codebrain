@@ -2,6 +2,19 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.15.1] — 2026-07-06
+
+### Features
+- Real token counting from Claude Code JSONL session files with USD cost badge per pane
+- Orchestrator panes show Σ mission total (sum of all workers' tokens + cost)
+- LibreWizard expanded to 6-step flow with model selection per worker
+- Terminal Alt+Click cursor jump and paste queue with Esc cancel
+- OpenRouter and Fireworks.ai providers added with accurate pricing in cost-tracker
+
+### Fixes
+- Removed all audio/voice/Gemini Live code (BrainVoiceOrb, register-voice, register-gemini-live)
+- AppHeader cleaned of BrainVoiceButton and orbVisible references
+
 ## [1.15.0] — 2026-07-05
 
 ### Features
