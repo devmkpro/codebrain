@@ -18,15 +18,17 @@ export const INITIAL_VOICE_STATS = {
 };
 
 // useVoiceStore
-export const useVoiceStore = create(set => ({
+export const useVoiceStore = create((set: any) => ({
   stats: INITIAL_VOICE_STATS,
   cancelRequestId: 0,
-  setStats: stats => set({
-    stats
-  }),
-  requestCancel: () => set(state => ({
-    cancelRequestId: state.cancelRequestId + 1
-  }))
+  setStats: (stats: any) => set({ stats }),
+  requestCancel: () => set((state: any) => ({ cancelRequestId: state.cancelRequestId + 1 })),
+
+  // ── Orb visibility ──
+  orbVisible: false,
+  showOrb: () => set({ orbVisible: true }),
+  hideOrb: () => set({ orbVisible: false }),
+  toggleOrb: () => set((s: any) => ({ orbVisible: !s.orbVisible })),
 }));
 export const HOLD_THRESHOLD_MS = 220;
 export const MIN_AUDIO_BYTES = 2e3;

@@ -1070,7 +1070,9 @@ function AudioIndicator({ audioConfig, audioModeBusy, onToggleMode }: any) {
   return (
     <div className={`flex items-stretch h-full border-l border-white/[0.06] ${audioModeBusy ? 'opacity-60' : ''}`}>
       {/* Waveform / audio level indicator */}
-      <div className={`flex items-center gap-1 px-2.5 border-r border-white/[0.06] transition-colors ${phaseColor}`} title={voiceStats.error ?? 'BrainVoice'}>
+      <div
+        className={`flex items-center gap-1 px-2.5 border-r border-white/[0.06] ${phaseColor}`}
+      >
         {voiceStats.phase === 'idle'
           ? <MicOff size={12} className="text-slate-700" />
           : <Mic size={12} />

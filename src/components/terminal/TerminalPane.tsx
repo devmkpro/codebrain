@@ -109,6 +109,9 @@ export function TerminalPane({
   const spawnedRef = React.useRef(false);
   const lastOutputRef = React.useRef(0);
   const [isActivelyWorking, setIsActivelyWorking] = React.useState(false);
+  // Cancelable paste queue
+  const pasteQueueRef = React.useRef<string[]>([]);
+  const pastingRef = React.useRef(false);
   const paneRef = React.useRef(pane);
   paneRef.current = pane;
   const updatePane = usePanesStore(s => s.updatePane);
@@ -253,6 +256,18 @@ export function TerminalPane({
     }
   }, [pane.id]);
 
+  /** Drain paste queue in chunks with small delays, allows Esc cancel. */
+  const drainPasteQueue = React.useCallback(async (paneId: string) => {
+    if (pastingRef.current) return; // already draining
+    pastingRef.current = true;
+    while (pasteQueueRef.current.length > 0) {
+      const chunk = pasteQueueRef.current.shift()!;
+      window.codeBrainApp?.pty.write(paneId, chunk);
+      await new Promise(r => setTimeout(r, 16));
+    }
+    pastingRef.current = false;
+  }, []);
+
   const initTerminal = React.useCallback(() => {
     if (!containerRef.current || termRef.current) return;
     const currentPane = paneRef.current;
@@ -280,9 +295,28 @@ export function TerminalPane({
     waitForReplayFit(containerRef.current, fitAddon, term).then(() => {
       lastPtySizeRef.current = { cols: term.cols, rows: term.rows };
     });
+
+    // Alt+Click: move cursor to clicked position in terminal
+    term.element?.addEventListener('click', (e) => {
+      if (!e.altKey) return;
+      const rect = term.element.getBoundingClientRect();
+      const core = term._core;
+      const dims = core?._renderService?.dimensions ?? core?._renderer?.dimensions;
+      const cellWidth = dims?.actualCellWidth ?? dims?.css?.cell?.width ?? 9;
+      const cellHeight = dims?.actualCellHeight ?? dims?.css?.cell?.height ?? 17;
+      const col = Math.max(1, Math.floor((e.clientX - rect.left) / cellWidth) + 1);
+      const row = Math.max(1, Math.floor((e.clientY - rect.top) / cellHeight) + term.buffer.active.viewportY + 1);
+      term.input('\x1b[' + row + ';' + col + 'H');
+    });
     term.attachCustomKeyEventHandler(e => {
       if (handlePushToTalkKeyRef.current(e)) return false;
       if (e.type !== "keydown") return true;
+      // Esc cancels pending paste queue
+      if (e.key === "Escape" && pastingRef.current) {
+        pasteQueueRef.current = [];
+        pastingRef.current = false;
+        return false;
+      }
       const write = seq => {
         window.codeBrainApp?.pty.write(currentPane.id, seq);
         e.preventDefault();
@@ -317,7 +351,17 @@ export function TerminalPane({
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
         (window.codeBrainApp?.app.readFromClipboard() ?? Promise.resolve("")).then(text => {
-          if (text) window.codeBrainApp?.pty.write(currentPane.id, text);
+          if (!text) return;
+          const CHUNK_SIZE = 100;
+          if (text.length > 200) {
+            pasteQueueRef.current = [];
+            for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+              pasteQueueRef.current.push(text.slice(i, i + CHUNK_SIZE));
+            }
+            drainPasteQueue(currentPane.id);
+          } else {
+            window.codeBrainApp?.pty.write(currentPane.id, text);
+          }
         }).catch(() => { });
         return false;
       }
