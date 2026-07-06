@@ -14,6 +14,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.15.1",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "LibreWizard 6-step flow, Alt+Click cursor, paste queue with Esc cancel"
+      },
+      {
+        "kind": "feat",
+        "text": "real token counting from Claude JSONL sessions with USD cost badge"
+      },
+      {
+        "kind": "feat",
+        "text": "add OpenRouter and Fireworks.ai providers with pricing"
+      }
+    ]
+  },
+  {
     "version": "1.15.0",
     "date": "julho 2026",
     "highlights": [
