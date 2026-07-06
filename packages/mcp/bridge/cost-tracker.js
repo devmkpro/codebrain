@@ -140,6 +140,21 @@ const DEFAULT_MODEL_COSTS = {
   "x-ai/grok-3": { input: 3.0, output: 15.0 },
   "x-ai/grok-3-mini": { input: 0.30, output: 0.50 },
   "x-ai/grok-4.3": { input: 1.25, output: 2.50 },
+  // OpenRouter extras
+  "meta-llama/llama-3.1-405b": { input: 1.00, output: 1.00 },
+  "anthropic/claude-opus-4-8": { input: 5.0, output: 25.0, cache_read: 0.50 },
+  "nousresearch/hermes-3-llama-3.1-405b:free": { input: 0.0, output: 0.0 },
+
+  // ==========================================
+  // FIREWORKS.AI — per 1M tokens (2026-07)
+  // https://fireworks.ai/pricing
+  // ==========================================
+  "accounts/fireworks/models/kimi-k2-instruct": { input: 0.50, output: 2.50 },
+  "accounts/fireworks/models/deepseek-v3": { input: 0.22, output: 0.88 },
+  "accounts/fireworks/models/glm-4-9b-chat": { input: 0.10, output: 0.10 },
+  "accounts/fireworks/models/qwen3-235b-a22b": { input: 0.22, output: 0.88 },
+  "accounts/fireworks/models/llama-v3p1-405b-instruct": { input: 3.00, output: 3.00 },
+  "accounts/fireworks/models/llama-v3p1-70b-instruct": { input: 0.90, output: 0.90 },
 
   // ==========================================
   // CODEX (OpenAI Codex CLI — via ChatGPT OAuth or API key)

@@ -134,17 +134,49 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     type: "openai-compat",
     host: "openclaude",
     baseUrl: "https://openrouter.ai/api/v1",
-    tokenEnvVar: "OPENAI_API_KEY",
+    tokenEnvVar: "OPENROUTER_API_KEY",
     signupUrl: "https://openrouter.ai/keys",
     models: [
-      "google/gemini-3.1-flash-lite", "deepseek/deepseek-chat-v3-0324",
-      "meta-llama/llama-4-maverick", "mistralai/mistral-medium-3-5",
+      // Anthropic via OpenRouter
+      "anthropic/claude-opus-4", "anthropic/claude-opus-4-8", "anthropic/claude-opus-4.7-fast",
+      "anthropic/claude-sonnet-4",
+      // Google via OpenRouter
+      "google/gemini-2.5-pro", "google/gemini-3.1-flash-lite",
+      // Meta via OpenRouter
+      "meta-llama/llama-3.1-405b", "meta-llama/llama-4-maverick",
+      // Other
+      "deepseek/deepseek-chat-v3-0324", "mistralai/mistral-medium-3-5",
       "openai/gpt-4.1-mini", "openai/gpt-4o",
       "x-ai/grok-4.3",
-      "anthropic/claude-sonnet-4", "anthropic/claude-opus-4.7-fast", "anthropic/claude-opus-4-8",
+      "nousresearch/hermes-3-llama-3.1-405b:free",
     ],
     labelIncludes: ["openrouter"],
     idIncludes: ["openrouter"],
+  },
+  {
+    id: "fireworks",
+    label: "Fireworks.ai",
+    icon: "FW",
+    type: "openai-compat",
+    host: "openclaude",
+    baseUrl: "https://api.fireworks.ai/inference/v1",
+    tokenEnvVar: "FIREWORKS_API_KEY",
+    signupUrl: "https://fireworks.ai/api-keys",
+    models: [
+      // Kimi K2 (Moonshot via Fireworks)
+      "accounts/fireworks/models/kimi-k2-instruct",
+      // DeepSeek V3
+      "accounts/fireworks/models/deepseek-v3",
+      // GLM-4
+      "accounts/fireworks/models/glm-4-9b-chat",
+      // Qwen3
+      "accounts/fireworks/models/qwen3-235b-a22b",
+      // Llama 3.1
+      "accounts/fireworks/models/llama-v3p1-405b-instruct",
+      "accounts/fireworks/models/llama-v3p1-70b-instruct",
+    ],
+    labelIncludes: ["fireworks"],
+    idIncludes: ["fireworks"],
   },
   {
     id: "openai",
