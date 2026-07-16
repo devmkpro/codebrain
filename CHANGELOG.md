@@ -2,6 +2,19 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.15.2] — 2026-07-16
+
+### Features
+- OpenRouter model picker with search, multi-select, and public catalog fetch (289 MCP tools)
+
+### Fixes
+- mergeModels now respects user-edited models for existing providers (no more template override)
+- Auto-fetch no longer overrides model edits when saving existing providers
+- Claude Code host disabled for OpenRouter (only works with Anthropic-compat providers)
+- Force OpenClaude when host=claude but provider is not anthropic/mimo/oauth
+- Improved OAuth warning message (accurate per provider type)
+- × button for removing models now visible (was gray-700 on black)
+
 ## [1.15.1] — 2026-07-06
 
 ### Features

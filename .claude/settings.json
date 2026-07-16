@@ -1,9 +1,9 @@
 {
   "env": {
-    "CODEBRAIN_VERSION": "1.15.1"
+    "CODEBRAIN_VERSION": "1.15.2"
   },
   "codebrain": {
-    "version": "1.15.1",
+    "version": "1.15.2",
     "mcp": {
       "totalTools": 289
     }
