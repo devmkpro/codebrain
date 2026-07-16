@@ -187,6 +187,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     delete: (id: string) => ipcRenderer.invoke("providers:delete", id),
     testToken: (args: unknown) => ipcRenderer.invoke("providers:testToken", args),
     listModels: (args: unknown) => ipcRenderer.invoke("providers:listModels", args),
+    listOpenRouterModels: () => ipcRenderer.invoke("providers:listOpenRouterModels"),
     healthCheck: (args: unknown) => ipcRenderer.invoke("providers:healthCheck", args),
     onUpdated: (callback: (providers: unknown[]) => void) => {
       const handler = (_evt: unknown, providers: unknown[]) => callback(providers);

@@ -385,6 +385,7 @@ export interface CodebrainApp {
     delete: (id: string) => Promise<{ ok: boolean; error?: string }>;
     testToken: (args: { providerId: string; token: string }) => Promise<{ ok: boolean; error?: string }>;
     listModels: (args: { baseUrl: string; apiKey: string; type: string }) => Promise<{ ok: boolean; models?: string[]; error?: string }>;
+    listOpenRouterModels: () => Promise<{ ok: boolean; models?: Array<{ id: string; name: string; context_length: number; pricing?: { prompt: number; completion: number } }>; error?: string }>;
     healthCheck: (args: { baseUrl: string; apiKey: string; type: string; model?: string }) => Promise<{ ok: boolean; status: string; checks: Record<string, unknown>; warnings: string[]; error?: string }>;
     onUpdated: (callback: (providers: Provider[]) => void) => () => void;
   };

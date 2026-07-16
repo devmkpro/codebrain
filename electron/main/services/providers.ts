@@ -3,14 +3,19 @@ import { PROVIDER_REGISTRY } from "./constants";
 
 /**
  * Merge user-saved models with template models.
- * Template models are ALWAYS included (guaranteed defaults).
- * User-saved models that aren't in the template are preserved (custom additions).
- * Template models come first in the merged list.
+ * - If user has explicitly saved models (edited via UI), respect their choice (no template merge).
+ * - If no saved models exist (fresh provider), use template defaults.
+ * - User-saved models that aren't in the template are always preserved (custom additions).
  */
-function mergeModels(saved: string[] | undefined, templateModels: string[]): string[] {
-  const savedSet = new Set((saved ?? []).map(m => m.trim()).filter(Boolean));
+function mergeModels(saved: string[] | undefined, templateModels: string[], isExistingProvider: boolean): string[] {
+  const cleaned = (saved ?? []).map(m => m.trim()).filter(Boolean);
+  // Existing provider with user-saved models → respect user edits, don't re-add template models
+  if (isExistingProvider && cleaned.length > 0) return cleaned;
+  // Existing provider with empty models → user cleared them all, keep empty (don't repopulate)
+  if (isExistingProvider && cleaned.length === 0) return saved !== undefined ? [] : templateModels;
+  // New provider (no saved data) → use template defaults + any custom additions
+  const savedSet = new Set(cleaned);
   const templateSet = new Set(templateModels);
-  // Template models first (in template order), then user-only models
   const merged = [...templateModels];
   for (const m of savedSet) {
     if (!templateSet.has(m)) merged.push(m);
@@ -75,8 +80,8 @@ export function getEnhancedProviders(ctx: AppContext) {
           // Only fall back to template.host if the user hasn't explicitly set one.
           host: p.host || template.host,
           type: template.type as any,
-          // Always ensure template models are present
-          models: mergeModels(p.models, template.models),
+          // Respect user-saved models for existing providers; only merge template defaults for new ones
+          models: mergeModels(p.models, template.models, true),
         };
       }
 
@@ -101,13 +106,9 @@ export function getEnhancedProviders(ctx: AppContext) {
         return {
           ...p,
           label: resolvedLabel,
-          // Respect user-saved host; fall back to template only if not set.
           host: p.host || bestMatch.host,
           type: bestMatch.type as any,
-          // Always ensure template models are present — merge with user-saved
-          // models so custom additions are preserved, but template defaults
-          // are never lost (fixes providers showing no models after re-add).
-          models: mergeModels(p.models, bestMatch.models),
+          models: mergeModels(p.models, bestMatch.models, true),
         };
       }
 

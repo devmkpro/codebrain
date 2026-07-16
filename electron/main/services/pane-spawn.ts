@@ -124,6 +124,13 @@ export async function spawnPaneInternal(
     let providerId = resolved.providerId;
     let model = resolved.model;
 
+    // Safety: Claude Code CLI only supports Anthropic-compatible providers.
+    // Force OpenClaude for openai-compat (OpenRouter), gemini-compat, etc.
+    if (agent === "claude" && provider?.type && !["anthropic-compat", "mimo-compat", "oauth"].includes(provider.type)) {
+      log.info(`[spawnPaneInternal] host=claude but provider type=${provider.type} — forcing OpenClaude`);
+      agent = "openclaude";
+    }
+
     // Filter masked values from frontend config.env
     const configEnv = Object.fromEntries(
       Object.entries(config.env ?? {}).filter(([, v]) => !/^\*+$/.test(v))
@@ -286,11 +293,11 @@ export async function spawnPaneInternal(
       if (provider) env["CLAUDE_CODE_PROVIDER_PROFILE_ENV_APPLIED"] = "1";
 
       // --provider flag tells the CLI which adapter to use.
-      // For openai-compat (OpenRouter, OpenAI, etc.) and gemini-compat: ALWAYS pass it,
-      // even for OpenClaude — otherwise the CLI auto-detects from the model name prefix
-      // (e.g. "anthropic/claude-opus-4.7-fast" → Anthropic adapter → wrong endpoint).
-      // For anthropic-compat and mimo-compat: skip — env vars handle routing.
-      if (provider?.type && !args.includes("--provider")) {
+      // Claude Code CLI does NOT support --provider — it routes via env vars only
+      // (ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN for Anthropic-compat endpoints).
+      // OpenClaude supports --provider for openai-compat, gemini-compat, etc.
+      // So we only pass --provider when agent is NOT native Claude Code.
+      if (provider?.type && !args.includes("--provider") && agent !== "claude") {
         let providerArg = "";
         switch (provider.type as string) {
           case "openai-compat": providerArg = "openai"; break;
@@ -379,17 +386,31 @@ export async function spawnPaneInternal(
             // OpenRouter's OpenAI-compatible endpoint handles Google models natively.
             // The Gemini adapter uses Google's own API format which is incompatible,
             // so we force the OpenAI adapter via OPENAI_BASE_URL + --provider openai.
+            // NOTE: Claude Code CLI doesn't support --provider, so we skip it for agent=claude
+            // and route via ANTHROPIC_BASE_URL instead (OpenRouter supports Anthropic protocol).
             env["OPENAI_BASE_URL"] = provider?.baseUrl || "https://openrouter.ai/api/v1";
             env["OPENAI_API_KEY"] = openaiKey;
             env["OPENAI_MODEL"] = model;
             if (!args.includes("--model")) args.push("--model", model);
-            if (!args.includes("--provider")) args.push("--provider", "openai");
-            log.info(`[spawnPaneInternal] OpenRouter Google model: forcing OpenAI adapter → ${env["OPENAI_BASE_URL"]}`);
+            if (agent !== "claude" && !args.includes("--provider")) args.push("--provider", "openai");
+            // For Claude Code: route via Anthropic adapter (OpenRouter translates)
+            if (agent === "claude") {
+              env["ANTHROPIC_BASE_URL"] = provider?.baseUrl || "https://openrouter.ai/api/v1";
+              env["ANTHROPIC_AUTH_TOKEN"] = openaiKey;
+              env["ANTHROPIC_MODEL"] = model;
+            }
+            log.info(`[spawnPaneInternal] OpenRouter Google model: ${agent === "claude" ? "Anthropic adapter (Claude Code)" : "OpenAI adapter"} → ${env["OPENAI_BASE_URL"]}`);
           } else if (model?.includes("/")) {
             // Other slash-models on OpenRouter (meta-llama/*, deepseek/*, etc.)
             // Already handled by OPENAI_BASE_URL set earlier — just ensure model is passed.
             if (!args.includes("--model")) args.push("--model", model);
-            log.info(`[spawnPaneInternal] OpenRouter slash-model "${model}" → using OpenAI adapter`);
+            // For Claude Code: route via Anthropic adapter (OpenRouter translates)
+            if (agent === "claude") {
+              env["ANTHROPIC_BASE_URL"] = provider?.baseUrl || "https://openrouter.ai/api/v1";
+              env["ANTHROPIC_AUTH_TOKEN"] = openaiKey;
+              env["ANTHROPIC_MODEL"] = model;
+            }
+            log.info(`[spawnPaneInternal] OpenRouter slash-model "${model}" → ${agent === "claude" ? "Anthropic adapter" : "OpenAI adapter"}`);
           }
         }
       } else if (isAnthropicCompat) {
