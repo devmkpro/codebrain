@@ -2,6 +2,11 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.15.4] — 2026-07-22
+
+### Fixes
+- OpenRouter + Claude Code CLI: modelos não-Anthropic (moonshotai/kimi-k3, etc.) não passam mais `--model` para o CLI — evita billing errado (antes cobrava claude-sonnet-4-5 em vez do modelo selecionado). O `ANTHROPIC_DEFAULT_SONNET_MODEL` carrega o modelo real direto ao OpenRouter
+
 ## [1.15.3] — 2026-07-22
 
 ### Fixes
