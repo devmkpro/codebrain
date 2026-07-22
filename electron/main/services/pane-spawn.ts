@@ -394,37 +394,46 @@ export async function spawnPaneInternal(
           const orBaseUrl = (provider?.baseUrl || "https://openrouter.ai/api/v1").replace(/\/v1\/?$/, "");
 
           if (agent === "claude") {
-            // Claude Code CLI validates --model locally against Anthropic's known model list.
-            // Non-Anthropic models (moonshotai/*, google/*, meta-llama/*, etc.) are rejected.
+            // Claude Code CLI + OpenRouter:
+            //   ANTHROPIC_BASE_URL = OpenRouter base (without /v1 — CLI appends it)
+            //   ANTHROPIC_AUTH_TOKEN = OpenRouter API key
+            //   ANTHROPIC_API_KEY = "" (must be empty per OpenRouter docs)
+            //   ANTHROPIC_DEFAULT_*_MODEL = real model (e.g. moonshotai/kimi-k3)
             //
-            // Workaround: pass a valid Anthropic model ID as --model (satisfies local validation),
-            // but override ANTHROPIC_DEFAULT_*_MODEL with the real OpenRouter model ID.
-            // The CLI sends ANTHROPIC_DEFAULT_SONNET_MODEL to the API, ignoring --model's value
-            // once it resolves the "sonnet" role. OpenRouter then routes to the real model.
-            //
-            // For native Anthropic models (anthropic/*): strip the prefix, use as-is.
-            // For all others: use claude-sonnet-4-5 as local placeholder.
+            // For native Anthropic models on OpenRouter (anthropic/* or claude-*):
+            //   pass clean model name as --model (CLI validates it locally).
+            // For all other models (moonshotai/*, google/*, meta-llama/*, etc.):
+            //   do NOT pass --model at all — CLI would reject the model ID locally.
+            //   OpenRouter reads ANTHROPIC_DEFAULT_SONNET_MODEL and uses that.
+
             const isNativeAnthropicModel = model?.startsWith("anthropic/") || model?.match(/^claude-/);
-            const localModel = isNativeAnthropicModel
-              ? (model!.startsWith("anthropic/") ? model!.replace(/^anthropic\//, "") : model!)
-              : "claude-sonnet-4-5"; // valid placeholder — satisfies CLI validation
 
             env["ANTHROPIC_BASE_URL"] = orBaseUrl;
             env["ANTHROPIC_AUTH_TOKEN"] = openaiKey;
             env["ANTHROPIC_API_KEY"] = ""; // must be empty per OpenRouter docs
             if (model) {
-              // Real model → sent to OpenRouter API
+              // Real model → sent to OpenRouter API via env vars
               env["ANTHROPIC_MODEL"] = model;
               env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model;
               env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model;
               env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = model;
               env["ANTHROPIC_SMALL_FAST_MODEL"] = model;
             }
-            // --model uses the local placeholder (or real model for native Anthropic)
-            const mIdx = args.indexOf("--model");
-            if (mIdx !== -1) args[mIdx + 1] = localModel;
-            else args.push("--model", localModel);
-            log.info(`[spawnPaneInternal] OpenRouter → Claude Code: realModel="${model}" localModel="${localModel}" base="${orBaseUrl}"`);
+
+            if (isNativeAnthropicModel && model) {
+              // Native Anthropic model: pass clean name (strip "anthropic/" prefix if present)
+              const cleanModel = model.startsWith("anthropic/") ? model.replace(/^anthropic\//, "") : model;
+              const mIdx = args.indexOf("--model");
+              if (mIdx !== -1) args[mIdx + 1] = cleanModel;
+              else args.push("--model", cleanModel);
+            } else {
+              // Non-Anthropic model (moonshotai/*, etc.): remove --model entirely.
+              // CLI would reject it locally. ANTHROPIC_DEFAULT_SONNET_MODEL carries the real model.
+              const mIdx = args.indexOf("--model");
+              if (mIdx !== -1) args.splice(mIdx, 2);
+            }
+
+            log.info(`[spawnPaneInternal] OpenRouter → Claude Code: model="${model}" isNativeAnthropic=${isNativeAnthropicModel} base="${orBaseUrl}" args=${JSON.stringify(args)}`);
           } else {
             // OpenClaude path: use OpenAI-compat endpoint, pass model as-is (no ~ prefix).
             // OpenClaude doesn't validate against Anthropic model list.
