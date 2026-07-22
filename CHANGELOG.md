@@ -2,6 +2,41 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.15.5] — 2026-07-22
+
+### Fixes
+- OpenRouter pricing no +shell menu mostrava $0.00 — preços eram USD/token, agora convertidos para USD/1M tokens antes de exibir
+
+## [1.15.4] — 2026-07-22
+
+### Fixes
+- OpenRouter + Claude Code CLI: modelos não-Anthropic (moonshotai/kimi-k3, etc.) não passam mais `--model` para o CLI — evita billing errado (antes cobrava claude-sonnet-4-5 em vez do modelo selecionado). O `ANTHROPIC_DEFAULT_SONNET_MODEL` carrega o modelo real direto ao OpenRouter
+
+## [1.15.3] — 2026-07-22
+
+### Fixes
+- OpenRouter + Claude Code CLI: modelos não-Anthropic (moonshotai/kimi-k3, google/*, meta-llama/*, etc.) agora funcionam via Claude Code usando `claude-sonnet-4-5` como placeholder local e `ANTHROPIC_DEFAULT_SONNET_MODEL` com o modelo real
+- OpenRouter + Claude Code CLI: `ANTHROPIC_BASE_URL` agora sem `/v1` (Claude Code appende sozinho, evitando `/v1/v1/` duplicado)
+- Health check: URL `/v1` duplicada corrigida para todos providers openai-compat via `stripV1Suffix()`
+- Health check: OpenRouter pula listagem de modelos (400+ modelos) e usa `openai/gpt-4o-mini` como fallback
+- ProviderForm: removido `useEffect` que forçava `host: "openclaude"` para OpenRouter, permitindo Claude Code CLI
+- ProviderForm: opção "Claude Code" agora visível para providers OpenRouter com label correto
+- `resolve-spawn-target`: quando `preferredAgent=claude` e provider é OpenRouter, usa `agent=claude` corretamente
+- `pane-spawn`: OpenRouter não mais força `openclaude` quando `provider.type=openai-compat`
+
+## [1.15.2] — 2026-07-16
+
+### Features
+- OpenRouter model picker with search, multi-select, and public catalog fetch (289 MCP tools)
+
+### Fixes
+- mergeModels now respects user-edited models for existing providers (no more template override)
+- Auto-fetch no longer overrides model edits when saving existing providers
+- Claude Code host disabled for OpenRouter (only works with Anthropic-compat providers)
+- Force OpenClaude when host=claude but provider is not anthropic/mimo/oauth
+- Improved OAuth warning message (accurate per provider type)
+- × button for removing models now visible (was gray-700 on black)
+
 ## [1.15.1] — 2026-07-06
 
 ### Features

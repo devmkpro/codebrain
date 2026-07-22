@@ -123,10 +123,22 @@ export function resolveSpawnTarget(opts: ResolveOpts & {
   // ── Step 3: Resolve agent ──
   // Agent is determined by the chosen provider's host.
   // For non-explicit spawns, allow favoriteAgent or preferredAgent as override.
+  //
+  // Special case: OpenRouter (openai-compat) supports the Anthropic protocol via
+  // ANTHROPIC_BASE_URL. When preferredAgent="claude", allow Claude Code CLI to be
+  // used with OpenRouter — the backend will configure ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN.
+  const isOpenRouterProvider =
+    provider?.type === "openai-compat" &&
+    ((provider?.id ?? "").startsWith("openrouter") || (provider?.baseUrl ?? "").toLowerCase().includes("openrouter"));
+
   let agent: string;
   if (explicit) {
-    // Explicit: always derive from provider.
-    agent = provider?.host ?? (provider?.type === "oauth" ? "claude" : "openclaude");
+    // Explicit: normally derive from provider host, but honour preferredAgent for OpenRouter.
+    if (isOpenRouterProvider && preferredAgent === "claude") {
+      agent = "claude";
+    } else {
+      agent = provider?.host ?? (provider?.type === "oauth" ? "claude" : "openclaude");
+    }
   } else {
     // Non-explicit: preferredAgent > favoriteAgent > provider.host > fallback
     agent = preferredAgent ?? favoriteAgent ?? provider?.host ?? "openclaude";

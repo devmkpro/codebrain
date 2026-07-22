@@ -253,7 +253,9 @@ export function ProvidersModal({
     const baseUrl = cleanEnv.ANTHROPIC_BASE_URL ?? cleanEnv.GEMINI_BASE_URL ?? cleanEnv.OPENAI_BASE_URL;
     const tokenKey = editing.type === "anthropic-compat" || editing.type === "mimo-compat" ? "ANTHROPIC_AUTH_TOKEN" : editing.type === "gemini-compat" ? "GEMINI_API_KEY" : "OPENAI_API_KEY";
     const token = cleanEnv[tokenKey];
-    if (baseUrl && token && cleanModels.length === 0) {
+    // Only auto-fetch models for NEW providers (no original). For existing providers,
+    // respect the user's explicit edits (removals/changes) and never override them.
+    if (!original && baseUrl && token && cleanModels.length === 0) {
       const fetched = await fetchModelsFromEndpoint(baseUrl, token, editing.type === "anthropic-compat" || editing.type === "mimo-compat" ? "anthropic" : editing.type === "gemini-compat" ? "gemini" : "openai");
       if (fetched.length > 0) cleanModels = fetched;
     }

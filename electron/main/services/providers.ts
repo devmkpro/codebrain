@@ -3,14 +3,19 @@ import { PROVIDER_REGISTRY } from "./constants";
 
 /**
  * Merge user-saved models with template models.
- * Template models are ALWAYS included (guaranteed defaults).
- * User-saved models that aren't in the template are preserved (custom additions).
- * Template models come first in the merged list.
+ * - If user has explicitly saved models (edited via UI), respect their choice (no template merge).
+ * - If no saved models exist (fresh provider), use template defaults.
+ * - User-saved models that aren't in the template are always preserved (custom additions).
  */
-function mergeModels(saved: string[] | undefined, templateModels: string[]): string[] {
-  const savedSet = new Set((saved ?? []).map(m => m.trim()).filter(Boolean));
+function mergeModels(saved: string[] | undefined, templateModels: string[], isExistingProvider: boolean): string[] {
+  const cleaned = (saved ?? []).map(m => m.trim()).filter(Boolean);
+  // Existing provider with user-saved models → respect user edits, don't re-add template models
+  if (isExistingProvider && cleaned.length > 0) return cleaned;
+  // Existing provider with empty models → user cleared them all, keep empty (don't repopulate)
+  if (isExistingProvider && cleaned.length === 0) return saved !== undefined ? [] : templateModels;
+  // New provider (no saved data) → use template defaults + any custom additions
+  const savedSet = new Set(cleaned);
   const templateSet = new Set(templateModels);
-  // Template models first (in template order), then user-only models
   const merged = [...templateModels];
   for (const m of savedSet) {
     if (!templateSet.has(m)) merged.push(m);
@@ -75,8 +80,8 @@ export function getEnhancedProviders(ctx: AppContext) {
           // Only fall back to template.host if the user hasn't explicitly set one.
           host: p.host || template.host,
           type: template.type as any,
-          // Always ensure template models are present
-          models: mergeModels(p.models, template.models),
+          // Respect user-saved models for existing providers; only merge template defaults for new ones
+          models: mergeModels(p.models, template.models, true),
         };
       }
 
@@ -101,13 +106,9 @@ export function getEnhancedProviders(ctx: AppContext) {
         return {
           ...p,
           label: resolvedLabel,
-          // Respect user-saved host; fall back to template only if not set.
           host: p.host || bestMatch.host,
           type: bestMatch.type as any,
-          // Always ensure template models are present — merge with user-saved
-          // models so custom additions are preserved, but template defaults
-          // are never lost (fixes providers showing no models after re-add).
-          models: mergeModels(p.models, bestMatch.models),
+          models: mergeModels(p.models, bestMatch.models, true),
         };
       }
 
@@ -207,6 +208,11 @@ function sanitizeApiKey(key: string): string {
     .trim();
 }
 
+/** Normalise a base URL so it never ends in /v1 or /v1/ — callers append /v1/... themselves. */
+function stripV1Suffix(base: string): string {
+  return base.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+}
+
 export async function listModelsFromEndpoint(args: {
   baseUrl: string;
   apiKey: string;
@@ -224,17 +230,18 @@ export async function listModelsFromEndpoint(args: {
   const isMimo = type === 'mimo-compat' || base.includes('xiaomimimo.com');
   if (isMimo) {
     const mimoRoot = base.replace(/\/anthropic$/, '');
-    url = `${mimoRoot}/v1/models`;
+    url = `${stripV1Suffix(mimoRoot)}/v1/models`;
     headers['Authorization'] = `Bearer ${apiKey}`;
   } else if (type === 'anthropic-compat') {
-    url = `${base}/v1/models`;
+    url = `${stripV1Suffix(base)}/v1/models`;
     headers['x-api-key'] = apiKey;
     headers['anthropic-version'] = '2023-06-01';
   } else if (type === 'gemini-compat') {
-    url = `${base}/v1beta/models?key=${apiKey}`;
+    url = `${stripV1Suffix(base)}/v1beta/models?key=${apiKey}`;
   } else {
-    // OpenAI-compatible: standard /v1/models endpoint
-    url = `${base}/v1/models`;
+    // OpenAI-compatible (includes OpenRouter): standard /v1/models endpoint
+    // Strip /v1 suffix first to avoid double /v1/v1/models when user saved URL as .../api/v1
+    url = `${stripV1Suffix(base)}/v1/models`;
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
@@ -306,9 +313,13 @@ export async function healthCheckProvider(args: {
 
   const isMimo = type === "mimo-compat" || base.includes("xiaomimimo.com");
   // MIMO uses OpenAI-compat /v1/* endpoints; the /anthropic suffix is only for message routing
-  const mimoRoot = isMimo ? base.replace(/\/anthropic$/, "") : base;
+  const mimoRoot = isMimo ? stripV1Suffix(base.replace(/\/anthropic$/, "")) : stripV1Suffix(base);
   const isAnthropicType = type === "anthropic-compat";
   const isGemini = type === "gemini-compat";
+  const isOpenRouter = base.toLowerCase().includes("openrouter");
+  // For OpenAI-compat providers that already include /v1 in their base URL (e.g. openrouter.ai/api/v1),
+  // we strip it before appending /v1/... to avoid double /v1/v1/... paths.
+  const openaiBase = stripV1Suffix(base);
 
   // ── Check 1: Endpoint reachability ────────────────────────────────────────
   const endpointCheck: HealthCheckResult["checks"]["endpoint"] = { ok: false };
@@ -329,17 +340,25 @@ export async function healthCheckProvider(args: {
   // ── Check 2: Model listing ─────────────────────────────────────────────────
   const modelsCheck: HealthCheckResult["checks"]["models"] = { ok: false };
   let selectedModel = args.model;
-  try {
-    const result = await listModelsFromEndpoint({ baseUrl, apiKey, type });
-    if (result.ok && result.models && result.models.length > 0) {
-      modelsCheck.ok = true;
-      modelsCheck.count = result.models.length;
-      if (!selectedModel) selectedModel = result.models[0];
-    } else {
-      warnings.push("No models returned from /models endpoint");
+  // OpenRouter /v1/models returns 400+ models and requires auth — skip listing,
+  // mark as ok and use a known cheap model for the generation check.
+  if (isOpenRouter) {
+    modelsCheck.ok = true;
+    modelsCheck.count = -1; // sentinel: skip listing
+    if (!selectedModel) selectedModel = "openai/gpt-4o-mini";
+  } else {
+    try {
+      const result = await listModelsFromEndpoint({ baseUrl, apiKey, type });
+      if (result.ok && result.models && result.models.length > 0) {
+        modelsCheck.ok = true;
+        modelsCheck.count = result.models.length;
+        if (!selectedModel) selectedModel = result.models[0];
+      } else {
+        warnings.push("No models returned from /models endpoint");
+      }
+    } catch {
+      warnings.push("Model listing failed");
     }
-  } catch {
-    warnings.push("Model listing failed");
   }
 
   if (!selectedModel) {
@@ -359,12 +378,13 @@ export async function healthCheckProvider(args: {
   const generationCheck: HealthCheckResult["checks"]["generation"] = { ok: false };
   try {
     // MIMO: messages go to /anthropic/v1/messages (base already has /anthropic, so just /v1/messages)
-    // Anthropic: /v1/messages, OpenAI: /v1/chat/completions
+    // Anthropic: /v1/messages, OpenAI/OpenRouter: /v1/chat/completions
+    // MIMO base already ends with /anthropic, so /v1/messages gives .../anthropic/v1/messages
     const chatUrl = isMimo
-      ? `${base}/v1/messages`   // base = .../anthropic already
+      ? `${base}/v1/messages`
       : isAnthropicType
-        ? `${base}/v1/messages`
-        : `${base}/v1/chat/completions`;
+        ? `${stripV1Suffix(base)}/v1/messages`
+        : `${openaiBase}/v1/chat/completions`;
     const body = JSON.stringify({ model: selectedModel, max_tokens: 8, messages: [{ role: "user", content: "say ok" }] });
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (isMimo || isAnthropicType) {
@@ -391,11 +411,12 @@ export async function healthCheckProvider(args: {
   // ── Check 4: Tool calling ─────────────────────────────────────────────────
   const toolsCheck: HealthCheckResult["checks"]["tools"] = { ok: false };
   try {
+    // MIMO base already ends with /anthropic, so /v1/messages gives .../anthropic/v1/messages
     const chatUrl = isMimo
       ? `${base}/v1/messages`
       : isAnthropicType
-        ? `${base}/v1/messages`
-        : `${base}/v1/chat/completions`;
+        ? `${stripV1Suffix(base)}/v1/messages`
+        : `${openaiBase}/v1/chat/completions`;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (isMimo || isAnthropicType) {
       headers["x-api-key"] = apiKey;

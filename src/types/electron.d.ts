@@ -85,15 +85,34 @@ export interface Squad {
   id: string;
   name: string;
   description?: string;
+  mode?: "sequential" | "parallel" | "auto";
+  orchestrator: {
+    providerId?: string;
+    model?: string;
+    cli?: string;
+    effort?: "low" | "medium" | "high";
+    allowedSkills?: string[] | null;
+  };
+  orchestratorInstructions?: string;
+  orchestratorAllowedSkills?: string[] | null;
+  nativeInstructions?: string;
   agents: SquadAgent[];
+  createdAt: number;
+  updatedAt?: number;
 }
 
 export interface SquadAgent {
   id: string;
-  agent: string;
+  agentName: string;
+  category?: string;
+  cli: string;
   model?: string;
   providerId?: string;
-  role?: string;
+  effort?: "low" | "medium" | "high";
+  allowedSkills?: string[] | null;
+  delegateOnly?: boolean;
+  invocable?: string;
+  leaf?: boolean;
 }
 
 export interface SkillManifest {
@@ -385,6 +404,7 @@ export interface CodebrainApp {
     delete: (id: string) => Promise<{ ok: boolean; error?: string }>;
     testToken: (args: { providerId: string; token: string }) => Promise<{ ok: boolean; error?: string }>;
     listModels: (args: { baseUrl: string; apiKey: string; type: string }) => Promise<{ ok: boolean; models?: string[]; error?: string }>;
+    listOpenRouterModels: () => Promise<{ ok: boolean; models?: Array<{ id: string; name: string; context_length: number; pricing?: { prompt: number; completion: number } }>; error?: string }>;
     healthCheck: (args: { baseUrl: string; apiKey: string; type: string; model?: string }) => Promise<{ ok: boolean; status: string; checks: Record<string, unknown>; warnings: string[]; error?: string }>;
     onUpdated: (callback: (providers: Provider[]) => void) => () => void;
   };
@@ -555,8 +575,9 @@ export interface CodebrainApp {
   };
   squads: {
     list: () => Promise<Squad[]>;
-    save: (squad: Squad) => Promise<void>;
-    delete: (id: string) => Promise<void>;
+    save: (squad: Squad) => Promise<{ ok: boolean; error?: string }>;
+    delete: (id: string) => Promise<{ ok: boolean; error?: string }>;
+    onUpdated: (cb: (squads: Squad[]) => void) => () => void;
   };
   browser: {
     // Navigation

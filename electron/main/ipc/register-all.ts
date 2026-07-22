@@ -16,6 +16,7 @@ import { registerNotificationHandlers } from "./register-notifications";
 import { registerRecipeHandlers } from "./register-recipe";
 import { registerRemoteBridgeHandlers } from "./register-remote-bridge";
 import { registerCronHandlers } from "./register-cron";
+import { registerSquadHandlers } from "./register-squads";
 
 export function registerAllIpcHandlers(ctx: AppContext): void {
   // Each group is isolated: a throw in one registration must not abort the
@@ -39,6 +40,7 @@ export function registerAllIpcHandlers(ctx: AppContext): void {
     ["recipe", registerRecipeHandlers],
     ["remote-bridge", registerRemoteBridgeHandlers],
     ["cron", registerCronHandlers],
+    ["squads", registerSquadHandlers],
   ];
   for (const [name, fn] of groups) {
     try {

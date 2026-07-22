@@ -187,6 +187,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     delete: (id: string) => ipcRenderer.invoke("providers:delete", id),
     testToken: (args: unknown) => ipcRenderer.invoke("providers:testToken", args),
     listModels: (args: unknown) => ipcRenderer.invoke("providers:listModels", args),
+    listOpenRouterModels: () => ipcRenderer.invoke("providers:listOpenRouterModels"),
     healthCheck: (args: unknown) => ipcRenderer.invoke("providers:healthCheck", args),
     onUpdated: (callback: (providers: unknown[]) => void) => {
       const handler = (_evt: unknown, providers: unknown[]) => callback(providers);
@@ -303,6 +304,11 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     list: () => ipcRenderer.invoke("squads:list"),
     save: (squad: unknown) => ipcRenderer.invoke("squads:save", squad),
     delete: (id: string) => ipcRenderer.invoke("squads:delete", id),
+    onUpdated: (cb: (squads: unknown[]) => void) => {
+      const handler = (_evt: unknown, squads: unknown[]) => cb(squads);
+      ipcRenderer.on("squads:updated", handler);
+      return () => ipcRenderer.off("squads:updated", handler);
+    },
   },
 
   browser: {

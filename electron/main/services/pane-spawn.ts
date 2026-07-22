@@ -83,6 +83,10 @@ export interface SpawnPaneConfig {
   taskId?: string;
   activityId?: string;
   missionId?: string;
+  /** Squad workers list — injected into orchestrator system prompt */
+  squadCallable?: object[];
+  /** High-level instructions for the orchestrator from Squad config */
+  orchestratorInstructions?: string;
 }
 
 export async function spawnPaneInternal(
@@ -123,6 +127,21 @@ export async function spawnPaneInternal(
     let provider = resolved.provider;
     let providerId = resolved.providerId;
     let model = resolved.model;
+
+    // Safety: Claude Code CLI only supports Anthropic-compatible providers.
+    // Exception: OpenRouter supports the Anthropic protocol via ANTHROPIC_BASE_URL,
+    // so openai-compat providers with OpenRouter base URL can run with agent=claude.
+    const isOpenRouterProvider = (provider?.id ?? "").startsWith("openrouter") || (provider?.baseUrl ?? "").includes("openrouter");
+    if (agent === "claude" && provider?.type && !["anthropic-compat", "mimo-compat", "oauth"].includes(provider.type)) {
+      if (isOpenRouterProvider) {
+        // OpenRouter supports Anthropic protocol — keep agent=claude and let the
+        // isOpenAICompat block below set ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN.
+        log.info(`[spawnPaneInternal] host=claude with OpenRouter (openai-compat) — keeping claude agent, will route via Anthropic protocol`);
+      } else {
+        log.info(`[spawnPaneInternal] host=claude but provider type=${provider.type} — forcing OpenClaude`);
+        agent = "openclaude";
+      }
+    }
 
     // Filter masked values from frontend config.env
     const configEnv = Object.fromEntries(
@@ -269,6 +288,8 @@ export async function spawnPaneInternal(
         agent,
         role: config.role,
         sessionContext: config.sessionContext,
+        squadCallable: config.squadCallable,
+        orchestratorInstructions: config.orchestratorInstructions,
       });
       args.push("--system-prompt-file", promptFile);
     }
@@ -286,11 +307,11 @@ export async function spawnPaneInternal(
       if (provider) env["CLAUDE_CODE_PROVIDER_PROFILE_ENV_APPLIED"] = "1";
 
       // --provider flag tells the CLI which adapter to use.
-      // For openai-compat (OpenRouter, OpenAI, etc.) and gemini-compat: ALWAYS pass it,
-      // even for OpenClaude — otherwise the CLI auto-detects from the model name prefix
-      // (e.g. "anthropic/claude-opus-4.7-fast" → Anthropic adapter → wrong endpoint).
-      // For anthropic-compat and mimo-compat: skip — env vars handle routing.
-      if (provider?.type && !args.includes("--provider")) {
+      // Claude Code CLI does NOT support --provider — it routes via env vars only
+      // (ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN for Anthropic-compat endpoints).
+      // OpenClaude supports --provider for openai-compat, gemini-compat, etc.
+      // So we only pass --provider when agent is NOT native Claude Code.
+      if (provider?.type && !args.includes("--provider") && agent !== "claude") {
         let providerArg = "";
         switch (provider.type as string) {
           case "openai-compat": providerArg = "openai"; break;
@@ -368,28 +389,69 @@ export async function spawnPaneInternal(
         // to OpenRouter, not to the default provider endpoints.
         const isOpenRouter = (provider?.id ?? "").startsWith("openrouter") || base.includes("openrouter");
         if (isOpenRouter && openaiKey) {
-          if (model?.startsWith("anthropic/")) {
-            // Force Anthropic client to route through OpenRouter
-            env["ANTHROPIC_BASE_URL"] = provider?.baseUrl || "https://openrouter.ai/api/v1";
-            env["ANTHROPIC_API_KEY"] = openaiKey;
-            env["ANTHROPIC_MODEL"] = model;
-            if (!args.includes("--model")) args.push("--model", model);
-            log.info(`[spawnPaneInternal] OpenRouter Anthropic model: setting ANTHROPIC_BASE_URL → ${env["ANTHROPIC_BASE_URL"]}`);
-          } else if (model?.startsWith("google/")) {
-            // OpenRouter's OpenAI-compatible endpoint handles Google models natively.
-            // The Gemini adapter uses Google's own API format which is incompatible,
-            // so we force the OpenAI adapter via OPENAI_BASE_URL + --provider openai.
-            env["OPENAI_BASE_URL"] = provider?.baseUrl || "https://openrouter.ai/api/v1";
-            env["OPENAI_API_KEY"] = openaiKey;
-            env["OPENAI_MODEL"] = model;
-            if (!args.includes("--model")) args.push("--model", model);
-            if (!args.includes("--provider")) args.push("--provider", "openai");
-            log.info(`[spawnPaneInternal] OpenRouter Google model: forcing OpenAI adapter → ${env["OPENAI_BASE_URL"]}`);
-          } else if (model?.includes("/")) {
-            // Other slash-models on OpenRouter (meta-llama/*, deepseek/*, etc.)
-            // Already handled by OPENAI_BASE_URL set earlier — just ensure model is passed.
-            if (!args.includes("--model")) args.push("--model", model);
-            log.info(`[spawnPaneInternal] OpenRouter slash-model "${model}" → using OpenAI adapter`);
+          // OpenRouter ANTHROPIC_BASE_URL must NOT have /v1 suffix — Claude Code appends /v1 itself.
+          // e.g. user saved "https://openrouter.ai/api/v1" → strip to "https://openrouter.ai/api"
+          const orBaseUrl = (provider?.baseUrl || "https://openrouter.ai/api/v1").replace(/\/v1\/?$/, "");
+
+          if (agent === "claude") {
+            // Claude Code CLI + OpenRouter:
+            //   ANTHROPIC_BASE_URL = OpenRouter base (without /v1 — CLI appends it)
+            //   ANTHROPIC_AUTH_TOKEN = OpenRouter API key
+            //   ANTHROPIC_API_KEY = "" (must be empty per OpenRouter docs)
+            //   ANTHROPIC_DEFAULT_*_MODEL = real model (e.g. moonshotai/kimi-k3)
+            //
+            // For native Anthropic models on OpenRouter (anthropic/* or claude-*):
+            //   pass clean model name as --model (CLI validates it locally).
+            // For all other models (moonshotai/*, google/*, meta-llama/*, etc.):
+            //   do NOT pass --model at all — CLI would reject the model ID locally.
+            //   OpenRouter reads ANTHROPIC_DEFAULT_SONNET_MODEL and uses that.
+
+            const isNativeAnthropicModel = model?.startsWith("anthropic/") || model?.match(/^claude-/);
+
+            env["ANTHROPIC_BASE_URL"] = orBaseUrl;
+            env["ANTHROPIC_AUTH_TOKEN"] = openaiKey;
+            env["ANTHROPIC_API_KEY"] = ""; // must be empty per OpenRouter docs
+            if (model) {
+              // Real model → sent to OpenRouter API via env vars
+              env["ANTHROPIC_MODEL"] = model;
+              env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model;
+              env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model;
+              env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = model;
+              env["ANTHROPIC_SMALL_FAST_MODEL"] = model;
+            }
+
+            if (isNativeAnthropicModel && model) {
+              // Native Anthropic model: pass clean name (strip "anthropic/" prefix if present)
+              const cleanModel = model.startsWith("anthropic/") ? model.replace(/^anthropic\//, "") : model;
+              const mIdx = args.indexOf("--model");
+              if (mIdx !== -1) args[mIdx + 1] = cleanModel;
+              else args.push("--model", cleanModel);
+            } else {
+              // Non-Anthropic model (moonshotai/*, etc.): remove --model entirely.
+              // CLI would reject it locally. ANTHROPIC_DEFAULT_SONNET_MODEL carries the real model.
+              const mIdx = args.indexOf("--model");
+              if (mIdx !== -1) args.splice(mIdx, 2);
+            }
+
+            log.info(`[spawnPaneInternal] OpenRouter → Claude Code: model="${model}" isNativeAnthropic=${isNativeAnthropicModel} base="${orBaseUrl}" args=${JSON.stringify(args)}`);
+          } else {
+            // OpenClaude path: use OpenAI-compat endpoint, pass model as-is (no ~ prefix).
+            // OpenClaude doesn't validate against Anthropic model list.
+            if (model?.startsWith("anthropic/")) {
+              env["ANTHROPIC_BASE_URL"] = orBaseUrl;
+              env["ANTHROPIC_API_KEY"] = openaiKey;
+              env["ANTHROPIC_MODEL"] = model;
+            } else if (model?.startsWith("google/")) {
+              env["OPENAI_BASE_URL"] = provider?.baseUrl || "https://openrouter.ai/api/v1";
+              env["OPENAI_API_KEY"] = openaiKey;
+              env["OPENAI_MODEL"] = model;
+              if (!args.includes("--provider")) args.push("--provider", "openai");
+            } else {
+              // meta-llama/*, deepseek/*, moonshotai/*, etc.
+              // OPENAI_BASE_URL already set above from provider.baseUrl
+            }
+            if (model && !args.includes("--model")) args.push("--model", model);
+            log.info(`[spawnPaneInternal] OpenRouter → OpenClaude: model="${model}"`);
           }
         }
       } else if (isAnthropicCompat) {
@@ -519,6 +581,7 @@ export async function spawnPaneInternal(
         try {
           const promptFile = buildSystemPrompt(ctx, {
             paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
+            squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
           });
           const promptContent = fs.readFileSync(promptFile, "utf-8");
           const skillsDir = path.join(cwd, ".codebrain", "tmp", `kimi-skills-${paneId}`);
@@ -621,6 +684,7 @@ export async function spawnPaneInternal(
       try {
         const promptFile = buildSystemPrompt(ctx, {
           paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
+          squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
         });
         const promptContent = fs.readFileSync(promptFile, "utf-8");
         const rulesDir = path.join(cwd, ".cursor", "rules");
@@ -669,6 +733,7 @@ export async function spawnPaneInternal(
         try {
           const promptFile = buildSystemPrompt(ctx, {
             paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
+            squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
           });
           const promptContent = fs.readFileSync(promptFile, "utf-8");
           // Write to .copilot/codebrain-context.md and include it via AGENTS.md import
@@ -723,6 +788,7 @@ export async function spawnPaneInternal(
       // System prompt → file, then pass file PATH via -c (avoids error 206 = cmd too long)
       const instructionsFile = buildSystemPrompt(ctx, {
         paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
+        squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
       });
       if (!args.some((a: string) => a.includes("model_instructions_file="))) {
         // Normalize to forward slashes for TOML compatibility
@@ -811,6 +877,7 @@ export async function spawnPaneInternal(
       // System prompt → .gemini/codebrain-context.md + add to contextFileName
       const promptFile = buildSystemPrompt(ctx, {
         paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
+        squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
       });
       try {
         const promptContent = fs.readFileSync(promptFile, "utf-8");
