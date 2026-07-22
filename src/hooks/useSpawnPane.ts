@@ -179,7 +179,9 @@ ${JSON.stringify(workerConfig, null, 2)}
     for (const config of configs) {
       if (!config.providerId) continue;
       const provider = providers.find(p => p.id === config.providerId);
-      const agent = provider?.host ?? (provider?.type === "oauth" ? "claude" : "openclaude");
+      const preferredAgentForConfig = (() => { try { return localStorage.getItem('codebrain.preferredAgent') || undefined; } catch { return undefined; } })();
+      const isOpenRouterProv = provider?.type === "openai-compat" && ((provider?.id ?? "").startsWith("openrouter") || (provider?.baseUrl ?? "").toLowerCase().includes("openrouter"));
+      const agent = (isOpenRouterProv && preferredAgentForConfig === "claude") ? "claude" : (provider?.host ?? (provider?.type === "oauth" ? "claude" : "openclaude"));
       const validModel = resolveValidModel(config.providerId, config.model);
 
       for (let i = 0; i < config.count; i++) {

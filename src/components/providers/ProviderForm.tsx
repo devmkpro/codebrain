@@ -34,12 +34,8 @@ export function ProviderForm({
   const urlKey = isAnthropicCompat || isMimoCompat ? "ANTHROPIC_BASE_URL" : isGeminiCompat ? "GEMINI_BASE_URL" : isOpenAICompat ? "OPENAI_BASE_URL" : "BASE_URL";
   // OpenRouter has no public model listing endpoint — returns hundreds of unrelated models
   const isOpenRouter = /openrouter/i.test(env[urlKey] ?? "") || /openrouter/i.test(provider.label ?? "");
-  // Auto-switch to OpenClaude if Claude Code was selected but provider is OpenRouter
-  React.useEffect(() => {
-    if (isOpenRouter && provider.host === "claude") {
-      onChange({ ...provider, host: "openclaude" });
-    }
-  }, [isOpenRouter, provider.host]);
+  // OpenRouter supports the Anthropic protocol via ANTHROPIC_BASE_URL — Claude Code CLI works.
+  // No longer force-switch to openclaude for OpenRouter providers.
   const runHealthCheck = async () => {
     const baseUrl = env[urlKey];
     const token = env[tokenKey];
@@ -136,13 +132,15 @@ export function ProviderForm({
           host: e.target.value
         })} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-gray-200 focus:outline-none focus:border-indigo-500/40 cursor-pointer">
               <option value="openclaude">OpenClaude (API key via env)</option>
-              {!isOpenRouter && <option value="claude">Claude Code (OAuth — plano oficial)</option>}
+              <option value="claude">{isOpenRouter ? "Claude Code (API key via ANTHROPIC_BASE_URL)" : "Claude Code (OAuth — plano oficial)"}</option>
             </select>
             {provider.host === "claude" && (
               <p className="font-mono text-[9px] text-amber-500/80 mt-1">
-                {isAnthropicCompat || isMimoCompat
-                  ? "Com Claude Code nativo, a API key é gerenciada pelo OAuth do plano — o campo acima é ignorado."
-                  : "Claude Code será usado como CLI, mas a API key acima ainda é necessária para autenticar com o provider."}
+                {isOpenRouter
+                  ? "Claude Code CLI vai usar ANTHROPIC_BASE_URL=openrouter.ai/api/v1 com sua API key — qualquer modelo OpenRouter funciona."
+                  : isAnthropicCompat || isMimoCompat
+                    ? "Com Claude Code nativo, a API key é gerenciada pelo OAuth do plano — o campo acima é ignorado."
+                    : "Claude Code será usado como CLI, mas a API key acima ainda é necessária para autenticar com o provider."}
               </p>
             )}
           </div>
