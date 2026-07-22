@@ -42,6 +42,10 @@ export interface PromptBuilderConfig {
   role?: string;
   sessionContext?: string;
   agent?: string;
+  /** Squad callable list — injected into orchestrator system prompt */
+  squadCallable?: object[];
+  /** High-level orchestrator instructions from Squad config */
+  orchestratorInstructions?: string;
 }
 
 interface SkillManifest {
@@ -276,7 +280,7 @@ function buildMemoryContext(ctx: AppContext, workspace: string): string {
  * Returns the path to pass via --system-prompt-file.
  */
 export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig): string {
-  const { paneId, cwd, model, role, sessionContext, agent } = config;
+  const { paneId, cwd, model, role, sessionContext, agent, squadCallable, orchestratorInstructions } = config;
 
   const allProviders = ctx.providerStore.listFull();
   const configuredProviders = allProviders.filter((p: any) => p.id !== "claude-oauth");
@@ -309,6 +313,27 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
   }
   if (rolePrompt) sysPrompt += `\n\n---\n\n${rolePrompt}`;
   if (sessionContext) sysPrompt += `\n\n---\n\n${sessionContext}`;
+
+  // Squad callable — inject into orchestrator so it knows which workers to spawn
+  if (role === "orchestrator" && squadCallable && squadCallable.length > 0) {
+    const callable = JSON.stringify(squadCallable, null, 2);
+    sysPrompt += `\n\n## Squad Workers Disponíveis (squadCallable)
+
+Ao spawnar workers para este squad, use os seguintes agents pré-configurados com o parâmetro \`squadCallable\`:
+
+\`\`\`json
+${callable}
+\`\`\`
+
+**Como usar:** Ao chamar \`mcp__codebrain__pane_spawn\`, passe o array inteiro como \`squadCallable\`. O sistema injeta automaticamente os workers para o orquestrador convocar por nome ou categoria.
+
+Cada agente tem: \`role\` (categoria), \`agentName\` (alias), \`cli\` (runtime), e opcionalmente \`providerId\`, \`model\`, \`effort\`, \`delegateOnly\`, \`leaf\`, \`invocable\`.`;
+  }
+
+  // Orchestrator instructions from Squad config
+  if (role === "orchestrator" && orchestratorInstructions?.trim()) {
+    sysPrompt += `\n\n## Instruções Específicas do Squad\n\n${orchestratorInstructions.trim()}`;
+  }
 
   // Mission bootstrap — auto-discovery for non-orchestrator panes
   if (role !== "orchestrator") {

@@ -304,6 +304,11 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     list: () => ipcRenderer.invoke("squads:list"),
     save: (squad: unknown) => ipcRenderer.invoke("squads:save", squad),
     delete: (id: string) => ipcRenderer.invoke("squads:delete", id),
+    onUpdated: (cb: (squads: unknown[]) => void) => {
+      const handler = (_evt: unknown, squads: unknown[]) => cb(squads);
+      ipcRenderer.on("squads:updated", handler);
+      return () => ipcRenderer.off("squads:updated", handler);
+    },
   },
 
   browser: {
