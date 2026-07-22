@@ -2,6 +2,11 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.15.5] — 2026-07-22
+
+### Fixes
+- OpenRouter pricing no +shell menu mostrava $0.00 — preços eram USD/token, agora convertidos para USD/1M tokens antes de exibir
+
 ## [1.15.4] — 2026-07-22
 
 ### Fixes

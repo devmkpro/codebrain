@@ -736,7 +736,8 @@ function PaneMenu({
         if (r?.ok && r.models) {
           const map: Record<string, { i: number; o: number }> = {};
           for (const m of r.models) {
-            if (m.pricing) map[m.id] = { i: m.pricing.prompt, o: m.pricing.completion };
+            // pricing.prompt/completion are USD per token → convert to USD per 1M tokens
+            if (m.pricing) map[m.id] = { i: m.pricing.prompt * 1_000_000, o: m.pricing.completion * 1_000_000 };
           }
           setOrPrices(map);
         }
