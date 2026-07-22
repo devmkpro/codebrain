@@ -2,6 +2,18 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.15.3] — 2026-07-22
+
+### Fixes
+- OpenRouter + Claude Code CLI: modelos não-Anthropic (moonshotai/kimi-k3, google/*, meta-llama/*, etc.) agora funcionam via Claude Code usando `claude-sonnet-4-5` como placeholder local e `ANTHROPIC_DEFAULT_SONNET_MODEL` com o modelo real
+- OpenRouter + Claude Code CLI: `ANTHROPIC_BASE_URL` agora sem `/v1` (Claude Code appende sozinho, evitando `/v1/v1/` duplicado)
+- Health check: URL `/v1` duplicada corrigida para todos providers openai-compat via `stripV1Suffix()`
+- Health check: OpenRouter pula listagem de modelos (400+ modelos) e usa `openai/gpt-4o-mini` como fallback
+- ProviderForm: removido `useEffect` que forçava `host: "openclaude"` para OpenRouter, permitindo Claude Code CLI
+- ProviderForm: opção "Claude Code" agora visível para providers OpenRouter com label correto
+- `resolve-spawn-target`: quando `preferredAgent=claude` e provider é OpenRouter, usa `agent=claude` corretamente
+- `pane-spawn`: OpenRouter não mais força `openclaude` quando `provider.type=openai-compat`
+
 ## [1.15.2] — 2026-07-16
 
 ### Features
