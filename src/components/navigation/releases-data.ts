@@ -14,6 +14,26 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.15.3",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "OpenRouter + Claude Code CLI support for non-Anthropic models"
+      }
+    ]
+  },
+  {
+    "version": "1.15.2",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "OpenRouter provider model editing and Claude Code host safety"
+      }
+    ]
+  },
+  {
     "version": "1.15.1",
     "date": "julho 2026",
     "highlights": [
