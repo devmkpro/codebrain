@@ -14,6 +14,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.15.5",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "OpenRouter pricing in +shell showed $0.00 — convert USD/token to USD/1M"
+      },
+      {
+        "kind": "feat",
+        "text": "squads store v2 + squad IPC handlers + prompt-builder integration"
+      },
+      {
+        "kind": "feat",
+        "text": "show OpenRouter model pricing in +shell menu and model picker"
+      }
+    ]
+  },
+  {
     "version": "1.15.4",
     "date": "julho 2026",
     "highlights": [
