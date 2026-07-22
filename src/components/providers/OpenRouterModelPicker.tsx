@@ -151,6 +151,15 @@ export function OpenRouterModelPicker({ selectedModels, onChange }: Props) {
                 <p className="font-mono text-[10px] text-gray-200 truncate">{m.id}</p>
                 <p className="font-mono text-[9px] text-gray-500 truncate">
                   {m.name !== m.id ? m.name : ""} {ctxK ? `· ${ctxK} ctx` : ""}
+                  {m.pricing && (
+                    <span className="text-gray-600">
+                      {" · "}
+                      <span className="text-emerald-700">↑${(Number(m.pricing.prompt) * 1_000_000).toFixed(2)}</span>
+                      {" "}
+                      <span className="text-sky-700">↓${(Number(m.pricing.completion) * 1_000_000).toFixed(2)}</span>
+                      <span className="text-gray-700">/1M</span>
+                    </span>
+                  )}
                 </p>
               </div>
             </button>

@@ -695,11 +695,17 @@ const MODEL_PRICES: Record<string, { i: number; o: number }> = {
   "mimo-v2-pro": { i: 1.0, o: 3.0 }, "mimo-v2-omni": { i: 0.4, o: 2.0 },
   "mimo-v2-flash": { i: 0.1, o: 0.3 },
 };
-function modelPricingLabel(model: string): string | null {
+function modelPricingLabel(model: string, orPrices?: Record<string, { i: number; o: number }>): string | null {
   const lower = model.toLowerCase();
+  // 1. Static table first
   const v = MODEL_PRICES[lower] ?? MODEL_PRICES[Object.keys(MODEL_PRICES).find(k => lower.includes(k)) ?? ""];
-  if (!v) return null;
-  return `IN $${v.i.toFixed(2)} / OUT $${v.o.toFixed(2)}`;
+  if (v) return `IN $${v.i.toFixed(2)} / OUT $${v.o.toFixed(2)}`;
+  // 2. Dynamic OpenRouter prices (fetched at runtime)
+  if (orPrices) {
+    const dv = orPrices[model] ?? orPrices[lower];
+    if (dv) return `IN $${dv.i.toFixed(2)} / OUT $${dv.o.toFixed(2)}`;
+  }
+  return null;
 }
 
 // ─── + PANE Dropdown ─────────────────────────────────────────────────────────
@@ -716,6 +722,27 @@ function PaneMenu({
   const favoritePane = React.useRef<any>(null);
   const [favLoaded, setFavLoaded] = React.useState(false);
   const [modelSearch, setModelSearch] = React.useState('');
+  const [orPrices, setOrPrices] = React.useState<Record<string, { i: number; o: number }>>({});
+
+  // Load OpenRouter pricing (uses 5-min backend cache — instant if already fetched)
+  React.useEffect(() => {
+    const hasOrProvider = providers.some((p: any) =>
+      p.type === 'openai-compat' &&
+      ((p.id ?? '').startsWith('openrouter') || (p.baseUrl ?? '').toLowerCase().includes('openrouter'))
+    );
+    if (!hasOrProvider) return;
+    (window as any).codeBrainApp?.providers?.listOpenRouterModels?.()
+      .then((r: any) => {
+        if (r?.ok && r.models) {
+          const map: Record<string, { i: number; o: number }> = {};
+          for (const m of r.models) {
+            if (m.pricing) map[m.id] = { i: m.pricing.prompt, o: m.pricing.completion };
+          }
+          setOrPrices(map);
+        }
+      })
+      .catch(() => {});
+  }, [providers]);
   const [collapsedProviders, setCollapsedProviders] = React.useState<Record<string, boolean>>(() => {
     // Collapse all providers by default if there are many (>= 2)
     return {};
@@ -908,8 +935,8 @@ function PaneMenu({
                     : models.map((model: string) => (
                       <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">
                         <div className="truncate">+ {model}</div>
-                        {modelPricingLabel(model) && (
-                          <div className="font-mono text-[10px] text-emerald-400/70 mt-0.5">{modelPricingLabel(model)}</div>
+                        {modelPricingLabel(model, orPrices) && (
+                          <div className="font-mono text-[10px] text-emerald-400/70 mt-0.5">{modelPricingLabel(model, orPrices)}</div>
                         )}
                       </button>
                     ))
