@@ -14,9 +14,23 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.15.6",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "uso excessivo de tokens — skills lazy-load, memoria enxuta e tool groups sob demanda (25K tokens a menos por request por agente)"
+      }
+    ]
+  },
+  {
     "version": "1.15.5",
     "date": "julho 2026",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "add missing register-squads.ts that was left untracked"
+      },
       {
         "kind": "fix",
         "text": "OpenRouter pricing in +shell showed $0.00 — convert USD/token to USD/1M"
