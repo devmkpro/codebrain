@@ -19,6 +19,7 @@ export interface AllCliInfo {
   kimi: CliInfo;
   cursor: CliInfo;
   copilot: CliInfo;
+  "9router": CliInfo;
   shell: { path: string };
 }
 
@@ -145,6 +146,7 @@ export class CliDetector {
       kimi: detectCli("kimi"),
       cursor: detectCli("cursor-agent", true), // requireVersion — file may exist but not be functional
       copilot: detectCli("copilot"),
+      "9router": detectCli("9router"),
       shell: { path: shell },
     };
   }

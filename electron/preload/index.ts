@@ -275,6 +275,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     redetect: () => ipcRenderer.invoke("cli:redetect"),
     install: () => ipcRenderer.invoke("cli:install"),
     installCli: (cli: string) => ipcRenderer.invoke("cli:install-cli", cli),
+    ping9Router: (baseUrl?: string) => ipcRenderer.invoke("cli:ping-9router", baseUrl),
   },
 
   remoteBridge: {

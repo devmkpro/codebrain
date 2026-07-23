@@ -74,6 +74,19 @@ export interface ConsoleLogEntry {
   source?: string;
 }
 
+export interface CostTrackerLike {
+  listModels: () => unknown;
+  summary: (opts: Record<string, unknown>) => unknown;
+  setBudget: (opts: Record<string, unknown>) => unknown;
+  getBudget: (opts: Record<string, unknown>) => unknown;
+  getAlerts: (opts: Record<string, unknown>) => unknown;
+  estimateCost: (opts: Record<string, unknown>) => unknown;
+  reset: (opts: Record<string, unknown>) => unknown;
+  taskSummary: (opts: Record<string, unknown>) => unknown;
+  setModelCost: (opts: Record<string, unknown>) => unknown;
+  deleteModelCost: (opts: Record<string, unknown>) => unknown;
+}
+
 export function createAppContext() {
   const DATA_DIR = app.getPath("userData");
   const PROVIDERS_FILE = path.join(DATA_DIR, "providers.json");
@@ -119,6 +132,9 @@ export function createAppContext() {
     memoryStore: createMemoryStore(MEMORY_DB_FILE),
     hooksManager: new HooksManager(),
     sessionWatchers: null as SessionWatcherManager | null,
+    // Optional cost-tracking backend (budget/alerts/summary) — not yet wired to
+    // a real instance; register-cost.ts falls back to static model pricing when null.
+    costTracker: null as CostTrackerLike | null,
 
     // Paths
     DATA_DIR,

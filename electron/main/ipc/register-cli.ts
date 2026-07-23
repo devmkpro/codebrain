@@ -16,6 +16,7 @@ const CLI_INSTALL: Record<string, InstallMethod> = {
     win:  "powershell -ExecutionPolicy Bypass -c \"irm https://code.kimi.com/kimi-code/install.ps1 | iex\"",
     description: "Script oficial do Kimi Code CLI",
   },
+  "9router": { via: "npm", pkg: "9router" },
 };
 
 function findNpm(): string | null {
@@ -121,6 +122,7 @@ export function registerCliHandlers(ctx: AppContext): void {
       { name: "kimi",       found: info.kimi.found,       path: info.kimi.path,       version: info.kimi.version },
       { name: "cursor",     found: info.cursor.found,     path: info.cursor.path,     version: info.cursor.version },
       { name: "copilot",    found: info.copilot.found,    path: info.copilot.path,    version: info.copilot.version },
+      { name: "9router",    found: info["9router"].found, path: info["9router"].path, version: info["9router"].version },
     ];
   });
 
@@ -166,6 +168,23 @@ export function registerCliHandlers(ctx: AppContext): void {
     const IS_WIN = process.platform === "win32";
     if (recipe.via === "npm") return { via: "npm", cmd: `npm install -g ${recipe.pkg}` };
     return { via: "script", cmd: IS_WIN ? recipe.win : recipe.unix, description: recipe.description };
+  });
+
+  // Checks whether a 9Router instance is actually serving requests at baseUrl
+  // (self-host default localhost:20128, or a remote/VPS deployment). The
+  // "9router" binary being installed just means the CLI exists — the server
+  // still needs to be started (`9router`) before providers can route through it.
+  ipcMain.handle("cli:ping-9router", async (_event, baseUrl?: string) => {
+    const base = (baseUrl?.trim() || "http://localhost:20128").replace(/\/+$/, "");
+    try {
+      const resp = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(4000) });
+      if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
+      const json = await resp.json().catch(() => null) as any;
+      const count = Array.isArray(json?.data) ? json.data.length : 0;
+      return { ok: true, baseUrl: base, modelCount: count };
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? String(err) };
+    }
   });
 
   ipcMain.handle("shells:list", () => ctx.cliDetector.detectShells());

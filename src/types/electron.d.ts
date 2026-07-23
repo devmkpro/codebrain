@@ -557,6 +557,7 @@ export interface CodebrainApp {
     redetect: () => Promise<{ found: boolean; path?: string }>;
     install: () => Promise<{ ok: boolean; error?: string; info?: object }>;
     installCli: (cli: string) => Promise<{ ok: boolean; error?: string; info?: object }>;
+    ping9Router: (baseUrl?: string) => Promise<{ ok: boolean; baseUrl?: string; modelCount?: number; error?: string }>;
   };
   remoteBridge: {
     start: (args?: { port?: number }) => Promise<{ ok: boolean; data?: { port: number; bindAddr: string; alreadyRunning?: boolean }; error?: string }>;

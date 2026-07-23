@@ -239,6 +239,11 @@ export function SettingsPage() {
   const [kimiCliStatus,    setKimiCliStatus]    = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [cursorCliStatus,  setCursorCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [copilotCliStatus, setCopilotCliStatus] = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [nineRouterCliStatus, setNineRouterCliStatus] = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [nineRouterServer, setNineRouterServer] = useState<{ checked: boolean; running: boolean; modelCount?: number; error?: string } | null>(null);
+  const [nineRouterChecking, setNineRouterChecking] = useState(false);
+  const [nineRouterInstalling, setNineRouterInstalling] = useState(false);
+  const [nineRouterInstallErr, setNineRouterInstallErr] = useState<string | null>(null);
   const [oauthStatus, setOauthStatus] = useState<{ github: { connected: boolean; account?: string }; gitlab: { connected: boolean; account?: string } } | null>(null);
   const [oauthBusy, setOauthBusy] = useState<string | null>(null); // 'github' | 'gitlab' | null
   const [oauthError, setOauthError] = useState<string | null>(null);
@@ -365,6 +370,7 @@ export function SettingsPage() {
         setKimiCliStatus(s?.kimi ?? null);
         setCursorCliStatus(s?.cursor ?? null);
         setCopilotCliStatus(s?.copilot ?? null);
+        setNineRouterCliStatus(s?.["9router"] ?? null);
       })
       .catch(() => {});
     loadProviders().catch(() => {});
@@ -460,17 +466,60 @@ export function SettingsPage() {
         const cl = res.find((r: any) => r.name === 'claude');
         const cx = res.find((r: any) => r.name === 'codex');
         const gc = res.find((r: any) => r.name === 'gemini');
+        const ki = res.find((r: any) => r.name === 'kimi');
+        const cu = res.find((r: any) => r.name === 'cursor');
+        const co = res.find((r: any) => r.name === 'copilot');
+        const nr = res.find((r: any) => r.name === '9router');
         if (oc) setCliStatus(oc);
         if (cl) setClaudeCliStatus(cl);
         if (cx) setCodexCliStatus(cx);
         if (gc) setGeminiCliStatus(gc);
+        if (ki) setKimiCliStatus(ki);
+        if (cu) setCursorCliStatus(cu);
+        if (co) setCopilotCliStatus(co);
+        if (nr) setNineRouterCliStatus(nr);
       } else {
         setCliStatus(res?.openclaude ?? res);
         setClaudeCliStatus(res?.claude ?? null);
         setCodexCliStatus(res?.codex ?? null);
         setGeminiCliStatus(res?.gemini ?? null);
+        setKimiCliStatus(res?.kimi ?? null);
+        setCursorCliStatus(res?.cursor ?? null);
+        setCopilotCliStatus(res?.copilot ?? null);
+        setNineRouterCliStatus(res?.["9router"] ?? null);
       }
     } catch {} finally { setCliBusy(false); }
+  };
+
+  const handleInstall9Router = async () => {
+    setNineRouterInstalling(true);
+    setNineRouterInstallErr(null);
+    try {
+      const r = await (window as any).codeBrainApp?.cli?.installCli?.('9router');
+      if (r?.ok) {
+        setNineRouterCliStatus({ found: true });
+        handleRedetectCli();
+      } else {
+        setNineRouterInstallErr(r?.error || 'Erro ao instalar.');
+      }
+    } catch (e) {
+      setNineRouterInstallErr(String(e));
+    } finally {
+      setNineRouterInstalling(false);
+    }
+  };
+
+  const handleCheck9RouterServer = async () => {
+    if (nineRouterChecking) return;
+    setNineRouterChecking(true);
+    try {
+      const r = await (window as any).codeBrainApp?.cli?.ping9Router?.();
+      setNineRouterServer({ checked: true, running: !!r?.ok, modelCount: r?.modelCount, error: r?.ok ? undefined : (r?.error || 'não respondeu') });
+    } catch (e) {
+      setNineRouterServer({ checked: true, running: false, error: String(e) });
+    } finally {
+      setNineRouterChecking(false);
+    }
   };
 
   // ── OAuth handlers ──────────────────────────────────────────────────────
@@ -1123,6 +1172,67 @@ export function SettingsPage() {
               >
                 <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
               </button>
+            </div>
+
+            <Divider />
+
+            {/* 9Router (proxy/roteador de LLMs — self-host ou instância remota) */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <p className="text-[11px] font-medium text-slate-300">9Router</p>
+                  {nineRouterCliStatus && (
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${nineRouterCliStatus.found ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-amber-400 border-amber-500/20 bg-amber-500/5'}`}>
+                      {nineRouterCliStatus.found ? '✓ instalado' : '✗ não encontrado'}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-600 mt-0.5 leading-relaxed">
+                  Proxy/roteador de LLMs — provider <span className="font-mono">9Router</span> (self-host em <span className="font-mono">localhost:20128</span> ou instância remota/VPS). Instale via <span className="font-mono">npm install -g 9router</span>, depois rode <span className="font-mono">9router</span> num terminal para subir o servidor.
+                </p>
+                {nineRouterCliStatus?.path && nineRouterCliStatus.found && (
+                  <p className="text-[9px] font-mono text-slate-700 mt-0.5 truncate">{nineRouterCliStatus.path}</p>
+                )}
+                {nineRouterCliStatus?.version && (
+                  <p className="text-[9px] font-mono text-slate-700 mt-0.5">{nineRouterCliStatus.version}</p>
+                )}
+                {nineRouterInstallErr && (
+                  <p className="text-[9px] font-mono text-red-400 mt-1 leading-relaxed">{nineRouterInstallErr}</p>
+                )}
+                {nineRouterServer?.checked && (
+                  <p className={`text-[9px] font-mono mt-1 ${nineRouterServer.running ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {nineRouterServer.running
+                      ? `✓ servidor respondendo em localhost:20128 (${nineRouterServer.modelCount ?? 0} modelos)`
+                      : `✗ servidor não respondeu em localhost:20128 — ${nineRouterServer.error} (instâncias remotas: verifique a conexão em Providers → 9Router)`}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2 shrink-0">
+                {!nineRouterCliStatus?.found && (
+                  <button
+                    onClick={handleInstall9Router}
+                    disabled={nineRouterInstalling || cliBusy}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-300 text-[10px] font-bold uppercase tracking-widest hover:bg-violet-500/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                  >
+                    {nineRouterInstalling ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}
+                    {nineRouterInstalling ? 'Instalando…' : 'Instalar'}
+                  </button>
+                )}
+                <button
+                  onClick={handleCheck9RouterServer}
+                  disabled={nineRouterChecking}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all whitespace-nowrap"
+                >
+                  <Link size={11} className={nineRouterChecking ? 'animate-spin' : ''} /> Verificar servidor
+                </button>
+                <button
+                  onClick={handleRedetectCli}
+                  disabled={cliBusy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+                >
+                  <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
+                </button>
+              </div>
             </div>
           </SectionCard>
 
