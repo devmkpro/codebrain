@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.15.8",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "deteccao e instalacao do 9Router na secao Skill & CLI"
+      }
+    ]
+  },
+  {
     "version": "1.15.7",
     "date": "julho 2026",
     "highlights": [
