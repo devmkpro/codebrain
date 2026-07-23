@@ -92,7 +92,14 @@ export function ProvidersModal({
     const existingAnthropic = providers.find(p => p.id.startsWith(`${template.id}-`) && (p.type === "anthropic-compat" || p.type === "mimo-compat"));
     const defaultAnthropicUrl = template.integrations.find(i => i.type === "anthropic-compat" || i.type === "mimo-compat")?.baseUrl ?? "";
     const existingUrl = existingAnthropic?.env?.ANTHROPIC_BASE_URL ?? "";
-    setBulkAnthropicBaseUrl(template.id === "mimo" ? existingUrl || defaultAnthropicUrl || DEFAULT_MIMO_ANTHROPIC_BASE_URL : "");
+    if (template.id === "mimo") {
+      setBulkAnthropicBaseUrl(existingUrl || defaultAnthropicUrl || DEFAULT_MIMO_ANTHROPIC_BASE_URL);
+    } else if (template.id === "9router") {
+      // 9Router: seed with the saved instance URL (self-host or remote) or template default
+      setBulkAnthropicBaseUrl(existingUrl || defaultAnthropicUrl);
+    } else {
+      setBulkAnthropicBaseUrl("");
+    }
     setError(null);
     const alreadyConfigured = providers.some(p => p.id.startsWith(`${template.id}-`));
     setStep(alreadyConfigured ? "configured" : "token");
@@ -121,6 +128,11 @@ export function ProvidersModal({
     const customRoute = normalizeBaseUrl(bulkAnthropicBaseUrl);
     if (bulkTemplate.id === "mimo" && (!customRoute || !isValidHttpBaseUrl(customRoute))) {
       setError("URL do cluster MIMO inválida");
+      setTesting(false);
+      return;
+    }
+    if (bulkTemplate.id === "9router" && (!customRoute || !isValidHttpBaseUrl(customRoute))) {
+      setError("URL da instância 9Router inválida");
       setTesting(false);
       return;
     }
@@ -183,6 +195,11 @@ export function ProvidersModal({
       setBulkSaving(false);
       return;
     }
+    if (bulkTemplate.id === "9router" && (!customRoute || !isValidHttpBaseUrl(customRoute))) {
+      setError("URL da instância 9Router inválida");
+      setBulkSaving(false);
+      return;
+    }
     try {
       for (const p of providers) {
         if (p.id.startsWith(`${bulkTemplate.id}-`)) {
@@ -212,13 +229,20 @@ export function ProvidersModal({
           env.OPENAI_BASE_URL = resolveIntegrationBaseUrl(bulkTemplate, integ, customRoute);
           env[integ.tokenEnvVar] = token;
         }
+        // 9Router: models are dynamic (whatever the user configured in the instance
+        // dashboard) — auto-detect from /v1/models so the pane menu is populated on save
+        let models = [...integ.models];
+        if (bulkTemplate.id === "9router" && models.length === 0 && env.ANTHROPIC_BASE_URL) {
+          const fetched = await fetchModelsFromEndpoint(env.ANTHROPIC_BASE_URL, token, "anthropic").catch(() => []);
+          if (fetched.length > 0) models = fetched;
+        }
         const res = await save({
           id: `${bulkTemplate.id}-${nanoid(6)}`,
           label: integ.label ?? `${bulkTemplate.label} via ${integ.host}`,
           type: integ.type,
           host: integ.host,
           env,
-          models: [...integ.models]
+          models
         });
         if (!res.ok) {
           setError(res.error ?? "falha ao salvar");

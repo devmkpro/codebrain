@@ -19,6 +19,19 @@ export function BulkTokenForm({
 }) {
   const tokenEnvVar = template.integrations[0]?.tokenEnvVar ?? "API_KEY";
   const isMimo = template.id === "mimo";
+  const is9Router = template.id === "9router";
+  const nineRouterDefaultUrl = template.integrations[0]?.baseUrl ?? "http://localhost:20128";
+  // 9Router keys come from the user's own instance dashboard — derived from the
+  // typed instance URL (self-host or remote), falling back to the template default
+  const nineRouterDashboardUrl = (() => {
+    if (!is9Router) return null;
+    try {
+      const base = normalizeBaseUrl(mimoAnthropicBaseUrl) || nineRouterDefaultUrl;
+      return base ? `${new URL(base).origin}/dashboard` : null;
+    } catch {
+      return null;
+    }
+  })();
   const defaultMimoAnthropicBaseUrl = template.integrations.find(i => i.type === "anthropic-compat")?.baseUrl ?? DEFAULT_MIMO_ANTHROPIC_BASE_URL;
   const [showCustomRoute, setShowCustomRoute] = React.useState(false);
   const normalizedCustomRoute = normalizeBaseUrl(mimoAnthropicBaseUrl);
@@ -27,6 +40,32 @@ export function BulkTokenForm({
       <p className="font-mono text-[10px] text-gray-600">
         Cole API key — vamos criar o provider {template.integrations[0]?.label ?? template.label}.
       </p>
+      {is9Router && <div className="px-3 py-2 rounded border border-white/10 bg-white/[0.02] space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest">
+                URL DA INSTÂNCIA 9ROUTER
+              </p>
+              <p className="font-mono text-[10px] text-gray-400">
+                Self-host local ou instância remota (VPS / Railway / túnel).
+              </p>
+            </div>
+            <button type="button" onClick={() => onMimoAnthropicBaseUrlChange(nineRouterDefaultUrl)} className="shrink-0 px-2 py-1 rounded border border-white/10 hover:border-indigo-500/40 font-mono text-[9px] text-gray-400 hover:text-indigo-300 transition-colors">
+              usar self-host
+            </button>
+          </div>
+          <input type="text" value={mimoAnthropicBaseUrl} onChange={e => onMimoAnthropicBaseUrlChange(e.target.value)} placeholder={nineRouterDefaultUrl} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-gray-200 placeholder:text-gray-700 focus:outline-none focus:border-indigo-500/40" spellCheck={false} />
+          <p className="font-mono text-[9px] text-gray-700">
+            Sem /v1 no final — a rota Anthropic (/v1/messages) é adicionada automaticamente.
+          </p>
+          <p className="font-mono text-[10px] text-gray-400">
+            A key é gerada no <strong>dashboard da sua instância 9Router</strong> — não é uma key da OpenAI.
+          </p>
+          {nineRouterDashboardUrl && <a href={nineRouterDashboardUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-[10px] text-indigo-400 hover:text-indigo-300">
+              abrir dashboard → {new URL(nineRouterDashboardUrl).host}{" "}
+              <ExternalLink size={9} strokeWidth={1.5} />
+            </a>}
+        </div>}
       {isMimo && <div className="px-3 py-2 rounded border border-yellow-500/30 bg-yellow-500/[0.06]">
           <p className="font-mono text-[10px] text-yellow-200/90">
             ⚠ MIMO requer <strong>Dedicated API Key</strong> (não a key padrão).
@@ -76,7 +115,7 @@ export function BulkTokenForm({
         </div>}
       <label className="flex flex-col gap-1.5">
         <span className="font-mono text-[9px] text-gray-600 uppercase tracking-widest">
-          {tokenEnvVar}
+          {is9Router ? "9ROUTER API KEY" : tokenEnvVar}
         </span>
         <div className="flex items-center gap-2 px-3 py-2 rounded border border-white/10 bg-white/[0.02] focus-within:border-indigo-500/40 transition-colors">
           <KeyRound size={13} strokeWidth={1.5} className="text-gray-600 shrink-0" />

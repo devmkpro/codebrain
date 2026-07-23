@@ -18,9 +18,10 @@ export function ProviderList({
         // Virtual providers are auto-detected CLIs — they live only in memory, not in providers.json.
         // Deleting them does nothing, so hide the button. Identify by known virtual IDs or CLI-only types.
         // Exception: "mimo-claude" is virtual but needs an API key → show edit button (no delete).
-        const VIRTUAL_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot"];
+        const VIRTUAL_IDS = ["codex-oauth", "gemini-cli", "kimi", "cursor", "copilot"];
         const isMimoClaude = p.id === "mimo-claude";
-        const isBuiltin = VIRTUAL_IDS.includes(p.id) || p.type === "oauth" || p.isVirtual === true;
+        const isClaudeOAuth = p.id === "claude-oauth";
+        const isBuiltin = VIRTUAL_IDS.includes(p.id) || (p.type === "oauth" && !isClaudeOAuth) || p.isVirtual === true;
         const typeLabel = p.type === "oauth" ? "OAuth" : p.type === "anthropic-compat" ? `Anthropic → ${p.host ?? "claude"}` : p.type === "gemini-compat" ? `Gemini → ${p.host ?? "gemini"}` : p.type === "mimo-compat" ? `MIMO → ${p.host ?? "openclaude"}` : p.type === "openai-compat" ? `OpenAI → ${p.host ?? "openclaude"}` : "custom";
         const url = p.env?.ANTHROPIC_BASE_URL ?? p.env?.GEMINI_BASE_URL ?? p.env?.OPENAI_BASE_URL;
         const hasKey = p.env?.ANTHROPIC_AUTH_TOKEN && !/^\*+$/.test(p.env.ANTHROPIC_AUTH_TOKEN);
@@ -35,12 +36,12 @@ export function ProviderList({
                       : `${typeLabel} · ${url ?? "(no URL)"}`}
                 </p>
               </div>
-              {isMimoClaude && (
+              {(isMimoClaude || isClaudeOAuth) && (
                 <button onClick={() => onEdit(p)} className="opacity-0 group-hover:opacity-100 font-mono text-[10px] text-gray-500 hover:text-white transition-opacity cursor-pointer">
-                  edit key
+                  {isMimoClaude ? "edit key" : "edit"}
                 </button>
               )}
-              {!isBuiltin && !isMimoClaude && <React.Fragment>
+              {!isBuiltin && !isMimoClaude && !isClaudeOAuth && <React.Fragment>
                   <button onClick={() => onEdit(p)} className="opacity-0 group-hover:opacity-100 font-mono text-[10px] text-gray-500 hover:text-white transition-opacity cursor-pointer">
                     edit
                   </button>

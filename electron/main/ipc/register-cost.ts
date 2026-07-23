@@ -1,7 +1,25 @@
 import { ipcMain } from "electron";
+import * as path from "path";
 import type { AppContext } from "../context";
 
+// Read DEFAULT_MODEL_COSTS directly from cost-tracker.js (works even without a running tracker instance)
+function getDefaultModelCosts(): Record<string, { input: number; output: number; cache_read?: number }> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require(path.join(__dirname, "../../../packages/mcp/bridge/cost-tracker.js"));
+    return mod.DEFAULT_MODEL_COSTS ?? {};
+  } catch {
+    return {};
+  }
+}
+
 export function registerCostIpc(ctx: AppContext): void {
+  // cost:listModels works regardless of whether costTracker is wired in ctx
+  ipcMain.handle("cost:listModels", async () => {
+    if (ctx.costTracker) return ctx.costTracker.listModels();
+    return { ok: true, data: getDefaultModelCosts() };
+  });
+
   const tracker = ctx.costTracker;
   if (!tracker) return;
 
@@ -30,10 +48,6 @@ export function registerCostIpc(ctx: AppContext): void {
       limit: (opts?.limit as number) || 50,
       type: opts?.type as string | undefined,
     });
-  });
-
-  ipcMain.handle("cost:listModels", async () => {
-    return tracker.listModels();
   });
 
   ipcMain.handle("cost:estimate", async (_evt, opts: Record<string, unknown>) => {

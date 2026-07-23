@@ -154,6 +154,26 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     idIncludes: ["openrouter"],
   },
   {
+    id: "9router",
+    label: "9Router",
+    icon: "9R",
+    // 9Router serves the Anthropic protocol at <base>/v1/messages (like MIMO),
+    // so it runs via Claude Code CLI with ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN.
+    type: "anthropic-compat",
+    host: "claude",
+    // Default self-host port; edit baseUrl for cloud/remote instances.
+    // No /v1 suffix — Claude CLI appends /v1/messages itself.
+    baseUrl: "http://localhost:20128",
+    tokenEnvVar: "ANTHROPIC_AUTH_TOKEN",
+    // No signupUrl: the key is generated in the user's own 9Router dashboard
+    // (<baseUrl origin>/dashboard) — the forms link there dynamically instead.
+    // Models are dynamic (depend on which providers/combos the user configured
+    // in the 9Router dashboard) — use "Detectar modelos" to fetch from /v1/models
+    models: [],
+    labelIncludes: ["9router"],
+    idIncludes: ["9router"],
+  },
+  {
     id: "fireworks",
     label: "Fireworks.ai",
     icon: "FW",

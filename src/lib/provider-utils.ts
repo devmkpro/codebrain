@@ -22,11 +22,16 @@ export function isValidHttpBaseUrl(value: string): boolean {
 export function resolveIntegrationBaseUrl(
   template: { id: string },
   integration: { type: string; baseUrl: string },
-  customMimoAnthropicBaseUrl: string,
+  customBaseUrl: string,
 ): string {
-  const custom = normalizeBaseUrl(customMimoAnthropicBaseUrl);
-  if (template.id !== "mimo" || !custom) return integration.baseUrl;
-  if (integration.type === "anthropic-compat" || integration.type === "mimo-compat") return custom;
+  const custom = normalizeBaseUrl(customBaseUrl);
+  if (!custom) return integration.baseUrl;
+  if (template.id === "mimo" && (integration.type === "anthropic-compat" || integration.type === "mimo-compat")) return custom;
+  // 9Router: custom URL points at the user's own instance — self-host
+  // (http://localhost:20128) or a remote deployment (VPS/Railway/tunnel).
+  // Strip a trailing /v1 (users copy the OpenAI-endpoint form of the URL);
+  // Claude CLI appends /v1/messages itself.
+  if (template.id === "9router") return custom.replace(/\/v1$/, "");
   return integration.baseUrl;
 }
 

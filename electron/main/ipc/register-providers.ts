@@ -1,4 +1,7 @@
 import { ipcMain } from "electron";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 import type { AppContext } from "../context";
 import { safeSend } from "../context";
 import { getEnhancedProviders, listModelsFromEndpoint, healthCheckProvider } from "../services/providers";
@@ -10,6 +13,30 @@ let openRouterCache: { data: any[]; ts: number } | null = null;
 const OR_CACHE_TTL = 5 * 60 * 1000;
 
 export function registerProviderHandlers(ctx: AppContext): void {
+  // ── One-time migration: 9Router switched from openai-compat to anthropic-compat ──
+  // 9Router serves the Anthropic protocol at /v1/messages (like MIMO), so saved
+  // entries from the openai-compat era need type/host/env keys rewritten.
+  try {
+    for (const p of ctx.providerStore.listFull()) {
+      const is9Router = /9router/i.test(p.id ?? "") || /9router/i.test(p.label ?? "");
+      if (!is9Router) continue;
+      const env = { ...(p.env ?? {}) };
+      const needsMigration = (p.type as string) !== "anthropic-compat" || p.host !== "claude" || !!env["OPENAI_API_KEY"] || !!env["OPENAI_BASE_URL"];
+      if (!needsMigration) continue;
+      const key = env["ANTHROPIC_AUTH_TOKEN"] || env["OPENAI_API_KEY"] || "";
+      // Claude CLI appends /v1 itself — strip a trailing /v1 from the saved base URL
+      const baseUrl = (env["ANTHROPIC_BASE_URL"] || env["OPENAI_BASE_URL"] || "http://localhost:20128").replace(/\/v1\/?$/, "");
+      delete env["OPENAI_API_KEY"];
+      delete env["OPENAI_BASE_URL"];
+      if (key) env["ANTHROPIC_AUTH_TOKEN"] = key;
+      env["ANTHROPIC_BASE_URL"] = baseUrl;
+      ctx.providerStore.upsert({ ...p, type: "anthropic-compat" as any, host: "claude", env });
+      console.log(`[providers] Migrated 9Router provider "${p.id}" to anthropic-compat (baseUrl=${baseUrl})`);
+    }
+  } catch (err) {
+    console.warn("[providers] 9Router migration failed:", err);
+  }
+
   ipcMain.handle("providers:list", () => getEnhancedProviders(ctx));
   ipcMain.handle("providers:save", (_event, provider) => ctx.providerStore.upsert(provider));
   ipcMain.handle("providers:delete", (_event, id: string) => ctx.providerStore.remove(id));
@@ -20,6 +47,33 @@ export function registerProviderHandlers(ctx: AppContext): void {
 
   ipcMain.handle("providers:listModels", async (_event, args: { baseUrl: string; apiKey: string; type: string }) => {
     return listModelsFromEndpoint(args);
+  });
+
+  // Detect models available on Claude OAuth plan (reads token from ~/.claude/.credentials.json)
+  ipcMain.handle("providers:listClaudeOAuthModels", async () => {
+    try {
+      const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
+      if (!fs.existsSync(credPath)) return { ok: false, error: "Credenciais OAuth não encontradas. Faça login com 'claude auth login'." };
+      const creds = JSON.parse(fs.readFileSync(credPath, "utf-8"));
+      const accessToken = creds?.claudeAiOauth?.accessToken;
+      if (!accessToken) return { ok: false, error: "accessToken não encontrado nas credenciais." };
+
+      const resp = await fetch("https://api.anthropic.com/v1/models", {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "anthropic-version": "2023-06-01",
+          "anthropic-beta": "oauth-2025-04-20",
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}: ${resp.statusText}` };
+      const json = await resp.json() as any;
+      const rawModels: Array<{ id?: string }> = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+      const models = rawModels.map(m => m.id ?? "").filter(Boolean);
+      return { ok: true, models };
+    } catch (err: any) {
+      return { ok: false, error: err.message ?? String(err) };
+    }
   });
 
   ipcMain.handle("providers:healthCheck", async (_event, args: { baseUrl: string; apiKey: string; type: string; model?: string }) => {

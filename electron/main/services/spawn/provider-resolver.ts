@@ -257,9 +257,17 @@ export function resolveProvider(
         }
       }
 
-      // Fall back to first provider of matching type (e.g. direct Anthropic API key)
+      // Fall back to a provider of matching type — prefer one whose saved model
+      // list actually contains the model (e.g. 9Router models detected via
+      // /v1/models), so proxies like 9Router aren't shadowed by OpenRouter.
+      // Middle clause: slash-models get targetType "openai-compat" by heuristic,
+      // but a 9Router (anthropic-compat) provider that explicitly lists the model
+      // must win over a generic type match.
       if (!provider) {
-        provider = allProviders.find((p: any) => p.type === targetType) ?? null;
+        provider = allProviders.find((p: any) => p.type === targetType && (p.models ?? []).includes(model!))
+                ?? allProviders.find((p: any) => (p.models ?? []).includes(model!))
+                ?? allProviders.find((p: any) => p.type === targetType)
+                ?? null;
       }
 
       // ── preferredAgent tiebreaker: switch provider if user's preferred CLI has this model ──
@@ -302,6 +310,25 @@ export function resolveProvider(
         providerId = provider.id;
         log.info(`[resolveProvider] Model "${model}" → type "${targetType}" → provider "${provider.id}"`);
       }
+    }
+
+    // ── No type heuristic matched (e.g. 9Router combos like "combo1") ──────────
+    // Fall back to any provider whose saved model list contains the model exactly.
+    if (!provider) {
+      const allProviders = getEnhancedProviders(ctx);
+      provider = allProviders.find((p: any) => (p.models ?? []).includes(model!)) ?? null;
+      if (provider) {
+        providerId = provider.id;
+        log.info(`[resolveProvider] Model "${model}" (no type match) → provider "${provider.id}" via saved model list`);
+      }
+    }
+
+    // Providers hosted on the Claude CLI (e.g. 9Router/mimo-claude style
+    // anthropic-compat proxies) must spawn agent="claude" unless the caller
+    // explicitly asked for a different agent.
+    if (provider && !config.agent && provider.host === "claude" && agent === "openclaude") {
+      agent = "claude";
+      log.info(`[resolveProvider] Provider "${provider.id}" host=claude → agent="claude"`);
     }
   }
 

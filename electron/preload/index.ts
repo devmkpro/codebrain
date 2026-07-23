@@ -188,6 +188,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     testToken: (args: unknown) => ipcRenderer.invoke("providers:testToken", args),
     listModels: (args: unknown) => ipcRenderer.invoke("providers:listModels", args),
     listOpenRouterModels: () => ipcRenderer.invoke("providers:listOpenRouterModels"),
+    listClaudeOAuthModels: () => ipcRenderer.invoke("providers:listClaudeOAuthModels"),
     healthCheck: (args: unknown) => ipcRenderer.invoke("providers:healthCheck", args),
     onUpdated: (callback: (providers: unknown[]) => void) => {
       const handler = (_evt: unknown, providers: unknown[]) => callback(providers);
@@ -413,7 +414,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     setBudget: () => Promise.resolve({ ok: true }),
     getBudget: () => Promise.resolve({ ok: true, data: {} }),
     getAlerts: () => Promise.resolve({ ok: true, data: [] }),
-    listModels: () => Promise.resolve({ ok: true, data: {} }),
+    listModels: () => ipcRenderer.invoke("cost:listModels"),
     estimate: () => Promise.resolve({ ok: true, data: { cost: 0 } }),
     reset: () => Promise.resolve({ ok: true }),
     setModelCost: () => Promise.resolve({ ok: true }),

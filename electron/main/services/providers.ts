@@ -28,13 +28,15 @@ export function getEnhancedProviders(ctx: AppContext) {
   const claudeDetected = ctx.cliDetector?.getAll()?.claude?.found ?? false;
 
   // Virtual Claude OAuth provider — appears when Claude CLI is installed
+  // Respect user-saved models (e.g. after "Detectar modelos") over hardcoded template defaults
   const claudeOAuthTemplate = PROVIDER_REGISTRY.find(t => t.id === "claude-oauth");
+  const claudeOAuthSaved = list.find(p => p.id === "claude-oauth");
   const claudeOAuthProvider = claudeDetected && claudeOAuthTemplate ? [{
     id: claudeOAuthTemplate.id,
     label: claudeOAuthTemplate.label,
     type: claudeOAuthTemplate.type as "oauth",
     host: claudeOAuthTemplate.host,
-    models: [...claudeOAuthTemplate.models],
+    models: claudeOAuthSaved?.models?.length ? [...claudeOAuthSaved.models] : [...claudeOAuthTemplate.models],
     env: {},
   }] : [];
 

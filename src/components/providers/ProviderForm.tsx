@@ -30,10 +30,30 @@ export function ProviderForm({
   const isMimoCompat = provider.type === "mimo-compat";
   const isOpenAICompat = provider.type === "openai-compat";
   const isGeminiCompat = provider.type === "gemini-compat";
+  const isOAuth = provider.type === "oauth";
   const tokenKey = isAnthropicCompat || isMimoCompat ? "ANTHROPIC_AUTH_TOKEN" : isGeminiCompat ? "GEMINI_API_KEY" : isOpenAICompat ? "OPENAI_API_KEY" : "TOKEN";
   const urlKey = isAnthropicCompat || isMimoCompat ? "ANTHROPIC_BASE_URL" : isGeminiCompat ? "GEMINI_BASE_URL" : isOpenAICompat ? "OPENAI_BASE_URL" : "BASE_URL";
   // OpenRouter has no public model listing endpoint — returns hundreds of unrelated models
   const isOpenRouter = /openrouter/i.test(env[urlKey] ?? "") || /openrouter/i.test(provider.label ?? "");
+  // 9Router: key comes from the user's own instance dashboard, not an external signup page
+  const is9Router = /9router/i.test(provider.id ?? "") || /9router/i.test(provider.label ?? "");
+  const nineRouterDashboardUrl = (() => {
+    if (!is9Router) return null;
+    try {
+      const base = env[urlKey];
+      return base ? `${new URL(base).origin}/dashboard` : null;
+    } catch {
+      return null;
+    }
+  })();
+  const nineRouterKeyHint = is9Router && (
+    <p className="font-mono text-[9px] text-gray-500 mt-1">
+      Key gerada no dashboard da sua instância 9Router{" "}
+      {nineRouterDashboardUrl && <a href={nineRouterDashboardUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-0.5">
+        {new URL(nineRouterDashboardUrl).host}/dashboard <ExternalLink size={8} strokeWidth={1.5} />
+      </a>}
+    </p>
+  );
   // OpenRouter supports the Anthropic protocol via ANTHROPIC_BASE_URL — Claude Code CLI works.
   // No longer force-switch to openclaude for OpenRouter providers.
   const runHealthCheck = async () => {
@@ -56,6 +76,24 @@ export function ProviderForm({
     }
   };
   const fetchModels = async () => {
+    // OAuth plan: use token from ~/.claude/.credentials.json
+    if (isOAuth) {
+      setFetching(true);
+      setFetchError(null);
+      try {
+        const result = await (window as any).codeBrainApp?.providers?.listClaudeOAuthModels?.();
+        const ids: string[] = result?.models ?? [];
+        if (ids.length === 0) {
+          setFetchError(result?.error ? `erro: ${result.error}` : "nenhum modelo retornado — faça login com 'claude auth login'");
+        } else {
+          onChange({ ...provider, models: ids });
+        }
+      } catch (err) {
+        setFetchError(`erro: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      setFetching(false);
+      return;
+    }
     const baseUrl = env[urlKey];
     const token = env[tokenKey];
     if (!baseUrl || !token || /^\*+$/.test(token)) {
@@ -87,20 +125,48 @@ export function ProviderForm({
     ...provider,
     models: next
   });
+  // Shared models block (used in both simple OAuth mode and full form)
+  const modelsBlock = !isOpenRouter ? (
+    <div>
+      <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest mb-1">Models</p>
+      <div className="space-y-1">
+        {models.map((m, i) => <div key={i} className="flex gap-1">
+          <input value={m} onChange={e => { const next = [...models]; next[i] = e.target.value; setModels(next); }} className="flex-1 bg-black border border-white/10 rounded px-2 py-1 font-mono text-[11px] text-gray-200 focus:outline-none focus:border-indigo-500/40" placeholder="model-id" spellCheck={false} />
+          <button onClick={() => setModels(models.filter((_2, j) => j !== i))} className="px-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 border border-white/10 rounded transition-colors cursor-pointer" title="Remover modelo">×</button>
+        </div>)}
+        <div className="flex gap-2 pt-1">
+          <button onClick={() => setModels([...models, ""])} className="font-mono text-[10px] text-indigo-500/70 hover:text-indigo-400 cursor-pointer">+ adicionar model</button>
+          <button onClick={fetchModels} disabled={fetching} className="flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] bg-violet-900/30 border border-violet-700/40 text-violet-400 hover:bg-violet-800/40 hover:text-violet-300 disabled:opacity-40 transition-colors cursor-pointer">
+            {fetching ? "↻ detectando…" : "⤓ Detectar modelos"}
+          </button>
+        </div>
+        {fetchError && <p className="font-mono text-[9px] text-red-400 mt-1">{fetchError}</p>}
+      </div>
+    </div>
+  ) : null;
+
   return <div className="p-4 space-y-3">
       {simple ? <React.Fragment>
-          <p className="font-mono text-[10px] text-gray-500">
-            Cola sua API Key. URL e modelos já vêm do template.
-          </p>
-          <div>
-            <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest mb-1">
-              API Key
+          {isOAuth ? <>
+            <p className="font-mono text-[10px] text-gray-500">
+              Modelos disponíveis no seu plano Claude. Clique em "Detectar modelos" para atualizar a lista.
             </p>
-            <input type="password" value={env[tokenKey] ?? ""} onChange={e => setEnv(tokenKey, e.target.value)} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-gray-200 focus:outline-none focus:border-indigo-500/40" placeholder="sk-..." autoFocus spellCheck={false} />
-          </div>
-          {signupUrl && <a href={signupUrl} target="_blank" rel="noreferrer" className="font-mono text-[10px] text-gray-500 hover:text-indigo-400 flex items-center gap-1">
-              Não tem key? Criar conta <ExternalLink size={9} strokeWidth={1.5} />
-            </a>}
+            {modelsBlock}
+          </> : <>
+            <p className="font-mono text-[10px] text-gray-500">
+              Cola sua API Key. URL e modelos já vêm do template.
+            </p>
+            <div>
+              <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest mb-1">
+                API Key
+              </p>
+              <input type="password" value={env[tokenKey] ?? ""} onChange={e => setEnv(tokenKey, e.target.value)} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-gray-200 focus:outline-none focus:border-indigo-500/40" placeholder="sk-..." autoFocus spellCheck={false} />
+              {nineRouterKeyHint}
+            </div>
+            {signupUrl && !is9Router && <a href={signupUrl} target="_blank" rel="noreferrer" className="font-mono text-[10px] text-gray-500 hover:text-indigo-400 flex items-center gap-1">
+                Não tem key? Criar conta <ExternalLink size={9} strokeWidth={1.5} />
+              </a>}
+          </>}
         </React.Fragment> : <React.Fragment>
           <div>
             <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest mb-1">
@@ -122,6 +188,7 @@ export function ProviderForm({
               API Key
             </p>
             <input type="password" value={env[tokenKey] ?? ""} onChange={e => setEnv(tokenKey, e.target.value)} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-gray-200 focus:outline-none focus:border-indigo-500/40" placeholder="sk-..." spellCheck={false} />
+            {nineRouterKeyHint}
           </div>
           <div>
             <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest mb-1">
@@ -150,29 +217,7 @@ export function ProviderForm({
             </p>
             {isOpenRouter ? (
               <OpenRouterModelPicker selectedModels={models} onChange={setModels} />
-            ) : (
-              <div className="space-y-1">
-                {models.map((m, i) => <div key={i} className="flex gap-1">
-                    <input value={m} onChange={e => {
-                const next = [...models];
-                next[i] = e.target.value;
-                setModels(next);
-              }} className="flex-1 bg-black border border-white/10 rounded px-2 py-1 font-mono text-[11px] text-gray-200 focus:outline-none focus:border-indigo-500/40" placeholder="model-id" spellCheck={false} />
-                    <button onClick={() => setModels(models.filter((_2, j) => j !== i))} className="px-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 border border-white/10 rounded transition-colors cursor-pointer" title="Remover modelo">
-                      ×
-                    </button>
-                  </div>)}
-                <div className="flex gap-2 pt-1">
-                  <button onClick={() => setModels([...models, ""])} className="font-mono text-[10px] text-indigo-500/70 hover:text-indigo-400 cursor-pointer">
-                    + adicionar model
-                  </button>
-                  <button onClick={fetchModels} disabled={fetching} className="flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] bg-violet-900/30 border border-violet-700/40 text-violet-400 hover:bg-violet-800/40 hover:text-violet-300 disabled:opacity-40 transition-colors cursor-pointer">
-                    {fetching ? "↻ detectando…" : "⤓ Detectar modelos"}
-                  </button>
-                </div>
-                {fetchError && <p className="font-mono text-[9px] text-red-400 mt-1">{fetchError}</p>}
-              </div>
-            )}
+            ) : modelsBlock}
             <div className="flex gap-2 pt-2">
               <button onClick={runHealthCheck} disabled={healthChecking || !env[urlKey] || !env[tokenKey]} className="flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] bg-emerald-900/30 border border-emerald-700/40 text-emerald-400 hover:bg-emerald-800/40 hover:text-emerald-300 disabled:opacity-40 transition-colors cursor-pointer">
                 {healthChecking ? "↻ checando…" : "⚕ Health check"}

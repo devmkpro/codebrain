@@ -476,7 +476,15 @@ export async function spawnPaneInternal(
           env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model;
           env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = model;
           env["ANTHROPIC_SMALL_FAST_MODEL"] = model;
-          if (!args.includes("--model")) args.push("--model", model);
+          // Slash model IDs (e.g. 9Router "ag/gemini-3.5-flash-low") are rejected by
+          // Claude CLI's local --model validation — route via ANTHROPIC_* env only,
+          // same approach as the OpenRouter non-native-model path above.
+          if (model.includes("/")) {
+            const mIdx = args.indexOf("--model");
+            if (mIdx !== -1) args.splice(mIdx, 2);
+          } else if (!args.includes("--model")) {
+            args.push("--model", model);
+          }
         }
         if (anthropicKey) {
           // Key user (MIMO, DeepSeek, etc): set ONLY ANTHROPIC_AUTH_TOKEN — not ANTHROPIC_API_KEY.

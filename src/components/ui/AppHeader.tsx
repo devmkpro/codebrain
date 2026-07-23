@@ -674,35 +674,19 @@ function FilesNavBar({ workspacePath }: { workspacePath: string }) {
 }
 
 
-// ─── Static model pricing ($/1M tokens) — source: cost-tracker.js ───────────
-const MODEL_PRICES: Record<string, { i: number; o: number }> = {
-  // Claude (Anthropic OAuth / API)
-  "claude-opus-4-8": { i: 5.0, o: 25.0 }, "claude-opus-4-7": { i: 5.0, o: 25.0 },
-  "claude-opus-4-6": { i: 5.0, o: 25.0 },
-  "claude-sonnet-4-6": { i: 3.0, o: 15.0 }, "claude-sonnet-4-5-20250929": { i: 3.0, o: 15.0 },
-  "claude-haiku-4-5-20251001": { i: 1.0, o: 5.0 },
-  // OpenRouter
-  "anthropic/claude-3.5-sonnet": { i: 3.0, o: 15.0 }, "anthropic/claude-sonnet-4": { i: 3.0, o: 15.0 },
-  "anthropic/claude-opus-4": { i: 15.0, o: 75.0 }, "anthropic/claude-opus-4.8": { i: 5.0, o: 25.0 },
-  "anthropic/claude-opus-4.7": { i: 5.0, o: 25.0 },
-  "openai/gpt-4o": { i: 2.5, o: 10.0 }, "openai/gpt-4.1": { i: 2.0, o: 8.0 },
-  "openai/o3": { i: 2.0, o: 8.0 }, "openai/o4-mini": { i: 1.1, o: 4.4 },
-  // Gemini 3+ (via API) — Gemini 2.x deprecated
-  "gemini-3.5-flash": { i: 1.5, o: 9.0 }, "gemini-3.1-pro-preview": { i: 2.0, o: 12.0 },
-  "gemini-3.1-flash-lite": { i: 0.25, o: 1.5 }, "gemini-3-flash-preview": { i: 0.5, o: 3.0 },
-  // MIMO
-  "mimo-v2.5-pro": { i: 0.435, o: 0.87 }, "mimo-v2.5": { i: 0.14, o: 0.28 },
-  "mimo-v2-pro": { i: 1.0, o: 3.0 }, "mimo-v2-omni": { i: 0.4, o: 2.0 },
-  "mimo-v2-flash": { i: 0.1, o: 0.3 },
-};
-function modelPricingLabel(model: string, orPrices?: Record<string, { i: number; o: number }>): string | null {
+// ─── Model pricing — loaded dynamically from cost-tracker.js via IPC ─────────
+function modelPricingLabel(model: string, dynamicPrices?: Record<string, { i: number; o: number }>, costPrices?: Record<string, { input: number; output: number }>): string | null {
   const lower = model.toLowerCase();
-  // 1. Static table first
-  const v = MODEL_PRICES[lower] ?? MODEL_PRICES[Object.keys(MODEL_PRICES).find(k => lower.includes(k)) ?? ""];
-  if (v) return `IN $${v.i.toFixed(2)} / OUT $${v.o.toFixed(2)}`;
-  // 2. Dynamic OpenRouter prices (fetched at runtime)
-  if (orPrices) {
-    const dv = orPrices[model] ?? orPrices[lower];
+  // 1. cost-tracker prices (source of truth — covers all Anthropic, MIMO, Gemini, etc.)
+  if (costPrices && Object.keys(costPrices).length > 0) {
+    // Exact match first, then substring match
+    const key = costPrices[lower] ? lower : Object.keys(costPrices).find(k => lower === k || lower.startsWith(k) || k.startsWith(lower));
+    const v = key ? costPrices[key] : undefined;
+    if (v) return `IN $${v.input.toFixed(2)} / OUT $${v.output.toFixed(2)}`;
+  }
+  // 2. Dynamic OpenRouter prices (fetched at runtime from openrouter.ai)
+  if (dynamicPrices) {
+    const dv = dynamicPrices[model] ?? dynamicPrices[lower];
     if (dv) return `IN $${dv.i.toFixed(2)} / OUT $${dv.o.toFixed(2)}`;
   }
   return null;
@@ -723,6 +707,7 @@ function PaneMenu({
   const [favLoaded, setFavLoaded] = React.useState(false);
   const [modelSearch, setModelSearch] = React.useState('');
   const [orPrices, setOrPrices] = React.useState<Record<string, { i: number; o: number }>>({});
+  const [costPrices, setCostPrices] = React.useState<Record<string, { input: number; output: number }>>({});
 
   // Load OpenRouter pricing (uses 5-min backend cache — instant if already fetched)
   React.useEffect(() => {
@@ -750,6 +735,13 @@ function PaneMenu({
   });
   const searchRef = React.useRef<HTMLInputElement>(null);
 
+  // Load cost-tracker prices on mount (all models: Anthropic, MIMO, Gemini, etc.)
+  React.useEffect(() => {
+    (window as any).codeBrainApp?.cost?.listModels?.()
+      .then((r: any) => { if (r?.data && typeof r.data === 'object') setCostPrices(r.data); })
+      .catch(() => {});
+  }, []);
+
   // Auto-focus search when opened; auto-expand providers when searching
   React.useEffect(() => {
     searchRef.current?.focus();
@@ -758,6 +750,26 @@ function PaneMenu({
   const toggleProvider = (pid: string) => {
     setCollapsedProviders(prev => ({ ...prev, [pid]: !prev[pid] }));
   };
+
+  const handleDetectOAuthModels = React.useCallback(async () => {
+    setOauthDetecting(true);
+    setOauthDetectError(null);
+    try {
+      const result = await (window as any).codeBrainApp?.providers?.listClaudeOAuthModels?.();
+      if (!result?.ok || !result.models?.length) {
+        setOauthDetectError(result?.error ?? "Nenhum modelo retornado");
+      } else {
+        // Persist models into the claude-oauth provider entry via providers:save
+        const oauthProvider = providers.find((p: any) => p.id === 'claude-oauth');
+        if (oauthProvider) {
+          await (window as any).codeBrainApp?.providers?.save({ ...oauthProvider, models: result.models });
+        }
+      }
+    } catch (e: any) {
+      setOauthDetectError(e?.message ?? String(e));
+    }
+    setOauthDetecting(false);
+  }, [providers]);
 
   const isProviderCollapsed = (pid: string) => {
     // If user never toggled, default: collapse when there are >= 2 providers
@@ -936,8 +948,8 @@ function PaneMenu({
                     : models.map((model: string) => (
                       <button key={model} onClick={() => handleAddPane(pid, model)} className="w-full text-left px-5 py-1 font-mono text-[10px] text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer">
                         <div className="truncate">+ {model}</div>
-                        {modelPricingLabel(model, orPrices) && (
-                          <div className="font-mono text-[10px] text-emerald-400/70 mt-0.5">{modelPricingLabel(model, orPrices)}</div>
+                        {modelPricingLabel(model, orPrices, costPrices) && (
+                          <div className="font-mono text-[10px] text-emerald-400/70 mt-0.5">{modelPricingLabel(model, orPrices, costPrices)}</div>
                         )}
                       </button>
                     ))
