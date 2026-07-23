@@ -59,16 +59,16 @@ interface SkillManifest {
 
 interface LoadedSkill {
   manifest: SkillManifest;
-  content: string | null; // prompt.md content, null if unreadable
 }
 
 /**
- * Reads skills from all skill directories in priority order:
+ * Reads skill manifests from all skill directories in priority order:
  *   1. Project-local:  <cwd>/.codebrain/skills/
  *   2. Global:         ~/.codebrain/skills/
  *
  * Deduplicates by skill id (project takes priority over global).
- * Returns both manifest and full prompt.md content for each skill.
+ * Only manifests are read — full prompt.md content is lazy-loaded by the
+ * agent via mcp__codebrain__skill_get when a trigger matches.
  */
 function loadSkills(cwd: string): LoadedSkill[] {
   const skillDirs: string[] = [];
@@ -95,15 +95,7 @@ function loadSkills(cwd: string): LoadedSkill[] {
           if (!manifest.id || seenIds.has(manifest.id)) continue;
           seenIds.add(manifest.id);
 
-          // Read prompt content
-          const entrypoint = manifest.entrypoint ?? "prompt.md";
-          const promptPath = path.join(skillDir, entrypoint);
-          let content: string | null = null;
-          try {
-            if (fs.existsSync(promptPath)) content = fs.readFileSync(promptPath, "utf-8");
-          } catch {}
-
-          loaded.push({ manifest, content });
+          loaded.push({ manifest });
         } catch {}
       }
     } catch {}
@@ -115,19 +107,15 @@ function loadSkills(cwd: string): LoadedSkill[] {
 /**
  * Builds the skills section of the system prompt.
  *
- * Strategy differs by agent:
- * - Claude Code CLI ("claude"): has the native Skill() tool that reads ~/.claude/skills/*.md
- *   → inject summary table + Skill() invocation instructions only (content already synced)
- * - All other CLIs (openclaude, gemini, codex, etc.): no Skill() tool
- *   → inject the FULL prompt.md content of each skill inline so the agent can execute it
+ * Lazy-load strategy (all CLIs): inject ONLY the summary table (id, description,
+ * triggers). The full prompt.md is loaded on demand via mcp__codebrain__skill_get.
+ * Injecting full content inline used to add ~95 KB (~24K tokens) of mostly
+ * irrelevant instructions to EVERY agent on EVERY request.
  */
-function buildSkillsSection(cwd: string, agent?: string): string {
+function buildSkillsSection(cwd: string, _agent?: string): string {
   const skills = loadSkills(cwd);
   if (skills.length === 0) return "";
 
-  const isClaudeCodeCli = agent === "claude";
-
-  // Summary table — used by all agents
   const rows = skills
     .map(s => {
       const triggers = (s.manifest.triggers ?? []).join(", ") || "—";
@@ -135,38 +123,19 @@ function buildSkillsSection(cwd: string, agent?: string): string {
     })
     .join("\n");
 
-  if (isClaudeCodeCli) {
-    // Claude Code: inject full skill content inline (same as other CLIs).
-    // The Skill() tool only works for Claude Code's own slash commands, NOT for Codebrain skills.
-    // So we inject the full prompt.md content so the agent can execute skill steps directly.
-  }
+  return `\n\n## Skills Disponíveis — CARREGUE SOB DEMANDA
 
-  // Non-Claude-Code CLIs: inject full skill content inline
-  // The agent executes the skill steps directly from the prompt.
-  let section = `\n\n## Skills Disponíveis — EXECUTE AUTOMATICAMENTE
-
-Você tem skills especializadas com guias completos abaixo. **Ao detectar um trigger, execute diretamente os passos da skill correspondente** sem esperar o usuário pedir.
+Você tem skills especializadas instaladas. A tabela abaixo lista apenas o resumo — o conteúdo completo NÃO está neste prompt.
 
 | Skill | Descrição | Triggers (palavras-chave) |
 |---|---|---|
 ${rows}
 
-**REGRA OBRIGATÓRIA:** Se o pedido do usuário corresponder a qualquer trigger → execute imediatamente os passos da skill. Não pergunte, não explique — execute direto.
+**REGRA OBRIGATÓRIA:** Se o pedido do usuário corresponder a um trigger:
+1. Chame \`mcp__codebrain__skill_get({ id: "<skill-id>" })\` para carregar o guia completo da skill
+2. Execute os passos retornados imediatamente — não pergunte, não explique
 
----
-
-`;
-
-  for (const { manifest, content } of skills) {
-    if (!content) continue;
-    const triggers = (manifest.triggers ?? []).join(", ") || "—";
-    section += `### Skill: \`${manifest.id}\` — ${manifest.description ?? manifest.name}\n`;
-    section += `**Triggers:** ${triggers}\n\n`;
-    section += content.trim();
-    section += "\n\n---\n\n";
-  }
-
-  return section;
+NUNCA execute uma tarefa coberta por uma skill sem antes carregá-la via \`skill_get\`. NUNCA carregue skills cujos triggers não correspondem à tarefa atual.`;
 }
 
 /**
@@ -222,12 +191,13 @@ function buildMemoryContext(ctx: AppContext, workspace: string): string {
   try {
     const store = ctx.memoryStore as any;
 
-    // Fetch recent memories for this workspace (semantic + episodic + procedural)
-    const memResult = store.list({ workspace, limit: 20 });
+    // Fetch a SMALL sample of recent memories — just enough to prove the memory
+    // is alive and worth searching. The agent pulls the rest via memory_search.
+    const memResult = store.list({ workspace, limit: 5 });
     const memories: any[] = memResult?.memories ?? [];
 
-    // Fetch top patterns (sorted by quality_score DESC in the store)
-    const patResult = store.listPatterns({ limit: 15 });
+    // Top patterns only (sorted by quality_score DESC in the store)
+    const patResult = store.listPatterns({ limit: 5 });
     const patterns: any[] = patResult?.patterns ?? [];
 
     if (memories.length === 0 && patterns.length === 0) {
@@ -244,20 +214,18 @@ function buildMemoryContext(ctx: AppContext, workspace: string): string {
 `;
 
     if (memories.length > 0) {
-      block += `**Memórias recentes (${memories.length}):**\n`;
+      block += `**Memórias mais recentes (amostra — use \`memory_search\` para o resto):**\n`;
       for (const m of memories) {
-        const tags = (m.tags ?? []).length > 0 ? ` [${m.tags.join(", ")}]` : "";
-        const preview = (m.content ?? "").slice(0, 200).replace(/\n/g, " ");
-        block += `- **[${m.type ?? "working"}]** \`${m.key ?? m.id}\`${tags}: ${preview}${m.content?.length > 200 ? "…" : ""}\n`;
+        const preview = (m.content ?? "").slice(0, 120).replace(/\n/g, " ");
+        block += `- **[${m.type ?? "working"}]** \`${m.key ?? m.id}\`: ${preview}${m.content?.length > 120 ? "…" : ""}\n`;
       }
     }
 
     if (patterns.length > 0) {
-      block += `\n**Patterns aprendidos (${patterns.length}) — USE-OS:**\n`;
+      block += `\n**Top patterns (amostra — use \`pattern_list\` para o resto):**\n`;
       for (const p of patterns) {
-        const score = typeof p.quality_score === "number" ? ` (score: ${p.quality_score.toFixed(2)})` : "";
-        const preview = (p.description ?? "").slice(0, 180).replace(/\n/g, " ");
-        block += `- **[${p.pattern_type ?? "general"}]**${score}: ${preview}${p.description?.length > 180 ? "…" : ""}\n`;
+        const preview = (p.description ?? "").slice(0, 120).replace(/\n/g, " ");
+        block += `- **[${p.pattern_type ?? "general"}]**: ${preview}${p.description?.length > 120 ? "…" : ""}\n`;
       }
     }
 
@@ -339,13 +307,13 @@ Cada agente tem: \`role\` (categoria), \`agentName\` (alias), \`cli\` (runtime),
   if (role !== "orchestrator") {
     sysPrompt += `\n\n## Missão — Bootstrap obrigatório
 
-No início da sua primeira ação, chame \`mcp__codebrain__mcp__codebrain__mission_context({ paneId: "${paneId}" })\`.
+No início da sua primeira ação, chame \`mcp__codebrain__mission_context({ paneId: "${paneId}" })\`.
 - Se **action='adopt'**: você é worker do orquestrador retornado. Reporte a ele via \`handoff_submit\` ao terminar.
-- Se **action='ask_if_orchestrator'**: use \`mcp__codebrain__mcp__codebrain__question_ask\` perguntando ao usuário se você é o orquestrador desta missão. Se sim, chame:
+- Se **action='ask_if_orchestrator'**: use \`mcp__codebrain__question_ask\` perguntando ao usuário se você é o orquestrador desta missão. Se sim, chame:
 \`\`\`
-mcp__codebrain__mcp__codebrain__pane_set_role({ paneId: "${paneId}", role: "orchestrator" })
+mcp__codebrain__pane_set_role({ paneId: "${paneId}", role: "orchestrator" })
 \`\`\`
-e crie/associe a missão com \`mcp__codebrain__mcp__codebrain__mission_create\` / \`mcp__codebrain__mcp__codebrain__mission_set\`.
+e crie/associe a missão com \`mcp__codebrain__mission_create\` / \`mcp__codebrain__mission_set\`.
 
 ### 🔴 TASK BOARD — OBRIGATÓRIO
 
@@ -367,14 +335,14 @@ Se precisa mudar código → \`task_create\` + \`task_assign\` a um worker + \`p
 
 ## Missão — Orquestrador
 
-Chame \`mcp__codebrain__mcp__codebrain__mission_context({ paneId: "${paneId}" })\` para descobrir ou criar sua missão.
+Chame \`mcp__codebrain__mission_context({ paneId: "${paneId}" })\` para descobrir ou criar sua missão.
 
 ### Regras obrigatórias:
-1. **CRIE tasks** (\`mcp__codebrain__mcp__codebrain__task_create\` com mission_id) para CADA subtask ANTES de delegar a workers
-2. **Atribua tasks** (\`mcp__codebrain__mcp__codebrain__task_assign\`) ao paneId do worker responsável
+1. **CRIE tasks** (\`mcp__codebrain__task_create\` com mission_id) para CADA subtask ANTES de delegar a workers
+2. **Atribua tasks** (\`mcp__codebrain__task_assign\`) ao paneId do worker responsável
 3. **NUNCA execute** o trabalho você mesmo — delegue SEMPRE (veja a seção "VOCÊ NÃO EXECUTA" no topo)
-4. Acompanhe progresso via \`mcp__codebrain__mcp__codebrain__task_list({ mission_id })\` e \`mcp__codebrain__mcp__codebrain__handoff_wait\`
-5. **Contador de confirmações:** para executar direto, o usuário DEVE confirmar 2x. Use \`mcp__codebrain__mcp__codebrain__actor_set_metadata({ paneId: "${paneId}", metadata: { execution_confirmed: true, confirmations: 2 } })\` após as 2 confirmações. Sem isso, recuse e delegue.
+4. Acompanhe progresso via \`mcp__codebrain__task_list({ mission_id })\` e \`mcp__codebrain__handoff_wait\`
+5. **Contador de confirmações:** para executar direto, o usuário DEVE confirmar 2x. Use \`mcp__codebrain__actor_set_metadata({ paneId: "${paneId}", metadata: { execution_confirmed: true, confirmations: 2 } })\` após as 2 confirmações. Sem isso, recuse e delegue.
 6. **🔴 REUSE PRIMEIRO:** ANTES de \`pane_spawn\`, chame \`actor_list()\`. Se algum worker tem \`available: true\`, DELEGUE a ele (\`task_assign\` + \`pane_write\`). Só spawne se NÃO houver worker idle compatível.`;
   }
 

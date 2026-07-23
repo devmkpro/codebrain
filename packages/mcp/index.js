@@ -1745,11 +1745,11 @@ function createCodebrainMCPServer(bridge) {
   console.log(`[MCP] ${advancedToolCount} advanced tools disabled (activate via enable_tool_group)`);
 
   // ── RE-ENABLE essential advanced groups (always available) ─────────────
-  // These groups are advanced in implementation but essential in usage:
-  // - session_advanced: compaction, snapshots, checkpoints — critical for long sessions
-  // - memory_advanced: knowledge graph, PageRank, similarity — core intelligence
-  // - mission: structured workflow goals — fundamental coordination
-  const essentialAdvancedGroups = ["session_advanced", "memory_advanced", "mission"];
+  // Only groups the squad bootstrap protocol depends on stay always-on:
+  // - mission: mission_context/task_* — every worker calls these on boot
+  // session_advanced and memory_advanced moved to on-demand (enable_tool_group)
+  // to cut default tools/list token overhead per agent.
+  const essentialAdvancedGroups = ["mission"];
   for (const name of essentialAdvancedGroups) {
     const refs = advancedToolGroups[name];
     if (refs) refs.forEach(ref => ref.enable());
@@ -1761,7 +1761,7 @@ function createCodebrainMCPServer(bridge) {
 
   server.tool(
     "mcp__codebrain__enable_tool_group",
-    "Activate additional MCP tool groups on demand. Call this BEFORE using tools from disabled groups. ALWAYS-ON groups (no activation needed): session_advanced (7), memory_advanced (4), mission (5). ON-DEMAND groups: browser (60), fetch (5), swarm (10), worker (10), consensus (19), event (5), hooks_advanced (3), lsp (12), workflows (11). Essential tools (pane, memory, pattern, file, task, hooks, skill, system, todo, agent, provider, handoff, goal, checkpoint, snapshot, compaction) are always available. BROWSER WORKFLOW: (1) enable_tool_group('browser') → (2) browser_launch() → (3) browser_navigate(url).",
+    "Activate additional MCP tool groups on demand. Call this BEFORE using tools from disabled groups. ALWAYS-ON group (no activation needed): mission (12). ON-DEMAND groups: browser (60), fetch (5), swarm (10), worker (10), consensus (19), event (5), hooks_advanced (3), lsp (12), workflows (11), session_advanced (7), memory_advanced (4). Essential tools (pane, memory, pattern, file, task, hooks, skill, system, todo, agent, provider, handoff, goal, checkpoint, compaction) are always available. BROWSER WORKFLOW: (1) enable_tool_group('browser') → (2) browser_launch() → (3) browser_navigate(url).",
     {
       group: z.enum(["browser", "fetch", "swarm", "worker", "consensus", "event", "mission", "memory_advanced", "hooks_advanced", "session_advanced", "lsp", "workflows"])
         .describe("Tool group to activate. Use tool_groups() to see all available groups."),
