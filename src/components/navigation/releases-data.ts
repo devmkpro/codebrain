@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.15.7",
+    "date": "julho 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "9Router via Claude Code CLI (anthropic-compat) — self-host e instancia remota"
+      }
+    ]
+  },
+  {
     "version": "1.15.6",
     "date": "julho 2026",
     "highlights": [
