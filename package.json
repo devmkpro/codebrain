@@ -1,7 +1,7 @@
 {
   "name": "codebrain",
   "productName": "Codebrain",
-  "version": "1.15.8",
+  "version": "1.15.9",
   "description": "Electron shell â€” React UI + IPC layer for Codebrain App",
   "homepage": "https://gitlab.com/maikeofc18/codebrain",
   "author": {
@@ -18,6 +18,8 @@
     "preview": "electron-vite preview",
     "prebuild:native": "node scripts/prebuild-native.mjs",
     "bundle:stdio": "node scripts/bundle-stdio.mjs",
+    "mcp:start": "electron . --mcp-server",
+    "mcp:stop": "node scripts/stop-mcp-server.mjs",
     "pack:win": "node scripts/build-exe.mjs",
     "dist:win": "npm run prebuild:native && npm run bundle:stdio && npm run build && electron-builder --win --publish never",
     "dist:win:nsis": "npm run build && electron-builder --win nsis --publish never",

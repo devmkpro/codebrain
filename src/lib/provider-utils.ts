@@ -32,6 +32,9 @@ export function resolveIntegrationBaseUrl(
   // Strip a trailing /v1 (users copy the OpenAI-endpoint form of the URL);
   // Claude CLI appends /v1/messages itself.
   if (template.id === "9router") return custom.replace(/\/v1$/, "");
+  // Ollama (local or self-hosted): OPENAI_BASE_URL must include /v1 —
+  // users often paste the bare origin (e.g. https://my-ollama.example.com).
+  if (template.id === "ollama") return custom.endsWith("/v1") ? custom : `${custom}/v1`;
   return integration.baseUrl;
 }
 

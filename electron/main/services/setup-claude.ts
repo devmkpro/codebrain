@@ -13,6 +13,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { app } from "electron";
 import log from "electron-log/main.js";
+import { buildStdioServerConfig, isStdioConfigCurrent, resolveStdioEntry } from "./mcp-runtime";
 
 function copyDirRecursive(src: string, dest: string): void {
   fs.mkdirSync(dest, { recursive: true });
@@ -30,41 +31,12 @@ function copyDirRecursive(src: string, dest: string): void {
 /**
  * Resolve the absolute path to the MCP stdio server.
  *
- * In packaged mode: <install>/resources/mcp-stdio/stdio.cjs
- *   (bundled standalone file outside app.asar — Node.js can load it)
- *
- * In dev mode: <project>/resources/mcp-stdio/stdio.cjs
- *   (created by `npm run bundle:stdio`)
- *
- * Fallback (dev without bundle): <project>/packages/mcp/stdio.js
+ * Delegates to the shared resolver in mcp-runtime.ts so every config file
+ * (~/.mcp.json, ~/.claude.json, workspace .mcp.json, .vscode/mcp.json) points
+ * at the same entry point with the same runtime.
  */
 function getStdioPath(): string {
-  if (app.isPackaged) {
-    // Primary: bundled standalone file outside app.asar
-    const bundledPath = path.join(process.resourcesPath, "mcp-stdio", "stdio.cjs");
-    if (fs.existsSync(bundledPath)) return bundledPath;
-    // Fallback: unpacked native modules dir (in case user hasn't rebuilt yet)
-    const unpackedPath = path.join(process.resourcesPath, "app.asar.unpacked", "packages", "mcp", "stdio.js");
-    if (fs.existsSync(unpackedPath)) return unpackedPath;
-    // Last resort: resolve from project source (works if user has dev checkout)
-    const homeDir = os.homedir();
-    const devCheckout = path.join(homeDir, "Desktop", "codebrain", "resources", "mcp-stdio", "stdio.cjs");
-    if (fs.existsSync(devCheckout)) return devCheckout;
-    const devSource = path.join(homeDir, "Desktop", "codebrain", "packages", "mcp", "stdio.js");
-    if (fs.existsSync(devSource)) return devSource;
-    // Return the bundled path anyway — will fail with a clear error
-    return bundledPath;
-  }
-  // Dev mode — use app.getAppPath() which returns the actual project root.
-  // __dirname is unreliable in dev (electron-vite may resolve it differently).
-  const projectRoot = app.getAppPath();
-  const bundledPath = path.join(projectRoot, "resources", "mcp-stdio", "stdio.cjs");
-  if (fs.existsSync(bundledPath)) return bundledPath;
-  // Dev fallback — direct source (only if it actually exists)
-  const sourcePath = path.join(projectRoot, "packages", "mcp", "stdio.js");
-  if (fs.existsSync(sourcePath)) return sourcePath;
-  // Neither exists — return bundled path anyway (will fail with a clear error)
-  return bundledPath;
+  return resolveStdioEntry() ?? "";
 }
 
 /**
@@ -170,26 +142,16 @@ export function setupClaudeIntegration(): void {
     // so Claude Code can connect to the MCP server.
     {
       const homeMcpPath = path.join(os.homedir(), ".mcp.json");
-      const stdioPath = getStdioPath();
-      const mcpConfig = JSON.stringify({
-        mcpServers: {
-          codebrain: {
-            command: "node",
-            args: [stdioPath],
-          },
-        },
-      }, null, 2);
+      const stdioServer = buildStdioServerConfig();
+      const mcpConfig = JSON.stringify({ mcpServers: { codebrain: stdioServer } }, null, 2);
 
-      // Only skip if the file already has the exact correct path.
+      // Only skip if the file already has the exact correct launch config.
       // Always overwrite stale/wrong paths — this is the #1 cause of "MCP failed".
       let shouldWrite = true;
       if (fs.existsSync(homeMcpPath)) {
         try {
           const existing = JSON.parse(fs.readFileSync(homeMcpPath, "utf-8"));
-          const existingArgs = existing?.mcpServers?.codebrain?.args;
-          if (Array.isArray(existingArgs) && existingArgs[0] === stdioPath) {
-            shouldWrite = false;
-          }
+          if (isStdioConfigCurrent(existing?.mcpServers?.codebrain)) shouldWrite = false;
         } catch {
           // Invalid JSON — overwrite
         }
@@ -197,7 +159,7 @@ export function setupClaudeIntegration(): void {
 
       if (shouldWrite) {
         fs.writeFileSync(homeMcpPath, mcpConfig, "utf-8");
-        log.info("[setup-claude] Wrote ~/.mcp.json with stdio transport:", stdioPath);
+        log.info("[setup-claude] Wrote ~/.mcp.json with stdio transport:", stdioServer.args[0]);
       }
     }
 
@@ -206,43 +168,39 @@ export function setupClaudeIntegration(): void {
     // A common bug is "resources\resources\mcp-stdio" (double "resources").
     // This scans ALL project entries and fixes any stale paths to the correct stdio.cjs.
     {
-      const stdioPath = getStdioPath();
       const claudeJsonPath = path.join(os.homedir(), ".claude.json");
       if (fs.existsSync(claudeJsonPath)) {
         try {
-          const raw = fs.readFileSync(claudeJsonPath, "utf-8");
-          // Detect the known-broken pattern: resources\resources\mcp-stdio
-          const wrongPattern = String.raw`resources\resources\mcp-stdio`;
-          const correctPattern = String.raw`resources\mcp-stdio`;
-          if (raw.includes(wrongPattern)) {
-            const fixed = raw.split(wrongPattern).join(correctPattern);
-            fs.writeFileSync(claudeJsonPath, fixed, "utf-8");
-            const count = raw.split(wrongPattern).length - 1;
-            log.info(`[setup-claude] Fixed ${count} stale MCP path(s) in ~/.claude.json`);
-          }
-
-          // Also scan for any codebrain mcpServers args that don't match the current stdio path
+          const stdioServer = buildStdioServerConfig();
           const parsed = JSON.parse(fs.readFileSync(claudeJsonPath, "utf-8"));
           let pathFixCount = 0;
-          for (const [projectKey, projectVal] of Object.entries(parsed)) {
-            if (typeof projectVal !== "object" || projectVal === null) continue;
-            const servers = (projectVal as any).mcpServers;
-            if (!servers?.codebrain) continue;
-            const args = servers.codebrain.args;
-            if (!Array.isArray(args) || args.length === 0) continue;
-            // Only fix stdio-based configs (not streamable-http)
-            if (servers.codebrain.command !== "node") continue;
-            if (args[0] !== stdioPath && typeof args[0] === "string") {
-              // Check if the path simply doesn't exist but stdioPath does
-              if (!fs.existsSync(args[0]) && fs.existsSync(stdioPath)) {
-                args[0] = stdioPath;
-                pathFixCount++;
-              }
+
+          // Claude Code keeps per-project config under `projects`; older builds of
+          // this repair loop scanned the top level and therefore fixed nothing.
+          // Scan both so stale entries written by any version get repaired.
+          const containers: Array<Record<string, any>> = [];
+          if (parsed?.projects && typeof parsed.projects === "object") containers.push(parsed.projects);
+          if (parsed && typeof parsed === "object") containers.push(parsed);
+
+          for (const container of containers) {
+            for (const projectVal of Object.values(container)) {
+              if (typeof projectVal !== "object" || projectVal === null) continue;
+              const entry = (projectVal as any).mcpServers?.codebrain;
+              if (!entry || entry.url) continue; // leave HTTP configs alone
+              if (!Array.isArray(entry.args) || typeof entry.args[0] !== "string") continue;
+              // Repair when the recorded launch target no longer resolves —
+              // covers the old "resources/resources/mcp-stdio" double path, an
+              // uninstalled system Node, and paths left behind by an update.
+              if (isStdioConfigCurrent(entry)) continue;
+              if (fs.existsSync(entry.args[0]) && entry.command === stdioServer.command) continue;
+              (projectVal as any).mcpServers.codebrain = { ...stdioServer };
+              pathFixCount++;
             }
           }
+
           if (pathFixCount > 0) {
             fs.writeFileSync(claudeJsonPath, JSON.stringify(parsed, null, 2), "utf-8");
-            log.info(`[setup-claude] Fixed ${pathFixCount} non-existent MCP path(s) in ~/.claude.json`);
+            log.info(`[setup-claude] Repaired ${pathFixCount} stale MCP entr(ies) in ~/.claude.json`);
           }
         } catch (err) {
           log.warn("[setup-claude] ~/.claude.json MCP path repair skipped (non-fatal):", err);

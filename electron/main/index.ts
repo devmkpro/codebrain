@@ -80,6 +80,7 @@ function copyDirRecursive(src: string, dest: string): void {
 }
 
 const ctx = createAppContext();
+const HEADLESS_MCP = process.argv.includes("--mcp-server") || process.argv.includes("--mcp-daemon");
 
 app.whenReady().then(async () => {
   // Enrich PATH on Linux/macOS — GUI-launched Electron has a minimal PATH
@@ -92,9 +93,24 @@ app.whenReady().then(async () => {
   // Auto-install Claude Code integration (statusline, .mcp.json, helpers)
   setupClaudeIntegration();
 
+  // `codebrain --mcp-server` is the user-facing Linux/macOS entry point for
+  // the server-only mode. It runs the same MCP + PTY stack but deliberately
+  // skips BrowserWindow, renderer, updater, Discord and session UI wiring.
+  if (HEADLESS_MCP) {
+    clearCodexGlobalConfig();
+    refreshAllWorkspaces(ctx, undefined, app.isPackaged ? process.resourcesPath : app.getAppPath());
+    try {
+      await startMcpServer(ctx);
+      log.info("[MCP] Headless server mode is ready; Codebrain UI was not opened");
+    } catch (err) {
+      log.error("[MCP] Headless startup failed:", err);
+      app.exit(1);
+    }
+    return;
+  }
+
   // Ensure workspace .claude/settings.json has correct version + tool count on startup.
   // Previously this only ran when spawning a pane — now it runs every app start.
-  const { app } = require("electron");
   const codebrainRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
   ensureClaudeSettings(codebrainRoot);
 

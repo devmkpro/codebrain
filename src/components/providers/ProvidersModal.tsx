@@ -97,6 +97,11 @@ export function ProvidersModal({
     } else if (template.id === "9router") {
       // 9Router: seed with the saved instance URL (self-host or remote) or template default
       setBulkAnthropicBaseUrl(existingUrl || defaultAnthropicUrl);
+    } else if (template.id === "ollama") {
+      // Ollama: seed with the saved instance URL (local or self-hosted/remote) or template default
+      const existingOllama = providers.find(p => p.id.startsWith(`${template.id}-`) && p.type === "openai-compat");
+      const defaultOllamaUrl = template.integrations.find(i => i.type === "openai-compat")?.baseUrl ?? "";
+      setBulkAnthropicBaseUrl(existingOllama?.env?.OPENAI_BASE_URL ?? defaultOllamaUrl);
     } else {
       setBulkAnthropicBaseUrl("");
     }
@@ -117,7 +122,7 @@ export function ProvidersModal({
     setStep("pickTemplate");
   };
   const handleTestToken = async () => {
-    if (!bulkTemplate || !bulkToken.trim()) {
+    if (!bulkTemplate || (!bulkToken.trim() && bulkTemplate.id !== "ollama")) {
       setError("Cole uma API key antes de testar");
       return;
     }
@@ -182,7 +187,7 @@ export function ProvidersModal({
     setTesting(false);
   };
   const handleBulkSave = async () => {
-    if (!bulkTemplate || !bulkToken.trim()) {
+    if (!bulkTemplate || (!bulkToken.trim() && bulkTemplate.id !== "ollama")) {
       setError("API key obrigatória");
       return;
     }
@@ -234,6 +239,12 @@ export function ProvidersModal({
         let models = [...integ.models];
         if (bulkTemplate.id === "9router" && models.length === 0 && env.ANTHROPIC_BASE_URL) {
           const fetched = await fetchModelsFromEndpoint(env.ANTHROPIC_BASE_URL, token, "anthropic").catch(() => []);
+          if (fetched.length > 0) models = fetched;
+        }
+        // Ollama: models depend on what's pulled on the user's own server —
+        // auto-detect from /v1/models so the pane menu is populated on save
+        if (bulkTemplate.id === "ollama" && models.length === 0 && env.OPENAI_BASE_URL) {
+          const fetched = await fetchModelsFromEndpoint(env.OPENAI_BASE_URL, token, "openai").catch(() => []);
           if (fetched.length > 0) models = fetched;
         }
         const res = await save({

@@ -436,6 +436,10 @@ export interface SessionWatcherManager {
  */
 export function createSessionWatchers(ctx: AppContext): SessionWatcherManager {
   const watchers: BaseSessionWatcher[] = [];
+  // Do not keep five filesystem polling timers alive while the app has no
+  // agent panes. The manager starts them on the first matching pane and stops
+  // them again after the last pane exits.
+  const activePanes = new Set<string>();
 
   function onCapture(capture: CapturedSession) {
     try {
@@ -466,16 +470,27 @@ export function createSessionWatchers(ctx: AppContext): SessionWatcherManager {
 
   return {
     registerPane(pane: PaneInfo) {
+      activePanes.add(pane.paneId);
       for (const w of watchers) w.registerPane(pane);
+      if (activePanes.size === 1) {
+        for (const w of watchers) w.start();
+      }
     },
     unregisterPane(paneId: string) {
+      activePanes.delete(paneId);
       for (const w of watchers) w.unregisterPane(paneId);
+      if (activePanes.size === 0) {
+        for (const w of watchers) w.stop();
+      }
     },
     start() {
-      for (const w of watchers) w.start();
+      if (activePanes.size > 0) {
+        for (const w of watchers) w.start();
+      }
     },
     stop() {
       for (const w of watchers) w.stop();
+      activePanes.clear();
     },
   };
 }

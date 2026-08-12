@@ -99,13 +99,16 @@ export function PaneTokenBadge({
     }
 
     poll();
-    intervalRef.current = setInterval(poll, 1200);
+    // Token usage is immutable while an agent is idle. Poll only during an
+    // active turn; this removes one IPC + SQLite query every 1.2s per pane
+    // from the common idle state.
+    if (isRunning) intervalRef.current = setInterval(poll, 2500);
 
     return () => {
       cancelled = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [paneId, isOrchestrator, missionId, missionPaneIds?.join(",")]);
+  }, [paneId, isOrchestrator, isRunning, missionId, missionPaneIds?.join(",")]);
 
   // Only show when we have data
   const hasCounts = counts && (counts.input > 0 || counts.output > 0);

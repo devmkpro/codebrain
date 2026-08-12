@@ -578,13 +578,18 @@ export class PtyManager extends EventEmitter {
     this.idleDetector.on("idle", ({ paneId, lastOutput }: { paneId: string; lastOutput: string[] }) => {
       this.emit("idle", { paneId, idle: { lastOutput } });
     });
-    const shutdown = () => {
-      process.stderr.write("[pty] Received shutdown signal — killing all panes\n");
-      this.killAll();
-      process.exit(0);
-    };
-    process.once("SIGINT", shutdown);
-    process.once("SIGTERM", shutdown);
+    // The standalone MCP daemon owns its shutdown sequence so it can close
+    // the HTTP server and remove daemon.json before exiting. The regular app
+    // keeps the historical signal handling here.
+    if (process.env.CODEBRAIN_MANAGED_SIGNALS !== "1") {
+      const shutdown = () => {
+        process.stderr.write("[pty] Received shutdown signal — killing all panes\n");
+        this.killAll();
+        process.exit(0);
+      };
+      process.once("SIGINT", shutdown);
+      process.once("SIGTERM", shutdown);
+    }
   }
 
   private reapZombies(): void {

@@ -252,13 +252,18 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
   },
   {
     id: "ollama",
-    label: "Ollama (Local)",
+    label: "Ollama",
     icon: "🦙",
+    // Local Ollama or a self-hosted/remote Ollama-compatible proxy — the user
+    // types their own Base URL + API key in the UI (see BulkTokenForm "isOllama"
+    // branch). Nothing but this localhost placeholder default ships in source.
     type: "openai-compat",
     host: "openclaude",
     baseUrl: "http://localhost:11434/v1",
     tokenEnvVar: "OPENAI_API_KEY",
     models: [],
+    labelIncludes: ["ollama"],
+    idIncludes: ["ollama"],
   },
   // ── New CLI agents (feature parity) ────────────────────────────────
   {

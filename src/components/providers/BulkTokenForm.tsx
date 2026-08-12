@@ -20,7 +20,9 @@ export function BulkTokenForm({
   const tokenEnvVar = template.integrations[0]?.tokenEnvVar ?? "API_KEY";
   const isMimo = template.id === "mimo";
   const is9Router = template.id === "9router";
+  const isOllama = template.id === "ollama";
   const nineRouterDefaultUrl = template.integrations[0]?.baseUrl ?? "http://localhost:20128";
+  const ollamaDefaultUrl = template.integrations[0]?.baseUrl ?? "http://localhost:11434/v1";
   // 9Router keys come from the user's own instance dashboard — derived from the
   // typed instance URL (self-host or remote), falling back to the template default
   const nineRouterDashboardUrl = (() => {
@@ -65,6 +67,28 @@ export function BulkTokenForm({
               abrir dashboard → {new URL(nineRouterDashboardUrl).host}{" "}
               <ExternalLink size={9} strokeWidth={1.5} />
             </a>}
+        </div>}
+      {isOllama && <div className="px-3 py-2 rounded border border-white/10 bg-white/[0.02] space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest">
+                URL DO SERVIDOR OLLAMA
+              </p>
+              <p className="font-mono text-[10px] text-gray-400">
+                Local (Ollama rodando na sua máquina) ou self-hosted/remoto (VPS, túnel, proxy próprio).
+              </p>
+            </div>
+            <button type="button" onClick={() => onMimoAnthropicBaseUrlChange(ollamaDefaultUrl)} className="shrink-0 px-2 py-1 rounded border border-white/10 hover:border-indigo-500/40 font-mono text-[9px] text-gray-400 hover:text-indigo-300 transition-colors">
+              usar local
+            </button>
+          </div>
+          <input type="text" value={mimoAnthropicBaseUrl} onChange={e => onMimoAnthropicBaseUrlChange(e.target.value)} placeholder={ollamaDefaultUrl} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-gray-200 placeholder:text-gray-700 focus:outline-none focus:border-indigo-500/40" spellCheck={false} />
+          <p className="font-mono text-[9px] text-gray-700">
+            Endpoint OpenAI-compatible — /v1 é adicionado automaticamente se você não incluir.
+          </p>
+          <p className="font-mono text-[10px] text-gray-400">
+            A key é a que o <strong>seu servidor/proxy Ollama</strong> exigir (ou deixe em branco se não usar auth).
+          </p>
         </div>}
       {isMimo && <div className="px-3 py-2 rounded border border-yellow-500/30 bg-yellow-500/[0.06]">
           <p className="font-mono text-[10px] text-yellow-200/90">
@@ -115,13 +139,13 @@ export function BulkTokenForm({
         </div>}
       <label className="flex flex-col gap-1.5">
         <span className="font-mono text-[9px] text-gray-600 uppercase tracking-widest">
-          {is9Router ? "9ROUTER API KEY" : tokenEnvVar}
+          {is9Router ? "9ROUTER API KEY" : isOllama ? "OLLAMA API KEY (opcional)" : tokenEnvVar}
         </span>
         <div className="flex items-center gap-2 px-3 py-2 rounded border border-white/10 bg-white/[0.02] focus-within:border-indigo-500/40 transition-colors">
           <KeyRound size={13} strokeWidth={1.5} className="text-gray-600 shrink-0" />
           <input type="password" autoFocus value={token} onChange={e => onTokenChange(e.target.value)} onKeyDown={e => {
-          if (e.key === "Enter" && token.trim() && !saving) onSave();
-        }} placeholder="sk-..." className="flex-1 bg-transparent border-0 outline-none font-mono text-[11px] text-white placeholder:text-gray-700" />
+          if (e.key === "Enter" && (token.trim() || isOllama) && !saving) onSave();
+        }} placeholder={isOllama ? "sk-... (deixe em branco se o servidor não exigir)" : "sk-..."} className="flex-1 bg-transparent border-0 outline-none font-mono text-[11px] text-white placeholder:text-gray-700" />
         </div>
       </label>
       {template.signupUrl && !isMimo && <a href={template.signupUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-[10px] text-gray-500 hover:text-indigo-400">
@@ -146,10 +170,10 @@ export function BulkTokenForm({
           cancelar
         </button>
         <div className="flex gap-2">
-          <button onClick={onTest} disabled={saving || testing || !token.trim()} className="px-3 py-2 rounded font-mono text-[10px] text-gray-300 border border-white/10 hover:border-white/30 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+          <button onClick={onTest} disabled={saving || testing || (!token.trim() && !isOllama)} className="px-3 py-2 rounded font-mono text-[10px] text-gray-300 border border-white/10 hover:border-white/30 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             {testing ? "testando…" : "testar conexão"}
           </button>
-          <button onClick={onSave} disabled={saving || !token.trim()} className="px-4 py-2 rounded font-mono text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/[0.04] disabled:text-gray-700 disabled:cursor-not-allowed transition-colors">
+          <button onClick={onSave} disabled={saving || (!token.trim() && !isOllama)} className="px-4 py-2 rounded font-mono text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/[0.04] disabled:text-gray-700 disabled:cursor-not-allowed transition-colors">
             {saving ? "salvando…" : "salvar"}
           </button>
         </div>

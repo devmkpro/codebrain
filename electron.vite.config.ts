@@ -13,7 +13,10 @@ export default defineConfig({
     build: {
       outDir: "out/main",
       rollupOptions: {
-        input: { index: resolve(__dirname, "electron/main/index.ts") },
+        input: {
+          index: resolve(__dirname, "electron/main/index.ts"),
+          daemon: resolve(__dirname, "electron/main/daemon.ts"),
+        },
       },
     },
   },

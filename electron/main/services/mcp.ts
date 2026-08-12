@@ -5,6 +5,7 @@ import { spawnPaneInternal } from "./pane-spawn";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
 import { refreshAllWorkspaces, writeContextFiles } from "./workspace";
 import { PROVIDER_REGISTRY } from "./constants";
+import { stopDaemon } from "./mcp-runtime";
 
 // CDP Client for native Chrome browser control
 const { CDPClient } = require("../../packages/mcp/bridge/cdp-client.js");
@@ -111,6 +112,11 @@ function buildMcpBridge(ctx: AppContext) {
 
 export async function startMcpServer(ctx: AppContext): Promise<void> {
   const { startMCPServer } = require("../../packages/mcp/server.js");
+
+  // A daemon may have been started by VS Code/Claude while the desktop app
+  // was closed. Stop that owner before opening the same MCP port and SQLite
+  // store in the desktop process.
+  await stopDaemon();
   const bridge = buildMcpBridge(ctx);
 
   // Store bridge reference on ctx so IPC handlers (e.g. register-recipe.ts)

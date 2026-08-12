@@ -2,28 +2,31 @@
 import * as path from "node:path";
 import * as os from "node:os";
 import type { AppContext, McpServerInfo } from "../context";
+import { buildStdioServerConfig, isStdioConfigCurrent, type StdioServerConfig } from "./mcp-runtime";
 
 /**
- * Resolve the stdio MCP server path for workspace .mcp.json files.
- * Same logic as setup-claude.ts getStdioPath().
- *
- * MUST return a path that actually exists on disk. If the primary path is
- * missing, fall back to the source — but NEVER return a non-existent path.
- * A wrong path means MCP fails silently for every Claude Code session.
- *
- * @param projectRoot - The project root from app.getAppPath() (passed from caller).
- *                      Falls back to __dirname traversal if not provided.
+ * Write .vscode/mcp.json so the VS Code MCP client (1.102+) picks Codebrain up
+ * without manual setup. Merges into an existing file — never clobbers other
+ * servers the user configured.
  */
-function getStdioPathForWorkspace(projectRoot?: string): string {
-  const root = projectRoot || path.join(__dirname, "..", "..", "..");
-  // Try bundled first (works in production)
-  const bundledPath = path.join(root, "resources", "mcp-stdio", "stdio.cjs");
-  if (fs.existsSync(bundledPath)) return bundledPath;
-  // Fallback to source
-  const sourcePath = path.join(root, "packages", "mcp", "stdio.js");
-  if (fs.existsSync(sourcePath)) return sourcePath;
-  // Last resort: return bundled path anyway (will fail with a clear error)
-  return bundledPath;
+function writeVsCodeMcpConfig(wsPath: string, stdioServer: StdioServerConfig): void {
+  try {
+    const vscodeDir = path.join(wsPath, ".vscode");
+    const target = path.join(vscodeDir, "mcp.json");
+
+    let config: Record<string, any> = {};
+    try { config = JSON.parse(fs.readFileSync(target, "utf-8")); } catch {}
+    if (!config.servers || typeof config.servers !== "object") config.servers = {};
+
+    const existing = config.servers.codebrain;
+    if (existing && isStdioConfigCurrent(existing)) return; // already current
+
+    config.servers.codebrain = { type: "stdio", ...stdioServer };
+    if (!fs.existsSync(vscodeDir)) fs.mkdirSync(vscodeDir, { recursive: true });
+    fs.writeFileSync(target, JSON.stringify(config, null, 2) + "\n", "utf-8");
+  } catch (err) {
+    console.warn(`[refreshAllWorkspaces] Failed to write .vscode/mcp.json for ${wsPath}:`, err);
+  }
 }
 
 export function readRecentWorkspaces(ctx: AppContext): string[] {
@@ -156,8 +159,9 @@ export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo, p
   const httpUrl = mcpInfo?.streamableHttpUrl ?? `http://127.0.0.1:${port}/mcp`;
   const totalTools = countMcpTools(projectRoot);
 
-  // Resolve stdio path once for all workspace configs
-  const stdioPath = getStdioPathForWorkspace(projectRoot);
+  // Resolve the stdio launch config once for all workspace configs
+  const stdioServer = buildStdioServerConfig();
+  const stdioPath = stdioServer.args[0];
 
   // ── Per-workspace files ──
   for (const wsPath of wsSet) {
@@ -168,9 +172,13 @@ export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo, p
       //    (outside the app) fails because no MCP server is listening. Stdio always works.
       //    Other agents (OpenClaude, Gemini, Codex, Kimi) use their own config files (HTTP).
       const mcpJson = JSON.stringify({
-        mcpServers: { codebrain: { command: "node", args: [stdioPath] } },
+        mcpServers: { codebrain: stdioServer },
       }, null, 2);
       fs.writeFileSync(path.join(wsPath, ".mcp.json"), mcpJson, "utf-8");
+
+      // 1b. .vscode/mcp.json — VS Code (1.102+) reads MCP servers from here.
+      //     Same stdio launch config, different envelope ("servers", not "mcpServers").
+      writeVsCodeMcpConfig(wsPath, stdioServer);
 
       // 2. .codex/instructions.md — Codex workspace context
       const codexDir = path.join(wsPath, ".codex");
@@ -256,13 +264,9 @@ Query the MCP server at ${httpUrl} using Streamable HTTP transport.
       if (!claudeJson.projects[projectKey].mcpServers) claudeJson.projects[projectKey].mcpServers = {};
       const existing = claudeJson.projects[projectKey].mcpServers.codebrain;
       // Update if missing, or if still using old HTTP config (has url/type but no command),
-      // or if the stdio path is stale (e.g. old packages/mcp/stdio.js → mcp-stdio/stdio.cjs)
-      const argsMatch = Array.isArray(existing?.args) && existing.args[0] === stdioPath;
-      if (!existing || existing.url || !existing.command || !argsMatch) {
-        claudeJson.projects[projectKey].mcpServers.codebrain = {
-          command: "node",
-          args: [stdioPath],
-        };
+      // or if the launch config is stale (wrong runtime, or a stdio path that moved).
+      if (!existing || existing.url || !isStdioConfigCurrent(existing)) {
+        claudeJson.projects[projectKey].mcpServers.codebrain = { ...stdioServer };
         updated++;
       }
     }

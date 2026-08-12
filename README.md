@@ -64,6 +64,26 @@ npm run dev
 
 That's it. Hot reload is instant.
 
+### MCP sem abrir o Codebrain
+
+O servidor headless usa o mesmo PTY real do aplicativo e pode ser iniciado
+separadamente. No Linux instalado pelo `.deb`, execute:
+
+```bash
+codebrain --mcp-server
+```
+
+Em desenvolvimento:
+
+```bash
+npm run mcp:start
+```
+
+O `.vscode/mcp.json` e os arquivos do Claude usam um launcher stdio leve: ele
+inicia o daemon automaticamente quando o editor conecta. Para parar um daemon
+iniciado pelo launcher, use `npm run mcp:stop` no checkout de desenvolvimento;
+no pacote instalado, encerre o processo `codebrain --mcp-server`.
+
 ### What happens in dev mode
 
 - **Renderer** — HMR automatic (change .tsx, reloads instantly)
