@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.15.9",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add standalone MCP daemon and optimize resource usage"
+      }
+    ]
+  },
+  {
     "version": "1.15.8",
     "date": "julho 2026",
     "highlights": [
