@@ -16,6 +16,7 @@ import { useTerminalSettings } from "../stores/terminal-settings-store";
 import { useSpecStore } from "../stores/spec-store";
 import { useWorkspaceStore } from "../stores/workspace-store";
 import { useOnboardingStore } from "../stores/onboarding-store";
+import { usePaneLauncherStore } from "../stores/pane-launcher-store";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    AÇÕES DO NÚCLEO
@@ -49,20 +50,13 @@ const coreActions: Action[] = [
   {
     id: "pane.new",
     title: "Novo pane",
-    subtitle: "Abre um terminal com o agente preferido",
+    subtitle: "Escolha o provider e depois um modelo compatível",
     group: "agentes",
     keywords: ["terminal", "spawn", "agente", "aba", "new pane", "pane_spawn"],
     shortcut: ["Ctrl", "T"],
     icon: "Terminal",
     priority: 100,
-    run: () => {
-      const cwd = activeWorkspace();
-      usePanesStore.getState().addPane({
-        agent: "openclaude",
-        cwd,
-        workspacePath: cwd,
-      });
-    },
+    run: () => usePaneLauncherStore.getState().show(),
   },
   {
     id: "pane.close",

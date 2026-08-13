@@ -120,6 +120,20 @@ export function resolveSpawnTarget(opts: ResolveOpts & {
     ? providers.find((p: any) => p.id === nextProviderId)
     : null;
 
+  // A provider is the compatibility boundary. Stale favorites used to combine
+  // providerId="codex-oauth" with a Claude model and pass both to Codex.
+  // Keep custom slash models for OpenRouter, but never leak a model from one
+  // configured provider into another provider's CLI.
+  if (provider && nextModel) {
+    const models: string[] = provider.models ?? [];
+    const isOpenRouter = (provider.id ?? "").startsWith("openrouter") || (provider.baseUrl ?? "").toLowerCase().includes("openrouter");
+    const acceptsCustomOpenRouterModel = isOpenRouter && nextModel.includes("/");
+    if (models.length > 0 && !models.includes(nextModel) && !acceptsCustomOpenRouterModel) {
+      const configuredDefault = providerDefaultModels?.[provider.id];
+      nextModel = configuredDefault && models.includes(configuredDefault) ? configuredDefault : models[0];
+    }
+  }
+
   // ── Step 3: Resolve agent ──
   // Agent is determined by the chosen provider's host.
   // For non-explicit spawns, allow favoriteAgent or preferredAgent as override.
@@ -140,8 +154,10 @@ export function resolveSpawnTarget(opts: ResolveOpts & {
       agent = provider?.host ?? (provider?.type === "oauth" ? "claude" : "openclaude");
     }
   } else {
-    // Non-explicit: preferredAgent > favoriteAgent > provider.host > fallback
-    agent = preferredAgent ?? favoriteAgent ?? provider?.host ?? "openclaude";
+    // A resolved provider always owns its CLI. Preferences only apply when no
+    // provider was selected, otherwise Codex could receive a Claude model (or
+    // the inverse) from stale workspace settings.
+    agent = provider?.host ?? preferredAgent ?? favoriteAgent ?? "openclaude";
   }
 
   // ── Step 4: Build env (merge provider env + model env vars) ──

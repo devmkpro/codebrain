@@ -8,6 +8,7 @@ import { ClarifyPrompt } from "../clarify/ClarifyPrompt";
 import { ConversationPanel } from "../conversation/ConversationPanel";
 import { SpecPanel } from "../spec/SpecPanel";
 import { TerminalFirstOnboarding } from "../onboarding/TerminalFirstOnboarding";
+import { PaneLauncher } from "../panes/PaneLauncher";
 import { CronPanel } from "../cron/CronPanel";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { CommandPalette } from "../palette/CommandPalette";
@@ -19,6 +20,7 @@ import { WorkspaceView } from "../workspace/WorkspaceView";
 import { AgentRail } from "./AgentRail";
 import { CommandBar } from "./CommandBar";
 import { StatusBar } from "./StatusBar";
+import { GlobalModalsHost } from "../ui/AppHeader";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SHELL V2 — TERMINAL-FIRST
@@ -125,6 +127,8 @@ export function ShellV2({ appVersion }: Props) {
 
       <CommandPalette />
       <ClarifyPrompt />
+      <PaneLauncher />
+      <GlobalModalsHost />
       <TerminalFirstOnboarding />
     </RouterProvider>
   );

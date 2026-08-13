@@ -582,6 +582,17 @@ function Modals({ modals: m, activeWorkspace }: { modals: ReturnType<typeof useM
   );
 }
 
+/** Global modal layer for the terminal-first shell, which does not mount AppHeader. */
+export function GlobalModalsHost() {
+  const modals = useModals();
+  const activeWorkspace = useNavStore((state) => {
+    const tabs = state.tabs as any[];
+    return tabs[state.activeTabIndex]?.workspacePath as string | undefined;
+  });
+  useModalShortcuts();
+  return <Modals modals={modals} activeWorkspace={activeWorkspace} />;
+}
+
 // ─── Squad spawner (shared logic) ────────────────────────────────────────────
 function useWorkspaceSquadSpawner() {
   const addPane = usePanesStore(s => s.addPane);

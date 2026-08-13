@@ -19,6 +19,7 @@ import { CommandPalette } from '../palette/CommandPalette';
 import { useGlobalShortcuts } from '../palette/usePaletteShortcut';
 import { useFlag } from '../../stores/flags-store';
 import { ShellV2 } from '../shell/ShellV2';
+import { PaneLauncher } from '../panes/PaneLauncher';
 
 interface Props {
   whatsNewOpen: boolean;
@@ -117,6 +118,7 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
       <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} currentVersion={appVersion} />
       <ClarifyPrompt />
       {paletteEnabled && <CommandPalette />}
+      <PaneLauncher />
 
       {workspaceToast && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[9999] animate-in fade-in zoom-in-95 duration-200">

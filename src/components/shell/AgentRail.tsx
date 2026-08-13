@@ -2,9 +2,9 @@ import React from "react";
 import { ChevronLeft, ChevronRight, MessageSquare, Plus } from "lucide-react";
 import { usePanesStore } from "../../stores/panes-store";
 import { useShellStore } from "../../stores/shell-store";
-import { runAction } from "../../lib/actions";
 import { statusPresentation } from "./pane-status";
 import { useConversationStore } from "../../stores/conversation-store";
+import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RAIL DE AGENTES
@@ -88,6 +88,7 @@ export function AgentRail() {
   const collapsed = useShellStore((state) => state.railCollapsed);
   const toggleRail = useShellStore((state) => state.toggleRail);
   const openConversation = useConversationStore((state) => state.openFor);
+  const openPaneLauncher = usePaneLauncherStore((state) => state.show);
 
   return (
     <aside
@@ -136,13 +137,13 @@ export function AgentRail() {
 
       <button
         type="button"
-        onClick={() => void runAction("pane.new")}
+        onClick={openPaneLauncher}
         aria-label="Novo pane"
         title="Novo pane — Ctrl+T"
         className="flex items-center gap-2 h-cell-lg px-3 border-t border-cb-line-0 text-cb-fg-2 hover:text-cb-accent hover:bg-cb-bg-2 shrink-0"
       >
         <Plus size={13} strokeWidth={1.5} />
-        {!collapsed && <span className="text-xs">novo pane</span>}
+        {!collapsed && <span className="text-xs">+ pane</span>}
       </button>
     </aside>
   );

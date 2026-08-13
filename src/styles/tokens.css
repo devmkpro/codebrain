@@ -193,7 +193,9 @@
   --cb-z-sticky:              100;
   --cb-z-header:              200;
   --cb-z-drawer:              300;
+  --cb-z-panel:               300;
   --cb-z-overlay:             400;
+  --cb-z-popover:             400;
   --cb-z-modal:               500;
   --cb-z-palette:             600;   /* command palette fica acima de tudo  */
   --cb-z-toast:               700;

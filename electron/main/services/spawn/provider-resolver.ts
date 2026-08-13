@@ -50,14 +50,13 @@ export function resolveProvider(
     agent = "claude";
     const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "claude-oauth");
     const registryModels = registryTemplate?.models ?? [];
-    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
     const anthropicTemplate = PROVIDER_REGISTRY.find((t) => t.id === "anthropic");
     const anthropicModels = anthropicTemplate?.models ?? [];
     provider = {
       id: "claude-oauth",
       type: "anthropic-compat",
       host: "claude",
-      models: [...new Set([...allModels, ...anthropicModels])],
+      models: [...new Set([...registryModels, ...anthropicModels])],
       env: {},
     };
     log.info(`[resolveProvider] claude-oauth → agent="claude", ${provider.models.length} models`);
@@ -68,14 +67,13 @@ export function resolveProvider(
     agent = "codex";
     const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "codex-oauth");
     const registryModels = registryTemplate?.models ?? [];
-    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
     const codexTemplate = PROVIDER_REGISTRY.find((t) => t.id === "codex");
     const codexApiModels = codexTemplate?.models ?? [];
     provider = {
       id: "codex-oauth",
       type: "codex",
       host: "codex",
-      models: [...new Set([...allModels, ...codexApiModels])],
+      models: [...new Set([...registryModels, ...codexApiModels])],
       env: {},
     };
     log.info(`[resolveProvider] codex-oauth → agent="codex", ${provider.models.length} models`);
@@ -86,12 +84,11 @@ export function resolveProvider(
     agent = "gemini-cli";
     const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "gemini-cli");
     const registryModels = registryTemplate?.models ?? [];
-    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
     provider = {
       id: "gemini-cli",
       type: "gemini-cli",
       host: "gemini-cli",
-      models: [...new Set([...allModels])],
+      models: [...new Set([...registryModels])],
       env: {},
     };
     log.info(`[resolveProvider] gemini-cli → agent="gemini-cli", ${provider.models.length} models`);
@@ -102,13 +99,12 @@ export function resolveProvider(
     agent = "kimi";
     const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "kimi");
     const registryModels = registryTemplate?.models ?? [];
-    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
     provider = {
       id: "kimi",
       type: "openai-compat",
       host: "kimi",
       baseUrl: registryTemplate?.baseUrl ?? "https://api.moonshot.cn/v1",
-      models: [...new Set([...allModels])],
+      models: [...new Set([...registryModels])],
       env: {},
     };
     log.info(`[resolveProvider] kimi → agent="kimi", ${provider.models.length} models`);
@@ -119,12 +115,11 @@ export function resolveProvider(
     agent = "cursor";
     const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "cursor");
     const registryModels = registryTemplate?.models ?? [];
-    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
     provider = {
       id: "cursor",
       type: "openai-compat",
       host: "cursor",
-      models: [...new Set([...allModels])],
+      models: [...new Set([...registryModels])],
       env: {},
     };
     log.info(`[resolveProvider] cursor → agent="cursor", ${provider.models.length} models`);
@@ -135,12 +130,11 @@ export function resolveProvider(
     agent = "copilot";
     const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "copilot");
     const registryModels = registryTemplate?.models ?? [];
-    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
     provider = {
       id: "copilot",
       type: "openai-compat",
       host: "copilot",
-      models: [...new Set([...allModels])],
+      models: [...new Set([...registryModels])],
       env: {},
     };
     log.info(`[resolveProvider] copilot → agent="copilot", ${provider.models.length} models`);
@@ -151,7 +145,6 @@ export function resolveProvider(
     agent = "claude";
     const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "mimo-claude");
     const registryModels = registryTemplate?.models ?? [];
-    const allModels = model && !registryModels.includes(model) ? [model, ...registryModels] : registryModels;
     // Inherit MIMO key from the configured mimo provider in the store.
     // The main MIMO provider (mimo-compat/openclaude) stores the key as OPENAI_API_KEY
     // or ANTHROPIC_AUTH_TOKEN. We check ALL possible locations.
@@ -173,7 +166,7 @@ export function resolveProvider(
       host: "claude",
       baseUrl: mimoBaseUrl,
       tokenEnvVar: "ANTHROPIC_AUTH_TOKEN",
-      models: [...new Set([...allModels])],
+      models: [...new Set([...registryModels])],
       env: mimoKey ? { ANTHROPIC_AUTH_TOKEN: mimoKey, MIMO_API_KEY: mimoKey } : {},
     };
     log.info(`[resolveProvider] mimo-claude → agent="claude", key=${mimoKey ? "SET" : "MISSING"}, baseUrl=${mimoBaseUrl}`);
@@ -409,6 +402,7 @@ export function resolveProvider(
         log.info(`[resolveProvider] Model "${model}" → switching provider from "${provider.id}" to "${betterProvider.id}"`);
         provider = betterProvider;
         providerId = betterProvider.id;
+        agent = betterProvider.host ?? agent;
       } else {
         const fallback = enhancedModels[0] || providerModels[0];
         log.warn(`[resolveProvider] Model "${model}" not found in any provider. Falling back to: ${fallback}`);
@@ -435,6 +429,14 @@ export function resolveProvider(
   if (provider && agent === "claude" && provider.type === "mimo-compat") {
     log.info(`[resolveProvider] Overriding agent "claude" → "openclaude" for mimo-compat`);
     agent = "openclaude";
+  }
+
+  // Final invariant: provider and CLI cannot disagree. OpenRouter is the sole
+  // intentional exception because it can expose an Anthropic-compatible route
+  // to Claude Code when explicitly requested.
+  const finalIsOpenRouter = (provider?.id ?? "").startsWith("openrouter") || (provider?.baseUrl ?? "").includes("openrouter");
+  if (provider?.host && !(finalIsOpenRouter && config.agent === "claude")) {
+    agent = provider.host;
   }
 
   return { agent, provider, providerId, model };
