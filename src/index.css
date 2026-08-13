@@ -465,6 +465,18 @@ html, body, #root {
     top: 0;
     bottom: 0;
 }
+
+/* O canvas do xterm usa o tema ativo, mas o viewport que fica por trás dele
+   vem do CSS legado. Sem este override ele mantém #000 e vira uma faixa preta
+   quando há alguns pixels de sobra após um resize/fit no tema claro. */
+:root.light .xterm,
+:root.light .xterm .xterm-viewport,
+:root.light .xterm .composition-view {
+    background-color: #ffffff;
+}
+:root.light .xterm .composition-view {
+    color: #161616;
+}
 .xterm .xterm-screen {
     position: relative;
 }
