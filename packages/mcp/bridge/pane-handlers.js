@@ -290,12 +290,11 @@ function createPaneHandlers(ptyManager, opts) {
         if (excludeSet.has(actor.pane_id)) continue;
         // Must not have an in_progress kanban task
         if (busyPaneIds.has(actor.pane_id)) continue;
-        // Model match (if specified): exact match or both undefined
-        if (model && actor.model && actor.model !== model) continue;
-        // Provider match (if specified): exact match or actor has none
-        if (providerId && actor.provider_id && actor.provider_id !== providerId) continue;
-        // Agent match (if specified): exact match or actor has none
-        if (agent && actor.agent && actor.agent !== agent) continue;
+        // Explicit compatibility constraints are strict. Missing metadata is not
+        // proof of compatibility and must never reuse a different CLI silently.
+        if (model && actor.model !== model) continue;
+        if (providerId && actor.provider_id !== providerId) continue;
+        if (agent && actor.agent !== agent) continue;
 
         candidates.push(actor);
       }
@@ -337,6 +336,10 @@ function createPaneHandlers(ptyManager, opts) {
             return {
               ok: true,
               paneId: idleWorker.pane_id,
+              agent: idleWorker.agent,
+              providerId: idleWorker.provider_id || undefined,
+              model: idleWorker.model || undefined,
+              cwd: idleWorker.cwd || cwd,
               reused: true,
               label: label || null,
               message: `Reused idle worker ${idleWorker.pane_id.slice(0, 8)} (turns: ${idleWorker.turn_count || 0}). No new pane spawned.`,
@@ -354,12 +357,17 @@ function createPaneHandlers(ptyManager, opts) {
               const pane = panes.find(p => p.paneId === existingPaneId);
               if (pane && pane.status !== "exited") {
                 // Check if provider/model match — if not, don't reuse (user wants different provider)
-                const providerMatch = !providerId || !pane.providerId || pane.providerId === providerId;
-                const modelMatch = !model || !pane.model || pane.model === model;
-                if (providerMatch && modelMatch) {
+                const agentMatch = !agent || pane.agent === agent;
+                const providerMatch = !providerId || pane.providerId === providerId;
+                const modelMatch = !model || pane.model === model;
+                if (agentMatch && providerMatch && modelMatch) {
                   return {
                     ok: true,
                     paneId: existingPaneId,
+                    agent: pane.agent,
+                    providerId: pane.providerId,
+                    model: pane.model,
+                    cwd: pane.cwd,
                     reused: true,
                     label,
                     message: `Reusing existing "${label}" pane (${existingPaneId}). It is already active.`,
@@ -385,11 +393,20 @@ function createPaneHandlers(ptyManager, opts) {
               const workspace = opts.getCurrentWorkspacePath?.() || null;
               opts.memoryStore?.actorRegister?.({
                 paneId: result.paneId, parentPaneId: parentPaneId || null,
-                agent, label, description, workspace, cwd, providerId, model,
+                agent: result.agent || agent, label, description, workspace,
+                cwd: result.cwd || cwd,
+                providerId: result.providerId || providerId,
+                model: result.model || model,
               });
             } catch {}
           }
-          return result;
+          return {
+            ...result,
+            agent: result.agent || agent || "openclaude",
+            providerId: result.providerId || providerId || undefined,
+            model: result.model || model || undefined,
+            cwd: result.cwd || cwd || undefined,
+          };
         }
         const config = { agent: agent || "openclaude", cwd: cwd || undefined, providerId: providerId || undefined, model: model || undefined };
         const paneId = await ptyManager.spawn(config);

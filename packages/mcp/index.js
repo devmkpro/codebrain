@@ -78,7 +78,7 @@ function createCodebrainMCPServer(bridge) {
     "Open a NEW VISIBLE terminal pane in the CodeBrain workspace grid, OR reuse an idle worker if one is compatible (default: reuseIdle=true). Returns paneId + reused flag. ALWAYS check actor_list() first to see available workers before spawning.",
     {
       cwd:          z.string().optional().describe("Working directory for the new pane. STRONGLY RECOMMENDED — always pass your workspace path here to ensure the pane opens in the correct project. If omitted, the system guesses from active panes."),
-      agent:        z.string().optional().describe("Agent binary: claude, codex, gemini, openclaude, shell. Defaults to claude."),
+      agent:        z.enum(["claude", "codex", "gemini", "gemini-cli", "openclaude", "kimi", "cursor", "copilot", "shell"]).optional().describe("Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it (for example, Codex → codex). Omit only when the user did not choose a CLI."),
       providerId:   z.string().optional().describe("Provider ID to use for the new pane."),
       model:        z.string().optional().describe("Model to use for the new pane."),
       label:        z.string().optional().describe("A short label to identify this pane in pane_list (e.g. 'backend', 'frontend', 'ui-tester'). Helps the orchestrator reuse existing workers."),
@@ -103,7 +103,15 @@ function createCodebrainMCPServer(bridge) {
         if (!paneId || result?.error) {
           return { content: [{ type: "text", text: `error: ${result?.error ?? "spawn failed"}` }], isError: true };
         }
-        const out = { paneId, ok: true, reused: result.reused || false };
+        const out = {
+          paneId,
+          ok: true,
+          reused: result.reused || false,
+          agent: result.agent,
+          providerId: result.providerId,
+          model: result.model,
+          cwd: result.cwd,
+        };
         if (result.message) out.message = result.message;
         return { content: [{ type: "text", text: JSON.stringify(out) }] };
       } catch (err) {
@@ -118,7 +126,7 @@ function createCodebrainMCPServer(bridge) {
     "Spawn a pane and BLOCK until it goes idle (run mode). Returns the pane output + parsed status header. Use when you need the result inline (like MiMo action:'run'). For fire-and-forget, use pane_spawn instead.",
     {
       cwd:          z.string().optional().describe("Working directory for the new pane."),
-      agent:        z.string().optional().describe("Agent binary: claude, codex, gemini, openclaude. Defaults to claude."),
+      agent:        z.enum(["claude", "codex", "gemini", "gemini-cli", "openclaude", "kimi", "cursor", "copilot"]).optional().describe("Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it."),
       providerId:   z.string().optional().describe("Provider ID to use."),
       model:        z.string().optional().describe("Model to use."),
       label:        z.string().optional().describe("Label to identify this pane."),

@@ -17,7 +17,7 @@ export interface ResolvedProvider {
  * Resolves the provider, model, and agent for a spawn request.
  *
  * Priority:
- *   0) claude-oauth virtual provider fast path
+ *   0) Explicit native CLI pinning + virtual provider fast path
  *   1) Explicit providerId lookup in store
  *   2) Model-based provider lookup
  *   3) Inheritance from last spawned pane (only when neither model nor provider given)
@@ -44,6 +44,12 @@ export function resolveProvider(
   if (agent === "shell") {
     return { agent, provider: null, providerId: null, model: undefined };
   }
+
+  // A native CLI explicitly requested by the caller is authoritative. Without
+  // this pin, the inheritance step can copy the previous pane's Claude provider
+  // into a `pane_spawn({ agent: "codex" })` request and silently launch Claude.
+  if (!providerId && agent === "codex") providerId = "codex-oauth";
+  if (!providerId && (agent === "gemini" || agent === "gemini-cli")) providerId = "gemini-cli";
 
   // ── Step 0: claude-oauth virtual provider ───────────────────────────────────
   if (providerId === "claude-oauth") {
@@ -326,7 +332,7 @@ export function resolveProvider(
   }
 
   // ── Step 3: Inheritance from last spawned pane ──────────────────────────────
-  if (!providerId && !model) {
+  if (!providerId && !model && !config.agent) {
     let latest = 0;
     let callerCfg: any = null;
     for (const [pid, pcfg] of ctx.paneConfigs) {
@@ -388,7 +394,8 @@ export function resolveProvider(
     if (providerModels.length > 0 && !modelKnown) {
       const targetType = getProviderTypeForModel(model);
       // Try to find a better-suited provider
-      const betterProvider =
+      const nativeCliPinned = ["codex", "gemini", "gemini-cli", "kimi", "cursor", "copilot"].includes(config.agent ?? "");
+      const betterProvider = nativeCliPinned ? null :
         (targetType && targetType !== provider.type
           ? ctx.providerStore.listFull().find((p: any) => p.type === targetType)
           : null) ??

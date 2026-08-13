@@ -25,7 +25,7 @@ describe("provider resolver compatibility", () => {
     expect(result.provider.models).toContain(result.model);
   });
 
-  it("uses the provider host after correcting an incompatible provider", () => {
+  it("keeps the requested native CLI when another provider supports the incompatible model", () => {
     const anthropic = { id: "anthropic", type: "anthropic-compat", host: "claude", models: ["claude-sonnet-4-6"] };
     const result = resolveProvider(context([anthropic]), {
       agent: "codex",
@@ -33,8 +33,24 @@ describe("provider resolver compatibility", () => {
       model: "claude-sonnet-4-6",
     });
 
-    expect(result.providerId).toBe("anthropic");
-    expect(result.agent).toBe("claude");
-    expect(result.model).toBe("claude-sonnet-4-6");
+    expect(result.providerId).toBe("codex-oauth");
+    expect(result.agent).toBe("codex");
+    expect(result.model).not.toContain("claude");
+  });
+
+  it("does not inherit Claude when Codex is requested without provider or model", () => {
+    const ctx = context();
+    ctx.paneConfigs.set("previous", {
+      agent: "claude",
+      providerId: "claude-oauth",
+      model: "claude-haiku-4-5-20251001",
+    });
+    ctx.paneRegistry.set("previous", { spawnedAt: Date.now() });
+
+    const result = resolveProvider(ctx, { agent: "codex" });
+
+    expect(result.agent).toBe("codex");
+    expect(result.providerId).toBe("codex-oauth");
+    expect(result.model).not.toContain("claude");
   });
 });

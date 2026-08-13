@@ -92,7 +92,7 @@ export interface SpawnPaneConfig {
 export async function spawnPaneInternal(
   ctx: AppContext,
   config: SpawnPaneConfig,
-): Promise<{ ok: boolean; paneId?: string; providerId?: string; error?: string }> {
+): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; error?: string }> {
   try {
     // Smart cwd resolution: explicit > most active pane workspace > global > home
     let cwd = config.cwd;
@@ -972,6 +972,8 @@ export async function spawnPaneInternal(
       cwd,
       args,
       env,
+      providerId: providerId ?? undefined,
+      model,
       permissionMode: config.permissionMode,
       claudeSessionId: config.claudeSessionId,
       role: config.role,
@@ -1027,7 +1029,14 @@ export async function spawnPaneInternal(
       ctx.providerHealth.set(providerId, health);
     }
 
-    return { ok: true, paneId, providerId: providerId ?? undefined };
+    return {
+      ok: true,
+      paneId,
+      agent,
+      providerId: providerId ?? undefined,
+      model,
+      cwd,
+    };
   } catch (err) {
     // Track provider health — failure
     if (config.providerId) {
