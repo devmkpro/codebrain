@@ -43,14 +43,15 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
   const tabs         = useNavStore(s => s.tabs) as any[];
   const activeTabIdx = useNavStore(s => s.activeTabIndex);
 
-  // Ctrl+K depende da flag; os atalhos declarados pelas ações valem sempre —
-  // eles substituíram os handlers que viviam soltos no App.tsx.
-  const paletteEnabled = useFlag('commandPalette');
-  useGlobalShortcuts(paletteEnabled);
-
   // Shell terminal-first é o padrão. A flag agora existe apenas como saída
   // temporária para recuperar uma instalação caso haja regressão visual.
   const shellV2 = useFlag('shellV2');
+
+  // O palette é navegação estrutural do shell v2, não um extra opcional.
+  // Preferências antigas podem ter commandPalette=false; no shell novo isso
+  // não pode desativar o Ctrl+K prometido pela própria interface.
+  const paletteEnabled = useFlag('commandPalette') || shellV2;
+  useGlobalShortcuts(paletteEnabled);
   if (shellV2) {
     return (
       <>

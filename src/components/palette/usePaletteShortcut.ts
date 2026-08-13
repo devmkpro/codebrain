@@ -87,6 +87,7 @@ export function useGlobalShortcuts(paletteEnabled: boolean): void {
         event.key.toLowerCase() === "k"
       ) {
         event.preventDefault();
+        event.stopPropagation();
         usePaletteStore.getState().togglePalette();
         return;
       }
@@ -106,12 +107,16 @@ export function useGlobalShortcuts(paletteEnabled: boolean): void {
         if (action.enabled && !action.enabled()) continue;
 
         event.preventDefault();
+        event.stopPropagation();
         void action.run();
         return;
       }
     }
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    // Capture é intencional: xterm instala seu próprio handler no elemento e
+    // usa Ctrl+K como comando de readline. O app precisa interceptar primeiro,
+    // senão o terminal consome o gesto antes que ele alcance `window` no bubble.
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [paletteEnabled]);
 }
