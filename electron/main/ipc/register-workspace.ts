@@ -4,6 +4,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import type { AppContext } from "../context";
 import { readRecentWorkspaces, saveRecentWorkspaces, touchWorkspace, writeContextFiles } from "../services/workspace";
+import { getRepositoryPreparationStatus, prepareRepository } from "../services/repository-preparation";
 
 /** Directories that indicate a project root */
 const PROJECT_MARKERS = [
@@ -76,6 +77,8 @@ export function registerWorkspaceHandlers(ctx: AppContext): void {
   });
 
   ipcMain.handle("workspace:save", async (_event, _config: Record<string, unknown>) => {});
+  ipcMain.handle("workspace:preparation-status", async (_event, wsPath: string) => getRepositoryPreparationStatus(wsPath));
+  ipcMain.handle("workspace:prepare", async (_event, args: { workspace: string; createCommit?: boolean }) => prepareRepository(args.workspace, Boolean(args.createCommit)));
 
   ipcMain.handle("workspaces:recent", async () => readRecentWorkspaces(ctx));
   ipcMain.handle("workspaces:touch", async (_event, wsPath: string) => touchWorkspace(ctx, wsPath));

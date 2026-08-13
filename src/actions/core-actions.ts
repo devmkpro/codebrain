@@ -222,6 +222,17 @@ const coreActions: Action[] = [
     },
   },
   {
+    id: "workspace.prepare",
+    title: "Preparar repositório",
+    subtitle: "Gerar contexto, mapa, Skills e opção de commit",
+    group: "workspace",
+    keywords: ["preparar", "inicializar", "contexto", "skills", "bootstrap", "setup", "repositório"],
+    icon: "Sparkles",
+    priority: 65,
+    enabled: inWorkspace,
+    run: () => window.dispatchEvent(new CustomEvent("codebrain:prepare-repository")),
+  },
+  {
     id: "workspace.files",
     title: "Arquivos",
     group: "workspace",

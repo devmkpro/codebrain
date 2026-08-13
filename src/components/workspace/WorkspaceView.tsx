@@ -8,6 +8,7 @@ import { useEditorStore } from "../../stores/editor-store";
 import { Editor } from "../files/Editor";
 import { Grid } from "../layout/Grid";
 import { FloatingFileWindow } from "./FloatingFileWindow";
+import { RepositoryPreparation } from "./RepositoryPreparation";
 
 export function WorkspaceView({ workspacePath, view }) {
   const addPane = usePanesStore(s => s.addPane);
@@ -78,7 +79,7 @@ export function WorkspaceView({ workspacePath, view }) {
   return (
     <div
       ref={rootRef}
-      className="flex flex-col h-full cb-surface"
+      className="relative flex flex-col h-full cb-surface"
       onDragOver={event => {
         if (!event.dataTransfer.types.includes(CODEBRAIN_FILE_DRAG_TYPE)) return;
         event.preventDefault();
@@ -122,6 +123,8 @@ export function WorkspaceView({ workspacePath, view }) {
       >
         <Grid workspacePath={workspacePath} />
       </div>
+
+      {view?.kind !== "map" && view?.kind !== "files" && <RepositoryPreparation workspacePath={workspacePath} />}
 
       {floatingFiles.map(file => (
         <FloatingFileWindow

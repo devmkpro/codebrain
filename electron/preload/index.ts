@@ -189,6 +189,8 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     open: () => ipcRenderer.invoke("workspace:open"),
     set: (dir: string) => ipcRenderer.invoke("workspace:set", dir),
     save: (config: unknown) => ipcRenderer.invoke("workspace:save", config),
+    preparationStatus: (workspace: string) => ipcRenderer.invoke("workspace:preparation-status", workspace),
+    prepare: (args: { workspace: string; createCommit?: boolean }) => ipcRenderer.invoke("workspace:prepare", args),
     scan: (path: string) => ipcRenderer.invoke("workspace:scan", path),
     detect: (dir?: string) => ipcRenderer.invoke("workspace:detect", dir),
   },

@@ -6,8 +6,6 @@
  */
 import { app, session } from "electron";
 import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 import log from "electron-log/main.js";
 
 import { platform } from "./platform";
@@ -27,58 +25,6 @@ import { setupDiscordRPC, teardownDiscordRPC } from "./discord-rpc";
 import { createSessionWatchers } from "./services/session-watchers";
 
 log.initialize();
-
-/**
- * Auto-install bundled skills from resources/  into ~/.codebrain/skills/.
- * Each sub-directory in resources/ that contains a skill.json is treated as a bundled skill.
- * Installs only if the skill is not already present (never overwrites user edits).
- */
-function autoInstallBundledSkills(): void {
-  try {
-    const isPackaged = app.isPackaged;
-    const resourcesDir = isPackaged
-      ? process.resourcesPath
-      : path.join(__dirname, "..", "..", "resources");
-
-    if (!fs.existsSync(resourcesDir)) return;
-
-    const globalSkillsDir = path.join(os.homedir(), ".codebrain", "skills");
-    fs.mkdirSync(globalSkillsDir, { recursive: true });
-
-    for (const entry of fs.readdirSync(resourcesDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const bundledDir = path.join(resourcesDir, entry.name);
-      const manifestPath = path.join(bundledDir, "skill.json");
-      if (!fs.existsSync(manifestPath)) continue; // not a skill directory
-
-      const targetDir = path.join(globalSkillsDir, entry.name);
-      if (fs.existsSync(targetDir)) continue; // already installed — don't overwrite
-
-      try {
-        fs.mkdirSync(targetDir, { recursive: true });
-        copyDirRecursive(bundledDir, targetDir);
-        log.info(`[Skills] Auto-installed bundled skill: ${entry.name}`);
-      } catch (err) {
-        log.warn(`[Skills] Failed to install bundled skill '${entry.name}':`, err);
-      }
-    }
-  } catch (err) {
-    log.warn("[Skills] autoInstallBundledSkills error:", err);
-  }
-}
-
-function copyDirRecursive(src: string, dest: string): void {
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      fs.mkdirSync(destPath, { recursive: true });
-      copyDirRecursive(srcPath, destPath);
-    } else {
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
-}
 
 const ctx = createAppContext();
 const HEADLESS_MCP = process.argv.includes("--mcp-server") || process.argv.includes("--mcp-daemon");
@@ -117,9 +63,6 @@ app.whenReady().then(async () => {
   // Previously this only ran when spawning a pane — now it runs every app start.
   const codebrainRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
   ensureClaudeSettings(codebrainRoot);
-
-  // Auto-install bundled skills (~/.codebrain/skills/<id>)
-  autoInstallBundledSkills();
 
   // Clean up any stale codebrain MCP entry in ~/.codex/config.toml from a previous
   // crashed session. MCP is injected via -c flag at spawn time,

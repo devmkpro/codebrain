@@ -400,6 +400,8 @@ export interface CodebrainApp {
     open: () => Promise<string | null>;
     set: (dir: string) => Promise<void>;
     save: (config: WorkspaceConfig) => Promise<void>;
+    preparationStatus: (workspace: string) => Promise<{ ok: boolean; initialized: boolean; workspace: string; stack: string[]; commands: string[]; skills: { id: string; title: string; guidance: string }[]; files: string[]; git: boolean; error?: string }>;
+    prepare: (args: { workspace: string; createCommit?: boolean }) => Promise<{ ok: boolean; initialized: boolean; workspace: string; stack: string[]; commands: string[]; skills: { id: string; title: string; guidance: string }[]; files: string[]; git: boolean; created?: string[]; commit?: string; commitError?: string; error?: string }>;
     scan: (path: string) => Promise<FileEntry[]>;
     detect: (dir?: string) => Promise<{ path: string; autoDetected: boolean; fromRecent?: boolean; fallback?: boolean } | null>;
   };
