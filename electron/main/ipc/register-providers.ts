@@ -9,6 +9,16 @@ import { syncClaudeSettingsVersion } from "../services/setup-claude";
 let openRouterCache: { data: any[]; ts: number } | null = null;
 const OR_CACHE_TTL = 5 * 60 * 1000;
 
+/**
+ * Electron's main-process hot reload can execute a registration module more
+ * than once. Replace an older handler so a newly added endpoint (such as
+ * syncModels) is not skipped after a duplicate `providers:list` exception.
+ */
+function replaceHandler(channel: string, listener: Parameters<typeof ipcMain.handle>[1]): void {
+  ipcMain.removeHandler(channel);
+  ipcMain.handle(channel, listener);
+}
+
 export function registerProviderHandlers(ctx: AppContext): void {
   // ── One-time migration: 9Router switched from openai-compat to anthropic-compat ──
   // 9Router serves the Anthropic protocol at /v1/messages (like MIMO), so saved
@@ -34,32 +44,32 @@ export function registerProviderHandlers(ctx: AppContext): void {
     console.warn("[providers] 9Router migration failed:", err);
   }
 
-  ipcMain.handle("providers:list", () => getEnhancedProviders(ctx));
-  ipcMain.handle("providers:save", (_event, provider) => {
+  replaceHandler("providers:list", () => getEnhancedProviders(ctx));
+  replaceHandler("providers:save", (_event, provider) => {
     const result = ctx.providerStore.upsert(provider);
     if (result.ok) void syncProviderModels(ctx, { providerIds: [provider.id] });
     return result;
   });
-  ipcMain.handle("providers:delete", (_event, id: string) => ctx.providerStore.remove(id));
-  ipcMain.handle("providers:templates", () => BUILTIN_TEMPLATES);
-  ipcMain.handle("providers:testToken", async (_event, _args: { providerId: string; token: string }) => {
+  replaceHandler("providers:delete", (_event, id: string) => ctx.providerStore.remove(id));
+  replaceHandler("providers:templates", () => BUILTIN_TEMPLATES);
+  replaceHandler("providers:testToken", async (_event, _args: { providerId: string; token: string }) => {
     return { ok: true };
   });
 
-  ipcMain.handle("providers:listModels", async (_event, args: { baseUrl: string; apiKey: string; type: string }) => {
+  replaceHandler("providers:listModels", async (_event, args: { baseUrl: string; apiKey: string; type: string }) => {
     return listModelsFromEndpoint(args);
   });
 
   // Detect models available on Claude OAuth plan (reads token from ~/.claude/.credentials.json)
-  ipcMain.handle("providers:listClaudeOAuthModels", () => listClaudeOAuthModels());
-  ipcMain.handle("providers:syncModels", (_event, args?: { providerIds?: string[]; force?: boolean }) => syncProviderModels(ctx, args));
+  replaceHandler("providers:listClaudeOAuthModels", () => listClaudeOAuthModels());
+  replaceHandler("providers:syncModels", (_event, args?: { providerIds?: string[]; force?: boolean }) => syncProviderModels(ctx, args));
 
-  ipcMain.handle("providers:healthCheck", async (_event, args: { baseUrl: string; apiKey: string; type: string; model?: string }) => {
+  replaceHandler("providers:healthCheck", async (_event, args: { baseUrl: string; apiKey: string; type: string; model?: string }) => {
     return healthCheckProvider(args);
   });
 
   // Fetch OpenRouter public model catalog (no API key needed)
-  ipcMain.handle("providers:listOpenRouterModels", async () => {
+  replaceHandler("providers:listOpenRouterModels", async () => {
     if (openRouterCache && Date.now() - openRouterCache.ts < OR_CACHE_TTL) {
       return { ok: true, models: openRouterCache.data };
     }
