@@ -211,6 +211,13 @@ export interface DiagnosticsSnapshot {
   [key: string]: unknown;
 }
 
+export interface McpStatus {
+  active: boolean;
+  port: number | null;
+  route: string | null;
+  toolCount: number;
+}
+
 export interface FileEntry {
   name: string;
   path: string;
@@ -437,6 +444,9 @@ export interface CodebrainApp {
       paneCount: number;
       panes: Array<{ paneId: string; agent: string; pid: number | null; rssMB: number; cpu: number }>;
     }>;
+  };
+  mcp: {
+    status: () => Promise<McpStatus>;
   };
   skill: {
     status: () => Promise<{ installed: boolean }>;

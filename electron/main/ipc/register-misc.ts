@@ -59,6 +59,13 @@ export function registerMiscHandlers(ctx: AppContext): void {
     };
   });
 
+  ipcMain.handle("mcp:status", () => ({
+    active: !!ctx.mcpServerInfo,
+    port: ctx.mcpServerInfo?.port ?? null,
+    route: ctx.mcpServerInfo?.streamableHttpUrl ?? null,
+    toolCount: ctx.mcpServerInfo ? getMcpToolCount() : 0,
+  }));
+
   // Performance HUD snapshot — RSS + CPU per pane
   ipcMain.handle("diagnostics:perfSnap", async () => {
     const mem = process.memoryUsage();

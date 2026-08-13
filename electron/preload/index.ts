@@ -244,6 +244,10 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     perfSnap: () => ipcRenderer.invoke("diagnostics:perfSnap"),
   },
 
+  mcp: {
+    status: () => ipcRenderer.invoke("mcp:status"),
+  },
+
   audio: {
     getConfig: () => ipcRenderer.invoke("audio:getConfig"),
     saveConfig: (patch: unknown) => ipcRenderer.invoke("audio:saveConfig", patch),

@@ -2,6 +2,7 @@ import React from "react";
 import { usePanesStore } from "../../stores/panes-store";
 import { useShellStore, applyDensity, type Density } from "../../stores/shell-store";
 import { toPaneStatus } from "./pane-status";
+import { McpRouteStatus } from "./McpRouteStatus";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    BARRA DE STATUS
@@ -56,6 +57,9 @@ export function StatusBar({ appVersion }: { appVersion?: string | null }) {
       {counts.failed > 0 && (
         <span className="text-cb-danger">{counts.failed} com erro</span>
       )}
+
+      <span className="h-3 w-px bg-cb-line-0" aria-hidden />
+      <McpRouteStatus />
 
       <span className="flex-1" />
 
