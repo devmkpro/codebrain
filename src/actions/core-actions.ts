@@ -14,6 +14,7 @@ import { useSessionHistoryStore } from "../stores/session-history-store";
 import { useTasksStore } from "../stores/tasks-store";
 import { useTerminalSettings } from "../stores/terminal-settings-store";
 import { useSpecStore } from "../stores/spec-store";
+import { useWorkspaceStore } from "../stores/workspace-store";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    AÇÕES DO NÚCLEO
@@ -205,6 +206,26 @@ const coreActions: Action[] = [
   },
 
   /* ── Workspace ─────────────────────────────────────────────────────── */
+  {
+    id: "workspace.open",
+    title: "Abrir workspace…",
+    subtitle: "Seleciona uma pasta e troca para ela",
+    group: "workspace",
+    keywords: ["abrir pasta", "trocar workspace", "projeto", "repositório"],
+    shortcut: ["Ctrl", "O"],
+    icon: "FolderPlus",
+    priority: 60,
+    run: async () => {
+      const selected = await window.codeBrainApp.workspace.open();
+      if (!selected) return;
+      useWorkspaceStore.getState().setPath(selected);
+      useNavStore.getState().openWorkspace(selected);
+      await Promise.allSettled([
+        window.codeBrainApp.workspace.set(selected),
+        window.codeBrainApp.workspaces.touch(selected),
+      ]);
+    },
+  },
   {
     id: "workspace.files",
     title: "Arquivos",

@@ -1,8 +1,8 @@
 import React from "react";
 import { ArrowLeft, ArrowRight, Search } from "lucide-react";
-import { useNavStore } from "../../stores/nav-store";
 import { usePaletteStore } from "../../stores/palette-store";
 import { useRouter } from "../../lib/router";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    BARRA DE COMANDO
@@ -20,27 +20,9 @@ import { useRouter } from "../../lib/router";
    ensina o atalho.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function basename(path: string): string {
-  return path.replace(/[/\\]+$/, "").split(/[/\\]/).pop() ?? path;
-}
-
-/** Caminho encurtado no meio, preservando início e fim. */
-function shortenPath(path: string, max = 44): string {
-  if (path.length <= max) return path;
-  const head = path.slice(0, Math.floor(max / 2) - 2);
-  const tail = path.slice(-Math.ceil(max / 2) + 1);
-  return `${head}…${tail}`;
-}
-
 export function CommandBar() {
   const { back, forward, canGoBack, canGoForward } = useRouter();
   const openPalette = usePaletteStore((state) => state.openPalette);
-
-  const onHome = useNavStore((state) => state.onHome);
-  const tabs = useNavStore((state) => state.tabs) as { workspacePath: string }[];
-  const activeIndex = useNavStore((state) => state.activeTabIndex);
-
-  const workspacePath = !onHome ? tabs[activeIndex]?.workspacePath : undefined;
 
   return (
     <header
@@ -75,26 +57,7 @@ export function CommandBar() {
 
       {/* Caminho como prompt. É a assinatura visual do shell v2: o app se
           apresenta como um terminal, não como um site com breadcrumb. */}
-      <div className="flex items-baseline gap-2 min-w-0 flex-1">
-        <span className="text-cb-accent text-sm select-none shrink-0" aria-hidden>
-          ❯
-        </span>
-        {workspacePath ? (
-          <>
-            <span className="text-sm text-cb-fg-0 truncate">
-              {basename(workspacePath)}
-            </span>
-            <span
-              className="text-2xs text-cb-fg-3 truncate hidden md:inline"
-              title={workspacePath}
-            >
-              {shortenPath(workspacePath)}
-            </span>
-          </>
-        ) : (
-          <span className="text-sm text-cb-fg-2">codebrain</span>
-        )}
-      </div>
+      <WorkspaceSwitcher />
 
       {/* Gatilho do palette. Mostra o atalho no próprio botão — quem clicar
           uma vez aprende a nunca mais precisar clicar. */}
