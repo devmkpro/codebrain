@@ -67,8 +67,22 @@ html, body, #root {
 .light,
 .light body,
 .light #root {
-  background: #f4f4fb !important;
-  color: #1a1a2e !important;
+  background: var(--cb-bg-0) !important;
+  color: var(--cb-fg-1) !important;
+}
+
+/* O shell terminal-first usa uma coluna flexível. Em janelas pequenas, sem
+   `min-height: 0`, o browser pode comprimir essa coluna até sobrar apenas o
+   header. Estas superfícies explícitas também impedem que o fundo global do
+   modo claro apague a separação entre rail, conteúdo e status. */
+:root.light .cb-terminal-shell {
+  background: var(--cb-bg-0);
+}
+:root.light .cb-terminal-shell > header,
+:root.light .cb-terminal-shell > footer,
+:root.light .cb-terminal-shell aside {
+  background: var(--cb-bg-1);
+  border-color: var(--cb-line-0);
 }
 
 /* ══ SURFACES — every dark hex used in components ════════════════ */

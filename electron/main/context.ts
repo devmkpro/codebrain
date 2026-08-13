@@ -13,8 +13,11 @@ import { HooksManager } from "./services/hooks";
 import { createSessionWatchers, type SessionWatcherManager } from "./services/session-watchers";
 import { ConversationTurnTracker } from "./services/conversation-turns";
 
+// Keep this dynamic. electron-vite moves this module into out/main/chunks,
+// where a source-relative require("../../packages/…") no longer points at the
+// application package directory.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { createMemoryStore } = require("../../packages/memory/store.js");
+const { createMemoryStore } = require(path.join(app.getAppPath(), "packages", "memory", "store.js"));
 
 export interface McpServerInfo {
   port: number;

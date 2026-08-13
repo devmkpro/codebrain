@@ -128,7 +128,7 @@ export function AgentRail() {
 
   return (
     <aside
-      className="flex flex-col shrink-0 bg-cb-bg-1 border-r border-cb-line-0 transition-[width] duration-[var(--cb-duration-normal)]"
+      className="flex flex-col min-h-0 shrink-0 bg-cb-bg-1 border-r border-cb-line-0 transition-[width] duration-[var(--cb-duration-normal)]"
       style={{ width: collapsed ? "40px" : "200px" }}
       aria-label="Agentes"
     >

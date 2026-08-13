@@ -58,8 +58,8 @@ import { GlobalModalsHost } from "../ui/AppHeader";
 function HomePages() {
   const { route } = useRouter();
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {route === "/" && <DashboardPage />}
+    <div className="flex-1 min-h-0 flex overflow-hidden">
+      {(route === "/" || !["/workspaces", "/settings"].includes(route)) && <DashboardPage />}
       {route === "/workspaces" && <WorkspacesPage />}
       {route === "/settings" && <SettingsPage />}
     </div>
@@ -83,13 +83,13 @@ export function ShellV2({ appVersion }: Props) {
 
   return (
     <RouterProvider>
-      <div className="flex flex-col h-full bg-cb-bg-0 text-cb-fg-1 overflow-hidden">
+      <div className="cb-terminal-shell flex flex-col h-full min-h-0 bg-cb-bg-0 text-cb-fg-1 overflow-hidden">
         <CommandBar />
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
           <AgentRail />
 
-          <main className="flex-1 relative overflow-hidden" style={{ zIndex: 0 }}>
+          <main className="flex-1 min-h-0 min-w-0 relative overflow-hidden" style={{ zIndex: 0 }}>
             <div
               className="absolute inset-0 flex flex-col"
               style={{ display: showHome ? "flex" : "none" }}
