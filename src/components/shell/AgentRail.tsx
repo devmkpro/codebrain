@@ -1,10 +1,11 @@
 import React from "react";
-import { ChevronLeft, ChevronRight, MessageSquare, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, GripVertical, MessageSquare, Plus, X } from "lucide-react";
 import { usePanesStore } from "../../stores/panes-store";
 import { useShellStore } from "../../stores/shell-store";
 import { statusPresentation } from "./pane-status";
 import { useConversationStore } from "../../stores/conversation-store";
 import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
+import { CODEBRAIN_PANE_DRAG_TYPE } from "../../lib/pane-drag";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RAIL DE AGENTES
@@ -37,22 +38,35 @@ function AgentRow({
   collapsed,
   onSelect,
   onConversation,
+  onClose,
+  onDragStart,
+  onDragEnd,
+  dragging,
 }: {
   pane: PaneLike;
   active: boolean;
   collapsed: boolean;
   onSelect: () => void;
   onConversation: () => void;
+  onClose: () => void;
+  onDragStart: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+  dragging: boolean;
 }) {
   const presentation = statusPresentation(pane.status);
   const label = pane.title || pane.agent || "shell";
 
   return (
     <div
+      role="option"
       aria-selected={active}
+      aria-grabbed={dragging}
       aria-label={`${label} — ${presentation.label}`}
-      title={collapsed ? `${label} — ${presentation.label}` : undefined}
-      className="cb-row cb-rail w-full text-left h-cell group"
+      title={collapsed ? `${label} — ${presentation.label}` : "Arraste sobre outro pane para dividir a tela"}
+      draggable={!collapsed}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`cb-row cb-rail w-full text-left h-cell group ${collapsed ? "" : "cursor-grab active:cursor-grabbing"} ${dragging ? "opacity-40" : ""}`}
       style={
         {
           "--cb-rail-color": active ? "var(--cb-accent)" : presentation.color,
@@ -70,10 +84,12 @@ function AgentRow({
       </button>
       {!collapsed && (
         <>
+          <GripVertical size={10} className="text-cb-fg-3 shrink-0" aria-hidden />
           <span className="text-2xs text-cb-fg-3 shrink-0 tabular-nums">
             {pane.id.slice(0, 4)}
           </span>
-          <button type="button" onClick={onConversation} className="opacity-0 group-hover:opacity-100 text-cb-fg-3 hover:text-cb-accent" aria-label={`Conversar com ${label}`} title="Abrir conversa"><MessageSquare size={11} /></button>
+          <button type="button" data-pane-action draggable={false} onClick={onConversation} className="opacity-0 group-hover:opacity-100 text-cb-fg-3 hover:text-cb-accent" aria-label={`Conversar com ${label}`} title="Abrir conversa"><MessageSquare size={11} /></button>
+          <button type="button" data-pane-action draggable={false} onClick={onClose} className="opacity-60 group-hover:opacity-100 text-cb-fg-2 hover:text-cb-danger" aria-label={`Encerrar ${label}`} title="Encerrar agente"><X size={11} /></button>
         </>
       )}
     </div>
@@ -84,11 +100,31 @@ export function AgentRail() {
   const panes = usePanesStore((state) => state.panes) as PaneLike[];
   const activePaneId = usePanesStore((state) => state.activePaneId);
   const setActive = usePanesStore((state) => state.setActive);
+  const removePane = usePanesStore((state) => state.removePane);
 
   const collapsed = useShellStore((state) => state.railCollapsed);
   const toggleRail = useShellStore((state) => state.toggleRail);
   const openConversation = useConversationStore((state) => state.openFor);
   const openPaneLauncher = usePaneLauncherStore((state) => state.show);
+  const [draggingPaneId, setDraggingPaneId] = React.useState<string | null>(null);
+
+  const closePane = React.useCallback((paneId: string) => {
+    void window.codeBrainApp?.pty.kill(paneId);
+    removePane(paneId);
+    const conversation = useConversationStore.getState();
+    if (conversation.paneId === paneId) conversation.close();
+  }, [removePane]);
+
+  const startPaneDrag = React.useCallback((event: React.DragEvent<HTMLDivElement>, pane: PaneLike) => {
+    if ((event.target as HTMLElement).closest("[data-pane-action]")) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(CODEBRAIN_PANE_DRAG_TYPE, pane.id);
+    event.dataTransfer.setData("text/plain", pane.title || pane.agent || "agente");
+    setDraggingPaneId(pane.id);
+  }, []);
 
   return (
     <aside
@@ -130,6 +166,10 @@ export function AgentRail() {
               collapsed={collapsed}
               onSelect={() => setActive(pane.id)}
               onConversation={() => openConversation(pane.id)}
+              onClose={() => closePane(pane.id)}
+              onDragStart={(event) => startPaneDrag(event, pane)}
+              onDragEnd={() => setDraggingPaneId(null)}
+              dragging={draggingPaneId === pane.id}
             />
           ))
         )}

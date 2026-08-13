@@ -1,6 +1,7 @@
 import React from "react";
 import { ArrowLeft, ArrowRight, RotateCw, X$1 } from "../../stores/providers-store";
 import { useBrowserStore } from "../../stores/browser-store";
+import { CODEBRAIN_PANE_DRAG_TYPE } from "../../lib/pane-drag";
 import {
   consoleHookScript,
   a11yTreeScript,
@@ -523,7 +524,7 @@ export function BrowserPane({
   return <div onClick={onClick} className={`h-full flex flex-col bg-black rounded overflow-hidden border cursor-pointer ${isActive ? "border-indigo-500/40" : "border-white/5 hover:border-white/10"}`}>
       <div className="flex items-center gap-1 px-2 py-1 border-b border-white/5 shrink-0 bg-black cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
       e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("application/x-codebrain-pane", pane.id);
+      e.dataTransfer.setData(CODEBRAIN_PANE_DRAG_TYPE, pane.id);
     }}>
         <span className="font-mono text-[9px] text-indigo-500/60 uppercase tracking-widest mr-1">
           www

@@ -1,4 +1,5 @@
 import React from "react";
+import { CODEBRAIN_PANE_DRAG_TYPE, paneDropSide, type PaneDropSide } from "../../lib/pane-drag";
 
 // DropTarget
 export function DropTarget({
@@ -7,46 +8,43 @@ export function DropTarget({
   movePaneTo,
   children
 }) {
-  const computeSide = e => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const xPct = (e.clientX - rect.left) / rect.width;
-    const yPct = (e.clientY - rect.top) / rect.height;
-    const dists = [{
-      side: "top",
-      d: yPct
-    }, {
-      side: "bottom",
-      d: 1 - yPct
-    }, {
-      side: "left",
-      d: xPct
-    }, {
-      side: "right",
-      d: 1 - xPct
-    }];
-    dists.sort((a, b) => a.d - b.d);
-    return dists[0].side;
-  };
+  const [dropSide, setDropSide] = React.useState<PaneDropSide | null>(null);
+  React.useEffect(() => {
+    const clear = () => setDropSide(null);
+    window.addEventListener("dragend", clear);
+    window.addEventListener("drop", clear);
+    return () => {
+      window.removeEventListener("dragend", clear);
+      window.removeEventListener("drop", clear);
+    };
+  }, []);
+  const computeSide = e => paneDropSide(e.currentTarget.getBoundingClientRect(), e.clientX, e.clientY);
+  const zoneStyle: React.CSSProperties | undefined = dropSide === "left"
+    ? { inset: "8px 50% 8px 8px" }
+    : dropSide === "right"
+      ? { inset: "8px 8px 8px 50%" }
+      : dropSide === "top"
+        ? { inset: "8px 8px 50% 8px" }
+        : dropSide === "bottom"
+          ? { inset: "50% 8px 8px 8px" }
+          : undefined;
+  const dropLabel = dropSide === "left" || dropSide === "right" ? "lado a lado" : dropSide === "top" ? "acima" : "abaixo";
   return <div className="relative h-full w-full" onDragOver={e => {
-    if (!e.dataTransfer.types.includes("application/x-codebrain-pane")) return;
+    if (!e.dataTransfer.types.includes(CODEBRAIN_PANE_DRAG_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    const side = computeSide(e);
-    const zone = e.currentTarget.querySelector("[data-drop-zone]");
-    if (zone) zone.dataset.side = side;
+    setDropSide(computeSide(e));
   }} onDragLeave={e => {
-    const zone = e.currentTarget.querySelector("[data-drop-zone]");
-    if (zone) zone.dataset.side = "";
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropSide(null);
   }} onDrop={e => {
-    const fromId = e.dataTransfer.getData("application/x-codebrain-pane");
-    const zone = e.currentTarget.querySelector("[data-drop-zone]");
-    if (zone) zone.dataset.side = "";
+    const fromId = e.dataTransfer.getData(CODEBRAIN_PANE_DRAG_TYPE);
+    const side = computeSide(e);
+    setDropSide(null);
     if (!fromId || fromId === pane.id) return;
     e.preventDefault();
-    const side = computeSide(e);
     movePaneTo(workspacePath, fromId, pane.id, side);
   }}>
-      <div data-drop-zone data-side="" className="pointer-events-none absolute inset-0 z-10 transition-all data-[side=top]:border-t-4 data-[side=bottom]:border-b-4 data-[side=left]:border-l-4 data-[side=right]:border-r-4 data-[side=top]:border-red-500 data-[side=bottom]:border-red-500 data-[side=left]:border-red-500 data-[side=right]:border-red-500" />
+      {dropSide && <div data-drop-zone className="pointer-events-none absolute z-30 flex items-center justify-center border border-cb-accent bg-cb-accent-wash-strong rounded-cb-1 text-2xs text-cb-accent-bright uppercase tracking-wider transition-all" style={zoneStyle}>{dropLabel}</div>}
       {children}
     </div>;
 }

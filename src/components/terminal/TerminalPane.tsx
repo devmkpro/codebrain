@@ -2,6 +2,7 @@
 import { X$1 } from "../../stores/providers-store";
 import { usePushToTalk, spawnedPaneIds, openWebLink } from "../../stores/voice-store";
 import { xtermExports, addonFitExports, L } from "../../lib/xterm-exports";
+import { CODEBRAIN_PANE_DRAG_TYPE } from "../../lib/pane-drag";
 import { Copy, Clipboard, Square, MessageSquare, Terminal as TerminalIcon, Settings, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -643,7 +644,7 @@ export function TerminalPane({
       {/* ── Pane Header ─────────────────────────────────── */}
       <div className="relative flex min-h-7 items-center overflow-hidden bg-black/50 border-b border-white/5 py-1.5 pl-3 pr-16 select-none shrink-0 cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("application/x-codebrain-pane", pane.id);
+        e.dataTransfer.setData(CODEBRAIN_PANE_DRAG_TYPE, pane.id);
       }}>
         <div className="flex min-w-0 max-w-full items-center gap-1.5 overflow-hidden">
           <StatusDot status={pane.status} />
