@@ -21,7 +21,6 @@ export function registerAppHandlers(ctx: AppContext): void {
     if (win && !win.isDestroyed()) {
       const clamped = Math.max(0.5, Math.min(2, factor));
       win.webContents.setZoomFactor(clamped);
-      win.webContents.setZoomLevel(0);
       return clamped;
     }
     return 1;
