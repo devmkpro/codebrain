@@ -125,7 +125,9 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
 
   // Callback: startMCPServer → createMCPBridge produces a NEW enriched object.
   // We must update ctx._mcpBridge to the enriched version so IPC handlers find cron, recipes, etc.
-  bridge._exposeBridge = (enriched: any) => {
+  // `_exposeBridge` é um canal de retorno instalado em runtime, fora do tipo
+  // que buildMcpBridge declara.
+  (bridge as any)._exposeBridge = (enriched: any) => {
     (ctx as any)._mcpBridge = enriched;
     console.log("[MCP] Enriched bridge stored on ctx._mcpBridge (cron, recipes, etc. available)");
   };

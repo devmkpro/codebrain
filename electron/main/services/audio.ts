@@ -252,7 +252,15 @@ export async function transcribeWithGroq(
   const prompt = buildAudioPrompt(cfg.outputMode, cfg.prompt, context);
 
   const form = new FormData();
-  form.append("file", new Blob([bytes], { type: mimeType }), `codebrain-voice.${ext}`);
+  // `bytes` é um Buffer do Node, cujo `.buffer` é ArrayBufferLike (pode ser
+  // SharedArrayBuffer), enquanto BlobPart exige ArrayBuffer. Fatiar o trecho
+  // exato produz um ArrayBuffer de verdade — e evita mandar sobra do pool de
+  // buffers do Node caso este Buffer seja uma view de um maior.
+  const audioBytes = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  form.append("file", new Blob([audioBytes], { type: mimeType }), `codebrain-voice.${ext}`);
   form.append("model", cfg.model);
   form.append("response_format", "json");
   form.append("temperature", "0");

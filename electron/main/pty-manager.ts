@@ -827,6 +827,21 @@ export class PtyManager extends EventEmitter {
     }));
   }
 
+  /**
+   * PID do processo do terminal, ou null se o pane não existe.
+   *
+   * O HUD de performance (`diagnostics:perfSnap`) já chamava isto como
+   * `getPid?.(paneId)`, mas o método nunca existiu — o encadeamento opcional
+   * fazia a chamada virar `undefined` calada, e a coluna de PID aparecia
+   * vazia para todo pane desde sempre.
+   */
+  getPid(paneId: string): number | null {
+    const state = this.panes.get(paneId);
+    if (!state) return null;
+    const pid = (state.pty as { pid?: number }).pid;
+    return typeof pid === "number" ? pid : null;
+  }
+
   killAll(): void {
     for (const [paneId] of this.panes) {
       this.kill(paneId);

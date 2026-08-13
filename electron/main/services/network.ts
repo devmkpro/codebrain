@@ -28,14 +28,54 @@ export function statusTextFromCode(code: number): string {
   return map[code] || "";
 }
 
+/**
+ * O Electron entrega headers como `Record<string, string | string[]>` — um
+ * header repetido (Set-Cookie, por exemplo) vira array. O log espera string,
+ * então juntamos com ", " como manda a RFC 9110 §5.3, em vez de forçar o tipo
+ * com um cast e deixar um array vazar para a UI.
+ */
+function flattenHeaders(
+  headers: Record<string, string | string[]> | undefined,
+): Record<string, string> {
+  if (!headers) return {};
+  const flat: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    flat[name] = Array.isArray(value) ? value.join(", ") : String(value);
+  }
+  return flat;
+}
+
+interface PendingRequest {
+  startTime: number;
+  method: string;
+  url: string;
+  requestHeaders: Record<string, string>;
+}
+
 export function attachNetworkTracking(ctx: AppContext, sess: Electron.Session): void {
-  const pendingRequests = new Map<number, { startTime: number; method: string; url: string }>();
+  const pendingRequests = new Map<number, PendingRequest>();
 
   sess.webRequest.onBeforeRequest((details, callback) => {
     if (!isInternalUrl(details.url)) {
-      pendingRequests.set(details.id, { startTime: Date.now(), method: details.method, url: details.url });
+      pendingRequests.set(details.id, {
+        startTime: Date.now(),
+        method: details.method,
+        url: details.url,
+        requestHeaders: {},
+      });
     }
     callback({});
+  });
+
+  // Headers de requisição só existem nesta fase — `onCompleted` não os recebe.
+  // O código anterior lia `details.requestHeaders` lá, que é sempre undefined,
+  // então o log de rede nunca teve header de requisição nenhum.
+  sess.webRequest.onBeforeSendHeaders((details, callback) => {
+    const pending = pendingRequests.get(details.id);
+    if (pending) {
+      pending.requestHeaders = flattenHeaders(details.requestHeaders);
+    }
+    callback({ requestHeaders: details.requestHeaders });
   });
 
   sess.webRequest.onCompleted((details) => {
@@ -53,8 +93,8 @@ export function attachNetworkTracking(ctx: AppContext, sess: Electron.Session): 
       status: details.statusCode,
       statusText: statusTextFromCode(details.statusCode),
       ok: details.statusCode >= 200 && details.statusCode < 400,
-      requestHeaders: (details.requestHeaders as Record<string, string>) || {},
-      responseHeaders: (details.responseHeaders as Record<string, string>) || {},
+      requestHeaders: pending?.requestHeaders ?? {},
+      responseHeaders: flattenHeaders(details.responseHeaders),
       error: null,
     };
     ctx.browserNetworkLog.push(entry);

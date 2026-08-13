@@ -1,0 +1,300 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CODEBRAIN — DESIGN TOKENS
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Terminal-first design language.
+
+   PRINCÍPIO CENTRAL: a paleta da UI *é* a paleta ANSI do terminal. Não existe
+   uma cor de UI e uma cor de terminal — existe uma paleta só. Um badge de erro
+   e um `stderr` vermelho no xterm usam o mesmo token. Isso faz o app inteiro
+   parecer uma extensão do terminal em vez de um wrapper em volta dele.
+
+   REGRAS DE USO:
+   1. Componentes NUNCA hardcodam hex. Use `bg-cb-bg-1`, `text-cb-fg-1`, etc.
+   2. Trocar tema = redefinir tokens em `:root.light`. Nunca `!important`,
+      nunca seletor de atributo caçando hex. Se um componente usa tokens,
+      ele já funciona nos dois temas de graça.
+   3. Todo token é `--cb-*`. O mapeamento para utilitários Tailwind vive em
+      `@theme inline` (ver theme.css) — `inline` porque o valor é ele mesmo
+      uma var que muda em runtime.
+
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── ANSI 16 ────────────────────────────────────────────────────────────
+     A base de tudo. Estas cores são passadas ao xterm.js *e* usadas pela UI,
+     então o terminal e o app nunca divergem. Calibradas para contraste AA
+     sobre --cb-bg-1.                                                        */
+  --cb-ansi-black:            #16161d;
+  --cb-ansi-red:              #ff5f6a;
+  --cb-ansi-green:            #5ef2a0;
+  --cb-ansi-yellow:           #ffcc66;
+  --cb-ansi-blue:             #6aa9ff;
+  --cb-ansi-magenta:          #b78cff;
+  --cb-ansi-cyan:             #58e6e6;
+  --cb-ansi-white:            #c9c9d8;
+
+  --cb-ansi-bright-black:     #3a3a4a;
+  --cb-ansi-bright-red:       #ff8a92;
+  --cb-ansi-bright-green:     #8bf7bd;
+  --cb-ansi-bright-yellow:    #ffdd99;
+  --cb-ansi-bright-blue:      #97c4ff;
+  --cb-ansi-bright-magenta:   #d0b3ff;
+  --cb-ansi-bright-cyan:      #8af0f0;
+  --cb-ansi-bright-white:     #f0f0f8;
+
+  /* ── Superfícies ───────────────────────────────────────────────────────
+     Escada de elevação. bg-0 é o vazio (canvas do app), bg-3 é o topo
+     (hover, item ativo). Passos pequenos e deliberados — terminal-first
+     não usa sombra pra criar profundidade, usa 1px de borda e um degrau
+     sutil de luminância.                                                    */
+  --cb-bg-0:                  #07070a;  /* void / canvas atrás dos painéis  */
+  --cb-bg-1:                  #0b0b10;  /* painel, superfície padrão        */
+  --cb-bg-2:                  #101018;  /* elevado: linhas, inputs, cards   */
+  --cb-bg-3:                  #17171f;  /* hover / selecionado              */
+  --cb-bg-inset:              #050508;  /* recuado: poço do terminal, code  */
+
+  /* Overlays — para modais e menus flutuantes sobre qualquer superfície */
+  --cb-bg-overlay:            #0d0d14;
+  --cb-bg-scrim:              rgb(3 3 6 / 0.72);
+
+  /* ── Texto ─────────────────────────────────────────────────────────────
+     4 níveis. fg-0 é conteúdo, fg-3 é decoração. Se você precisa de um
+     quinto nível, o layout está errado, não a paleta.                       */
+  --cb-fg-0:                  #e6e6f0;  /* primário — títulos, valores      */
+  --cb-fg-1:                  #a8a8bd;  /* secundário — corpo, labels       */
+  --cb-fg-2:                  #6f6f88;  /* mudo — metadados, placeholders   */
+  --cb-fg-3:                  #4a4a5e;  /* fraco — separadores, disabled    */
+  --cb-fg-on-accent:          #0a0a0f;  /* texto sobre preenchimento accent */
+
+  /* ── Linhas ────────────────────────────────────────────────────────────
+     Terminal-first: bordas de 1px são o principal recurso estrutural.
+     Nunca abaixo de line-0 — foi assim que o tema antigo virou uma sopa de
+     `border-white/[0.04]` invisível.                                        */
+  --cb-line-0:                #1c1c26;  /* divisor sutil                    */
+  --cb-line-1:                #2a2a38;  /* borda padrão                     */
+  --cb-line-2:                #3d3d50;  /* borda enfática / hover           */
+  --cb-line-focus:            var(--cb-accent);
+
+  /* ── Accent ────────────────────────────────────────────────────────────
+     Magenta ANSI é a cor da marca. Um accent só, usado com parcimônia:
+     estado ativo, foco, e o cursor. Se tudo é accent, nada é.               */
+  --cb-accent:                var(--cb-ansi-magenta);
+  --cb-accent-bright:         var(--cb-ansi-bright-magenta);
+  --cb-accent-dim:            #4a3a6b;
+  --cb-accent-wash:           rgb(183 140 255 / 0.10);
+  --cb-accent-wash-strong:    rgb(183 140 255 / 0.18);
+
+  /* ── Semântica de estado ───────────────────────────────────────────────
+     Apontam para ANSI de propósito — um agente com falha e um stderr
+     vermelho devem ser o mesmo vermelho.                                    */
+  --cb-success:               var(--cb-ansi-green);
+  --cb-success-wash:          rgb(94 242 160 / 0.10);
+  --cb-warn:                  var(--cb-ansi-yellow);
+  --cb-warn-wash:             rgb(255 204 102 / 0.10);
+  --cb-danger:                var(--cb-ansi-red);
+  --cb-danger-wash:           rgb(255 95 106 / 0.10);
+  --cb-info:                  var(--cb-ansi-blue);
+  --cb-info-wash:             rgb(106 169 255 / 0.10);
+
+  /* ── Estados de agente ─────────────────────────────────────────────────
+     Vocabulário de cor dedicado ao ciclo de vida dos panes. Separado da
+     semântica genérica porque "idle" não é "sucesso" e "thinking" não é
+     "info" — são conceitos do domínio e merecem tokens próprios.            */
+  --cb-agent-idle:            var(--cb-fg-2);
+  --cb-agent-thinking:        var(--cb-ansi-magenta);
+  --cb-agent-running:         var(--cb-ansi-cyan);
+  --cb-agent-blocked:         var(--cb-ansi-yellow);
+  --cb-agent-failed:          var(--cb-ansi-red);
+  --cb-agent-done:            var(--cb-ansi-green);
+
+  /* ── Tipografia ────────────────────────────────────────────────────────
+     Mono em toda parte. Não há fonte de UI — essa é a decisão que mais faz
+     o app "parecer outro programa".                                         */
+  --cb-font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas,
+                  "Cascadia Code", "DejaVu Sans Mono", monospace;
+  --cb-font-ui: var(--cb-font-mono);
+
+  /* Escala tipográfica — passos apertados, densidade alta. */
+  --cb-text-2xs:              10px;
+  --cb-text-xs:               11px;
+  --cb-text-sm:               12px;
+  --cb-text-base:             13px;
+  --cb-text-md:               14px;
+  --cb-text-lg:               16px;
+  --cb-text-xl:               20px;
+  --cb-text-2xl:              26px;
+
+  --cb-leading-tight:         1.25;
+  --cb-leading-normal:        1.5;
+
+  --cb-tracking-label:        0.08em;   /* micro-labels em caixa alta       */
+  --cb-tracking-normal:       0;
+
+  --cb-weight-normal:         400;
+  --cb-weight-medium:         500;
+  --cb-weight-bold:           700;
+
+  /* ── Grade de caracteres ───────────────────────────────────────────────
+     O layout se alinha a uma grade de células, não a uma escala de espaço
+     arbitrária. --cb-cell é a altura de uma linha de terminal; toda linha
+     de lista, item de menu e campo é múltiplo dela. É isso que dá ao app a
+     sensação de "isso é um terminal", não "isso é um site".                 */
+  --cb-cell:                  22px;     /* altura de uma linha              */
+  --cb-cell-sm:               18px;     /* linha densa                      */
+  --cb-cell-lg:               28px;     /* linha confortável / botão        */
+  --cb-ch:                    7.8px;    /* largura aprox. de 1 char @13px    */
+
+  /* Espaçamento — passos de 4px alinhados à grade. */
+  --cb-space-0:               0px;
+  --cb-space-1:               2px;
+  --cb-space-2:               4px;
+  --cb-space-3:               6px;
+  --cb-space-4:               8px;
+  --cb-space-5:               12px;
+  --cb-space-6:               16px;
+  --cb-space-7:               24px;
+  --cb-space-8:               32px;
+
+  /* ── Raios ─────────────────────────────────────────────────────────────
+     Quase zero. Cantos arredondados são a marca registrada de UI web; a
+     ausência deles é metade do que faz isso parecer um terminal.            */
+  --cb-radius-0:              0px;
+  --cb-radius-1:              2px;      /* padrão — botões, inputs, linhas  */
+  --cb-radius-2:              3px;      /* painéis, modais                  */
+  --cb-radius-full:           9999px;   /* só para pontos de status         */
+
+  /* ── Elevação ──────────────────────────────────────────────────────────
+     Terminal-first evita sombra difusa. Elevação = borda + degrau de fundo.
+     Sombra existe só para o que realmente flutua (menus, modais), e é dura
+     em vez de suave.                                                        */
+  --cb-shadow-none:           none;
+  --cb-shadow-pop:            0 4px 16px rgb(0 0 0 / 0.55);
+  --cb-shadow-modal:          0 12px 48px rgb(0 0 0 / 0.65);
+  --cb-glow-accent:           0 0 0 1px var(--cb-accent-dim),
+                              0 0 12px rgb(183 140 255 / 0.15);
+
+  /* Anel de foco — um só, consistente, sempre visível no teclado. */
+  --cb-focus-ring:            0 0 0 1px var(--cb-bg-1), 0 0 0 2px var(--cb-accent);
+
+  /* ── Movimento ─────────────────────────────────────────────────────────
+     Rápido e reto. Sem bounce, sem spring — coisas de terminal aparecem,
+     não deslizam. `.reduced-motion` zera tudo isso globalmente.             */
+  --cb-duration-instant:      60ms;
+  --cb-duration-fast:         110ms;
+  --cb-duration-normal:       180ms;
+  --cb-ease:                  cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* ── Camadas ───────────────────────────────────────────────────────────
+     Escala de z-index nomeada. Antes, os valores viviam espalhados pelos
+     componentes (z-[9999], z-[10000], zIndex: 200) e brigavam entre si.     */
+  --cb-z-base:                0;
+  --cb-z-raised:              10;
+  --cb-z-sticky:              100;
+  --cb-z-header:              200;
+  --cb-z-drawer:              300;
+  --cb-z-overlay:             400;
+  --cb-z-modal:               500;
+  --cb-z-palette:             600;   /* command palette fica acima de tudo  */
+  --cb-z-toast:               700;
+  --cb-z-tooltip:             800;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TEMA CLARO — "paper terminal"
+   ═══════════════════════════════════════════════════════════════════════════
+   Não é uma inversão do escuro. É um esquema de terminal claro por direito
+   próprio: fundo papel quente, ANSI dessaturado e escurecido para manter
+   AA sobre branco.
+
+   Repare que este bloco só redefine tokens. Nenhum `!important`, nenhum
+   seletor caçando hex, nenhum conhecimento sobre componente nenhum.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root.light {
+  --cb-ansi-black:            #2b2b36;
+  --cb-ansi-red:              #c2314b;
+  --cb-ansi-green:            #1f7a4d;
+  --cb-ansi-yellow:           #96650a;
+  --cb-ansi-blue:             #2c5fd0;
+  --cb-ansi-magenta:          #7a3fd0;
+  --cb-ansi-cyan:             #10707a;
+  --cb-ansi-white:            #55556a;
+
+  --cb-ansi-bright-black:     #6a6a80;
+  --cb-ansi-bright-red:       #9c1f38;
+  --cb-ansi-bright-green:     #145c39;
+  --cb-ansi-bright-yellow:    #7a5008;
+  --cb-ansi-bright-blue:      #1d47a8;
+  --cb-ansi-bright-magenta:   #5f2ba8;
+  --cb-ansi-bright-cyan:      #0b555d;
+  --cb-ansi-bright-white:     #1a1a26;
+
+  --cb-bg-0:                  #ececef;
+  --cb-bg-1:                  #f7f7fa;
+  --cb-bg-2:                  #ffffff;
+  --cb-bg-3:                  #e9e9f0;
+  --cb-bg-inset:              #f0f0f4;
+
+  --cb-bg-overlay:            #ffffff;
+  --cb-bg-scrim:              rgb(20 20 30 / 0.32);
+
+  --cb-fg-0:                  #14141f;
+  --cb-fg-1:                  #3d3d52;
+  --cb-fg-2:                  #62627a;
+  --cb-fg-3:                  #9494a8;
+  --cb-fg-on-accent:          #ffffff;
+
+  --cb-line-0:                #e2e2ea;
+  --cb-line-1:                #d0d0dc;
+  --cb-line-2:                #b0b0c2;
+
+  --cb-accent-dim:            #c9b3ec;
+  --cb-accent-wash:           rgb(122 63 208 / 0.08);
+  --cb-accent-wash-strong:    rgb(122 63 208 / 0.14);
+
+  --cb-success-wash:          rgb(31 122 77 / 0.10);
+  --cb-warn-wash:             rgb(150 101 10 / 0.10);
+  --cb-danger-wash:           rgb(194 49 75 / 0.10);
+  --cb-info-wash:             rgb(44 95 208 / 0.10);
+
+  --cb-shadow-pop:            0 4px 16px rgb(20 20 40 / 0.12);
+  --cb-shadow-modal:          0 12px 48px rgb(20 20 40 / 0.18);
+  --cb-glow-accent:           0 0 0 1px var(--cb-accent-dim),
+                              0 0 12px rgb(122 63 208 / 0.12);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ACESSIBILIDADE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Alto contraste — engrossa linhas e reforça texto mudo. Ainda é só
+   redefinição de token. */
+@media (prefers-contrast: more) {
+  :root {
+    --cb-fg-1:     #c4c4d6;
+    --cb-fg-2:     #9494ac;
+    --cb-fg-3:     #70708a;
+    --cb-line-0:   #2e2e3c;
+    --cb-line-1:   #454558;
+    --cb-line-2:   #5c5c74;
+  }
+  :root.light {
+    --cb-fg-1:     #24243a;
+    --cb-fg-2:     #45455c;
+    --cb-fg-3:     #6c6c84;
+    --cb-line-0:   #cdcdd8;
+    --cb-line-1:   #b4b4c4;
+    --cb-line-2:   #8e8ea4;
+  }
+}
+
+/* Respeita a preferência do SO por padrão. O toggle explícito do app usa
+   `.reduced-motion` no <html>, que já existe e continua valendo. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --cb-duration-instant: 0.01ms;
+    --cb-duration-fast:    0.01ms;
+    --cb-duration-normal:  0.01ms;
+  }
+}

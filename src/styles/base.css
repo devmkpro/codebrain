@@ -1,0 +1,221 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CODEBRAIN — PRIMITIVAS BASE
+   ═══════════════════════════════════════════════════════════════════════════
+
+   As poucas classes estruturais que o shell terminal-first repete em toda
+   parte. Deliberadamente pequeno: se algo aparece uma vez só, é utilitário
+   Tailwind no componente, não classe aqui.
+
+   Tudo aqui consome tokens. Nada aqui conhece tema.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Foco ────────────────────────────────────────────────────────────────
+   Um anel de foco, global, só no teclado. O app antigo não tinha nenhum
+   indicador consistente — navegar por Tab era invisível.                   */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--cb-focus-ring);
+  border-radius: var(--cb-radius-1);
+}
+
+/* Remove o anel quando o foco veio do mouse, mas mantém para teclado. */
+:where(a, button, input, select, textarea, [tabindex]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── Seleção ─────────────────────────────────────────────────────────── */
+::selection {
+  background: var(--cb-accent-wash-strong);
+  color: var(--cb-fg-0);
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────
+   Fina e tokenizada. Aparece só no hover do container — terminal-first
+   evita cromo permanente.                                                  */
+.cb-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cb-line-1) transparent;
+  overflow: auto;
+}
+.cb-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.cb-scroll::-webkit-scrollbar-track { background: transparent; }
+.cb-scroll::-webkit-scrollbar-thumb {
+  background: var(--cb-line-0);
+  border-radius: var(--cb-radius-1);
+}
+.cb-scroll:hover::-webkit-scrollbar-thumb { background: var(--cb-line-1); }
+.cb-scroll::-webkit-scrollbar-thumb:hover { background: var(--cb-line-2); }
+.cb-scroll::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── Painel ──────────────────────────────────────────────────────────────
+   Contêiner padrão: superfície + 1px de borda. Sem sombra — profundidade
+   vem do degrau de fundo, não de blur.                                     */
+.cb-panel {
+  background: var(--cb-bg-1);
+  border: 1px solid var(--cb-line-0);
+  border-radius: var(--cb-radius-2);
+}
+
+.cb-panel-inset {
+  background: var(--cb-bg-inset);
+  border: 1px solid var(--cb-line-0);
+  border-radius: var(--cb-radius-1);
+}
+
+/* ── Linha ───────────────────────────────────────────────────────────────
+   A unidade de lista. Trava na grade de células para que listas, menus e
+   resultados do palette compartilhem o mesmo ritmo vertical.               */
+.cb-row {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-space-4);
+  min-height: var(--cb-cell);
+  padding-inline: var(--cb-space-4);
+  border-radius: var(--cb-radius-1);
+  color: var(--cb-fg-1);
+  transition: background var(--cb-duration-instant) var(--cb-ease),
+              color var(--cb-duration-instant) var(--cb-ease);
+}
+.cb-row:hover { background: var(--cb-bg-2); color: var(--cb-fg-0); }
+.cb-row[data-active="true"],
+.cb-row[aria-selected="true"] {
+  background: var(--cb-bg-3);
+  color: var(--cb-fg-0);
+}
+
+/* ── Trilho ──────────────────────────────────────────────────────────────
+   Barra de 2px na borda esquerda marcando estado. É o vocabulário visual
+   de "bloco" — a coisa que faz uma lista de agentes ler como saída de
+   terminal em vez de cards.                                                */
+.cb-rail {
+  position: relative;
+  padding-left: var(--cb-space-5);
+}
+.cb-rail::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--cb-rail-color, var(--cb-line-1));
+  border-radius: var(--cb-radius-1);
+}
+
+/* ── Micro-label ─────────────────────────────────────────────────────────
+   Caixa alta, tracking largo, minúsculo. O rótulo de seção do shell.       */
+.cb-label {
+  font-size: var(--cb-text-2xs);
+  line-height: var(--cb-leading-tight);
+  text-transform: uppercase;
+  letter-spacing: var(--cb-tracking-label);
+  color: var(--cb-fg-2);
+  font-weight: var(--cb-weight-medium);
+}
+
+/* ── Divisor ─────────────────────────────────────────────────────────── */
+.cb-divider {
+  height: 1px;
+  background: var(--cb-line-0);
+  border: 0;
+  margin-block: var(--cb-space-3);
+}
+.cb-divider-v {
+  width: 1px;
+  align-self: stretch;
+  background: var(--cb-line-0);
+}
+
+/* ── Tecla ───────────────────────────────────────────────────────────────
+   Atalhos aparecem em toda a UI nova — o palette existe para ensiná-los.   */
+.cb-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: var(--cb-space-2);
+  font-size: var(--cb-text-2xs);
+  font-family: var(--cb-font-mono);
+  color: var(--cb-fg-2);
+  background: var(--cb-bg-2);
+  border: 1px solid var(--cb-line-1);
+  border-bottom-width: 2px;
+  border-radius: var(--cb-radius-1);
+}
+
+/* ── Ponto de status ─────────────────────────────────────────────────── */
+.cb-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--cb-radius-full);
+  background: var(--cb-dot-color, var(--cb-fg-3));
+}
+.cb-dot[data-pulse="true"] {
+  animation: cb-pulse 1.6s var(--cb-ease) infinite;
+}
+
+@keyframes cb-pulse {
+  0%, 100% { opacity: 1;   box-shadow: 0 0 0 0 var(--cb-dot-color, transparent); }
+  50%      { opacity: 0.5; box-shadow: 0 0 0 3px transparent; }
+}
+
+/* ── Scrim ───────────────────────────────────────────────────────────────
+   Fundo de modal. Sem backdrop-filter por padrão: blur é o efeito mais caro
+   da UI e o app tem um toggle inteiro pra desligá-lo. Terminal-first não
+   precisa dele.                                                            */
+.cb-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--cb-bg-scrim);
+  z-index: var(--cb-z-overlay);
+}
+
+/* ── Superfície flutuante ────────────────────────────────────────────────
+   Menus, popovers, palette. A única coisa que ganha sombra de verdade.     */
+.cb-float {
+  background: var(--cb-bg-overlay);
+  border: 1px solid var(--cb-line-1);
+  border-radius: var(--cb-radius-2);
+  box-shadow: var(--cb-shadow-pop);
+}
+
+/* ── Entrada ─────────────────────────────────────────────────────────── */
+.cb-input {
+  height: var(--cb-cell-lg);
+  padding-inline: var(--cb-space-4);
+  font-family: var(--cb-font-mono);
+  font-size: var(--cb-text-sm);
+  color: var(--cb-fg-0);
+  background: var(--cb-bg-2);
+  border: 1px solid var(--cb-line-1);
+  border-radius: var(--cb-radius-1);
+  transition: border-color var(--cb-duration-fast) var(--cb-ease);
+}
+.cb-input::placeholder { color: var(--cb-fg-3); }
+.cb-input:hover { border-color: var(--cb-line-2); }
+.cb-input:focus { border-color: var(--cb-accent); }
+
+/* ── Superfícies semânticas (compat) ──────────────────────────────────────
+   As classes `.cb-sidebar` / `.cb-header` / `.cb-surface` já existiam e são
+   usadas pelo shell atual. Reapontadas para tokens: o shell antigo herda a
+   troca de tema correta sem tocar em nenhum componente, e o gradiente
+   hardcoded sai de circulação.                                             */
+.cb-sidebar { background: var(--cb-bg-1); }
+.cb-header  { background: var(--cb-bg-1); }
+.cb-surface { background: var(--cb-bg-0); }
+
+/* ── Densidade ───────────────────────────────────────────────────────────
+   `data-density` no <html> reescala a grade de células. Compacto empacota
+   mais agentes na tela; confortável ajuda em monitor grande.               */
+:root[data-density="compact"] {
+  --cb-cell:     18px;
+  --cb-cell-sm:  16px;
+  --cb-cell-lg:  24px;
+}
+:root[data-density="comfortable"] {
+  --cb-cell:     26px;
+  --cb-cell-sm:  22px;
+  --cb-cell-lg:  32px;
+}

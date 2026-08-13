@@ -1,0 +1,110 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CODEBRAIN — PONTE TOKEN → TAILWIND
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Expõe os tokens de `tokens.css` como utilitários Tailwind, para que
+   componentes escrevam `bg-cb-bg-1` em vez de `bg-[#0b0b10]`.
+
+   Por que `@theme inline`: o valor de cada token é ele mesmo uma `var()` que
+   muda em runtime (troca de tema). Sem `inline`, o Tailwind emitiria uma
+   indireção (`--color-cb-bg-1: var(--cb-bg-1)`) resolvida uma vez no `:root`,
+   e a troca de tema não propagaria. Com `inline`, o utilitário referencia
+   `var(--cb-bg-1)` diretamente e reage à redefinição em `:root.light`.
+
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme inline {
+  /* ── Cores: superfícies ──────────────────────────────────────────────── */
+  --color-cb-bg-0:            var(--cb-bg-0);
+  --color-cb-bg-1:            var(--cb-bg-1);
+  --color-cb-bg-2:            var(--cb-bg-2);
+  --color-cb-bg-3:            var(--cb-bg-3);
+  --color-cb-bg-inset:        var(--cb-bg-inset);
+  --color-cb-overlay:         var(--cb-bg-overlay);
+  --color-cb-scrim:           var(--cb-bg-scrim);
+
+  /* ── Cores: texto ────────────────────────────────────────────────────── */
+  --color-cb-fg-0:            var(--cb-fg-0);
+  --color-cb-fg-1:            var(--cb-fg-1);
+  --color-cb-fg-2:            var(--cb-fg-2);
+  --color-cb-fg-3:            var(--cb-fg-3);
+  --color-cb-on-accent:       var(--cb-fg-on-accent);
+
+  /* ── Cores: linhas ───────────────────────────────────────────────────── */
+  --color-cb-line-0:          var(--cb-line-0);
+  --color-cb-line-1:          var(--cb-line-1);
+  --color-cb-line-2:          var(--cb-line-2);
+
+  /* ── Cores: accent ───────────────────────────────────────────────────── */
+  --color-cb-accent:          var(--cb-accent);
+  --color-cb-accent-bright:   var(--cb-accent-bright);
+  --color-cb-accent-dim:      var(--cb-accent-dim);
+  --color-cb-accent-wash:     var(--cb-accent-wash);
+  --color-cb-accent-wash-strong: var(--cb-accent-wash-strong);
+
+  /* ── Cores: semântica ────────────────────────────────────────────────── */
+  --color-cb-success:         var(--cb-success);
+  --color-cb-success-wash:    var(--cb-success-wash);
+  --color-cb-warn:            var(--cb-warn);
+  --color-cb-warn-wash:       var(--cb-warn-wash);
+  --color-cb-danger:          var(--cb-danger);
+  --color-cb-danger-wash:     var(--cb-danger-wash);
+  --color-cb-info:            var(--cb-info);
+  --color-cb-info-wash:       var(--cb-info-wash);
+
+  /* ── Cores: estados de agente ────────────────────────────────────────── */
+  --color-cb-agent-idle:      var(--cb-agent-idle);
+  --color-cb-agent-thinking:  var(--cb-agent-thinking);
+  --color-cb-agent-running:   var(--cb-agent-running);
+  --color-cb-agent-blocked:   var(--cb-agent-blocked);
+  --color-cb-agent-failed:    var(--cb-agent-failed);
+  --color-cb-agent-done:      var(--cb-agent-done);
+
+  /* ── Cores: ANSI cru ─────────────────────────────────────────────────────
+     Exposto para quem precisa da cor exata do terminal (syntax highlight,
+     legendas de log, badges de diff).                                       */
+  --color-cb-ansi-black:      var(--cb-ansi-black);
+  --color-cb-ansi-red:        var(--cb-ansi-red);
+  --color-cb-ansi-green:      var(--cb-ansi-green);
+  --color-cb-ansi-yellow:     var(--cb-ansi-yellow);
+  --color-cb-ansi-blue:       var(--cb-ansi-blue);
+  --color-cb-ansi-magenta:    var(--cb-ansi-magenta);
+  --color-cb-ansi-cyan:       var(--cb-ansi-cyan);
+  --color-cb-ansi-white:      var(--cb-ansi-white);
+
+  /* ── Tipografia ──────────────────────────────────────────────────────── */
+  --font-mono:                var(--cb-font-mono);
+  --font-sans:                var(--cb-font-mono);  /* mono em toda parte   */
+
+  --text-2xs:                 var(--cb-text-2xs);
+  --text-xs:                  var(--cb-text-xs);
+  --text-sm:                  var(--cb-text-sm);
+  --text-base:                var(--cb-text-base);
+  --text-md:                  var(--cb-text-md);
+  --text-lg:                  var(--cb-text-lg);
+  --text-xl:                  var(--cb-text-xl);
+  --text-2xl:                 var(--cb-text-2xl);
+
+  --tracking-label:           var(--cb-tracking-label);
+
+  /* ── Grade de caracteres ─────────────────────────────────────────────────
+     `h-cell` / `min-h-cell` mantêm as linhas alinhadas à grade do terminal. */
+  --spacing-cell:             var(--cb-cell);
+  --spacing-cell-sm:          var(--cb-cell-sm);
+  --spacing-cell-lg:          var(--cb-cell-lg);
+  --spacing-ch:               var(--cb-ch);
+
+  /* ── Raios ───────────────────────────────────────────────────────────── */
+  --radius-cb-0:              var(--cb-radius-0);
+  --radius-cb-1:              var(--cb-radius-1);
+  --radius-cb-2:              var(--cb-radius-2);
+
+  /* ── Sombras ─────────────────────────────────────────────────────────── */
+  --shadow-cb-pop:            var(--cb-shadow-pop);
+  --shadow-cb-modal:          var(--cb-shadow-modal);
+  --shadow-cb-glow:           var(--cb-glow-accent);
+  --shadow-cb-focus:          var(--cb-focus-ring);
+
+  /* ── Movimento ───────────────────────────────────────────────────────── */
+  --ease-cb:                  var(--cb-ease);
+}

@@ -6,6 +6,28 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 const PROVIDERS_UPDATED = "providers:updated";
 
+/**
+ * Overrides de feature flag vindos do ambiente.
+ *
+ * O renderer não tem `process.env`, então lemos aqui e expomos como um objeto
+ * simples. Convenção: `CODEBRAIN_FF_SHELLV2=1` liga a flag `shellV2`.
+ * Só valores explícitos entram — flag ausente cai para a preferência salva.
+ * Ver src/lib/flags.ts para a cadeia de precedência completa.
+ */
+function readFlagOverrides(): Record<string, boolean> {
+  const overrides: Record<string, boolean> = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (!name.startsWith("CODEBRAIN_FF_") || value === undefined) continue;
+    // CODEBRAIN_FF_SHELLV2 → shellV2 exige o casing exato da chave da flag,
+    // então casamos sem diferenciar caixa no consumidor; aqui só normalizamos.
+    // Nome de variável de ambiente é convencionalmente MAIÚSCULO, e a chave da
+    // flag é camelCase; o consumidor faz o casamento sem diferenciar caixa.
+    const key = name.slice("CODEBRAIN_FF_".length);
+    overrides[key] = value === "1" || value.toLowerCase() === "true";
+  }
+  return overrides;
+}
+
 // PTY output is high-frequency — use a shared listener + fanout to avoid
 // registering N separate ipcRenderer.on handlers.
 const ptyOutputCallbacks = new Set<(paneId: string, data: string, echo: boolean) => void>();
@@ -56,6 +78,9 @@ function installBrowserCommandBridge(): void {
 
 // Install the bridge immediately — it must be ready before any BrowserPane mounts
 installBrowserCommandBridge();
+
+// Overrides de flag: objeto simples, congelado, lido no boot do renderer.
+contextBridge.exposeInMainWorld("__CODEBRAIN_FLAGS__", readFlagOverrides());
 
 contextBridge.exposeInMainWorld("codeBrainApp", {
   app: {

@@ -1,18 +1,12 @@
 @import "tailwindcss";
 
-/* ── CodeBrain custom theme ───────────────────────────────────── */
-@theme {
-  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas,
-    "Cascadia Code", "Courier New", monospace;
-
-  --color-codebrain-accent: #706de8;
-  --color-codebrain-accent-soft: #818cf8;
-  --color-codebrain-purple: #a855f7;
-  --color-codebrain-bg: #000000;
-  --color-codebrain-surface: #07070f;
-  --color-codebrain-muted: #64648a;
-  --color-codebrain-text: #c8c8e0;
-}
+/* ── Camada de design system ───────────────────────────────────────────────
+   tokens → ponte Tailwind → primitivas. Tudo abaixo desta linha é o tema
+   legado, mantido enquanto o shell antigo existir. Ver ADR em
+   docs/adr/0001-design-tokens.md.                                          */
+@import "./styles/tokens.css";
+@import "./styles/theme.css";
+@import "./styles/base.css";
 
 /* ── Base reset ───────────────────────────────────────────────── */
 *, *::before, *::after {
@@ -25,16 +19,16 @@ html, body, #root {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: #0b0b0e;
-  color: #c8c8e0;
-  font-family: var(--font-mono);
+  background: var(--cb-bg-0);
+  color: var(--cb-fg-1);
+  font-family: var(--cb-font-mono);
 }
 
-/* ── Scrollbar ────────────────────────────────────────────────── */
+/* ── Scrollbar (global, legado) ───────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.24); }
+::-webkit-scrollbar-thumb { background: var(--cb-line-1); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--cb-line-2); }
 
 /* ══════════════════════════════════════════════════════════════════
    DARK MODE — contrast elevation fixes
@@ -285,14 +279,9 @@ html, body, #root {
 .light [class*="hover:bg-red-500/5"]:hover       { background: rgba(239,68,68,0.06) !important; }
 .light [class*="hover:text-slate-300"]:hover     { color: #2a2a4a !important; }
 
-/* ══ SEMANTIC SURFACE classes (dark gradients, light overrides) ══ */
-.cb-sidebar  { background: linear-gradient(180deg, #0F0F13 0%, #0D0D14 100%); }
-.cb-header   { background: linear-gradient(90deg, #0F0F13 0%, #111118 50%, #0F0F13 100%); }
-.cb-surface  { background: linear-gradient(180deg, #0D0D14 0%, #0B0B0E 100%); }
-
-.light .cb-sidebar  { background: #ededf6 !important; }
-.light .cb-header   { background: #ffffff !important; border-bottom-color: rgba(30,30,70,0.13) !important; }
-.light .cb-surface  { background: #f4f4fb !important; }
+/* ══ SEMANTIC SURFACE classes ═══════════════════════════════════
+   Movidas para styles/base.css e agora derivadas de token — os gradientes
+   hardcoded e os três overrides `!important` de light mode saíram junto. */
 
 /* Gradient buttons — keep text white */
 .light [class*="from-violet-600"][class*="to-indigo-600"] { color: #ffffff !important; }

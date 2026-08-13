@@ -8,7 +8,10 @@
     "allowSyntheticDefaultImports": true,
     "strict": false,
     "types": ["node"],
-    "lib": ["ES2022"]
+    // DOM entra por causa do preload: ele roda no contexto do renderer e usa
+    // `window`, `EventListener` e afins. Sem isto, o typecheck do lado node
+    // acusava "Cannot find name 'window'" em código correto.
+    "lib": ["ES2022", "DOM"]
   },
   "include": [
     "electron.vite.config.ts",
