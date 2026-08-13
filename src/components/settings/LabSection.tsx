@@ -84,8 +84,8 @@ export function LabSection() {
       <div className="p-3 rounded-lg bg-violet-500/5 border border-violet-500/15 flex items-start gap-2.5">
         <FlaskConical size={13} className="text-violet-400 shrink-0 mt-0.5" />
         <p className="text-[10px] text-slate-500 leading-relaxed">
-          Recursos em construção. Podem mudar ou sair sem aviso — e o shell
-          antigo continua disponível desligando a opção.
+          Recursos opcionais e fallback de compatibilidade. O shell
+          terminal-first já é a experiência padrão.
         </p>
       </div>
 

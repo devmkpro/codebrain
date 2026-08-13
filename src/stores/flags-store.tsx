@@ -40,6 +40,19 @@ export const useFlagsStore = create<FlagsState>()(
     }),
     {
       name: "codebrain.flags",
+      version: 1,
+      // A versão 0 foi distribuída enquanto shellV2 tinha default false. Uma
+      // preferência `false` daquela fase era só o valor semeado pelo produto,
+      // não uma escolha consciente. Removê-la na migração faz o shell novo
+      // realmente virar padrão para instalações existentes.
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Partial<FlagsState>;
+        if (version < 1 && state.flags) {
+          const { shellV2: _legacyShellPreference, ...flags } = state.flags;
+          return { ...state, flags } as FlagsState;
+        }
+        return state as FlagsState;
+      },
       // Descarta chaves de flags removidas do código, para que preferências
       // antigas não fiquem penduradas no localStorage para sempre.
       merge: (persisted, currentState) => {

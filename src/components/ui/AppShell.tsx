@@ -48,8 +48,8 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
   const paletteEnabled = useFlag('commandPalette');
   useGlobalShortcuts(paletteEnabled);
 
-  // Shell terminal-first, atrás de flag. O caminho antigo abaixo permanece
-  // intocado e continua sendo o padrão — ver docs/adr/0003.
+  // Shell terminal-first é o padrão. A flag agora existe apenas como saída
+  // temporária para recuperar uma instalação caso haja regressão visual.
   const shellV2 = useFlag('shellV2');
   if (shellV2) {
     return (

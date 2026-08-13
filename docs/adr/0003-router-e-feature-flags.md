@@ -1,6 +1,6 @@
 # ADR 0003 — Router com histórico e feature flags
 
-**Status:** aceito · **Data:** 2026-08-13 · **Fase:** 1 (Fundação)
+**Status:** aceito, atualizado · **Data:** 2026-08-13 · **Fase:** 1 (Fundação)
 
 ## Parte A — Router
 
@@ -86,3 +86,10 @@ o usuário clicar num toggle sem efeito.
   estabilizar, a flag e o shell antigo saem juntos.
 - Preferências de flags removidas do código são descartadas na hidratação, para
   não ficarem penduradas no localStorage.
+
+## Atualização após as fases 2–6
+
+Com o shell terminal-first validado por testes e build, `shellV2` passou a ser
+o padrão. A persistência foi versionada: instalações que receberam o antigo
+valor inicial `false` migram para o novo default. A flag continua temporariamente
+como fallback explícito, não mais como barreira de descoberta.

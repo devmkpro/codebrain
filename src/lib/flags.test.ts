@@ -73,6 +73,12 @@ describe("flagOverrideSource", () => {
 });
 
 describe("registro de flags", () => {
+  it("torna o shell terminal-first a experiência padrão", () => {
+    expect(FLAG_DEFINITIONS.shellV2.default).toBe(true);
+    expect(FLAG_DEFINITIONS.shellV2.stage).toBe("stable");
+    expect(resolveFlag("shellV2")).toBe(true);
+  });
+
   it("todas as flags têm rótulo, descrição e estágio", () => {
     for (const key of FLAG_KEYS) {
       const definition = FLAG_DEFINITIONS[key];

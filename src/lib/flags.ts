@@ -37,10 +37,10 @@ export const FLAG_DEFINITIONS = {
     label: "Shell v2 (terminal-first)",
     description:
       "Substitui o shell atual pela interface terminal-first: paleta ANSI unificada, " +
-      "grade de células e command palette. Em construção — o shell antigo segue " +
-      "disponível desligando esta opção.",
-    default: false,
-    stage: "experimental",
+      "grade de células, rail de agentes e command palette. É a experiência padrão; " +
+      "o shell clássico permanece disponível temporariamente como fallback.",
+    default: true,
+    stage: "stable",
   },
   commandPalette: {
     key: "commandPalette",
