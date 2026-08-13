@@ -7,7 +7,7 @@ import {
   Type, Monitor, Plus, X, Variable, Gamepad2, Bell,
   Mic, Cloud, Cpu, Link, Copy, Check, ExternalLink,
   Globe, Lock, GitPullRequest, FolderGit2,
-  Store, Search, Package, Filter,
+  Store, Search, Package, Filter, FlaskConical,
 } from 'lucide-react';
 import {
   useTerminalSettings,
@@ -18,10 +18,11 @@ import {
   MAX_SIZE,
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
+import { LabSection } from '../../components/settings/LabSection';
 import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
 import { HOST_LABELS } from '../../lib/resolve-spawn-target';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'preferredAgent' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'preferredAgent' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'lab' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -585,6 +586,7 @@ export function SettingsPage() {
           { id: 'marketplace'    as Section, icon: <Store size={12} />,    label: 'Marketplace' },
           { id: 'notifications'  as Section, icon: <Bell size={12} />,     label: 'Notificações' },
           { id: 'discord'        as Section, icon: <Gamepad2 size={12} />, label: 'Discord'   },
+          { id: 'lab'            as Section, icon: <FlaskConical size={12} />, label: 'Laboratório' },
           { id: 'advanced'       as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
         ] as const).map(({ id, icon, label }) => (
           <button key={id} onClick={() => toggleSection(id)}
@@ -1698,6 +1700,11 @@ export function SettingsPage() {
             </button>
 
             {discordMsg && <p className="text-[10px] text-slate-400 mt-1">{discordMsg}</p>}
+          </SectionCard>
+
+          {/* ── Laboratório ──────────────────────────────────────────── */}
+          <SectionCard id="lab" icon={<FlaskConical size={13} />} title="Laboratório" badge="Beta" active={open.includes('lab')} onToggle={toggleSection}>
+            <LabSection />
           </SectionCard>
 
           {/* ── Avançado ─────────────────────────────────────────────── */}

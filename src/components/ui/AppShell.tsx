@@ -18,6 +18,7 @@ import { ClarifyPrompt } from '../clarify/ClarifyPrompt';
 import { CommandPalette } from '../palette/CommandPalette';
 import { useGlobalShortcuts } from '../palette/usePaletteShortcut';
 import { useFlag } from '../../stores/flags-store';
+import { ShellV2 } from '../shell/ShellV2';
 
 interface Props {
   whatsNewOpen: boolean;
@@ -46,6 +47,18 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
   // eles substituíram os handlers que viviam soltos no App.tsx.
   const paletteEnabled = useFlag('commandPalette');
   useGlobalShortcuts(paletteEnabled);
+
+  // Shell terminal-first, atrás de flag. O caminho antigo abaixo permanece
+  // intocado e continua sendo o padrão — ver docs/adr/0003.
+  const shellV2 = useFlag('shellV2');
+  if (shellV2) {
+    return (
+      <>
+        <ShellV2 appVersion={appVersion} />
+        <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} currentVersion={appVersion} />
+      </>
+    );
+  }
 
   return (
     <RouterProvider>
