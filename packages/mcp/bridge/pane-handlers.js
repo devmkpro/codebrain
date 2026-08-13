@@ -560,10 +560,18 @@ function createPaneHandlers(ptyManager, opts) {
      * Send a message to a pane's stdin via writeSilent (echo-suppressed).
      * Unlike notifyPane (injectOutput = display only), this reaches the agent's CLI process.
      */
-    async messagePane(paneId, message) {
+    async messagePane(paneId, message, submit = false) {
       try {
         if (!ptyManager.hasPane(paneId)) return { ok: false, error: "pane not found" };
-        ptyManager.writeSilent(paneId, message);
+        // Use bracketed paste so message formatting remains literal, then
+        // submit with a separate CR after readline has processed the paste.
+        const text = String(message).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        ptyManager.writeSilent(paneId, text, true);
+        if (submit) {
+          const delay = Math.min(1000, Math.max(150, 150 + text.length * 0.3));
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          ptyManager.write(paneId, "\r");
+        }
         return { ok: true };
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) };

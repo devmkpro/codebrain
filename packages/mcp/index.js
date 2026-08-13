@@ -573,7 +573,7 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__pane_send_message ──────────────────────────────────────
   server.tool(
     "mcp__codebrain__pane_send_message",
-    "Send a message to another agent pane. type='task' wakes the recipient immediately (submits a new turn — use for assigning work). type='update'/'question'/'result' shows a yellow banner but does NOT interrupt the recipient (they read it via pane_read_messages on their next turn). NEVER use for task completion reporting — use handoff_submit instead.",
+    "Send a message to another agent pane and submit it as a new turn. Use type='task' for work assignments; type='update', 'question' and 'result' also wake the recipient so it can respond. NEVER use for task completion reporting — use handoff_submit instead.",
     {
       from:    z.string().describe("Your pane ID (sender)."),
       to:      z.string().describe("Target pane ID (recipient)."),
@@ -653,10 +653,9 @@ function createCodebrainMCPServer(bridge) {
           }, args.from);
         } catch {}
         // Deliver message to recipient's PTY stdin.
-        // Strategy depends on message type:
-        //   "task" → pane_write with submit=true: wakes the agent immediately (like a new user turn)
-        //   other  → writeSilent without submit: yellow banner visible but agent is NOT interrupted
-        //            (agent reads it proactively via pane_read_messages on its next turn)
+        // Every explicit agent-to-agent message is a new turn. Writing a
+        // banner without Enter leaves it stranded in the recipient's prompt,
+        // which looks delivered but is never seen by the CLI agent.
         try {
           const shortFrom = args.from.slice(0, 8);
           const typeLabel = msgType.toUpperCase();
@@ -667,9 +666,8 @@ function createCodebrainMCPServer(bridge) {
             const wakeMsg = `[MESSAGE from ${shortFrom} | TASK] ${args.content}`;
             await bridge.writePane(args.to, wakeMsg, true);
           } else if (typeof bridge.messagePane === "function") {
-            // Info/update/question/result — silent banner, no submit, no interruption
-            const injectMsg = `\n\x1b[33m[MESSAGE from ${shortFrom} | ${typeLabel}] ${preview}\x1b[0m\n`;
-            await bridge.messagePane(args.to, injectMsg);
+            const wakeMsg = `[MESSAGE from ${shortFrom} | ${typeLabel}] ${preview}`;
+            await bridge.messagePane(args.to, wakeMsg, true);
           }
           bridge.hooksManager?.fire?.("message_received", {
             from: args.from,
