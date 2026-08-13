@@ -635,6 +635,15 @@ function createCodebrainMCPServer(bridge) {
             });
           }
         } catch {}
+        try {
+          bridge.hooksManager?.fire?.("message_sent", {
+            from: args.from,
+            to: args.to,
+            type: msgType,
+            messageId: id,
+            preview: args.content.slice(0, 200),
+          }, args.from);
+        } catch {}
         // Deliver message to recipient's PTY stdin.
         // Strategy depends on message type:
         //   "task" → pane_write with submit=true: wakes the agent immediately (like a new user turn)
@@ -654,6 +663,12 @@ function createCodebrainMCPServer(bridge) {
             const injectMsg = `\n\x1b[33m[MESSAGE from ${shortFrom} | ${typeLabel}] ${preview}\x1b[0m\n`;
             await bridge.messagePane(args.to, injectMsg);
           }
+          bridge.hooksManager?.fire?.("message_received", {
+            from: args.from,
+            to: args.to,
+            type: msgType,
+            messageId: id,
+          }, args.to);
         } catch {}
 
         // ── Desktop notification for incoming message ─────────────────────

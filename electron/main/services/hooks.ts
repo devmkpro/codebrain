@@ -20,11 +20,14 @@ export type HookEventType =
   | "pane_spawned"
   | "pane_exited"
   | "pane_idle"
+  | "session_started"
+  | "session_ended"
   | "message_sent"
   | "message_received"
   | "squad_spawned"
   | "task_started"
   | "task_completed"
+  | "work_reported"
   | "hook_registered"
   // New tool-call interception hooks
   | "pre_tool_use"
@@ -279,9 +282,37 @@ export class HooksManager extends EventEmitter {
  * Call this once during app initialization.
  */
 export function setupHooks(hooks: HooksManager, ptyManager: PtyManager, ctx: AppContext): void {
+  const recordLifecycle = (paneId: string, content: string, type: string, data: Record<string, unknown>) => {
+    const config = ctx.paneConfigs.get(paneId);
+    const workspace = config?.cwd || ctx.currentWorkspacePath;
+    try {
+      ctx.memoryStore?.saveAgentMessage?.({ fromPane: "codebrain:hooks", toPane: paneId, content, type, workspace });
+      ctx.memoryStore?.write?.({
+        type: "episodic",
+        key: `hook-${type}-${paneId}-${Date.now()}`,
+        content: JSON.stringify({ paneId, ...data }),
+        tags: ["hook", type, "agent-lifecycle"],
+        agent_id: paneId,
+        workspace,
+      });
+    } catch (err) {
+      log.warn(`[hooks] Failed to persist ${type}: ${String(err)}`);
+    }
+  };
+
+  hooks.on("pane_spawned", (event: HookEvent) => {
+    if (!event.paneId) return;
+    const data = event.data ?? {};
+    hooks.fire("session_started", data, event.paneId, event.correlationId);
+    recordLifecycle(event.paneId, `Sessão iniciada${data.agent ? ` · ${String(data.agent)}` : ""}`, "session_started", data);
+  });
+
   // Wire PtyManager events → hooks
   ptyManager.on("exit", (paneId: string, exitCode: number) => {
-    hooks.fire("pane_exited", { exitCode, agent: ctx.paneConfigs.get(paneId)?.agent }, paneId);
+    const data = { exitCode, agent: ctx.paneConfigs.get(paneId)?.agent };
+    hooks.fire("session_ended", data, paneId);
+    recordLifecycle(paneId, `Sessão finalizada · código ${exitCode}`, "session_ended", data);
+    hooks.fire("pane_exited", data, paneId);
   });
 
   ptyManager.on("idle", ({ paneId, idle }: { paneId: string; idle: { lastOutput?: string[] } }) => {

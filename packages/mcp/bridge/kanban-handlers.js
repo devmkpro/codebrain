@@ -39,7 +39,13 @@ function createKanbanHandlers(opts = {}) {
     async taskComplete({ id, result }) {
       const store = getStore();
       if (!store) return { ok: false, error: "memory store not available" };
-      return store.completeKanbanTask({ id, result });
+      const completed = store.completeKanbanTask({ id, result });
+      if (completed?.ok) {
+        const data = { taskId: id, result: result || null, workspace: opts.getCurrentWorkspacePath?.() || null };
+        opts.hooksManager?.fire?.("task_completed", data);
+        opts.hooksManager?.fire?.("work_reported", data);
+      }
+      return completed;
     },
 
     async taskAssign({ id, paneId }) {

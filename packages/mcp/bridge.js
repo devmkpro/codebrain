@@ -782,6 +782,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...remoteSpawnHandlers,
     // Expose foundational instances
     messageBus,
+    hooksManager: opts.hooksManager,
     agentScorer,
     workerManager,
     configStore: opts.configStore,
