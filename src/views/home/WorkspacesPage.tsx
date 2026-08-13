@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   FolderOpen, Plus, X, Activity, Terminal,
   Bot, ChevronRight, Globe, Zap, Clock,
-  Trash2, RefreshCw, Server,
+  RefreshCw, Server, Unlink,
 } from 'lucide-react';
 import { useNavStore }       from '../../stores/nav-store';
 import { useProvidersStore } from '../../stores/providers-store';
@@ -15,7 +15,7 @@ function folderName(p: string) {
 }
 
 // ─── Open Workspace Card ──────────────────────────────────────────────────────
-function OpenWorkspaceCard({ tab, idx, panes, onSwitch, onClose }: any) {
+function OpenWorkspaceCard({ tab, idx, panes, onSwitch, onClose, onUnlink }: any) {
   const name      = folderName(tab.workspacePath);
   const tabPanes  = panes.filter((p: any) => p.workspacePath === tab.workspacePath || (p.cwd && p.cwd.startsWith(tab.workspacePath)));
   const running   = tabPanes.filter((p: any) => p.status === 'running').length;
@@ -34,9 +34,14 @@ function OpenWorkspaceCard({ tab, idx, panes, onSwitch, onClose }: any) {
             <p className="text-[9px] font-mono text-slate-600 truncate max-w-[160px]">{tab.workspacePath}</p>
           </div>
         </div>
-        <button onClick={() => onClose(idx)} className="p-1 text-slate-700 hover:text-red-400 transition-colors" title="Fechar workspace">
-          <X size={13} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onClose(idx)} className="p-1 text-slate-500 hover:text-slate-200 transition-colors" title="Fechar workspace — mantém nos recentes" aria-label={`Fechar ${name}`}>
+            <X size={13} />
+          </button>
+          <button onClick={() => onUnlink(tab.workspacePath, idx)} className="p-1 text-slate-500 hover:text-red-400 transition-colors" title="Desvincular — não apaga arquivos" aria-label={`Desvincular ${name}`}>
+            <Unlink size={13} />
+          </button>
+        </div>
       </div>
 
       {/* Metrics row */}
@@ -100,8 +105,8 @@ function RecentRow({ path, openTabs, onOpen, onRemove }: { path: string; openTab
         <button onClick={() => onOpen(path)} className="opacity-0 group-hover:opacity-100 px-2 py-1 rounded text-[9px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all">
           {isOpen ? 'Ir' : 'Abrir'}
         </button>
-        <button onClick={() => onRemove(path)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-700 hover:text-red-400 transition-all" title="Remover dos recentes">
-          <Trash2 size={11} />
+        <button onClick={() => onRemove(path)} className="opacity-60 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all" title="Desvincular — não apaga arquivos" aria-label={`Desvincular ${name}`}>
+          <Unlink size={11} />
         </button>
       </div>
     </div>
@@ -175,8 +180,19 @@ export function WorkspacesPage() {
   };
 
   const handleRemoveRecent = async (path: string) => {
-    try { await (window as any).codeBrainApp?.workspaces?.remove?.(path); } catch {}
-    setRecents(r => r.filter(p => p !== path));
+    try {
+      const result = await (window as any).codeBrainApp?.workspaces?.remove?.(path);
+      if (result?.ok) setRecents(r => r.filter(p => p !== path));
+    } catch {}
+  };
+
+  const handleUnlink = async (path: string, idx: number) => {
+    try {
+      const result = await (window as any).codeBrainApp?.workspaces?.remove?.(path);
+      if (!result?.ok) return;
+      closeTab(idx);
+      setRecents(r => r.filter(p => p !== path));
+    } catch {}
   };
 
   const recentNotOpen = recents.filter(r => !tabs.some((t: any) => t.workspacePath === r));
@@ -257,6 +273,7 @@ export function WorkspacesPage() {
                   tab={tab} idx={i} panes={panes}
                   onSwitch={handleSwitch}
                   onClose={handleCloseTab}
+                  onUnlink={handleUnlink}
                 />
               ))}
             </div>

@@ -357,7 +357,7 @@ export interface CodebrainApp {
   workspaces: {
     recent: () => Promise<string[]>;
     touch: (path: string) => Promise<void>;
-    remove: (path: string) => Promise<void>;
+    remove: (path: string) => Promise<{ ok: boolean; error?: string }>;
   };
   pty: {
     spawn: (config: PtyConfig) => Promise<string>;

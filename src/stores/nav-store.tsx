@@ -73,7 +73,9 @@ export const useNavStore = create()(persist((set, get) => ({
         activeTabIndex: 0,
         onHome: true
       };
-      const activeTabIndex = Math.min(s.activeTabIndex, tabs.length - 1);
+      let activeTabIndex = s.activeTabIndex;
+      if (index < activeTabIndex) activeTabIndex -= 1;
+      else if (index === activeTabIndex) activeTabIndex = Math.min(index, tabs.length - 1);
       return {
         tabs,
         activeTabIndex
