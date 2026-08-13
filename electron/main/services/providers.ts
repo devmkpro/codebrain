@@ -1,5 +1,8 @@
 ﻿import type { AppContext } from "../context";
 import { PROVIDER_REGISTRY } from "./constants";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 /**
  * Merge user-saved models with template models.
@@ -43,12 +46,13 @@ export function getEnhancedProviders(ctx: AppContext) {
   // Virtual Codex OAuth provider — appears when Codex CLI is installed
   const codexDetected = ctx.cliDetector?.getAll()?.codex?.found ?? false;
   const codexOAuthTemplate = PROVIDER_REGISTRY.find(t => t.id === "codex-oauth");
+  const codexOAuthSaved = list.find(p => p.id === "codex-oauth");
   const codexOAuthProvider = codexDetected && codexOAuthTemplate ? [{
     id: codexOAuthTemplate.id,
     label: codexOAuthTemplate.label,
     type: codexOAuthTemplate.type as any,
     host: codexOAuthTemplate.host,
-    models: [...codexOAuthTemplate.models],
+    models: codexOAuthSaved?.models?.length ? [...codexOAuthSaved.models] : [...codexOAuthTemplate.models],
     env: {},
   }] : [];
 
@@ -56,12 +60,13 @@ export function getEnhancedProviders(ctx: AppContext) {
   // Virtual Gemini CLI provider — appears when gemini CLI is installed
   const geminiCliDetected = ctx.cliDetector?.getAll()?.gemini?.found ?? false;
   const geminiCliTemplate = PROVIDER_REGISTRY.find(t => t.id === "gemini-cli");
+  const geminiCliSaved = list.find(p => p.id === "gemini-cli");
   const geminiCliProvider = geminiCliDetected && geminiCliTemplate ? [{
     id: geminiCliTemplate.id,
     label: geminiCliTemplate.label,
     type: geminiCliTemplate.type as any,
     host: geminiCliTemplate.host,
-    models: [...geminiCliTemplate.models],
+    models: geminiCliSaved?.models?.length ? [...geminiCliSaved.models] : [...geminiCliTemplate.models],
     env: {},
   }] : [];
 
@@ -121,12 +126,13 @@ export function getEnhancedProviders(ctx: AppContext) {
   // Virtual Kimi CLI provider — appears when Kimi CLI is installed
   const kimiDetected = ctx.cliDetector?.getAll()?.kimi?.found ?? false;
   const kimiTemplate = PROVIDER_REGISTRY.find(t => t.id === "kimi");
+  const kimiSaved = list.find(p => p.id === "kimi");
   const kimiProvider = kimiDetected && kimiTemplate ? [{
     id: kimiTemplate.id,
     label: kimiTemplate.label,
     type: kimiTemplate.type as any,
     host: kimiTemplate.host,
-    models: [...kimiTemplate.models],
+    models: kimiSaved?.models?.length ? [...kimiSaved.models] : [...kimiTemplate.models],
     env: {},
   }] : [];
 
@@ -183,7 +189,7 @@ export function getEnhancedProviders(ctx: AppContext) {
     type: mimoClaudeTemplate.type as any,
     host: mimoClaudeTemplate.host,
     baseUrl: mimoBaseUrl,
-    models: [...mimoClaudeTemplate.models],
+    models: mimoConfigured?.models?.length ? [...mimoConfigured.models] : [...mimoClaudeTemplate.models],
     env: mimoKey ? { ANTHROPIC_AUTH_TOKEN: mimoKey, MIMO_API_KEY: mimoKey } : {},
   }] : [];
 
@@ -192,7 +198,11 @@ export function getEnhancedProviders(ctx: AppContext) {
 
 // ─── Dynamic model discovery ──────────────────────────────
 
-const NON_CHAT_KEYWORDS = ['embed', 'embedding', 'tts', 'whisper', 'speech', 'rerank', 'audio', 'moderation', 'transcri'];
+const NON_CHAT_KEYWORDS = [
+  'embed', 'embedding', 'tts', 'whisper', 'speech', 'rerank', 'audio',
+  'moderation', 'transcri', 'image', 'imagen', 'realtime', 'video', 'veo',
+  'sora', 'ocr', 'computer-use',
+];
 
 function isNonChatModel(id: string): boolean {
   const parts = id.toLowerCase().split(/[-_]/);
@@ -235,16 +245,19 @@ export async function listModelsFromEndpoint(args: {
     url = `${stripV1Suffix(mimoRoot)}/v1/models`;
     headers['Authorization'] = `Bearer ${apiKey}`;
   } else if (type === 'anthropic-compat') {
-    url = `${stripV1Suffix(base)}/v1/models`;
+    url = `${stripV1Suffix(base)}/v1/models?limit=1000`;
     headers['x-api-key'] = apiKey;
     headers['anthropic-version'] = '2023-06-01';
   } else if (type === 'gemini-compat') {
-    url = `${stripV1Suffix(base)}/v1beta/models?key=${apiKey}`;
+    const geminiRoot = stripV1Suffix(base).replace(/\/v1beta\/?$/, '');
+    url = `${geminiRoot}/v1beta/models?pageSize=1000&key=${apiKey}`;
   } else {
     // OpenAI-compatible (includes OpenRouter): standard /v1/models endpoint
     // Strip /v1 suffix first to avoid double /v1/v1/models when user saved URL as .../api/v1
-    url = `${stripV1Suffix(base)}/v1/models`;
-    headers['Authorization'] = `Bearer ${apiKey}`;
+    const root = stripV1Suffix(base);
+    const isOpenRouter = /openrouter\.ai/i.test(root);
+    url = `${root}/v1/models${isOpenRouter ? '?supported_parameters=tools' : ''}`;
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
   try {
@@ -264,18 +277,165 @@ export async function listModelsFromEndpoint(args: {
     else if (Array.isArray(json.data)) rawModels = json.data;
     else if (Array.isArray(json.models)) rawModels = json.models;
 
-    const models = rawModels
+    const models = [...new Set(rawModels
       .map((m: any) => {
         const raw: string = m.id || m.name || '';
         // Gemini returns "models/gemini-2.5-pro" — strip the prefix
         return raw.startsWith('models/') ? raw.slice('models/'.length) : raw;
       })
-      .filter((id: string) => id && !isNonChatModel(id));
+      .filter((id: string) => id && !isNonChatModel(id)))];
 
     return { ok: true, models };
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+function readClaudeOAuthToken(): string | null {
+  try {
+    const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
+    const creds = JSON.parse(fs.readFileSync(credPath, "utf-8"));
+    return creds?.claudeAiOauth?.accessToken || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function listClaudeOAuthModels(): Promise<{ ok: boolean; models?: string[]; error?: string }> {
+  const accessToken = readClaudeOAuthToken();
+  if (!accessToken) return { ok: false, error: "Credenciais OAuth do Claude não encontradas." };
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/models?limit=1000", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "oauth-2025-04-20",
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}: ${resp.statusText}` };
+    const json = await resp.json() as any;
+    const models = (Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [])
+      .map((entry: any) => entry?.id ?? "")
+      .filter(Boolean);
+    return { ok: models.length > 0, models, error: models.length ? undefined : "Nenhum modelo retornado." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export function listCodexCachedModels(): string[] {
+  try {
+    const cachePath = path.join(os.homedir(), ".codex", "models_cache.json");
+    const json = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+    return [...new Set((Array.isArray(json.models) ? json.models : [])
+      .filter((entry: any) => entry?.visibility !== "hide")
+      .map((entry: any) => entry?.slug ?? entry?.id ?? "")
+      .filter(Boolean))] as string[];
+  } catch {
+    return [];
+  }
+}
+
+function providerEndpointConfig(provider: any): { baseUrl: string; apiKey: string; type: string } | null {
+  const env = provider?.env ?? {};
+  const baseUrl = env.ANTHROPIC_BASE_URL
+    || env.GEMINI_BASE_URL
+    || env.OPENAI_BASE_URL
+    || provider?.baseUrl
+    || "";
+  if (!baseUrl) return null;
+  const apiKey = env.ANTHROPIC_AUTH_TOKEN
+    || env.ANTHROPIC_API_KEY
+    || env.GEMINI_API_KEY
+    || env.OPENAI_API_KEY
+    || env.MIMO_API_KEY
+    || env.OPENROUTER_API_KEY
+    || env.FIREWORKS_API_KEY
+    || env.MOONSHOT_API_KEY
+    || env.XAI_API_KEY
+    || "";
+  return { baseUrl, apiKey, type: provider.type || "openai-compat" };
+}
+
+export interface ProviderModelSyncSummary {
+  updated: Array<{ providerId: string; count: number; source: string }>;
+  failed: Array<{ providerId: string; error: string }>;
+}
+
+/** Refresh every configured model catalog. Failures preserve the last known list. */
+export async function syncProviderModels(
+  ctx: AppContext,
+  options: { providerIds?: string[] } = {},
+): Promise<ProviderModelSyncSummary> {
+  const only = options.providerIds ? new Set(options.providerIds) : null;
+  const configured = ctx.providerStore.listFull().filter((provider: any) => !only || only.has(provider.id));
+  const updated: ProviderModelSyncSummary["updated"] = [];
+  const failed: ProviderModelSyncSummary["failed"] = [];
+
+  const discoveries = await Promise.all(configured.map(async (provider: any) => {
+    if (provider.id === "claude-oauth") {
+      const result = await listClaudeOAuthModels();
+      return { provider, result, source: "anthropic-oauth" };
+    }
+    if (provider.id === "codex-oauth") {
+      const models = listCodexCachedModels();
+      return { provider, result: { ok: models.length > 0, models, error: "Cache de modelos do Codex indisponível." }, source: "codex-cache" };
+    }
+    const endpoint = providerEndpointConfig(provider);
+    if (!endpoint) return { provider, result: { ok: false, error: "Provider sem endpoint configurado." }, source: "endpoint" };
+    const result = await listModelsFromEndpoint(endpoint);
+    return { provider, result, source: /openrouter/i.test(endpoint.baseUrl) ? "openrouter" : "endpoint" };
+  }));
+
+  for (const { provider, result, source } of discoveries) {
+    const models = result.models ?? [];
+    if (!result.ok || models.length === 0) {
+      failed.push({ providerId: provider.id, error: result.error || "Nenhum modelo retornado." });
+      continue;
+    }
+    const unchanged = JSON.stringify(provider.models ?? []) === JSON.stringify(models)
+      && provider.modelsSyncSource === source;
+    if (!unchanged) {
+      ctx.providerStore.upsert({
+        ...provider,
+        models,
+        modelsSyncedAt: Date.now(),
+        modelsSyncSource: source,
+      });
+    }
+    updated.push({ providerId: provider.id, count: models.length, source });
+  }
+
+  if (!only && (ctx.cliDetector?.getAll()?.codex?.found ?? false)) {
+    const models = listCodexCachedModels();
+    const template = PROVIDER_REGISTRY.find(entry => entry.id === "codex-oauth");
+    if (models.length && template && !configured.some((provider: any) => provider.id === "codex-oauth")) {
+      ctx.providerStore.upsert({ ...template, models, env: {}, modelsSyncedAt: Date.now(), modelsSyncSource: "codex-cache" } as any);
+      updated.push({ providerId: "codex-oauth", count: models.length, source: "codex-cache" });
+    }
+  }
+
+  if (!only && (ctx.cliDetector?.getAll()?.claude?.found ?? false)
+    && !configured.some((provider: any) => provider.id === "claude-oauth")) {
+    const result = await listClaudeOAuthModels();
+    const template = PROVIDER_REGISTRY.find(entry => entry.id === "claude-oauth");
+    if (result.ok && result.models?.length && template) {
+      ctx.providerStore.upsert({ ...template, models: result.models, env: {}, modelsSyncedAt: Date.now(), modelsSyncSource: "anthropic-oauth" } as any);
+      updated.push({ providerId: "claude-oauth", count: result.models.length, source: "anthropic-oauth" });
+    }
+  }
+
+  const syncedGemini = discoveries.find(({ provider, result }) => provider.type === "gemini-compat" && result.ok && result.models?.length);
+  if (!only && syncedGemini && (ctx.cliDetector?.getAll()?.gemini?.found ?? false)) {
+    const template = PROVIDER_REGISTRY.find(entry => entry.id === "gemini-cli");
+    if (template) {
+      ctx.providerStore.upsert({ ...template, models: syncedGemini.result.models, env: {}, modelsSyncedAt: Date.now(), modelsSyncSource: "gemini-api" } as any);
+      updated.push({ providerId: "gemini-cli", count: syncedGemini.result.models!.length, source: "gemini-api" });
+    }
+  }
+
+  return { updated, failed };
 }
 
 export interface HealthCheckResult {

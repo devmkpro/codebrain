@@ -17,6 +17,7 @@ import { createAppContext, safeSend } from "./context";
 import { createWindow } from "./window";
 import { registerAllIpcHandlers } from "./ipc/register-all";
 import { startMcpServer } from "./services/mcp";
+import { syncProviderModels } from "./services/providers";
 import { attachNetworkTracking } from "./services/network";
 import { setupHooks } from "./services/hooks";
 import { setupClaudeIntegration } from "./services/setup-claude";
@@ -99,6 +100,9 @@ app.whenReady().then(async () => {
   if (HEADLESS_MCP) {
     clearCodexGlobalConfig();
     refreshAllWorkspaces(ctx, undefined, app.isPackaged ? process.resourcesPath : app.getAppPath());
+    void syncProviderModels(ctx)
+      .then(summary => log.info(`[models] Startup sync: ${summary.updated.length} updated, ${summary.failed.length} preserved`))
+      .catch(err => log.warn("[models] Startup sync failed:", err));
     try {
       await startMcpServer(ctx);
       log.info("[MCP] Headless server mode is ready; Codebrain UI was not opened");
@@ -127,6 +131,9 @@ app.whenReady().then(async () => {
 
   ctx.mainWindow = createWindow();
   registerAllIpcHandlers(ctx);
+  void syncProviderModels(ctx)
+    .then(summary => log.info(`[models] Startup sync: ${summary.updated.length} updated, ${summary.failed.length} preserved`))
+    .catch(err => log.warn("[models] Startup sync failed:", err));
   setupAutoUpdater(ctx.mainWindow);
 
   // Discord Rich Presence (fire-and-forget, silent if Discord not running)

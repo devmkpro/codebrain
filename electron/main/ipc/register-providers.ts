@@ -1,10 +1,7 @@
 import { ipcMain } from "electron";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
 import type { AppContext } from "../context";
 import { safeSend } from "../context";
-import { getEnhancedProviders, listModelsFromEndpoint, healthCheckProvider } from "../services/providers";
+import { getEnhancedProviders, listModelsFromEndpoint, listClaudeOAuthModels, healthCheckProvider, syncProviderModels } from "../services/providers";
 import { BUILTIN_TEMPLATES } from "../services/constants";
 import { syncClaudeSettingsVersion } from "../services/setup-claude";
 
@@ -38,7 +35,11 @@ export function registerProviderHandlers(ctx: AppContext): void {
   }
 
   ipcMain.handle("providers:list", () => getEnhancedProviders(ctx));
-  ipcMain.handle("providers:save", (_event, provider) => ctx.providerStore.upsert(provider));
+  ipcMain.handle("providers:save", (_event, provider) => {
+    const result = ctx.providerStore.upsert(provider);
+    if (result.ok) void syncProviderModels(ctx, { providerIds: [provider.id] });
+    return result;
+  });
   ipcMain.handle("providers:delete", (_event, id: string) => ctx.providerStore.remove(id));
   ipcMain.handle("providers:templates", () => BUILTIN_TEMPLATES);
   ipcMain.handle("providers:testToken", async (_event, _args: { providerId: string; token: string }) => {
@@ -50,31 +51,8 @@ export function registerProviderHandlers(ctx: AppContext): void {
   });
 
   // Detect models available on Claude OAuth plan (reads token from ~/.claude/.credentials.json)
-  ipcMain.handle("providers:listClaudeOAuthModels", async () => {
-    try {
-      const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
-      if (!fs.existsSync(credPath)) return { ok: false, error: "Credenciais OAuth não encontradas. Faça login com 'claude auth login'." };
-      const creds = JSON.parse(fs.readFileSync(credPath, "utf-8"));
-      const accessToken = creds?.claudeAiOauth?.accessToken;
-      if (!accessToken) return { ok: false, error: "accessToken não encontrado nas credenciais." };
-
-      const resp = await fetch("https://api.anthropic.com/v1/models", {
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "anthropic-version": "2023-06-01",
-          "anthropic-beta": "oauth-2025-04-20",
-        },
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}: ${resp.statusText}` };
-      const json = await resp.json() as any;
-      const rawModels: Array<{ id?: string }> = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
-      const models = rawModels.map(m => m.id ?? "").filter(Boolean);
-      return { ok: true, models };
-    } catch (err: any) {
-      return { ok: false, error: err.message ?? String(err) };
-    }
-  });
+  ipcMain.handle("providers:listClaudeOAuthModels", () => listClaudeOAuthModels());
+  ipcMain.handle("providers:syncModels", () => syncProviderModels(ctx));
 
   ipcMain.handle("providers:healthCheck", async (_event, args: { baseUrl: string; apiKey: string; type: string; model?: string }) => {
     return healthCheckProvider(args);
@@ -86,7 +64,7 @@ export function registerProviderHandlers(ctx: AppContext): void {
       return { ok: true, models: openRouterCache.data };
     }
     try {
-      const resp = await fetch("https://openrouter.ai/api/v1/models", {
+      const resp = await fetch("https://openrouter.ai/api/v1/models?supported_parameters=tools", {
         headers: { "Accept": "application/json" },
         signal: AbortSignal.timeout(15000),
       });

@@ -33,7 +33,7 @@ export function ProviderForm({
   const isOAuth = provider.type === "oauth";
   const tokenKey = isAnthropicCompat || isMimoCompat ? "ANTHROPIC_AUTH_TOKEN" : isGeminiCompat ? "GEMINI_API_KEY" : isOpenAICompat ? "OPENAI_API_KEY" : "TOKEN";
   const urlKey = isAnthropicCompat || isMimoCompat ? "ANTHROPIC_BASE_URL" : isGeminiCompat ? "GEMINI_BASE_URL" : isOpenAICompat ? "OPENAI_BASE_URL" : "BASE_URL";
-  // OpenRouter has no public model listing endpoint — returns hundreds of unrelated models
+  // OpenRouter exposes a large public catalog; the dedicated picker keeps it searchable.
   const isOpenRouter = /openrouter/i.test(env[urlKey] ?? "") || /openrouter/i.test(provider.label ?? "");
   // 9Router: key comes from the user's own instance dashboard, not an external signup page
   const is9Router = /9router/i.test(provider.id ?? "") || /9router/i.test(provider.label ?? "");

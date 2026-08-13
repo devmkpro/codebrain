@@ -19,6 +19,10 @@ export const RELEASES: Release[] = [
     "highlights": [
       {
         "kind": "fix",
+        "text": "pin requested native agent provider"
+      },
+      {
+        "kind": "fix",
         "text": "enforce provider model compatibility"
       },
       {
