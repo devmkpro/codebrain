@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     },
     reloadShell: () => ipcRenderer.invoke("app:reload-shell"),
     setZoomFactor: (factor: number) => ipcRenderer.invoke("app:set-zoom", factor),
+    setWindowTheme: (theme: "dark" | "light") => ipcRenderer.invoke("app:set-window-theme", theme),
   },
 
   auth: {

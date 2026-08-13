@@ -347,6 +347,7 @@ export interface CodebrainApp {
     onReloadShortcut: (callback: () => void) => () => void;
     reloadShell: () => Promise<void>;
     setZoomFactor: (factor: number) => Promise<number>;
+    setWindowTheme: (theme: "dark" | "light") => Promise<boolean>;
   };
   auth: {
     status: () => Promise<AuthStatus>;

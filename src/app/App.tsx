@@ -262,6 +262,7 @@ export function App() {
   React.useEffect(() => {
     const root2 = document.documentElement;
     if (theme === "light") root2.classList.add("light"); else root2.classList.remove("light");
+    void window.codeBrainApp?.app?.setWindowTheme(theme).catch(() => {});
     // Performance CSS classes applied at root level
     if (reducedAnimations) root2.classList.add("reduced-motion"); else root2.classList.remove("reduced-motion");
     if (disableBackdropBlur) root2.classList.add("no-backdrop-blur"); else root2.classList.remove("no-backdrop-blur");
