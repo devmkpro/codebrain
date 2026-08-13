@@ -13,6 +13,7 @@ import { useRemoteBridgeStore } from "../stores/remote-bridge-store";
 import { useSessionHistoryStore } from "../stores/session-history-store";
 import { useTasksStore } from "../stores/tasks-store";
 import { useTerminalSettings } from "../stores/terminal-settings-store";
+import { useSpecStore } from "../stores/spec-store";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    AÇÕES DO NÚCLEO
@@ -222,6 +223,16 @@ const coreActions: Action[] = [
     icon: "Map",
     enabled: inWorkspace,
     run: () => useNavStore.getState().navigateInActiveTab({ kind: "map" }),
+  },
+  {
+    id: "workspace.specs",
+    title: "Spec Kit",
+    subtitle: "Especificar → planejar → decompor → implementar",
+    group: "workspace",
+    keywords: ["spec", "specify", "plan", "tasks", "requisitos", "feature"],
+    icon: "FileCode2",
+    enabled: inWorkspace,
+    run: () => useSpecStore.getState().toggle(),
   },
 
   /* ── Aparência ─────────────────────────────────────────────────────── */

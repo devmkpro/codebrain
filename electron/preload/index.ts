@@ -173,6 +173,12 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => ipcRenderer.invoke("conversation:send", args),
   },
 
+  spec: {
+    list: (args: { workspace: string }) => ipcRenderer.invoke("spec:list", args),
+    create: (args: { workspace: string; title: string; description?: string }) => ipcRenderer.invoke("spec:create", args),
+    open: (args: { workspace: string; id: string; file?: string }) => ipcRenderer.invoke("spec:open", args),
+  },
+
   workspace: {
     open: () => ipcRenderer.invoke("workspace:open"),
     set: (dir: string) => ipcRenderer.invoke("workspace:set", dir),

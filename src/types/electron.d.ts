@@ -387,6 +387,11 @@ export interface CodebrainApp {
     list: (args: { paneId: string; workspace?: string; limit?: number }) => Promise<{ ok: boolean; messages?: AgentMessage[]; count?: number; error?: string }>;
     send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => Promise<{ ok: boolean; id?: string; error?: string }>;
   };
+  spec: {
+    list: (args: { workspace: string }) => Promise<any>;
+    create: (args: { workspace: string; title: string; description?: string }) => Promise<any>;
+    open: (args: { workspace: string; id: string; file?: string }) => Promise<any>;
+  };
   workspace: {
     open: () => Promise<string | null>;
     set: (dir: string) => Promise<void>;
