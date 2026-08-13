@@ -99,6 +99,7 @@ html, body, #root {
 .light [class*="bg-[#0B0B0E]"]  { background: #f8f8ff !important; }
 .light [class*="bg-[#0c0c14]"]  { background: #ffffff !important; }
 .light [class*="bg-[#0d0d0d]"]  { background: #ffffff !important; }
+.light [class*="bg-[#0d0d12]"]  { background: #ffffff !important; }
 .light [class*="bg-[#0F0F13]"]  { background: #ededf6 !important; }
 /* Sidebars, inputs, elevated cards */
 .light [class*="bg-[#1A1A22]"]  { background: #e8e8f4 !important; }
