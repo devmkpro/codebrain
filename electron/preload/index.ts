@@ -435,6 +435,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     read: (opts: Record<string, unknown>) => ipcRenderer.invoke("memory:read", opts),
     delete: (opts: Record<string, unknown>) => ipcRenderer.invoke("memory:delete", opts),
     stats: () => ipcRenderer.invoke("memory:stats"),
+    maintain: (opts?: { maxWorkingAgeDays?: number; maxWorkingCount?: number; optimize?: boolean }) => ipcRenderer.invoke("memory:maintain", opts ?? {}),
     listPatterns: (opts?: Record<string, unknown>) => ipcRenderer.invoke("memory:listPatterns", opts ?? {}),
     deletePattern: (opts: Record<string, unknown>) => ipcRenderer.invoke("memory:deletePattern", opts),
   },

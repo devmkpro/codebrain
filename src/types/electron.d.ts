@@ -682,6 +682,16 @@ export interface CodebrainApp {
     dismiss: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
     clear: () => Promise<{ ok: boolean; error?: string }>;
   };
+  memory: {
+    list: (opts?: Record<string, unknown>) => Promise<any>;
+    search: (opts: Record<string, unknown>) => Promise<any>;
+    read: (opts: Record<string, unknown>) => Promise<any>;
+    delete: (opts: Record<string, unknown>) => Promise<any>;
+    stats: () => Promise<any>;
+    maintain: (opts?: { maxWorkingAgeDays?: number; maxWorkingCount?: number; optimize?: boolean }) => Promise<any>;
+    listPatterns: (opts?: Record<string, unknown>) => Promise<any>;
+    deletePattern: (opts: Record<string, unknown>) => Promise<any>;
+  };
   notify: (title: string, body: string) => void;
   log: {
     list: (opts?: Record<string, unknown>) => Promise<LogEntry[]>;

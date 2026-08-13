@@ -28,6 +28,7 @@ export interface PatternEntry {
 export interface MemoryStats {
   total: number;
   byType: Record<string, { count: number; totalBytes: number }>;
+  database?: { schemaVersion: number; sizeBytes: number; reclaimableBytes: number; journalMode: string; fts5: boolean };
 }
 
 interface MemoryState {
@@ -40,6 +41,7 @@ interface MemoryState {
   typeFilter: string;
   searchQuery: string;
   loading: boolean;
+  maintenanceMessage: string | null;
 
   toggle: () => void;
   setTab: (tab: "memories" | "patterns") => void;
@@ -52,6 +54,7 @@ interface MemoryState {
   searchMemories: (query: string) => Promise<void>;
   deleteMemory: (id: string) => Promise<void>;
   deletePattern: (id: string) => Promise<void>;
+  maintain: () => Promise<void>;
 }
 
 export const useMemoryStore = create<MemoryState>((set, get) => ({
@@ -64,6 +67,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   typeFilter: "",
   searchQuery: "",
   loading: false,
+  maintenanceMessage: null,
 
   toggle: () => set((s) => ({ visible: !s.visible })),
 
@@ -101,8 +105,8 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 
   loadStats: async () => {
     try {
-      const result = await (window as any).codeBrainApp?.memory?.stats?.();
-      if (result?.ok) set({ stats: { total: result.total, byType: result.byType } });
+      const result = await window.codeBrainApp.memory.stats();
+      if (result?.ok) set({ stats: { total: result.total, byType: result.byType, database: result.database } });
     } catch {}
   },
 
@@ -132,5 +136,18 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       await (window as any).codeBrainApp?.memory?.deletePattern?.({ id });
       get().loadPatterns();
     } catch {}
+  },
+  maintain: async () => {
+    set({ loading: true, maintenanceMessage: null });
+    try {
+      const result = await window.codeBrainApp.memory.maintain();
+      if (!result?.ok) throw new Error(result?.error || "Falha na manutenção");
+      set({ maintenanceMessage: `${result.pruned || 0} entradas removidas · banco otimizado` });
+      await Promise.all([get().loadMemories(), get().loadStats()]);
+    } catch (error) {
+      set({ maintenanceMessage: error instanceof Error ? error.message : String(error) });
+    } finally {
+      set({ loading: false });
+    }
   },
 }));

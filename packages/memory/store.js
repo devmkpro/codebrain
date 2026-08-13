@@ -1035,7 +1035,30 @@ function createMemoryStore(dbPath) {
       for (const r of rows) {
         byType[r.type] = { count: r.count, totalBytes: r.total_bytes };
       }
-      return { ok: true, total: total.total, byType };
+      const pageCount = db.pragma("page_count", { simple: true });
+      const pageSize = db.pragma("page_size", { simple: true });
+      const freelist = db.pragma("freelist_count", { simple: true });
+      return {
+        ok: true,
+        total: total.total,
+        byType,
+        database: {
+          schemaVersion: db.pragma("user_version", { simple: true }),
+          sizeBytes: Number(pageCount) * Number(pageSize),
+          reclaimableBytes: Number(freelist) * Number(pageSize),
+          journalMode: db.pragma("journal_mode", { simple: true }),
+          fts5: fts5Available,
+        },
+      };
+    },
+
+    maintain({ maxWorkingAgeDays = 7, maxWorkingCount = 500, optimize = true } = {}) {
+      const days = Math.max(1, Math.min(Number(maxWorkingAgeDays) || 7, 365));
+      const count = Math.max(50, Math.min(Number(maxWorkingCount) || 500, 10_000));
+      const result = this.autoPrune({ maxWorkingAge: days * 86400, maxWorkingCount: count });
+      if (!result.ok) return result;
+      if (optimize) db.exec("PRAGMA optimize");
+      return { ...result, policy: { maxWorkingAgeDays: days, maxWorkingCount: count } };
     },
 
     // ── Pattern Management ────────────────────────────────────────────────────

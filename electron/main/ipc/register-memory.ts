@@ -43,6 +43,14 @@ export function registerMemoryIpc(ctx: AppContext): void {
     return store.stats();
   });
 
+  ipcMain.handle("memory:maintain", async (_evt, opts?: Record<string, unknown>) => {
+    return store.maintain({
+      maxWorkingAgeDays: (opts?.maxWorkingAgeDays as number) || 7,
+      maxWorkingCount: (opts?.maxWorkingCount as number) || 500,
+      optimize: opts?.optimize !== false,
+    });
+  });
+
   ipcMain.handle("memory:listPatterns", async (_evt, opts?: Record<string, unknown>) => {
     return store.listPatterns({
       pattern_type: opts?.pattern_type as string | undefined,

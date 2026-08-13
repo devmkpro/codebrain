@@ -320,6 +320,8 @@ export function MemoryPanel() {
   const loadStats = useMemoryStore((s) => s.loadStats);
   const deleteMemory = useMemoryStore((s) => s.deleteMemory);
   const deletePattern = useMemoryStore((s) => s.deletePattern);
+  const maintain = useMemoryStore((s) => s.maintain);
+  const maintenanceMessage = useMemoryStore((s) => s.maintenanceMessage);
 
   const [searchInput, setSearchInput] = React.useState("");
   const searchTimer = React.useRef<ReturnType<typeof setTimeout>>();
@@ -438,7 +440,7 @@ export function MemoryPanel() {
 
       {/* Stats Bar */}
       {tab === "memories" && stats && (
-        <div className="px-3 py-1.5 border-b border-white/5 shrink-0 flex gap-3">
+        <div className="px-3 py-1.5 border-b border-white/5 shrink-0 flex flex-wrap gap-3">
           {Object.entries(stats.byType).map(([type, info]) => (
             <div key={type} className="flex items-center gap-1">
               <span className={`font-mono text-[8px] ${TYPE_COLORS[type] || "text-gray-400"}`}>
@@ -447,6 +449,9 @@ export function MemoryPanel() {
               <span className="font-mono text-[8px] text-gray-700">{info.count}</span>
             </div>
           ))}
+          {stats.database && <span className="font-mono text-[8px] text-gray-600">DB {formatBytes(stats.database.sizeBytes)} · v{stats.database.schemaVersion} · {stats.database.fts5 ? "FTS5" : "LIKE"}</span>}
+          <button onClick={() => void maintain()} className="ml-auto font-mono text-[8px] text-indigo-400 hover:text-indigo-300">otimizar</button>
+          {maintenanceMessage && <span className="basis-full font-mono text-[8px] text-gray-600">{maintenanceMessage}</span>}
         </div>
       )}
 
