@@ -19,6 +19,7 @@ interface ProviderLike {
 
 export function PaneLauncher() {
   const open = usePaneLauncherStore((state) => state.open);
+  const request = usePaneLauncherStore((state) => state.request);
   const close = usePaneLauncherStore((state) => state.close);
   const providers = useProvidersStore((state: any) => state.providers) as ProviderLike[];
   const loadProviders = useProvidersStore((state: any) => state.load) as () => Promise<void>;
@@ -69,8 +70,16 @@ export function PaneLauncher() {
         permissionMode,
         externallySpawned: true,
       });
+      const initialPrompt = request?.initialPrompt?.trim();
       close();
-      notify("Pane aberto", `${provider.label ?? provider.id} · ${target.model}`, "success");
+      if (initialPrompt) {
+        // A CLI needs a moment to draw its first prompt. A CR is intentional:
+        // preparation must begin without requiring the user to press Enter.
+        window.setTimeout(() => void window.codeBrainApp?.pty.write(result.paneId!, `${initialPrompt}\r`), 900);
+        notify("Agente de preparação iniciado", `${provider.label ?? provider.id} · ${target.model}`, "success");
+      } else {
+        notify("Pane aberto", `${provider.label ?? provider.id} · ${target.model}`, "success");
+      }
     } catch (spawnError) {
       setError(spawnError instanceof Error ? spawnError.message : String(spawnError));
     } finally {
@@ -103,7 +112,7 @@ export function PaneLauncher() {
       <header className="h-14 px-4 flex items-center gap-3 border-b border-cb-line-0">
         {provider && <button onClick={() => { setProviderId(null); setError(null); }} className="p-1 text-cb-fg-3 hover:text-cb-fg-0" aria-label="Voltar aos providers"><ArrowLeft size={15}/></button>}
         <div className="h-8 w-8 rounded-cb-1 border border-cb-accent/30 bg-cb-accent/10 flex items-center justify-center"><Plus size={15} className="text-cb-accent"/></div>
-        <div className="flex-1"><h2 className="text-sm text-cb-fg-0">Novo pane de IA</h2><p className="text-2xs text-cb-fg-3">{provider ? "2 de 2 · escolha um modelo compatível" : "1 de 2 · escolha o provider primeiro"}</p></div>
+        <div className="flex-1"><h2 className="text-sm text-cb-fg-0">{request?.title ?? "Novo pane de IA"}</h2><p className="text-2xs text-cb-fg-3">{provider ? "2 de 2 · escolha um modelo compatível" : request?.subtitle ?? "1 de 2 · escolha o provider primeiro"}</p></div>
         <button onClick={close} className="p-1 text-cb-fg-3 hover:text-cb-fg-0" aria-label="Fechar"><X size={15}/></button>
       </header>
 
