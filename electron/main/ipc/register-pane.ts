@@ -115,6 +115,37 @@ export function registerPaneHandlers(ctx: AppContext): void {
     }
   });
 
+  ipcMain.handle("conversation:list", async (_event, args: { paneId?: string; workspace?: string; limit?: number }) => {
+    try {
+      if (!ctx.memoryStore?.getAgentConversation) return { ok: false, error: "memory store not available" };
+      return ctx.memoryStore.getAgentConversation(args ?? {});
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle("conversation:send", async (_event, args: { toPane?: string; content?: string; workspace?: string; parentId?: string }) => {
+    const toPane = args?.toPane?.trim();
+    const content = args?.content?.trim();
+    if (!toPane || !content) return { ok: false, error: "toPane and content are required" };
+    if (content.length > 20_000) return { ok: false, error: "message exceeds 20000 characters" };
+    try {
+      const saved = ctx.memoryStore?.saveAgentMessage?.({
+        fromPane: "operator",
+        toPane,
+        content,
+        type: "question",
+        parentId: args?.parentId,
+        workspace: args?.workspace,
+      });
+      if (saved && !saved.ok) return saved;
+      ctx.ptyManager.write(toPane, `${content}\r`);
+      return { ok: true, id: saved?.id };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
   // ── Hibernate pane (kill PTY but keep config for revival) ──────────────────
   ipcMain.handle("pty:hibernate", async (_event, paneId: string) => {
     try {

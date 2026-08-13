@@ -5,6 +5,7 @@ import { DashboardPage } from "../../views/home/DashboardPage";
 import { SettingsPage } from "../../views/home/SettingsPage";
 import { WorkspacesPage } from "../../views/home/WorkspacesPage";
 import { ClarifyPrompt } from "../clarify/ClarifyPrompt";
+import { ConversationPanel } from "../conversation/ConversationPanel";
 import { CronPanel } from "../cron/CronPanel";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { CommandPalette } from "../palette/CommandPalette";
@@ -112,6 +113,7 @@ export function ShellV2({ appVersion }: Props) {
             <RecipeSuggestionPanel />
             <MemoryPanel />
             <SessionHistoryPanel />
+            <ConversationPanel />
           </main>
         </div>
 

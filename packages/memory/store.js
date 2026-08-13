@@ -1748,6 +1748,22 @@ function createMemoryStore(dbPath) {
       return { ok: true, messages: rows, count: rows.length };
     },
 
+    /** Return both sides of a durable conversation, oldest first. */
+    getAgentConversation({ paneId, workspace, limit = 200 } = {}) {
+      if (!paneId) return { ok: false, error: "paneId is required" };
+      const safeLimit = Math.max(1, Math.min(Number(limit) || 200, 500));
+      const rows = db.prepare(`
+        SELECT * FROM (
+          SELECT * FROM agent_messages
+          WHERE (from_pane = @pane_id OR to_pane = @pane_id)
+            AND (@workspace IS NULL OR workspace = @workspace)
+          ORDER BY created_at DESC
+          LIMIT @limit
+        ) ORDER BY created_at ASC
+      `).all({ pane_id: paneId, workspace: workspace || null, limit: safeLimit });
+      return { ok: true, messages: rows, count: rows.length };
+    },
+
     /**
      * Mark a message as read.
      * @param {{ id: string }} opts

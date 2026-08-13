@@ -1,9 +1,10 @@
 import React from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageSquare, Plus } from "lucide-react";
 import { usePanesStore } from "../../stores/panes-store";
 import { useShellStore } from "../../stores/shell-store";
 import { runAction } from "../../lib/actions";
 import { statusPresentation } from "./pane-status";
+import { useConversationStore } from "../../stores/conversation-store";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RAIL DE AGENTES
@@ -35,44 +36,47 @@ function AgentRow({
   active,
   collapsed,
   onSelect,
+  onConversation,
 }: {
   pane: PaneLike;
   active: boolean;
   collapsed: boolean;
   onSelect: () => void;
+  onConversation: () => void;
 }) {
   const presentation = statusPresentation(pane.status);
   const label = pane.title || pane.agent || "shell";
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
+    <div
       aria-selected={active}
       aria-label={`${label} — ${presentation.label}`}
       title={collapsed ? `${label} — ${presentation.label}` : undefined}
-      className="cb-row cb-rail w-full text-left h-cell"
+      className="cb-row cb-rail w-full text-left h-cell group"
       style={
         {
           "--cb-rail-color": active ? "var(--cb-accent)" : presentation.color,
         } as React.CSSProperties
       }
     >
-      <span
-        className="cb-dot"
-        data-pulse={presentation.pulse}
-        style={{ "--cb-dot-color": presentation.color } as React.CSSProperties}
-        aria-hidden
-      />
+      <button type="button" onClick={onSelect} className="flex flex-1 min-w-0 items-center gap-2" aria-label={`${label} — ${presentation.label}`}>
+        <span
+          className="cb-dot"
+          data-pulse={presentation.pulse}
+          style={{ "--cb-dot-color": presentation.color } as React.CSSProperties}
+          aria-hidden
+        />
+        {!collapsed && <span className="flex-1 min-w-0 truncate text-xs">{label}</span>}
+      </button>
       {!collapsed && (
         <>
-          <span className="flex-1 min-w-0 truncate text-xs">{label}</span>
           <span className="text-2xs text-cb-fg-3 shrink-0 tabular-nums">
             {pane.id.slice(0, 4)}
           </span>
+          <button type="button" onClick={onConversation} className="opacity-0 group-hover:opacity-100 text-cb-fg-3 hover:text-cb-accent" aria-label={`Conversar com ${label}`} title="Abrir conversa"><MessageSquare size={11} /></button>
         </>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -83,6 +87,7 @@ export function AgentRail() {
 
   const collapsed = useShellStore((state) => state.railCollapsed);
   const toggleRail = useShellStore((state) => state.toggleRail);
+  const openConversation = useConversationStore((state) => state.openFor);
 
   return (
     <aside
@@ -123,6 +128,7 @@ export function AgentRail() {
               active={pane.id === activePaneId}
               collapsed={collapsed}
               onSelect={() => setActive(pane.id)}
+              onConversation={() => openConversation(pane.id)}
             />
           ))
         )}

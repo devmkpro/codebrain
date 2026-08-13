@@ -168,6 +168,11 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     },
   },
 
+  conversation: {
+    list: (args: { paneId: string; workspace?: string; limit?: number }) => ipcRenderer.invoke("conversation:list", args),
+    send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => ipcRenderer.invoke("conversation:send", args),
+  },
+
   workspace: {
     open: () => ipcRenderer.invoke("workspace:open"),
     set: (dir: string) => ipcRenderer.invoke("workspace:set", dir),

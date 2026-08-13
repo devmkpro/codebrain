@@ -33,6 +33,19 @@ export interface PtyInfo {
   model?: string;
 }
 
+export interface AgentMessage {
+  id: string;
+  from_pane: string;
+  to_pane: string;
+  content: string;
+  type: string;
+  task_id?: string | null;
+  parent_id?: string | null;
+  workspace?: string | null;
+  read: number;
+  created_at: number;
+}
+
 export interface Session {
   provider: string;
   id: string;
@@ -369,6 +382,10 @@ export interface CodebrainApp {
     onPaneAdded: (callback: (info: PtyInfo) => void) => () => void;
     onPaneReattached: (callback: (paneId: string) => void) => () => void;
     onPaneSession: (callback: (info: { paneId: string; session?: Session; claudeSessionId?: string }) => void) => () => void;
+  };
+  conversation: {
+    list: (args: { paneId: string; workspace?: string; limit?: number }) => Promise<{ ok: boolean; messages?: AgentMessage[]; count?: number; error?: string }>;
+    send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => Promise<{ ok: boolean; id?: string; error?: string }>;
   };
   workspace: {
     open: () => Promise<string | null>;
