@@ -59,6 +59,8 @@ function parseCommit(subject) {
   if (!match) return null;
   const kind = match[1].toLowerCase();
   const text = match[2].trim();
+  // Keep obsolete historical entries for removed capabilities out of the UI.
+  if (/\breview/i.test(text)) return null;
   // Skip release commits
   if (kind === "chore" && text.startsWith("release")) return null;
   if (text.startsWith("release:")) return null;

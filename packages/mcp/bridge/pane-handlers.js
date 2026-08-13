@@ -588,7 +588,7 @@ function createPaneHandlers(ptyManager, opts) {
         } catch {}
 
         // ── Auto-complete tasks assigned to this worker ─────────────────────
-        // When a worker submits handoff, move its assigned kanban tasks to done/review.
+        // When a worker submits handoff, keep pending work active or mark it done.
         try {
           if (store.listKanbanTasks && store.moveKanbanTask) {
             const actorRole = store.getActorRole?.({ paneId });
@@ -596,7 +596,7 @@ function createPaneHandlers(ptyManager, opts) {
             if (missionId) {
               const assignedTasks = store.listKanbanTasks({ mission_id: missionId, assigned_to: paneId, limit: 10 });
               if (assignedTasks?.ok) {
-                const targetColumn = status === "done" ? "done" : "review";
+                const targetColumn = status === "done" ? "done" : "in_progress";
                 for (const task of (assignedTasks.tasks || [])) {
                   if (task.column_name !== "done" && task.column_name !== targetColumn) {
                     try { store.moveKanbanTask({ id: task.id, column: targetColumn }); } catch {}

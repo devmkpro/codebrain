@@ -32,7 +32,7 @@ const STEPS = [
   { id: "count", label: "Panes" },
   { id: "providers", label: "Providers" },
   { id: "squad", label: "Squad" },
-  { id: "review", label: "Revisar" },
+  { id: "confirm", label: "Confirmar" },
 ];
 
 const CLI_OPTIONS = [
@@ -53,7 +53,7 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
   const [orchestrator, setOrchestrator] = useState<{ providerId: string; model: string } | null>(null);
   const [slots, setSlots] = useState<LibreSlot[]>([]);
 
-  // Orchestrator extra config (step 4 / review)
+  // Orchestrator extra config shown before confirmation.
   const [orchCli, setOrchCli] = useState("claude");
   const [orchEffort, setOrchEffort] = useState("normal");
   const [orchInstructions, setOrchInstructions] = useState("");
@@ -386,7 +386,7 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
               <div className="text-[10px] text-zinc-600 mb-1">Nenhum squad salvo ainda.</div>
               <div className="text-[9px] text-zinc-700">Após spawnar, você pode salvar a configuração como squad.</div>
             </div>
-            <div className="text-[10px] text-zinc-500">Continue para revisar e spawnar com a configuração atual.</div>
+            <div className="text-[10px] text-zinc-500">Continue para confirmar e spawnar com a configuração atual.</div>
             <div className="flex gap-2">
               <button onClick={() => setStep(3)} className="flex-1 py-2 rounded-lg border border-zinc-800 text-zinc-400 text-[11px] hover:bg-zinc-900 transition-colors">
                 ← Voltar
@@ -401,7 +401,7 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
           </div>
         )}
 
-        {/* ── STEP 5: Review + spawn ── */}
+        {/* ── STEP 5: Confirm + spawn ── */}
         {activeWorkspace && step === 5 && orchestrator && (
           <div className="space-y-3">
             {/* Workspace */}

@@ -4,7 +4,6 @@ export type SquadAgentCategory =
   | "builder"
   | "planner"
   | "researcher"
-  | "reviewer"
   | "tester"
   | "devops"
   | "designer"

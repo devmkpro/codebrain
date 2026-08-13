@@ -102,7 +102,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     host: "codex",
     tokenEnvVar: "OPENAI_API_KEY",
     signupUrl: "https://platform.openai.com/api-keys",
-    models: ["gpt-5.5", "gpt-5.4-mini", "codex-auto-review"],
+    models: ["gpt-5.5", "gpt-5.4-mini"],
     labelIncludes: ["codex"],
     idIncludes: ["codex"],
   },
@@ -113,7 +113,7 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     type: "codex",
     host: "codex",
     signupUrl: "https://chatgpt.com/codex",
-    models: ["gpt-5.5", "gpt-5.4-mini", "codex-auto-review"],
+    models: ["gpt-5.5", "gpt-5.4-mini"],
     labelIncludes: ["codex"],
   },
   {

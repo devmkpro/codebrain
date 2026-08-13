@@ -98,7 +98,7 @@ When text appears in your terminal from another agent (via pane_write), you will
 
 ### Task Lifecycle
 - **Start:** task_move → `in_progress`
-- **Complete:** task_move → `review` or `done`, then `handoff_submit`
+- **Complete:** task_move → `done`, then `handoff_submit`
 - **Blocked:** task_move → `inbox`, then `handoff_submit({ status: "blocked" })`
 
 ### 🔴 Após completar: permaneça disponível

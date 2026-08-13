@@ -235,7 +235,7 @@ After calling `mcp__codebrain__pane_send_message`, the recipient sees a yellow n
 
 ## MULTI-AGENT DECISION — ALWAYS ASK
 
-**Whenever the user asks you to do ANY task (build a feature, fix a bug, review code, create something), you MUST ask first:**
+**Whenever the user asks you to do ANY task (build a feature, fix a bug, create something), you MUST ask first:**
 
 ```
 Deseja que eu resolva essa tarefa com multiagentes (squad)?

@@ -18,7 +18,7 @@ const STEPS = [
   { label: "spec", hint: "problema" },
   { label: "plan", hint: "resultado" },
   { label: "tasks", hint: "critérios" },
-  { label: "code", hint: "revisar" },
+  { label: "code", hint: "implementar" },
 ];
 
 function samePath(left?: string, right?: string): boolean {
@@ -82,7 +82,7 @@ export function SpecPanel() {
         `2. Leia ${spec.path}\\plan.md antes de alterar a arquitetura.`,
         `3. Execute ${spec.path}\\tasks.md em ordem e marque cada checkbox somente após obter evidência.`,
         "4. Rode os testes, lint e build disponíveis.",
-        "5. Revise o diff contra todos os critérios de aceitação e registre no arquivo de tarefas qualquer desvio ou bloqueio.",
+        "5. Valide todos os critérios de aceitação com testes ou evidências e registre no arquivo de tarefas qualquer desvio ou bloqueio.",
         "",
         "Não encerre na fase de análise: implemente o código e valide o resultado.",
       ].join("\n"),

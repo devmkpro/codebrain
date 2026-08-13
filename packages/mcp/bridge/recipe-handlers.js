@@ -23,7 +23,7 @@ const ONE_SHOT_TIMEOUT_MS = 60_000;
 const ENRICH_CHUNK_SIZE = 40;
 const ENRICH_CHUNK_CONCURRENCY = 4;
 
-// Codebrain role taxonomy (replaces Overclock's scout/builder/reviewer)
+// Codebrain role taxonomy for generated recipes.
 const VALID_ROLES = new Set([
   "orchestrator",  // planning, delegation, synthesis
   "backend",       // APIs, databases, Electron/MCP, server logic

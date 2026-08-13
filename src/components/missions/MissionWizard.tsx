@@ -1,6 +1,6 @@
 /**
  * MissionWizard — Wizard de criação de missão.
- * 3 steps: Escolha modo → Configura providers/squad → Review e criar.
+ * 3 steps: Escolha modo → Configura providers/squad → Confirmar e criar.
  */
 import React from 'react';
 import { Terminal, Users, Plus, Minus, X, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react';
@@ -14,7 +14,7 @@ interface MissionWizardProps {
   onCreated?: (missionId: string, mode: MissionMode, configs?: ProviderPaneConfig[], squadId?: string) => void;
 }
 
-type WizardStep = 'mode' | 'config' | 'review';
+type WizardStep = 'mode' | 'config' | 'confirm';
 
 const PROVIDER_LABELS: Record<string, string> = {
   'claude': 'Claude Code CLI',
@@ -110,14 +110,14 @@ export function MissionWizard({ open, onClose, workspacePath, onCreated }: Missi
 
         {/* Step indicators */}
         <div className="flex items-center gap-1 border-b border-white/5 px-4 py-2">
-          {(['mode', 'config', 'review'] as WizardStep[]).map((s, i) => (
+          {(['mode', 'config', 'confirm'] as WizardStep[]).map((s, i) => (
             <React.Fragment key={s}>
               <div className={`flex items-center gap-1.5 ${step === s ? 'text-slate-300' : 'text-slate-700'}`}>
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border ${
                   step === s ? 'border-amber-500/50 bg-amber-500/10 text-amber-400' :
-                  (['mode', 'config', 'review'].indexOf(step) > i ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-white/10 text-slate-700')
+                  (['mode', 'config', 'confirm'].indexOf(step) > i ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-white/10 text-slate-700')
                 }`}>{i + 1}</div>
-                <span className="font-mono text-[9px] uppercase tracking-wider">{s === 'mode' ? 'Modo' : s === 'config' ? 'Config' : 'Revisão'}</span>
+                <span className="font-mono text-[9px] uppercase tracking-wider">{s === 'mode' ? 'Modo' : s === 'config' ? 'Config' : 'Confirmação'}</span>
               </div>
               {i < 2 && <ChevronRight size={10} className="text-gray-700 mx-1" />}
             </React.Fragment>
@@ -254,8 +254,8 @@ export function MissionWizard({ open, onClose, workspacePath, onCreated }: Missi
             </div>
           )}
 
-          {/* STEP 3: Review */}
-          {step === 'review' && (
+          {/* STEP 3: Confirmation */}
+          {step === 'confirm' && (
             <div className="flex flex-col gap-3">
               <label className="font-mono text-[10px] uppercase tracking-wider text-slate-600">Resumo da missão</label>
               <div className="rounded-lg border border-white/8 bg-white/3 p-3 space-y-2">
@@ -294,17 +294,17 @@ export function MissionWizard({ open, onClose, workspacePath, onCreated }: Missi
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-white/5 px-4 py-3">
           <button
-            onClick={step === 'mode' ? onClose : () => setStep(step === 'review' ? 'config' : 'mode')}
+            onClick={step === 'mode' ? onClose : () => setStep(step === 'confirm' ? 'config' : 'mode')}
             className="flex items-center gap-1 rounded-lg border border-white/10 px-4 py-1.5 font-mono text-[11px] text-slate-500 hover:text-slate-300 hover:border-white/20 transition-colors"
           >
             {step === 'mode' ? 'Cancelar' : <><ChevronLeft size={12} /> Voltar</>}
           </button>
           <button
-            onClick={step === 'review' ? handleCreate : () => setStep(step === 'mode' ? 'config' : 'review')}
+            onClick={step === 'confirm' ? handleCreate : () => setStep(step === 'mode' ? 'config' : 'confirm')}
             disabled={!canProceed}
             className="flex items-center gap-1 rounded-lg bg-[#5855e5] border border-indigo-500/30 px-4 py-1.5 font-mono text-[11px] font-bold text-white hover:bg-[#4a47d6] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {step === 'review' ? 'Criar Missão' : <>Próximo <ChevronRight size={12} /></>}
+            {step === 'confirm' ? 'Criar Missão' : <>Próximo <ChevronRight size={12} /></>}
           </button>
         </div>
       </div>

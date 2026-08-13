@@ -523,7 +523,7 @@ Workers pull their own tasks via `task_list({ mission_id: "..." })`. The board i
 
 - **You** create tasks and assign them → `task_create(...)` + `task_assign({ id, paneId })`.
 - **Workers** check tasks on boot → `task_list({ mission_id })` and pick up assigned work.
-- **Workers** move tasks through columns: `inbox` → `assigned` → `in_progress` → `review` → `done`.
+- **Workers** move tasks through columns: `inbox` → `assigned` → `in_progress` → `done`.
 - **Workers** complete tasks → `task_complete({ id, result: "..." })`.
 
 ### Status Tracking

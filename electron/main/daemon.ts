@@ -125,8 +125,6 @@ function createHeadlessBridgeOptions(ptyManager: any, args: DaemonArgs, hooksMan
     emitNotification: (data: any) => {
       try { memoryStore?.createNotification?.(data); } catch {}
     },
-    getOAuthToken: async () => null,
-    getBotToken: () => null,
     getGoogleKey: () => null,
     emitToRenderer: () => {},
   };

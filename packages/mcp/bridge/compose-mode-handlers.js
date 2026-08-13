@@ -2,7 +2,7 @@
 
 /**
  * Compose Mode Handler (MiMo-inspired)
- * Specs-driven development workflow: plan → execute → review → test → debug → verify → merge.
+ * Specs-driven development workflow: plan → execute → test → debug → verify → merge.
  * Orchestrates the full lifecycle from spec to shipped code.
  */
 
@@ -10,9 +10,8 @@ function createComposeModeHandlers(opts) {
   const COMPOSE_PHASES = [
     { name: "plan", description: "Analyze the spec, break into tasks, create a plan" },
     { name: "execute", description: "Implement the plan step by step" },
-    { name: "review", description: "Code review: check for bugs, style, security" },
     { name: "test", description: "Write and run tests (TDD if applicable)" },
-    { name: "debug", description: "Fix any issues found during review or testing" },
+    { name: "debug", description: "Fix any issues found during testing" },
     { name: "verify", description: "Final verification: all tests pass, no regressions" },
     { name: "merge", description: "Prepare for merge: clean up, document, commit" },
   ];

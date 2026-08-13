@@ -3,7 +3,7 @@
 /**
  * Kanban task queue bridge handlers.
  * Provides CRUD operations for kanban board tasks with columns:
- * inbox → assigned → in_progress → review → done
+ * inbox → assigned → in_progress → done
  */
 function createKanbanHandlers(opts = {}) {
   const getStore = () => opts.memoryStore;

@@ -53,7 +53,7 @@ export function renderSpecDocuments(answers: SpecAnswers, workspace: string): Re
     ...requirements.map((item) => `Implementar: ${item}`),
     "Adicionar ou atualizar testes para os critérios de aceitação",
     ...(context.commands.length ? context.commands.map((command) => `Executar ${command}`) : ["Executar testes, lint e build disponíveis"]),
-    "Revisar o diff e marcar os requisitos atendidos em spec.md",
+    "Validar os requisitos atendidos em spec.md com testes ou evidências",
   ];
   const tasks = `# Tarefas: ${answers.title}\n\n> Execute em ordem. Marque cada item somente após obter evidência.\n\n${taskLines.map((item, index) => `- [ ] T${String(index + 1).padStart(3, "0")}: ${item}`).join("\n")}\n`;
   return { "spec.md": spec, "plan.md": plan, "tasks.md": tasks };

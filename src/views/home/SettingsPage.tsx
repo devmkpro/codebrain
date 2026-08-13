@@ -22,7 +22,7 @@ import { LabSection } from '../../components/settings/LabSection';
 import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
 import { HOST_LABELS } from '../../lib/resolve-spawn-target';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'preferredAgent' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'oauth' | 'lab' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'preferredAgent' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'lab' | 'advanced';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -245,27 +245,6 @@ export function SettingsPage() {
   const [nineRouterChecking, setNineRouterChecking] = useState(false);
   const [nineRouterInstalling, setNineRouterInstalling] = useState(false);
   const [nineRouterInstallErr, setNineRouterInstallErr] = useState<string | null>(null);
-  const [oauthStatus, setOauthStatus] = useState<{ github: { connected: boolean; account?: string }; gitlab: { connected: boolean; account?: string } } | null>(null);
-  const [oauthBusy, setOauthBusy] = useState<string | null>(null); // 'github' | 'gitlab' | null
-  const [oauthError, setOauthError] = useState<string | null>(null);
-  const [gitlabClientId, setGitlabClientId] = useState('');
-  const [gitlabClientSecret, setGitlabClientSecret] = useState('');
-  const [githubClientId, setGithubClientId] = useState('');
-  const [gitlabBotToken, setGitlabBotToken] = useState('');
-  const [githubBotToken, setGithubBotToken] = useState('');
-  const [botTokenSaving, setBotTokenSaving] = useState<string | null>(null); // 'gitlab' | 'github' | null
-  const [botTokenSaved, setBotTokenSaved] = useState<string | null>(null);    // 'gitlab' | 'github' | null
-  const [tutorialOpen, setTutorialOpen] = useState<{ gitlab: boolean; github: boolean }>({ gitlab: false, github: false });
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [mrAutoReview, setMrAutoReview] = useState(false);
-  const [mrReviewProvider, setMrReviewProvider] = useState('');
-  const [mrReviewModel, setMrReviewModel] = useState('');
-  // MR review store removed — use local defaults
-  const detectedWorkspaces: any[] = [];
-  const mrLoading = false;
-  const fetchAllowed = () => {};
-  const toggleWorkspace = () => {};
-  const allowedWorkspaces: any[] = [];
   const [skillBusy,   setSkillBusy]   = useState(false);
   // Marketplace
   const [registryIndex, setRegistryIndex] = useState<any[]>([]);
@@ -413,22 +392,6 @@ export function SettingsPage() {
         setDiscordConnected(s?.connected ?? false);
       })
       .catch(() => {});
-    // Load OAuth status
-    (window as any).codeBrainApp?.oauth?.status?.()
-      .then((r: any) => { if (r?.ok && r.data) setOauthStatus(r.data); })
-      .catch(() => {});
-    // Load auto-review config
-    (window as any).codeBrainApp?.appConfig?.get?.()
-      .then((cfg: any) => {
-        if (cfg?.mr_auto_review) setMrAutoReview(true);
-        if (cfg?.gitlab_bot_token) setGitlabBotToken(cfg.gitlab_bot_token);
-        if (cfg?.github_bot_token) setGithubBotToken(cfg.github_bot_token);
-        if (cfg?.mr_review_provider) setMrReviewProvider(cfg.mr_review_provider);
-        if (cfg?.mr_review_model) setMrReviewModel(cfg.mr_review_model);
-      })
-      .catch(() => {});
-    // Load detected repos for permission toggles
-    fetchAllowed();
   }, []);
 
   const toggleSection = (s: Section) => setOpen(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
@@ -521,54 +484,6 @@ export function SettingsPage() {
     } finally {
       setNineRouterChecking(false);
     }
-  };
-
-  // ── OAuth handlers ──────────────────────────────────────────────────────
-  const handleOAuthConnect = async (provider: 'github' | 'gitlab') => {
-    setOauthBusy(provider);
-    setOauthError(null);
-    try {
-      let args: any = { provider };
-      if (provider === 'gitlab') {
-        if (!gitlabClientId.trim()) { setOauthError('Preencha o Client ID do GitLab'); setOauthBusy(null); return; }
-        args.clientId = gitlabClientId.trim();
-        if (gitlabClientSecret.trim()) args.clientSecret = gitlabClientSecret.trim();
-      } else {
-        if (!githubClientId.trim()) { setOauthError('Preencha o Client ID do GitHub'); setOauthBusy(null); return; }
-        args.clientId = githubClientId.trim();
-      }
-      const res = await (window as any).codeBrainApp?.oauth?.connect?.(args);
-      if (!res?.ok) { setOauthError(res?.error || `Falha ao conectar ${provider}`); return; }
-      // GitHub Device Flow — show user code
-      if (res.userCode && res.verificationUri) {
-        window.open(`${res.verificationUri}?user_code=${res.userCode}`, '_blank');
-        setOauthError(null);
-      }
-      // Refresh status
-      const s = await (window as any).codeBrainApp?.oauth?.status?.();
-      if (s?.ok && s.data) setOauthStatus(s.data);
-    } catch (err: any) {
-      setOauthError(err?.message || `Erro ao conectar ${provider}`);
-    } finally {
-      setOauthBusy(null);
-    }
-  };
-
-  const handleOAuthDisconnect = async (provider: 'github' | 'gitlab') => {
-    setOauthBusy(provider);
-    try {
-      await (window as any).codeBrainApp?.oauth?.disconnect?.({ provider });
-      const s = await (window as any).codeBrainApp?.oauth?.status?.();
-      if (s?.ok && s.data) setOauthStatus(s.data);
-    } catch {} finally { setOauthBusy(null); }
-  };
-
-  const copyToClipboard = async (text: string, field: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 2000);
-    } catch {}
   };
 
   return (

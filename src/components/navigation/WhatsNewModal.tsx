@@ -13,35 +13,6 @@ function XIcon({ size = 14 }: { size?: number }) {
   );
 }
 
-function ShieldIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
-  );
-}
-
-function SearchIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <circle cx="11" cy="11" r="8" />
-      <path d="M21 21l-4.35-4.35" />
-    </svg>
-  );
-}
-
-function TagIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
-      <line x1="7" y1="7" x2="7.01" y2="7" />
-    </svg>
-  );
-}
-
 function CheckCircleIcon({ size = 14, className = "" }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -100,12 +71,8 @@ function useTypewriter(text: string, speed = 40, delay = 0, active = true) {
 // ─── Chat message component ──────────────────────────────────────────────────
 
 const EMOJI_CHECK = String.fromCodePoint(0x2705);
-const EMOJI_WARN = String.fromCodePoint(0x26A0, 0xFE0F);
 const EMOJI_BULB = String.fromCodePoint(0x1F4A1);
 const EMOJI_CHECKMARK = String.fromCodePoint(0x2713);
-const EMOJI_BRAIN = String.fromCodePoint(0x1F9E0);
-const EMOJI_LABEL = String.fromCodePoint(0x1F3F7, 0xFE0F);
-const EMOJI_NOTE = String.fromCodePoint(0x1F4DD);
 const EMOJI_ROBOT = String.fromCodePoint(0x1F916);
 const EMOJI_PERSON = String.fromCodePoint(0x1F464);
 const EN_DASH = String.fromCodePoint(0x2014);
@@ -363,7 +330,7 @@ export function WhatsNewModal({
             </div>
           </div>
 
-          {/* ── Codebrain Tag section ───────────────────────── */}
+          {/* ── Provider compatibility section ──────────────── */}
           <div
             className="rounded-xl border border-white/[0.06] overflow-hidden"
             style={{
@@ -375,26 +342,26 @@ export function WhatsNewModal({
           >
             <div className="p-4 space-y-3">
               <div className="flex items-center gap-2">
-                <TagIcon size={14} className="text-violet-400" />
+                <GearIcon size={14} className="text-violet-400" />
                 <span className="font-mono text-[10px] font-bold text-violet-400 uppercase tracking-[0.15em]">
-                  Identifica&#231;&#227;o Autom&#225;tica
+                  Compatibilidade Garantida
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Todo coment&#225;rio postado pelo Codebrain no seu MR/PR inclui uma tag identificando a origem:
+                O provider escolhido define a CLI e limita os modelos exibidos no novo pane:
               </p>
-              {/* Mock comment card */}
+              {/* Provider route card */}
               <div className="rounded-lg border border-white/[0.08] bg-[#0c0c18] p-3.5 space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px]">{EMOJI_BRAIN}</span>
-                  <span className="font-mono text-[11px] font-semibold text-white">Codebrain Review</span>
+                  <BotIcon size={13} className="text-violet-400" />
+                  <span className="font-mono text-[11px] font-semibold text-white">OpenAI Codex</span>
                 </div>
                 <div className="pl-5 space-y-1.5">
-                  <p className="text-[11px] text-amber-300/90">
-                    {EMOJI_WARN} Poss&#237;vel null pointer na linha 42
+                  <p className="text-[11px] text-slate-400">
+                    CLI: Codex
                   </p>
                   <p className="text-[11px] text-slate-400">
-                    Sugest&#227;o: adicionar null check antes da chamada
+                    Modelo: gpt-5.5
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 pt-1.5 mt-1.5 border-t border-white/[0.04]">
@@ -406,7 +373,7 @@ export function WhatsNewModal({
                       border: "1px solid rgba(139,92,246,0.15)",
                     }}
                   >
-                    {EMOJI_LABEL} Posted by Codebrain AI Review
+                    {EMOJI_CHECK} provider e modelo compat&#237;veis
                   </span>
                 </div>
               </div>
@@ -422,32 +389,32 @@ export function WhatsNewModal({
             }}
           >
             <FeatureItem
-              icon={<SearchIcon size={14} className="text-blue-400" />}
-              label="Detecta automaticamente GitHub ou GitLab"
+              icon={<GearIcon size={14} className="text-blue-400" />}
+              label="Escolha o provider antes do modelo"
               delay={0}
               visible={phase >= 2}
             />
             <FeatureItem
-              icon={<span className="text-[13px]">{EMOJI_NOTE}</span>}
-              label="Lista, analisa e comenta em MRs/PRs"
+              icon={<BotIcon size={14} className="text-violet-400" />}
+              label="Abre a CLI correta para cada provider"
               delay={80}
               visible={phase >= 2}
             />
             <FeatureItem
-              icon={<ShieldIcon size={14} className="text-emerald-400" />}
-              label="Foco em bugs, seguran&#231;a, performance e estilo"
+              icon={<CheckCircleIcon size={14} className="text-emerald-400" />}
+              label="Mostra somente modelos compat&#237;veis"
               delay={160}
               visible={phase >= 2}
             />
             <FeatureItem
-              icon={<TagIcon size={14} className="text-violet-400" />}
-              label={`Todos os coment&#225;rios t&#234;m tag ${LDQUO}Codebrain AI Review${RDQUO}`}
+              icon={<GearIcon size={14} className="text-violet-400" />}
+              label="Corrige prefer&#234;ncias antigas incompat&#237;veis"
               delay={240}
               visible={phase >= 2}
             />
             <FeatureItem
               icon={<CheckCircleIcon size={14} className="text-sky-400" />}
-              label="Pode postar inline ou s&#243; retornar findings"
+              label="Provider continua sendo a fonte de verdade"
               delay={320}
               visible={phase >= 2}
             />
@@ -463,7 +430,7 @@ export function WhatsNewModal({
             }}
           >
             <p className="text-[12px] text-slate-400 italic leading-relaxed">
-              Experimente agora: pe&#231;a ao Codebrain para revisar um MR do seu projeto!
+              Abra um novo pane e escolha o provider e o modelo em dois cliques.
             </p>
 
             <button

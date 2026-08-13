@@ -8,7 +8,7 @@ const COLUMN_LABELS: Record<string, string> = {
   inbox: "inbox",
   assigned: "assigned",
   in_progress: "wip",
-  review: "review",
+  review: "validation",
   done: "done",
 };
 

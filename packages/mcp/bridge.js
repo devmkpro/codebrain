@@ -106,7 +106,6 @@ function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType,
  * @param {Object} opts
  */
 function createMCPBridge(ptyManager, opts = {}) {
-  console.log(`[bridge] createMCPBridge called, setMrPollTrigger present:`, typeof opts.setMrPollTrigger === 'function');
   const paneLabels = new Map();
   const roleMap = new Map();
 
@@ -658,21 +657,6 @@ function createMCPBridge(ptyManager, opts = {}) {
   workerManager.opts.configStore = opts.configStore;
   workerManager.opts.emitNotification = opts.emitNotification;
   workerManager.opts.paneHandlers = paneHandlers;
-  workerManager.opts.clearReviewingState = opts.clearReviewingState;
-  workerManager.opts.sendFindings = opts.sendFindings;
-  workerManager.opts.sendReviewError = opts.sendReviewError;
-
-  // Expose direct trigger function for IPC handler (bypasses HooksManager event bus)
-  if (opts.setMrPollTrigger) {
-    opts.setMrPollTrigger((triggerOpts) => {
-      console.log(`[bridge] triggerMrPoll called directly, workspace:`, triggerOpts?.workspace ?? 'all');
-      const result = workerManager.triggerWorker("mr_poll", triggerOpts);
-      console.log(`[bridge] triggerWorker result:`, JSON.stringify(result));
-      return result;
-    });
-    console.log(`[bridge] mr_poll trigger function registered on ctx`);
-  }
-
   // ── Wrap fileWrite: auto-record in shared memory + notify agents ────────
   const originalFileWrite = fileHandlers.fileWrite.bind(fileHandlers);
   fileHandlers.fileWrite = async function wrappedFileWrite(args) {

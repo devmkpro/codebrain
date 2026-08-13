@@ -12,7 +12,6 @@ export interface AppNotification {
   read: boolean;
   /** If set, this notification came from SQLite (has a DB id) */
   dbId?: string;
-  mr_url?: string;
   provider?: string;
 }
 
@@ -59,7 +58,6 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
         level: (n.level || 'info') as NotifLevel,
         at: (n.created_at || 0) * 1000, // SQLite stores seconds, JS uses ms
         read: !!n.read,
-        mr_url: n.mr_url,
         provider: n.provider,
       }));
       // Merge: DB notifications first, then any in-memory-only ones (dedup by dbId)

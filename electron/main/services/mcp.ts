@@ -65,29 +65,9 @@ function buildMcpBridge(ctx: AppContext) {
     paneConfigs: ctx.paneConfigs,
     providerHealth: ctx.providerHealth,
     hooksManager: ctx.hooksManager,
-    // Direct trigger callback — bridge.js registers its trigger function here
-    setMrPollTrigger: (fn: (opts?: { workspace?: string }) => any) => { (ctx as any)._triggerMrPoll = fn; },
     configStore: ctx.configStore, // For notification settings
     workspaceConfigStore: ctx.workspaceConfigStore, // For workspace access mode sandbox
     updateContextFiles: (wsPath: string) => writeContextFiles(ctx, wsPath),
-    getOAuthToken: async (provider: "github" | "gitlab") => {
-      try {
-        const { getOAuthToken } = require("./oauth");
-        return await getOAuthToken(ctx, provider);
-      } catch (err) {
-        console.error("[OAuth] getOAuthToken failed:", err);
-        return null;
-      }
-    },
-    getBotToken: (provider: "github" | "gitlab") => {
-      try {
-        const config = ctx.configStore?.get?.() || {};
-        const key = provider === "gitlab" ? "gitlab_bot_token" : "github_bot_token";
-        return config[key] || null;
-      } catch {
-        return null;
-      }
-    },
     emitNotification: (data: { type: string; title: string; body?: string; level?: string; provider?: string }) => {
       try {
         const store = ctx.memoryStore;
@@ -140,8 +120,7 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
     });
   }
 
-  // _triggerMrPoll is set synchronously inside createMCPBridge (called by startMCPServer).
-  // But startMCPServer also starts the HTTP server (async). We need mcpServerReady to
+  // startMCPServer also starts the HTTP server asynchronously. We need mcpServerReady to
   // resolve once the server is listening so pane-spawn can get the port.
   // Use a deferred promise that resolves after the HTTP server starts.
   let resolveReady: (info: McpServerInfo) => void;
@@ -150,7 +129,7 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
     resolveReady = resolve;
     rejectReady = reject;
   });
-  console.log(`[MCP] mcpServerReady deferred promise created, _triggerMrPoll set:`, typeof (ctx as any)._triggerMrPoll);
+  console.log("[MCP] mcpServerReady deferred promise created");
 
   const tryStart = async () => {
     const info: McpServerInfo = await startMCPServer(ctx.ptyManager, bridge);

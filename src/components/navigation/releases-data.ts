@@ -18,6 +18,64 @@ export const RELEASES: Release[] = [
     "date": "em desenvolvimento",
     "highlights": [
       {
+        "kind": "fix",
+        "text": "enforce provider model compatibility"
+      },
+      {
+        "kind": "feat",
+        "text": "add guided workflow and agent implementation"
+      },
+      {
+        "kind": "fix",
+        "text": "garantir Ctrl+K sobre o terminal"
+      },
+      {
+        "kind": "feat",
+        "text": "onboarding visual do terminal-first e Spec Kit"
+      },
+      {
+        "kind": "feat",
+        "text": "adicionar switcher rápido de workspaces"
+      },
+      {
+        "kind": "fix",
+        "text": "tornar shell terminal-first o padrão real"
+      },
+      {
+        "kind": "feat",
+        "text": "registrar comunicação e ciclo de vida dos agentes"
+      },
+      {
+        "kind": "feat",
+        "text": "integrar fluxo Spec Kit aos workspaces"
+      },
+      {
+        "kind": "feat",
+        "text": "saúde e retenção da memória"
+      },
+      {
+        "kind": "feat",
+        "text": "conversa durável entre operador e agentes"
+      },
+      {
+        "kind": "feat",
+        "text": "shell v2 terminal-first atrás de flag"
+      },
+      {
+        "kind": "feat",
+        "text": "command palette (Ctrl+K) e registro de ações"
+      },
+      {
+        "kind": "feat",
+        "text": "fundação — design tokens, router, migrations, testes"
+      }
+    ]
+  },
+  {
+    "version": "1.15.9",
+    "date": "agosto 2026",
+    "highlights": [
+      {
         "kind": "feat",
         "text": "add standalone MCP daemon and optimize resource usage"
       }
@@ -155,10 +213,6 @@ export const RELEASES: Release[] = [
       },
       {
         "kind": "feat",
-        "text": "unified top header, brand refresh, and Review Bot removal"
-      },
-      {
-        "kind": "feat",
         "text": "idle-worker reuse, preferred agent tie-breaker, and silent watchdog"
       },
       {
@@ -168,30 +222,12 @@ export const RELEASES: Release[] = [
     ]
   },
   {
-    "version": "1.13.1",
-    "date": "julho 2026",
-    "highlights": [
-      {
-        "kind": "fix",
-        "text": "remove WhatsNew modal — disable shouldShow, strip Review Bot section"
-      }
-    ]
-  },
-  {
     "version": "1.13.0",
     "date": "julho 2026",
     "highlights": [
       {
         "kind": "fix",
-        "text": "update WhatsNewModal — remove MR review theme, show spawn fixes"
-      },
-      {
-        "kind": "fix",
         "text": "React getSnapshot infinite loop and duplicate key warnings"
-      },
-      {
-        "kind": "feat",
-        "text": "remove MR/PR review feature — -2054 lines across 23 files"
       },
       {
         "kind": "fix",
@@ -392,26 +428,6 @@ export const RELEASES: Release[] = [
     "date": "junho 2026",
     "highlights": [
       {
-        "kind": "fix",
-        "text": "auto-fix 1 finding(s) from review  Fixes: Missing error handling in server shutdown"
-      },
-      {
-        "kind": "fix",
-        "text": "auto-fix 1 finding(s) from review  Fixes: Potential race condition in server shutdown"
-      },
-      {
-        "kind": "fix",
-        "text": "auto-fix 1 finding(s) from review  Fixes: Asynchronous server shutdown race condition"
-      },
-      {
-        "kind": "fix",
-        "text": "auto-fix 1 finding(s) from review  Fixes: Default port changed from 3000 to 3001"
-      },
-      {
-        "kind": "fix",
-        "text": "auto-fix 1 finding(s) from review  Fixes: Inconsistent return logic in startApiServer"
-      },
-      {
         "kind": "feat",
         "text": "Add a GET /api/health endpoint returning {status: ok, timestamp: iso8601}"
       },
@@ -429,31 +445,7 @@ export const RELEASES: Release[] = [
       },
       {
         "kind": "feat",
-        "text": "implement auto-fix modal for MR review findings and enhance review handling"
-      },
-      {
-        "kind": "feat",
         "text": "prevent duplicate AI signature in comments for merge requests"
-      },
-      {
-        "kind": "fix",
-        "text": "MR review trigger — async syntax, diff extraction, workspace validation, review via MCP"
-      },
-      {
-        "kind": "feat",
-        "text": "add clearReviewingState option to workerManager and implement polling for review status"
-      },
-      {
-        "kind": "feat",
-        "text": "add release highlight for recent MR review enhancements and paneHandlers integration"
-      },
-      {
-        "kind": "feat",
-        "text": "update release highlights with recent MR review enhancements and integration of paneHandlers"
-      },
-      {
-        "kind": "feat",
-        "text": "enhance MR review logic to skip unchanged MRs and update reviewed MRs in the store"
       },
       {
         "kind": "feat",
@@ -469,43 +461,11 @@ export const RELEASES: Release[] = [
       },
       {
         "kind": "feat",
-        "text": "enhance MR review trigger with MCP server readiness check and update release highlights"
-      },
-      {
-        "kind": "feat",
-        "text": "Implement manual MR review trigger with debounce and workspace permissions"
-      },
-      {
-        "kind": "feat",
-        "text": "add MR review provider and model configuration to settings page"
-      },
-      {
-        "kind": "feat",
         "text": "enhance GitHub bot token saving button with loading state and success message"
       },
       {
         "kind": "feat",
-        "text": "implement manual MR review trigger and workspace permissions"
-      },
-      {
-        "kind": "feat",
-        "text": "add mr_poll background worker for automatic MR review"
-      },
-      {
-        "kind": "feat",
         "text": "enhance NotificationsBell to poll for updates every 30 seconds"
-      },
-      {
-        "kind": "feat",
-        "text": "add notification system + auto-review toggle for MR reviews"
-      },
-      {
-        "kind": "feat",
-        "text": "add OAuth review bot for GitLab and GitHub MR comments"
-      },
-      {
-        "kind": "fix",
-        "text": "6 bugs from MR review — inline comments, escaping, GitLab API, perf"
       },
       {
         "kind": "fix",
@@ -521,27 +481,11 @@ export const RELEASES: Release[] = [
       },
       {
         "kind": "feat",
-        "text": "add MR/PR review tools with diagnostics and usage guidelines"
-      },
-      {
-        "kind": "feat",
         "text": "enhance MR/PR tools with setup diagnostics and update tool counts"
       },
       {
         "kind": "feat",
         "text": "add mr_setup diagnostic tool + friendly error guards"
-      },
-      {
-        "kind": "feat",
-        "text": "append AI signature to comments in MR/PR review"
-      },
-      {
-        "kind": "feat",
-        "text": "add comment signature for Codebrain AI Review"
-      },
-      {
-        "kind": "feat",
-        "text": "add MR/PR review MCP tools + What's New modal"
       }
     ]
   },
@@ -999,14 +943,6 @@ export const RELEASES: Release[] = [
     "version": "1.6.6-gitlab-pipeline",
     "date": "maio 2026",
     "highlights": [
-      {
-        "kind": "feat",
-        "text": "add gitlab settings UI (token/URL) to gitlab-review-pipeline branch"
-      },
-      {
-        "kind": "feat",
-        "text": "gitlab review pipeline — MR auto-review via webhook"
-      },
       {
         "kind": "fix",
         "text": "session-restore type safety and logic bugs"

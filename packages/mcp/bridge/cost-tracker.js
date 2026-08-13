@@ -163,7 +163,6 @@ const DEFAULT_MODEL_COSTS = {
   "gpt-5.5": { input: 5.00, output: 30.00, cache_read: 0.50 },
   "gpt-5.4": { input: 2.50, output: 15.00, cache_read: 0.25 },
   "gpt-5.4-mini": { input: 0.75, output: 4.50, cache_read: 0.075 },
-  "codex-auto-review": { input: 2.50, output: 15.00, cache_read: 0.25 },
   // Aliases used by Codex CLI internally
   "gpt-4o-codex": { input: 2.50, output: 10.0 },
   "gpt-4.1-codex": { input: 2.00, output: 8.00 },

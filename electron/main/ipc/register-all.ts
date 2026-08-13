@@ -11,7 +11,6 @@ import { registerSkillHandlers } from "./register-skill";
 import { registerMiscHandlers } from "./register-misc";
 import { registerMemoryIpc } from "./register-memory";
 import { registerDiscordHandlers } from "./register-discord";
-import { registerOAuthHandlers } from "./register-oauth";
 import { registerNotificationHandlers } from "./register-notifications";
 import { registerRecipeHandlers } from "./register-recipe";
 import { registerRemoteBridgeHandlers } from "./register-remote-bridge";
@@ -37,7 +36,6 @@ export function registerAllIpcHandlers(ctx: AppContext): void {
     ["misc", registerMiscHandlers],
     ["memory", registerMemoryIpc],
     ["discord", registerDiscordHandlers],
-    ["oauth", registerOAuthHandlers],
     ["notification", registerNotificationHandlers],
     ["recipe", registerRecipeHandlers],
     ["remote-bridge", registerRemoteBridgeHandlers],

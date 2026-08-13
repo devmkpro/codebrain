@@ -34,7 +34,7 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 - **Text loop recovery** — detects repeated identical text output and injects progressive recovery prompts (mild → strong)
 - **Step classification** — classifies agent steps (final/continue/filtered/think-only/invalid/failed) for loop control
 - **Max mode** — Best-of-N: run N parallel candidate responses, judge selects the best for higher quality outputs
-- **Compose mode** — specs-driven development workflow: plan → execute → review → test → debug → verify → merge
+- **Compose mode** — specs-driven development workflow: plan → execute → test → debug → verify → merge
 - **Plan agent** — read-only mode for code exploration and solution design before implementation
 - **Question tool** — structured user interaction with predefined options; auto-resolve in headless mode
 - **Session snapshots** — revert workspace to any previous state; supports revert/unrevert with diff computation

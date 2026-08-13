@@ -180,7 +180,7 @@ codebrain/
 | **Auto-Dream / Auto-Distill** | Sessões automáticas de consolidação de memória (7d/30d) | Alto — memória evolutiva |
 | **Budgeted Context Injection** | Injeção de contexto com orçamento de tokens e ranking de importância | Alto — eficiência de contexto |
 | **Context Reconstruction** | Reconstrói contexto de checkpoint + memory + task progress quando limite se aproxima | Alto — continuidade |
-| **Compose Mode** | Modo estruturado para specs-driven development com skills de planning/TDD/review | Médio — workflow |
+| **Compose Mode** | Modo estruturado para specs-driven development com skills de planning/TDD/validation | Médio — workflow |
 | **Goal/Stop Condition com Judge** | `/goal` com modelo juiz independente para avaliar se condição foi satisfeita | Alto — autonomia |
 | **Codex/MiMo Import** | Importar sessões do Claude Code e Codex | Baixo — migração |
 | **Change Directory Tool** | `cd` como tool para mudar cwd durante sessão | Baixo |
@@ -199,14 +199,13 @@ codebrain/
 | **24 Lifecycle Hooks** | pane_spawned/exited/idle, message, task, tool, file, memory, error, performance, consensus, worker — com correlation IDs e export | Alto — observabilidade |
 | **Swarm Orchestration + Consensus** | Status, broadcast, respawn, worker_health + Raft/PBFT/Gossip (19 tools) — coordenação distribuída | Alto — multi-agent robusto |
 | **Actor Registry** | Registro persistente de actors com status/turn_count/stuck_detection | Alto — monitoring |
-| **Kanban Board** | task_create/move/assign com colunas (inbox/assigned/in_progress/review/done) | Alto — organização visual |
+| **Kanban Board** | task_create/move/assign com colunas (inbox/assigned/in_progress/done) | Alto — organização visual |
 | **Task Tree Hierárquico** | T1, T1.1, T1.2 com SQLite — subtasks aninhadas | Médio |
 | **Trajectory Recording** | Gravação de ações com extract_patterns — aprende com sucesso | Alto — auto-aprendizado |
 | **Pattern Learning** | Sistema de padrões com quality_score — auto-aprende e prioriza | Alto — inteligência |
 | **Security Scanner** | `security_scan` — detecção de secrets, vulnerabilidades, code smells | Alto — segurança |
 | **Cost Tracking** | Per-model pricing, cost_estimate, cost_models — rastreamento de custos | Alto — financeiro |
 | **MCP Server HTTP** | `packages/mcp/server.js` — SSE + Streamable HTTP para clientes externos | Médio — integração |
-| **GitLab Review Pipeline** | Review automático de MRs com inline comments | Alto — CI/CD |
 | **Multi-provider com Proxy** | API proxy que intercepta TODOS os providers para token counting | Alto — billing |
 | **Custom Env Vars** | `globalEnv` em ConfigStore — variáveis customizadas injetadas em todos os agents | Médio |
 | **Session Restore** | Auto-restaura sessão com todos os panes/agents via snapshot JSON | Alto — continuidade |
@@ -385,7 +384,7 @@ codebrain/
 
 9. **Trajectory Recording** — Codebrain grava ações e extrai padrões automaticamente.
 
-10. **GitLab Review Pipeline** — Codebrain faz review automático de MRs.
+10. **Spec Kit** — Codebrain conduz specify → plan → tasks → implement com artefatos versionados.
 
 11. **Handoff Protocol** — Protocolo estruturado de entrega de tarefas entre agents.
 
@@ -421,7 +420,7 @@ codebrain/
 6. **Lifecycle Observability** — 24 hooks para monitorar tudo, com correlation IDs e export JSONL/CSV.
 7. **Security Scanning** — Scan de secrets (7 patterns) e vulnerabilidades (8 patterns) integrado.
 8. **Kanban + Task Tree + Todo** — 3 sistemas de organização de tarefas complementares.
-9. **GitLab Integration** — Review automático de MRs com inline comments.
+9. **GitLab Integration** — Consulta de MRs, pipelines e metadados do repositório.
 10. **MCP Tool Count** — 265 tools (vs 25 built-in do MiMo-Code).
 11. **Knowledge Graph** — PageRank, cosine similarity (TF-IDF), graph traversal para memórias.
 12. **LSP Tools (12)** — Code intelligence via Language Server Protocol (experimental).
@@ -448,7 +447,7 @@ codebrain/
 
 5. **Granular Permissions** — Sistema de permissões por tool/agent com rulesets.
 
-6. **Built-in Workflows** — Workflows pré-definidos com phases (ex: "full-feature" = plan → backend → frontend → test → review). Codebrain já tem 11 workflow tools mas sem built-in scripts equivalentes ao deep-research/compose do MiMo-Code.
+6. **Built-in Workflows** — Workflows pré-definidos com phases (ex: "full-feature" = plan → backend → frontend → test → validation). Codebrain já tem 11 workflow tools mas sem built-in scripts equivalentes ao deep-research/compose do MiMo-Code.
 
 7. **Voice Input** — Codebrain já tem register-audio.ts mas precisa de integração streaming similar ao MiMo ASR.
 
@@ -468,6 +467,6 @@ codebrain/
 
 **MiMo-Code** é um projeto de **equipe grande** (Xiaomi/MiMo) com arquitetura sofisticada (Effect system), multi-client, e foco em **developer experience** (voice, LSP, workflows). É mais maduro em termos de arquitetura e context management.
 
-**Codebrain** é um projeto de **solo developer** (Maike) que compensa com **inovação em multi-agent** (terminais visíveis, swarm orchestration, browser automation) e **ferramentas únicas** (pattern learning, cost tracking, security scanning, GitLab review). Tem mais ferramentas MCP (265) do que MiMo-Code tem built-in tools (25).
+**Codebrain** é um projeto de **solo developer** (Maike) que compensa com **inovação em multi-agent** (terminais visíveis, swarm orchestration, browser automation) e **ferramentas únicas** (pattern learning, cost tracking, security scanning e Spec Kit). Tem mais ferramentas MCP (265) do que MiMo-Code tem built-in tools (25).
 
 **Os projetos são complementares, não concorrentes.** MiMo-Code é um CLI/desktop developer tool. Codebrain é um multi-agent IDE. As maiores oportunidades para Codebrain estão em: (1) context management inteligente, (2) plugin system, e (3) auto-memory automáticos — todos features que MiMo-Code já tem e que elevariam a qualidade das sessões multi-agent.

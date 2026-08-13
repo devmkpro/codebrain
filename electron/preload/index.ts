@@ -418,12 +418,6 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     },
   },
 
-  oauth: {
-    status: () => ipcRenderer.invoke("oauth:status"),
-    connect: (args: { provider: "github" | "gitlab"; clientId?: string; clientSecret?: string }) => ipcRenderer.invoke("oauth:connect", args),
-    disconnect: (args: { provider: "github" | "gitlab" }) => ipcRenderer.invoke("oauth:disconnect", args),
-  },
-
   notifications: {
     list: (opts?: { limit?: number }) => ipcRenderer.invoke("notifications:list", opts),
     count: () => ipcRenderer.invoke("notifications:count"),

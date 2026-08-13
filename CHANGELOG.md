@@ -79,17 +79,8 @@ All notable changes to Codebrain will be documented in this file.
 - Files panel showed "empty" — corrected the `files:list` IPC contract
 - Terminal text selection misaligned — migrated app zoom to native `setZoomFactor`, removing the coordinate hacks
 - Statusline showed `v?` / `MCP 0 tools` in freshly opened workspaces — real version + tool count now synced (265 tools) and provisioned per workspace
-- Removed the obsolete "Review Bot" settings menu
-
-## [1.13.1] — 2026-07-03
-
-### Fixes
-- Remove Review Bot onboarding screen from WhatsNewModal
 
 ## [1.13.0] — 2026-07-03
-
-### Features
-- **feat: remove MR/PR review feature** — removed 2054 lines across 23 files. Deleted mr-handlers, mr-review-store, MrFixModal, register-mr-review IPC, registerMRTools from MCP, mr_poll background worker, and all MR references from prompts and UI. 257 total MCP tools.
 
 ### Fixes
 - **fix: spawn system — worker config injection, role mapping, OpenRouter routing, duplicate guard** — orchestrator now receives worker config (providerId, model) in system prompt instead of invisible env var; workers get correct role (ui-tester prompt); OpenRouter google/* models route via OpenAI adapter; duplicate guard checks provider/model, not just label
@@ -166,7 +157,7 @@ All notable changes to Codebrain will be documented in this file.
 - **Short-term Pattern Promotion** — session-level patterns auto-promote to long-term after 3 uses + 0.6 quality (packages/memory/store.js)
 - **Intelligence Pipeline** — full RETRIEVE→JUDGE→DISTILL→CONSOLIDATE pass via `intelligence_consolidate` MCP tool
 - **Security Scanner** — automated secret detection (passwords, API keys, tokens) + vulnerability scanning (SQL/command injection, eval) via `security_scan` MCP tool
-- **20 Agent Prompts** — specialized roles: code-analyst, security-auditor, performance-engineer, api-designer, test-generator, database-optimizer, refactor-specialist, system-architect, ci-pipeline-builder, code-reviewer, dependency-auditor, bottleneck-analyzer, migration-planner, tech-lead, readme-writer, docker-optimizer, lint-fixer, tech-researcher, changelog-generator, competitor-analyzer
+- **19 Agent Prompts** — specialized roles: code-analyst, security-auditor, performance-engineer, api-designer, test-generator, database-optimizer, refactor-specialist, system-architect, ci-pipeline-builder, dependency-auditor, bottleneck-analyzer, migration-planner, tech-lead, readme-writer, docker-optimizer, lint-fixer, tech-researcher, changelog-generator, competitor-analyzer
 - **20 Slash Commands** — discoverable via /command syntax: squad, memory, security, pattern, agent, task, system, coordination
 - **Statusline Auto-Detection** — auto-reads version from package.json and counts MCP tools from index.js when settings.json has stale values
 
@@ -216,7 +207,7 @@ All notable changes to Codebrain will be documented in this file.
 - **Text Loop Recovery** — progressive recovery prompts for stuck agents
 - **Step Classification** — classify steps (final/continue/filtered/think-only/invalid/failed)
 - **Max Mode** — Best-of-N: N parallel candidates, judge selects best
-- **Compose Mode** — specs-driven workflow: plan → execute → review → test → debug → verify → merge
+- **Compose Mode** — specs-driven workflow: plan → execute → test → debug → verify → merge
 - **Plan Agent** — read-only mode for code exploration before implementation
 - **Question Tool** — structured user interaction with predefined options
 - **Multi-Edit** — batch multiple edits on a single file in one call
@@ -266,8 +257,6 @@ All notable changes to Codebrain will be documented in this file.
 ## [1.9.3] — 2026-06-15
 
 ### Features
-- Auto-fix modal for MR review findings
-- GitLab MR/PR auto-review with AI
 - Health endpoint (`/api/health`)
 - Server shutdown race condition fixes
 
