@@ -14,6 +14,16 @@ const EMPTY_ANSWERS: SpecAnswers = {
   nonGoals: "",
 };
 
+const QUICK_EXAMPLE: SpecAnswers = {
+  title: "Filtrar pedidos por status",
+  problem: "A equipe perde tempo procurando pedidos pendentes e concluídos na mesma lista.",
+  users: "Pessoas do atendimento que acompanham pedidos diariamente.",
+  outcome: "A lista mostra filtros de Pendente, Em andamento e Concluído; o filtro escolhido permanece ao recarregar a página.",
+  acceptanceCriteria: "É possível filtrar por Pendente, Em andamento e Concluído.\nO total da lista muda conforme o filtro.\nAo recarregar, o último filtro escolhido continua ativo.",
+  constraints: "Reutilizar a API e o componente de lista existentes.",
+  nonGoals: "Não criar novos status nem alterar o fluxo de pagamento.",
+};
+
 const STEPS = [
   { label: "spec", hint: "problema" },
   { label: "plan", hint: "resultado" },
@@ -51,6 +61,11 @@ export function SpecPanel() {
   if (!visible) return null;
 
   const update = (field: keyof SpecAnswers, value: string) => setAnswers((current) => ({ ...current, [field]: value }));
+  const useQuickExample = () => {
+    setAnswers(QUICK_EXAMPLE);
+    setStep(0);
+    setNotice("Exemplo preenchido. Revise os textos, avance pelas etapas e crie os documentos.");
+  };
   const canContinue = [
     Boolean(answers.title.trim() && answers.problem.trim()),
     Boolean(answers.users.trim() && answers.outcome.trim()),
@@ -115,6 +130,9 @@ export function SpecPanel() {
       </div>
 
       <div className="cb-scroll flex-1 overflow-auto">
+        <div className="mx-4 mt-4 border border-cb-accent/30 bg-cb-accent/5 rounded-cb-1 p-3">
+          <div className="flex items-start justify-between gap-3"><div><div className="cb-label text-cb-accent">exemplo rápido</div><p className="mt-1 text-2xs leading-relaxed text-cb-fg-1"><code>/specify</code> “filtrar pedidos por status” → responda às perguntas → <code>/plan</code> e <code>/tasks</code> são salvos em <code>specs/</code> → escolha um agente em <code>/implement</code>.</p></div><button type="button" onClick={useQuickExample} className="shrink-0 h-cell px-2.5 border border-cb-accent/50 text-cb-accent text-2xs rounded-cb-1 hover:bg-cb-accent/10">usar exemplo</button></div>
+        </div>
         <form className="p-4 border-b border-cb-line-0" onSubmit={(event) => { event.preventDefault(); if (step < 3) setStep(step + 1); else void createSpec(); }}>
           {step === 0 && <div className="space-y-3">
             <div><div className="cb-label mb-1">O que vamos construir?</div><input autoFocus value={answers.title} onChange={(event) => update("title", event.target.value)} placeholder="Ex.: checkout sem cadastro" className={fieldClass()}/></div>
