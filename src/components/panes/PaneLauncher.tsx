@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Bot, Check, ChevronRight, Cpu, LoaderCircle, Plus, X } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight, Cpu, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
 import { notify } from "../../lib/notify";
 import { HOST_LABELS, resolveSpawnTarget } from "../../lib/resolve-spawn-target";
 import { useNavStore } from "../../stores/nav-store";
@@ -28,6 +28,7 @@ export function PaneLauncher() {
   const workspace = tabs[activeTabIndex]?.workspacePath;
   const [providerId, setProviderId] = useState<string | null>(null);
   const [spawning, setSpawning] = useState<string | null>(null);
+  const [refreshingModels, setRefreshingModels] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const availableProviders = useMemo(() => providers.filter((provider) => (provider.models?.length ?? 0) > 0), [providers]);
@@ -77,6 +78,25 @@ export function PaneLauncher() {
     }
   };
 
+  const refreshModels = async () => {
+    if (!provider || refreshingModels) return;
+    setRefreshingModels(true);
+    setError(null);
+    try {
+      const result = await window.codeBrainApp?.providers?.syncModels?.({ providerIds: [provider.id], force: true });
+      const failure = result?.failed?.find((item) => item.providerId === provider.id);
+      if (failure) throw new Error(failure.error);
+      const updated = result?.updated?.find((item) => item.providerId === provider.id);
+      if (!updated) throw new Error("O provider não retornou um catálogo de modelos.");
+      await loadProviders();
+      notify("Modelos atualizados", `${updated.count} modelo${updated.count === 1 ? "" : "s"} disponível${updated.count === 1 ? "" : "is"}`, "success");
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : "Não foi possível atualizar os modelos.");
+    } finally {
+      setRefreshingModels(false);
+    }
+  };
+
   return <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Novo pane">
     <button className="absolute inset-0" onClick={close} aria-label="Fechar seletor"/>
     <section className="relative w-[min(680px,94vw)] max-h-[min(720px,90vh)] flex flex-col overflow-hidden border border-cb-line-1 rounded-lg bg-cb-bg-1 shadow-2xl">
@@ -101,7 +121,7 @@ export function PaneLauncher() {
             </button>)}
           </div>}
         </> : <>
-          <div className="mb-3 flex items-center gap-3"><div className="h-9 w-9 rounded-cb-1 bg-cb-accent/10 border border-cb-accent/30 flex items-center justify-center"><Cpu size={15} className="text-cb-accent"/></div><div><div className="text-xs text-cb-fg-0">{provider.label ?? provider.id}</div><div className="text-2xs text-cb-fg-3">{HOST_LABELS[provider.host ?? ""] ?? provider.host} · somente modelos compatíveis</div></div></div>
+          <div className="mb-3 flex items-center gap-3"><div className="h-9 w-9 rounded-cb-1 bg-cb-accent/10 border border-cb-accent/30 flex items-center justify-center"><Cpu size={15} className="text-cb-accent"/></div><div className="min-w-0 flex-1"><div className="text-xs text-cb-fg-0">{provider.label ?? provider.id}</div><div className="text-2xs text-cb-fg-3">{HOST_LABELS[provider.host ?? ""] ?? provider.host} · somente modelos compatíveis</div></div><button type="button" onClick={() => void refreshModels()} disabled={refreshingModels || Boolean(spawning)} className="shrink-0 h-8 px-2.5 inline-flex items-center gap-1.5 rounded-cb-1 border border-cb-line-1 text-2xs text-cb-fg-2 hover:text-cb-accent hover:border-cb-accent/60 disabled:opacity-50" title="Consultar o catálogo mais recente deste provider"><RefreshCw size={12} className={refreshingModels ? "animate-spin" : ""}/>{refreshingModels ? "atualizando" : "atualizar"}</button></div>
           <div className="space-y-2">{(provider.models ?? []).map((model, index) => <button key={model} disabled={Boolean(spawning)} onClick={() => void spawn(model)} className="w-full min-h-12 px-3 flex items-center gap-3 text-left border border-cb-line-1 rounded-cb-1 bg-cb-bg-0 hover:border-cb-accent/60 hover:bg-cb-accent/5 disabled:opacity-50">
             <div className="h-6 w-6 rounded-full border border-cb-line-1 flex items-center justify-center">{spawning === model ? <LoaderCircle size={12} className="animate-spin text-cb-accent"/> : index === 0 ? <Check size={11} className="text-cb-success"/> : <Cpu size={11} className="text-cb-fg-3"/>}</div>
             <div className="flex-1 min-w-0"><div className="text-xs text-cb-fg-0 truncate">{model}</div>{index === 0 && <div className="text-[9px] text-cb-success">recomendado pelo provider</div>}</div>
