@@ -80,15 +80,20 @@ export function registerWorkspaceHandlers(ctx: AppContext): void {
   ipcMain.handle("workspaces:recent", async () => readRecentWorkspaces(ctx));
   ipcMain.handle("workspaces:touch", async (_event, wsPath: string) => touchWorkspace(ctx, wsPath));
   ipcMain.handle("workspaces:remove", async (_event, wsPath: string) => {
-    if (typeof wsPath !== "string" || !wsPath.trim()) return { ok: false, error: "workspace path is required" };
-    const canonical = (value: string) => {
-      const resolved = path.resolve(value).replace(/\\/g, "/").replace(/\/$/, "");
-      return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-    };
-    const target = canonical(wsPath);
-    const list = readRecentWorkspaces(ctx).filter((item) => canonical(item) !== target);
-    saveRecentWorkspaces(ctx, list);
-    return { ok: true };
+    try {
+      if (typeof wsPath !== "string" || !wsPath.trim()) return { ok: false, error: "workspace path is required" };
+      const canonical = (value: string) => {
+        const resolved = path.resolve(value).replace(/\\/g, "/").replace(/\/$/, "");
+        return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+      };
+      const target = canonical(wsPath);
+      const list = readRecentWorkspaces(ctx).filter((item) => canonical(item) !== target);
+      saveRecentWorkspaces(ctx, list);
+      return { ok: true };
+    } catch (error) {
+      console.error("[workspaces:remove] Failed:", error);
+      return { ok: false, error: error instanceof Error ? error.message : "Não foi possível desvincular o workspace" };
+    }
   });
 
   ipcMain.handle("workspace:scan", async (_event, wsPath: string) => {

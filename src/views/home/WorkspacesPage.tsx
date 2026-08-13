@@ -11,6 +11,7 @@ import {
 import { useNavStore } from "../../stores/nav-store";
 import { usePanesStore } from "../../stores/panes-store";
 import { useWorkspaceStore } from "../../stores/workspace-store";
+import { ensureWorkspaceUnlinked } from "../../lib/workspace-unlink";
 
 interface WorkspaceTab {
   workspacePath: string;
@@ -177,8 +178,8 @@ export function WorkspacesPage() {
     setUnlinking(path);
     setError(null);
     try {
-      const result = await window.codeBrainApp.workspaces.remove(path);
-      if (!result.ok) throw new Error(result.error || "Não foi possível desvincular o workspace.");
+      const result = await window.codeBrainApp?.workspaces?.remove?.(path);
+      ensureWorkspaceUnlinked(result);
       if (tabIndex !== undefined) closeTab(tabIndex);
       setRecents((items) => items.filter((item) => normalized(item) !== normalized(path)));
     } catch (cause) {

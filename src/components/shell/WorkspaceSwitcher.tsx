@@ -1,6 +1,7 @@
 import React from "react";
 import { Check, ChevronDown, FolderOpen, FolderPlus, LayoutGrid, LoaderCircle, Search, Unlink, X } from "lucide-react";
 import { navigate } from "../../lib/router";
+import { ensureWorkspaceUnlinked } from "../../lib/workspace-unlink";
 import { useNavStore } from "../../stores/nav-store";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 
@@ -83,8 +84,8 @@ export function WorkspaceSwitcher() {
     setUnlinking(path);
     setUnlinkError(null);
     try {
-      const result = await window.codeBrainApp.workspaces.remove(path);
-      if (!result.ok) throw new Error(result.error || "Não foi possível desvincular o workspace");
+      const result = await window.codeBrainApp?.workspaces?.remove?.(path);
+      ensureWorkspaceUnlinked(result);
       if (tabIndex !== undefined) closeTab(tabIndex);
       setRecents((items) => items.filter((item) => normalized(item) !== normalized(path)));
     } catch (error) {
