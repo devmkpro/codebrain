@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listModelsFromEndpoint, syncProviderModels } from "./providers";
+import { getEnhancedProviders, listModelsFromEndpoint, mergeModelCatalogs, syncProviderModels } from "./providers";
 
 function jsonResponse(body: unknown, ok = true) {
   return {
@@ -15,6 +15,83 @@ afterEach(() => {
 });
 
 describe("provider model discovery", () => {
+  it("keeps canonical Codex releases visible when the saved CLI cache is stale", () => {
+    const ctx = {
+      providerStore: {
+        listFull: () => [{
+          id: "codex-oauth",
+          label: "Meu Codex",
+          type: "codex",
+          host: "codex",
+          models: ["gpt-5.4", "my-custom-model"],
+        }],
+      },
+      cliDetector: { getAll: () => ({ codex: { found: true } }) },
+    } as any;
+
+    const codex = getEnhancedProviders(ctx).find(provider => provider.id === "codex-oauth");
+
+    expect(codex?.label).toBe("Meu Codex");
+    expect(codex?.models).toEqual(expect.arrayContaining([
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "my-custom-model",
+    ]));
+    expect((codex as any)?.isVirtual).toBe(true);
+  });
+
+  it("respects an explicit manual catalog for a native provider", () => {
+    const ctx = {
+      providerStore: {
+        listFull: () => [{
+          id: "codex-oauth",
+          label: "Codex enxuto",
+          type: "codex",
+          host: "codex",
+          models: ["gpt-5.6-terra"],
+          modelsMode: "manual",
+        }],
+      },
+      cliDetector: { getAll: () => ({ codex: { found: true } }) },
+    } as any;
+
+    const codex = getEnhancedProviders(ctx).find(provider => provider.id === "codex-oauth");
+
+    expect(codex?.models).toEqual(["gpt-5.6-terra"]);
+    expect((codex as any)?.modelsMode).toBe("manual");
+  });
+
+  it("can explicitly return a native provider to automatic catalog updates", async () => {
+    const provider = {
+      id: "codex-oauth",
+      type: "codex",
+      host: "codex",
+      models: ["gpt-5.6-terra"],
+      modelsMode: "manual",
+    };
+    const upsert = vi.fn(() => ({ ok: true }));
+    const ctx = {
+      providerStore: { listFull: () => [provider], upsert },
+      cliDetector: { getAll: () => ({ codex: { found: true }, gemini: { found: false } }) },
+    } as any;
+
+    await syncProviderModels(ctx, { providerIds: ["codex-oauth"], force: true });
+
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      modelsMode: "auto",
+      models: expect.arrayContaining(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]),
+    }));
+  });
+
+  it("deduplicates detected and user model catalogs without changing priority", () => {
+    expect(mergeModelCatalogs(["gpt-new", "gpt-old"], ["gpt-old", "custom"])).toEqual([
+      "gpt-new",
+      "gpt-old",
+      "custom",
+    ]);
+  });
+
   it("loads only tool-capable OpenRouter model IDs from the public catalog", async () => {
     const fetchMock = vi.fn(async () => jsonResponse({
       data: [

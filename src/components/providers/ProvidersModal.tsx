@@ -10,6 +10,15 @@ import { TemplatePicker } from "./TemplatePicker";
 import { BulkTokenForm } from "./BulkTokenForm";
 import { ConfiguredTemplateView } from "./ConfiguredTemplateView";
 import { ProviderForm } from "./ProviderForm";
+
+const CATALOG_ONLY_PROVIDER_IDS = new Set([
+  "claude-oauth",
+  "codex-oauth",
+  "gemini-cli",
+  "kimi",
+  "cursor",
+  "copilot",
+]);
 export function ProvidersModal({
   open,
   onClose,
@@ -359,26 +368,26 @@ export function ProvidersModal({
       setStep("list");
     }
   };
-  return <div className="fixed top-[38px] left-0 right-0 bottom-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm cursor-pointer" onClick={onClose}>
-      <div className="bg-black border border-white/10 rounded-xl shadow-2xl w-[640px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+  return <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-cb-scrim p-4 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true" aria-label="Providers">
+      <div className="flex max-h-[min(760px,92vh)] w-[min(760px,96vw)] flex-col overflow-hidden rounded-cb-2 border border-cb-line-1 bg-cb-overlay shadow-cb-modal" onClick={e => e.stopPropagation()}>
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-cb-line-0 px-4">
           <div className="flex items-center gap-2">
-            {step !== "list" && <button onClick={cancel} className="text-gray-600 hover:text-white">
+            {step !== "list" && <button onClick={cancel} className="text-cb-fg-3 hover:text-cb-fg-0" aria-label="Voltar">
                 <ChevronLeft size={14} strokeWidth={1.5} />
               </button>}
-            <KeyRound size={14} strokeWidth={1.5} className="text-indigo-500/70" />
-            <h2 className="font-mono text-[12px] font-bold text-white tracking-wider">
+            <KeyRound size={14} strokeWidth={1.5} className="text-cb-accent" />
+            <h2 className="text-sm font-bold text-cb-fg-0">
               {step === "list" && "PROVIDERS"}
               {step === "pickTemplate" && "CHOOSE PROVIDER"}
               {step === "token" && (bulkTemplate ? `${bulkTemplate.label.toUpperCase()} — API KEY` : "API KEY")}
               {step === "form" && (editing && providers.some(p => p.id === editing.id) ? "EDIT PROVIDER" : "NEW PROVIDER")}
             </h2>
           </div>
-          <button onClick={onClose} className="text-gray-600 hover:text-red-500 cursor-pointer">
+          <button onClick={onClose} className="text-cb-fg-3 hover:text-cb-danger" aria-label="Fechar">
             <X$1 size={14} strokeWidth={1.5} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="cb-scroll flex-1 overflow-y-auto">
           {step === "list" && <ProviderList providers={providers} onAdd={() => setStep("pickTemplate")} onEdit={startEdit} onDelete={remove} />}
           {step === "pickTemplate" && <TemplatePicker templates={templates} onPick={pickTemplate} onPickDirect={pickTemplateDirect} existingProviders={providers} />}
           {step === "token" && bulkTemplate && <BulkTokenForm template={bulkTemplate} token={bulkToken} onTokenChange={v2 => {
@@ -404,7 +413,7 @@ export function ProvidersModal({
           setBulkTemplate(null);
           setStep("pickTemplate");
         }} />}
-          {step === "form" && editing && <ProviderForm provider={editing} onChange={setEditing} onCancel={cancel} onSave={handleSave} error={error} simple={initialStep === "pickTemplate"} signupUrl={templates.find(t => editing.id.startsWith(`${t.id}-`))?.signupUrl} />}
+          {step === "form" && editing && <ProviderForm provider={editing} onChange={setEditing} onCancel={cancel} onSave={handleSave} error={error} simple={initialStep === "pickTemplate"} catalogOnly={CATALOG_ONLY_PROVIDER_IDS.has(editing.id) || (editing.isVirtual === true && editing.id !== "mimo-claude")} signupUrl={templates.find(t => editing.id.startsWith(`${t.id}-`))?.signupUrl} />}
         </div>
       </div>
     </div>;

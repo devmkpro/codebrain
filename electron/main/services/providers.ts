@@ -26,6 +26,31 @@ function mergeModels(saved: string[] | undefined, templateModels: string[], isEx
   return merged.length > 0 ? merged : templateModels;
 }
 
+export function mergeModelCatalogs(...catalogs: Array<string[] | undefined>): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const catalog of catalogs) {
+    for (const model of catalog ?? []) {
+      const id = model.trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      merged.push(id);
+    }
+  }
+  return merged;
+}
+
+function virtualProviderModels(
+  saved: any,
+  canonical: string[],
+  canonicalFirst = false,
+): string[] {
+  if (saved?.modelsMode === "manual") return mergeModelCatalogs(saved.models);
+  return canonicalFirst
+    ? mergeModelCatalogs(canonical, saved?.models)
+    : mergeModelCatalogs(saved?.models, canonical);
+}
+
 export function getEnhancedProviders(ctx: AppContext) {
   const list = ctx.providerStore.listFull();
   const claudeDetected = ctx.cliDetector?.getAll()?.claude?.found ?? false;
@@ -36,11 +61,13 @@ export function getEnhancedProviders(ctx: AppContext) {
   const claudeOAuthSaved = list.find(p => p.id === "claude-oauth");
   const claudeOAuthProvider = claudeDetected && claudeOAuthTemplate ? [{
     id: claudeOAuthTemplate.id,
-    label: claudeOAuthTemplate.label,
+    label: claudeOAuthSaved?.label?.trim() || claudeOAuthTemplate.label,
     type: claudeOAuthTemplate.type as "oauth",
     host: claudeOAuthTemplate.host,
-    models: claudeOAuthSaved?.models?.length ? [...claudeOAuthSaved.models] : [...claudeOAuthTemplate.models],
+    models: virtualProviderModels(claudeOAuthSaved, claudeOAuthTemplate.models),
+    modelsMode: claudeOAuthSaved?.modelsMode ?? "auto",
     env: {},
+    isVirtual: true,
   }] : [];
 
   // Virtual Codex OAuth provider — appears when Codex CLI is installed
@@ -49,11 +76,14 @@ export function getEnhancedProviders(ctx: AppContext) {
   const codexOAuthSaved = list.find(p => p.id === "codex-oauth");
   const codexOAuthProvider = codexDetected && codexOAuthTemplate ? [{
     id: codexOAuthTemplate.id,
-    label: codexOAuthTemplate.label,
+    label: codexOAuthSaved?.label?.trim() || codexOAuthTemplate.label,
     type: codexOAuthTemplate.type as any,
     host: codexOAuthTemplate.host,
-    models: codexOAuthSaved?.models?.length ? [...codexOAuthSaved.models] : [...codexOAuthTemplate.models],
+    // Canonical releases must never disappear because the Codex CLI cache is stale.
+    models: virtualProviderModels(codexOAuthSaved, codexOAuthTemplate.models, true),
+    modelsMode: codexOAuthSaved?.modelsMode ?? "auto",
     env: {},
+    isVirtual: true,
   }] : [];
 
   // Filter out the virtual claude-oauth and Gemini CLI label to avoid duplicates
@@ -63,11 +93,13 @@ export function getEnhancedProviders(ctx: AppContext) {
   const geminiCliSaved = list.find(p => p.id === "gemini-cli");
   const geminiCliProvider = geminiCliDetected && geminiCliTemplate ? [{
     id: geminiCliTemplate.id,
-    label: geminiCliTemplate.label,
+    label: geminiCliSaved?.label?.trim() || geminiCliTemplate.label,
     type: geminiCliTemplate.type as any,
     host: geminiCliTemplate.host,
-    models: geminiCliSaved?.models?.length ? [...geminiCliSaved.models] : [...geminiCliTemplate.models],
+    models: virtualProviderModels(geminiCliSaved, geminiCliTemplate.models),
+    modelsMode: geminiCliSaved?.modelsMode ?? "auto",
     env: {},
+    isVirtual: true,
   }] : [];
 
   const VIRTUAL_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot", "mimo-claude"];
@@ -129,35 +161,43 @@ export function getEnhancedProviders(ctx: AppContext) {
   const kimiSaved = list.find(p => p.id === "kimi");
   const kimiProvider = kimiDetected && kimiTemplate ? [{
     id: kimiTemplate.id,
-    label: kimiTemplate.label,
+    label: kimiSaved?.label?.trim() || kimiTemplate.label,
     type: kimiTemplate.type as any,
     host: kimiTemplate.host,
-    models: kimiSaved?.models?.length ? [...kimiSaved.models] : [...kimiTemplate.models],
+    models: virtualProviderModels(kimiSaved, kimiTemplate.models),
+    modelsMode: kimiSaved?.modelsMode ?? "auto",
     env: {},
+    isVirtual: true,
   }] : [];
 
   // Virtual Cursor CLI provider — appears when Cursor CLI is installed
   const cursorDetected = ctx.cliDetector?.getAll()?.cursor?.found ?? false;
   const cursorTemplate = PROVIDER_REGISTRY.find(t => t.id === "cursor");
+  const cursorSaved = list.find(p => p.id === "cursor");
   const cursorProvider = cursorDetected && cursorTemplate ? [{
     id: cursorTemplate.id,
-    label: cursorTemplate.label,
+    label: cursorSaved?.label?.trim() || cursorTemplate.label,
     type: cursorTemplate.type as any,
     host: cursorTemplate.host,
-    models: [...cursorTemplate.models],
+    models: virtualProviderModels(cursorSaved, cursorTemplate.models),
+    modelsMode: cursorSaved?.modelsMode ?? "auto",
     env: {},
+    isVirtual: true,
   }] : [];
 
   // Virtual Copilot CLI provider — appears when Copilot CLI is installed
   const copilotDetected = ctx.cliDetector?.getAll()?.copilot?.found ?? false;
   const copilotTemplate = PROVIDER_REGISTRY.find(t => t.id === "copilot");
+  const copilotSaved = list.find(p => p.id === "copilot");
   const copilotProvider = copilotDetected && copilotTemplate ? [{
     id: copilotTemplate.id,
-    label: copilotTemplate.label,
+    label: copilotSaved?.label?.trim() || copilotTemplate.label,
     type: copilotTemplate.type as any,
     host: copilotTemplate.host,
-    models: [...copilotTemplate.models],
+    models: virtualProviderModels(copilotSaved, copilotTemplate.models),
+    modelsMode: copilotSaved?.modelsMode ?? "auto",
     env: {},
+    isVirtual: true,
   }] : [];
 
   // Virtual MIMO via Claude provider — appears when Claude CLI is installed AND user has a MIMO provider configured
@@ -366,7 +406,7 @@ export interface ProviderModelSyncSummary {
 /** Refresh every configured model catalog. Failures preserve the last known list. */
 export async function syncProviderModels(
   ctx: AppContext,
-  options: { providerIds?: string[] } = {},
+  options: { providerIds?: string[]; force?: boolean } = {},
 ): Promise<ProviderModelSyncSummary> {
   const only = options.providerIds ? new Set(options.providerIds) : null;
   const configured = ctx.providerStore.listFull().filter((provider: any) => !only || only.has(provider.id));
@@ -376,10 +416,21 @@ export async function syncProviderModels(
   const discoveries = await Promise.all(configured.map(async (provider: any) => {
     if (provider.id === "claude-oauth") {
       const result = await listClaudeOAuthModels();
-      return { provider, result, source: "anthropic-oauth" };
+      const template = PROVIDER_REGISTRY.find(entry => entry.id === "claude-oauth");
+      const models = provider.modelsMode === "manual" && !options.force
+        ? mergeModelCatalogs(provider.models)
+        : mergeModelCatalogs(result.models, provider.models, template?.models);
+      return {
+        provider,
+        result: { ...result, models, ok: result.ok || models.length > 0 },
+        source: "anthropic-oauth",
+      };
     }
     if (provider.id === "codex-oauth") {
-      const models = listCodexCachedModels();
+      const template = PROVIDER_REGISTRY.find(entry => entry.id === "codex-oauth");
+      const models = provider.modelsMode === "manual" && !options.force
+        ? mergeModelCatalogs(provider.models)
+        : mergeModelCatalogs(template?.models, listCodexCachedModels(), provider.models);
       return { provider, result: { ok: models.length > 0, models, error: "Cache de modelos do Codex indisponível." }, source: "codex-cache" };
     }
     const endpoint = providerEndpointConfig(provider);
@@ -395,11 +446,14 @@ export async function syncProviderModels(
       continue;
     }
     const unchanged = JSON.stringify(provider.models ?? []) === JSON.stringify(models)
-      && provider.modelsSyncSource === source;
+      && provider.modelsSyncSource === source
+      && !(options.force && provider.modelsMode === "manual");
     if (!unchanged) {
+      const resetNativeCatalog = options.force && ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot"].includes(provider.id);
       ctx.providerStore.upsert({
         ...provider,
         models,
+        ...(resetNativeCatalog ? { modelsMode: "auto" } : {}),
         modelsSyncedAt: Date.now(),
         modelsSyncSource: source,
       });
@@ -408,8 +462,8 @@ export async function syncProviderModels(
   }
 
   if (!only && (ctx.cliDetector?.getAll()?.codex?.found ?? false)) {
-    const models = listCodexCachedModels();
     const template = PROVIDER_REGISTRY.find(entry => entry.id === "codex-oauth");
+    const models = mergeModelCatalogs(template?.models, listCodexCachedModels());
     if (models.length && template && !configured.some((provider: any) => provider.id === "codex-oauth")) {
       ctx.providerStore.upsert({ ...template, models, env: {}, modelsSyncedAt: Date.now(), modelsSyncSource: "codex-cache" } as any);
       updated.push({ providerId: "codex-oauth", count: models.length, source: "codex-cache" });
@@ -421,8 +475,9 @@ export async function syncProviderModels(
     const result = await listClaudeOAuthModels();
     const template = PROVIDER_REGISTRY.find(entry => entry.id === "claude-oauth");
     if (result.ok && result.models?.length && template) {
-      ctx.providerStore.upsert({ ...template, models: result.models, env: {}, modelsSyncedAt: Date.now(), modelsSyncSource: "anthropic-oauth" } as any);
-      updated.push({ providerId: "claude-oauth", count: result.models.length, source: "anthropic-oauth" });
+      const models = mergeModelCatalogs(result.models, template.models);
+      ctx.providerStore.upsert({ ...template, models, env: {}, modelsSyncedAt: Date.now(), modelsSyncSource: "anthropic-oauth" } as any);
+      updated.push({ providerId: "claude-oauth", count: models.length, source: "anthropic-oauth" });
     }
   }
 
@@ -430,8 +485,12 @@ export async function syncProviderModels(
   if (!only && syncedGemini && (ctx.cliDetector?.getAll()?.gemini?.found ?? false)) {
     const template = PROVIDER_REGISTRY.find(entry => entry.id === "gemini-cli");
     if (template) {
-      ctx.providerStore.upsert({ ...template, models: syncedGemini.result.models, env: {}, modelsSyncedAt: Date.now(), modelsSyncSource: "gemini-api" } as any);
-      updated.push({ providerId: "gemini-cli", count: syncedGemini.result.models!.length, source: "gemini-api" });
+      const saved = ctx.providerStore.listFull().find((provider: any) => provider.id === "gemini-cli");
+      const models = saved?.modelsMode === "manual" && !options.force
+        ? mergeModelCatalogs(saved.models)
+        : mergeModelCatalogs(syncedGemini.result.models, saved?.models, template.models);
+      ctx.providerStore.upsert({ ...template, ...saved, models, env: {}, modelsSyncedAt: Date.now(), modelsSyncSource: "gemini-api" } as any);
+      updated.push({ providerId: "gemini-cli", count: models.length, source: "gemini-api" });
     }
   }
 

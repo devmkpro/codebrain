@@ -52,7 +52,7 @@ export function registerProviderHandlers(ctx: AppContext): void {
 
   // Detect models available on Claude OAuth plan (reads token from ~/.claude/.credentials.json)
   ipcMain.handle("providers:listClaudeOAuthModels", () => listClaudeOAuthModels());
-  ipcMain.handle("providers:syncModels", () => syncProviderModels(ctx));
+  ipcMain.handle("providers:syncModels", (_event, args?: { providerIds?: string[]; force?: boolean }) => syncProviderModels(ctx, args));
 
   ipcMain.handle("providers:healthCheck", async (_event, args: { baseUrl: string; apiKey: string; type: string; model?: string }) => {
     return healthCheckProvider(args);

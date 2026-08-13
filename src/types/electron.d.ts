@@ -431,7 +431,7 @@ export interface CodebrainApp {
     listModels: (args: { baseUrl: string; apiKey: string; type: string }) => Promise<{ ok: boolean; models?: string[]; error?: string }>;
     listOpenRouterModels: () => Promise<{ ok: boolean; models?: Array<{ id: string; name: string; context_length: number; pricing?: { prompt: number; completion: number } }>; error?: string }>;
     listClaudeOAuthModels: () => Promise<{ ok: boolean; models?: string[]; error?: string }>;
-    syncModels: () => Promise<{ updated: Array<{ providerId: string; count: number; source: string }>; failed: Array<{ providerId: string; error: string }> }>;
+    syncModels: (args?: { providerIds?: string[]; force?: boolean }) => Promise<{ updated: Array<{ providerId: string; count: number; source: string }>; failed: Array<{ providerId: string; error: string }> }>;
     healthCheck: (args: { baseUrl: string; apiKey: string; type: string; model?: string }) => Promise<{ ok: boolean; status: string; checks: Record<string, unknown>; warnings: string[]; error?: string }>;
     onUpdated: (callback: (providers: Provider[]) => void) => () => void;
   };

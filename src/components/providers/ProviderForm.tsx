@@ -10,7 +10,8 @@ export function ProviderForm({
   onSave,
   error,
   simple,
-  signupUrl
+  signupUrl,
+  catalogOnly = false,
 }) {
   const env = provider.env ?? {};
   const setEnv = (key, value) => {
@@ -76,6 +77,26 @@ export function ProviderForm({
     }
   };
   const fetchModels = async () => {
+    if (catalogOnly) {
+      setFetching(true);
+      setFetchError(null);
+      try {
+        await (window as any).codeBrainApp?.providers?.syncModels?.({ providerIds: [provider.id], force: true });
+        const list = await (window as any).codeBrainApp?.providers?.list?.();
+        const refreshed = list?.find((item: any) => item.id === provider.id);
+        const ids: string[] = refreshed?.models ?? [];
+        if (ids.length === 0) {
+          setFetchError("nenhum modelo detectado para este CLI");
+        } else {
+          onChange({ ...provider, label: refreshed.label ?? provider.label, models: ids, modelsMode: "auto" });
+        }
+      } catch (err) {
+        setFetchError(`erro: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setFetching(false);
+      }
+      return;
+    }
     // OAuth plan: use token from ~/.claude/.credentials.json
     if (isOAuth) {
       setFetching(true);
@@ -123,7 +144,8 @@ export function ProviderForm({
   const models = provider.models ?? [];
   const setModels = next => onChange({
     ...provider,
-    models: next
+    models: next,
+    ...(catalogOnly ? { modelsMode: "manual" } : {}),
   });
   // Shared models block (used in both simple OAuth mode and full form)
   const modelsBlock = !isOpenRouter ? (
@@ -146,7 +168,27 @@ export function ProviderForm({
   ) : null;
 
   return <div className="p-4 space-y-3">
-      {simple ? <React.Fragment>
+      {catalogOnly ? <React.Fragment>
+          <div className="rounded-cb-1 border border-cb-line-0 bg-cb-bg-2 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-cb-fg-1">Provider gerenciado pelo CLI</p>
+              <span className={`rounded-cb-1 border px-1.5 py-0.5 text-[9px] ${provider.modelsMode === "manual" ? "border-cb-warn/30 text-cb-warn" : "border-cb-success/30 text-cb-success"}`}>
+                catálogo {provider.modelsMode === "manual" ? "personalizado" : "automático"}
+              </span>
+            </div>
+            <p className="mt-1 text-2xs leading-relaxed text-cb-fg-3">
+              Login, rota e credenciais pertencem ao CLI. Aqui você pode renomear o provider e ajustar os model IDs exibidos no + pane.
+            </p>
+          </div>
+          <div>
+            <p className="cb-label mb-1">Nome</p>
+            <input value={provider.label ?? ""} onChange={e => onChange({
+              ...provider,
+              label: e.target.value,
+            })} className="cb-input w-full" />
+          </div>
+          {modelsBlock}
+        </React.Fragment> : simple ? <React.Fragment>
           {isOAuth ? <>
             <p className="font-mono text-[10px] text-gray-500">
               Modelos disponíveis no seu plano Claude. Clique em "Detectar modelos" para atualizar a lista.

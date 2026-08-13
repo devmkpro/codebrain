@@ -230,7 +230,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     listModels: (args: unknown) => ipcRenderer.invoke("providers:listModels", args),
     listOpenRouterModels: () => ipcRenderer.invoke("providers:listOpenRouterModels"),
     listClaudeOAuthModels: () => ipcRenderer.invoke("providers:listClaudeOAuthModels"),
-    syncModels: () => ipcRenderer.invoke("providers:syncModels"),
+    syncModels: (args?: { providerIds?: string[]; force?: boolean }) => ipcRenderer.invoke("providers:syncModels", args),
     healthCheck: (args: unknown) => ipcRenderer.invoke("providers:healthCheck", args),
     onUpdated: (callback: (providers: unknown[]) => void) => {
       const handler = (_evt: unknown, providers: unknown[]) => callback(providers);
