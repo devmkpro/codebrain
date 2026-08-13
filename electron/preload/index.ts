@@ -175,7 +175,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
 
   spec: {
     list: (args: { workspace: string }) => ipcRenderer.invoke("spec:list", args),
-    create: (args: { workspace: string; title: string; description?: string }) => ipcRenderer.invoke("spec:create", args),
+    create: (args: { workspace: string; answers: Record<string, string> }) => ipcRenderer.invoke("spec:create", args),
     open: (args: { workspace: string; id: string; file?: string }) => ipcRenderer.invoke("spec:open", args),
   },
 

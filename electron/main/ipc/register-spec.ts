@@ -2,6 +2,7 @@ import { ipcMain, shell } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AppContext } from "../context";
+import { renderSpecDocuments, writeSpecDocuments, type SpecAnswers } from "../services/spec-kit";
 
 function safeWorkspace(workspace: unknown): string {
   if (typeof workspace !== "string" || !path.isAbsolute(workspace)) throw new Error("workspace inválido");
@@ -26,20 +27,18 @@ function listSpecs(workspace: string) {
 
 export function registerSpecHandlers(_ctx: AppContext): void {
   ipcMain.handle("spec:list", (_event, args: { workspace: string }) => ({ ok: true, specs: listSpecs(safeWorkspace(args?.workspace)) }));
-  ipcMain.handle("spec:create", (_event, args: { workspace: string; title: string; description?: string }) => {
+  ipcMain.handle("spec:create", (_event, args: { workspace: string; answers: SpecAnswers }) => {
     const workspace = safeWorkspace(args?.workspace);
-    const title = args?.title?.trim();
+    const answers = args?.answers;
+    const title = answers?.title?.trim();
     const slug = title ? slugify(title) : "";
-    if (!title || !slug) return { ok: false, error: "título obrigatório" };
+    if (!title || !slug || !answers?.problem?.trim() || !answers?.users?.trim() || !answers?.outcome?.trim() || !answers?.acceptanceCriteria?.trim()) return { ok: false, error: "responda todas as perguntas obrigatórias" };
     const existing = listSpecs(workspace);
     const next = Math.max(0, ...existing.map((item) => Number(item.id.slice(0, 3)) || 0)) + 1;
     const id = `${String(next).padStart(3, "0")}-${slug}`;
     const dir = path.join(workspace, "specs", id);
-    fs.mkdirSync(dir, { recursive: false });
-    const description = args.description?.trim() || "Descreva o problema, os usuários afetados e o resultado esperado.";
-    fs.writeFileSync(path.join(dir, "spec.md"), `# Feature: ${title}\n\n## Problema\n\n${description}\n\n## Cenários de usuário\n\n- Dado ..., quando ..., então ...\n\n## Requisitos\n\n- [ ] FR-001: ...\n\n## Critérios de sucesso\n\n- SC-001: ...\n`, "utf8");
-    fs.writeFileSync(path.join(dir, "plan.md"), `# Plano: ${title}\n\n## Contexto técnico\n\n- Stack: detectar no workspace\n- Restrições: ...\n\n## Arquitetura\n\nDescreva componentes, dados e integrações.\n\n## Verificação\n\n- Testes: ...\n- Rollback: ...\n`, "utf8");
-    fs.writeFileSync(path.join(dir, "tasks.md"), `# Tarefas: ${title}\n\n## Fundação\n\n- [ ] T001 Validar requisitos e contratos\n\n## Implementação\n\n- [ ] T002 Implementar o menor corte vertical\n\n## Validação\n\n- [ ] T003 Executar testes e revisar critérios de sucesso\n`, "utf8");
+    const documents = renderSpecDocuments({ ...answers, title }, workspace);
+    writeSpecDocuments(dir, documents);
     return { ok: true, spec: listSpecs(workspace).find((item) => item.id === id) };
   });
   ipcMain.handle("spec:open", async (_event, args: { workspace: string; id: string; file?: string }) => {

@@ -389,7 +389,7 @@ export interface CodebrainApp {
   };
   spec: {
     list: (args: { workspace: string }) => Promise<any>;
-    create: (args: { workspace: string; title: string; description?: string }) => Promise<any>;
+    create: (args: { workspace: string; answers: Record<string, string> }) => Promise<any>;
     open: (args: { workspace: string; id: string; file?: string }) => Promise<any>;
   };
   workspace: {
