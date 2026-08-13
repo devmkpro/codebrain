@@ -1,300 +1,264 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React from "react";
 import {
-  FolderOpen, Plus, X, Activity, Terminal,
-  Bot, ChevronRight, Globe, Zap, Clock,
-  RefreshCw, Server, Unlink,
-} from 'lucide-react';
-import { useNavStore }       from '../../stores/nav-store';
-import { useProvidersStore } from '../../stores/providers-store';
-import { usePanesStore }     from '../../stores/panes-store';
-import { useWorkspaceStore } from '../../stores/workspace-store';
+  ArrowRight,
+  FolderOpen,
+  FolderPlus,
+  LoaderCircle,
+  SquareTerminal,
+  Unlink,
+  X,
+} from "lucide-react";
+import { useNavStore } from "../../stores/nav-store";
+import { usePanesStore } from "../../stores/panes-store";
+import { useWorkspaceStore } from "../../stores/workspace-store";
 
-function folderName(p: string) {
-  return p.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? p;
+interface WorkspaceTab {
+  workspacePath: string;
+  view?: { kind?: string };
 }
 
-// ─── Open Workspace Card ──────────────────────────────────────────────────────
-function OpenWorkspaceCard({ tab, idx, panes, onSwitch, onClose, onUnlink }: any) {
-  const name      = folderName(tab.workspacePath);
-  const tabPanes  = panes.filter((p: any) => p.workspacePath === tab.workspacePath || (p.cwd && p.cwd.startsWith(tab.workspacePath)));
-  const running   = tabPanes.filter((p: any) => p.status === 'running').length;
-  const viewKind  = tab.view?.kind ?? 'workspace';
-  const isActive  = useNavStore.getState().activeTabIndex === idx && !useNavStore.getState().onHome;
+interface PaneLike {
+  id: string;
+  agent?: string;
+  model?: string;
+  status?: string;
+  cwd?: string;
+  workspacePath?: string;
+  kind?: string;
+}
+
+function folderName(path: string): string {
+  return path.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? path;
+}
+
+function normalized(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function belongsToWorkspace(pane: PaneLike, workspacePath: string): boolean {
+  const root = normalized(workspacePath);
+  const candidate = normalized(pane.workspacePath || pane.cwd || "");
+  return candidate === root || candidate.startsWith(`${root}/`);
+}
+
+function PaneSummary({ pane }: { pane: PaneLike }) {
+  const running = pane.status === "running" || pane.status === "working";
+  return (
+    <div className="flex min-w-0 items-center gap-2 h-cell px-2 border-t border-cb-line-0 first:border-t-0">
+      <span
+        className="cb-dot"
+        data-pulse={running}
+        style={{ "--cb-dot-color": running ? "var(--cb-agent-running)" : "var(--cb-agent-idle)" } as React.CSSProperties}
+      />
+      <span className="text-2xs text-cb-fg-1 truncate">{pane.agent || "shell"}</span>
+      {pane.model && <span className="text-2xs text-cb-fg-3 truncate">{pane.model}</span>}
+      <span className="ml-auto text-2xs text-cb-fg-3 shrink-0">{pane.id.slice(0, 4)}</span>
+    </div>
+  );
+}
+
+function OpenWorkspaceRow({
+  tab,
+  index,
+  panes,
+  onOpen,
+  onClose,
+  onUnlink,
+}: {
+  tab: WorkspaceTab;
+  index: number;
+  panes: PaneLike[];
+  onOpen: (index: number) => void;
+  onClose: (index: number) => void;
+  onUnlink: (path: string, index: number) => void;
+}) {
+  const name = folderName(tab.workspacePath);
+  const workspacePanes = panes.filter((pane) => belongsToWorkspace(pane, tab.workspacePath));
+  const running = workspacePanes.filter((pane) => pane.status === "running" || pane.status === "working").length;
 
   return (
-    <div className={`p-4 rounded-xl border transition-all ${isActive ? 'border-[#5855e5]/40 bg-[#5855e5]/5 ring-1 ring-[#5855e5]/10' : 'border-white/5 bg-[#0A0A0B]/60 hover:border-white/10'}`}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isActive ? 'bg-[#5855e5]/20 border border-[#5855e5]/30' : 'bg-white/5 border border-white/10'}`}>
-            <Server size={15} className={isActive ? 'text-[#5855e5]' : 'text-slate-500'} />
-          </div>
+    <article className="relative flex flex-col min-w-0 border border-cb-line-1 bg-cb-bg-1 rounded-cb-1 hover:border-cb-line-2 transition-colors">
+      <div className="absolute left-0 top-0 bottom-0 w-px bg-cb-accent" aria-hidden />
+      <header className="flex items-start gap-3 px-3 py-3 border-b border-cb-line-0">
+        <div className="w-7 h-7 shrink-0 flex items-center justify-center border border-cb-line-1 bg-cb-bg-2 rounded-cb-1">
+          <FolderOpen size={13} className="text-cb-accent" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-xs font-semibold text-cb-fg-0 truncate">{name}</h3>
+          <p className="text-2xs text-cb-fg-3 truncate mt-0.5" title={tab.workspacePath}>{tab.workspacePath}</p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button type="button" onClick={() => onClose(index)} className="p-1 text-cb-fg-2 hover:text-cb-fg-0 rounded-cb-1 hover:bg-cb-bg-3" title="Fechar — mantém nos recentes" aria-label={`Fechar ${name}`}><X size={12} /></button>
+          <button type="button" onClick={() => onUnlink(tab.workspacePath, index)} className="p-1 text-cb-fg-2 hover:text-cb-danger rounded-cb-1 hover:bg-cb-danger-wash" title="Desvincular — não apaga arquivos" aria-label={`Desvincular ${name}`}><Unlink size={12} /></button>
+        </div>
+      </header>
+
+      <div className="flex items-center gap-4 h-cell-lg px-3 border-b border-cb-line-0 text-2xs">
+        <span className="text-cb-fg-3">panes <strong className="text-cb-fg-1 font-medium">{workspacePanes.length}</strong></span>
+        <span className="text-cb-fg-3">ativos <strong className="text-cb-success font-medium">{running}</strong></span>
+        <span className="text-cb-fg-3 truncate">view <strong className="text-cb-fg-1 font-medium">{tab.view?.kind || "workspace"}</strong></span>
+      </div>
+
+      <div className="min-h-[44px] bg-cb-bg-0/40">
+        {workspacePanes.length === 0
+          ? <p className="px-3 h-[44px] flex items-center text-2xs text-cb-fg-3">Nenhum agente aberto neste workspace.</p>
+          : workspacePanes.slice(0, 3).map((pane) => <PaneSummary key={pane.id} pane={pane} />)}
+        {workspacePanes.length > 3 && <p className="h-cell px-2 flex items-center text-2xs text-cb-fg-3 border-t border-cb-line-0">+ {workspacePanes.length - 3} agentes</p>}
+      </div>
+
+      <button type="button" onClick={() => onOpen(index)} className="flex items-center justify-between h-cell-lg px-3 border-t border-cb-line-1 text-xs text-cb-fg-1 hover:text-cb-accent hover:bg-cb-bg-2">
+        <span>abrir workspace</span><ArrowRight size={12} />
+      </button>
+    </article>
+  );
+}
+
+function RecentWorkspaceRow({ path, onOpen, onUnlink, busy }: { path: string; onOpen: (path: string) => void; onUnlink: (path: string) => void; busy: boolean }) {
+  const name = folderName(path);
+  return (
+    <div className="group flex items-center min-w-0 border-t border-cb-line-0 first:border-t-0 hover:bg-cb-bg-2">
+      <button type="button" onClick={() => onOpen(path)} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left">
+        <FolderOpen size={13} className="text-cb-fg-2 shrink-0" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs text-cb-fg-0 truncate">{name}</span>
+          <span className="block text-2xs text-cb-fg-3 truncate mt-0.5" title={path}>{path}</span>
+        </span>
+        <span className="text-2xs text-cb-fg-3 group-hover:text-cb-accent shrink-0">abrir</span>
+        <ArrowRight size={11} className="text-cb-fg-3 group-hover:text-cb-accent shrink-0" />
+      </button>
+      <button type="button" onClick={() => onUnlink(path)} disabled={busy} className="mx-2 p-1.5 text-cb-fg-2 hover:text-cb-danger hover:bg-cb-danger-wash rounded-cb-1 disabled:opacity-40" title="Desvincular — não apaga arquivos" aria-label={`Desvincular ${name}`}><Unlink size={12} /></button>
+    </div>
+  );
+}
+
+export function WorkspacesPage() {
+  const [recents, setRecents] = React.useState<string[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [launching, setLaunching] = React.useState(false);
+  const [unlinking, setUnlinking] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const tabs = useNavStore((state) => state.tabs) as WorkspaceTab[];
+  const closeTab = useNavStore((state) => state.closeTab);
+  const setActiveTab = useNavStore((state) => state.setActiveTab);
+  const openWorkspace = useNavStore((state) => state.openWorkspace);
+  const panes = usePanesStore((state) => state.panes) as PaneLike[];
+  const setWorkspacePath = useWorkspaceStore((state) => state.setPath);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    window.codeBrainApp.workspaces.recent()
+      .then((items) => { if (!cancelled) setRecents(Array.isArray(items) ? items : []); })
+      .catch(() => { if (!cancelled) setError("Não foi possível carregar os workspaces recentes."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const openPath = React.useCallback(async (path?: string) => {
+    if (launching) return;
+    setLaunching(true);
+    setError(null);
+    try {
+      const selected = path || await window.codeBrainApp.workspace.open();
+      if (!selected) return;
+      setWorkspacePath(selected);
+      await window.codeBrainApp.workspaces.touch(selected);
+      openWorkspace(selected);
+      setRecents((items) => [selected, ...items.filter((item) => normalized(item) !== normalized(selected))]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível abrir o workspace.");
+    } finally {
+      setLaunching(false);
+    }
+  }, [launching, openWorkspace, setWorkspacePath]);
+
+  const unlink = React.useCallback(async (path: string, tabIndex?: number) => {
+    if (unlinking) return;
+    setUnlinking(path);
+    setError(null);
+    try {
+      const result = await window.codeBrainApp.workspaces.remove(path);
+      if (!result.ok) throw new Error(result.error || "Não foi possível desvincular o workspace.");
+      if (tabIndex !== undefined) closeTab(tabIndex);
+      setRecents((items) => items.filter((item) => normalized(item) !== normalized(path)));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível desvincular o workspace.");
+    } finally {
+      setUnlinking(null);
+    }
+  }, [closeTab, unlinking]);
+
+  const recentOnly = recents.filter((path) => !tabs.some((tab) => normalized(tab.workspacePath) === normalized(path)));
+  const runningAgents = panes.filter((pane) => pane.status === "running" || pane.status === "working").length;
+
+  return (
+    <section className="relative flex-1 overflow-y-auto bg-cb-bg-0 cb-scroll">
+      <div className="absolute inset-0 pointer-events-none opacity-40" style={{ backgroundImage: "linear-gradient(var(--cb-line-0) 1px, transparent 1px), linear-gradient(90deg, var(--cb-line-0) 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
+      <div className="relative max-w-[1120px] mx-auto px-5 py-5">
+        <header className="flex items-start justify-between gap-5 pb-4 border-b border-cb-line-1">
           <div>
-            <p className="text-[12px] font-bold text-slate-200 truncate max-w-[160px]">{name}</p>
-            <p className="text-[9px] font-mono text-slate-600 truncate max-w-[160px]">{tab.workspacePath}</p>
+            <span className="cb-label text-cb-accent">workspace registry</span>
+            <h1 className="text-base font-semibold text-cb-fg-0 mt-1">Workspaces</h1>
+            <p className="text-2xs text-cb-fg-3 mt-1">Abra projetos e mantenha cada agente no contexto certo.</p>
           </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => onClose(idx)} className="p-1 text-slate-500 hover:text-slate-200 transition-colors" title="Fechar workspace — mantém nos recentes" aria-label={`Fechar ${name}`}>
-            <X size={13} />
+          <button type="button" onClick={() => void openPath()} disabled={launching} className="h-cell-lg px-3 flex items-center gap-2 border border-cb-accent bg-cb-accent-wash text-xs text-cb-accent-bright hover:bg-cb-accent-wash-strong rounded-cb-1 disabled:opacity-50">
+            {launching ? <LoaderCircle size={12} className="animate-spin" /> : <FolderPlus size={12} />}
+            {launching ? "abrindo…" : "abrir pasta"}
           </button>
-          <button onClick={() => onUnlink(tab.workspacePath, idx)} className="p-1 text-slate-500 hover:text-red-400 transition-colors" title="Desvincular — não apaga arquivos" aria-label={`Desvincular ${name}`}>
-            <Unlink size={13} />
-          </button>
-        </div>
-      </div>
+        </header>
 
-      {/* Metrics row */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        {[
-          { label: 'Panes',   value: tabPanes.length },
-          { label: 'Running', value: running },
-          { label: 'View',    value: viewKind },
-        ].map(({ label, value }) => (
-          <div key={label} className="text-center p-2 rounded-lg bg-white/5">
-            <p className="text-[12px] font-bold text-white truncate">{value}</p>
-            <p className="text-[8px] text-slate-600 uppercase tracking-widest mt-0.5">{label}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Pane list */}
-      {tabPanes.length > 0 && (
-        <div className="space-y-1 mb-3">
-          {tabPanes.slice(0, 3).map((p: any) => (
-            <div key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded bg-white/5">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${p.status === 'running' ? 'bg-indigo-400 animate-pulse' : 'bg-slate-700'}`} />
-              <span className="text-[10px] font-mono text-slate-400 truncate flex-1">{p.agent ?? 'shell'}{p.model ? ` · ${p.model}` : ''}</span>
-              <span className="text-[9px] font-mono text-slate-600">{p.kind === 'browser' ? '🌐' : '⬛'}</span>
+        <div className="grid grid-cols-3 border-b border-cb-line-1">
+          {[
+            ["abertos", tabs.length],
+            ["recentes", recents.length],
+            ["agentes ativos", runningAgents],
+          ].map(([label, value], index) => (
+            <div key={label} className={`h-12 px-3 flex flex-col justify-center ${index > 0 ? "border-l border-cb-line-0" : ""}`}>
+              <span className="text-sm text-cb-fg-0 tabular-nums">{value}</span>
+              <span className="cb-label">{label}</span>
             </div>
           ))}
-          {tabPanes.length > 3 && <p className="text-[9px] text-slate-700 text-center">+{tabPanes.length - 3} panes</p>}
         </div>
-      )}
 
-      <button
-        onClick={() => onSwitch(idx)}
-        className={`w-full py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
-          isActive
-            ? 'bg-[#5855e5] text-white hover:bg-[#4a47d6]'
-            : 'border border-white/10 text-slate-400 hover:border-[#5855e5]/30 hover:text-slate-300'
-        }`}
-      >
-        <Activity size={11} /> {isActive ? 'Ativo' : 'Ir para Workspace'}
-      </button>
-    </div>
-  );
-}
+        {error && <div role="alert" className="mt-3 px-3 py-2 border border-cb-danger bg-cb-danger-wash text-xs text-cb-danger rounded-cb-1">{error}</div>}
 
-// ─── Recent Workspace Row ────────────────────────────────────────────────────
-function RecentRow({ path, openTabs, onOpen, onRemove }: { path: string; openTabs: any[]; onOpen: (p: string) => void; onRemove: (p: string) => void }) {
-  const name    = folderName(path);
-  const isOpen  = openTabs.some((t: any) => t.workspacePath === path);
+        <div className="mt-5 flex items-center justify-between">
+          <h2 className="cb-label">abertos · {tabs.length}</h2>
+          <span className="text-2xs text-cb-fg-3">fechar mantém no histórico · desvincular remove da lista</span>
+        </div>
 
-  return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.04] hover:bg-white/[0.02] group transition-all">
-      <div className="flex items-center gap-3 min-w-0">
-        <FolderOpen size={14} className={isOpen ? 'text-emerald-400' : 'text-slate-600'} />
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold text-slate-300 truncate">{name}</p>
-          <p className="text-[9px] font-mono text-slate-700 truncate">{path}</p>
+        {tabs.length === 0 ? (
+          <div className="mt-2 min-h-40 flex items-center justify-center border border-cb-line-1 bg-cb-bg-1/80 rounded-cb-1">
+            <div className="text-center px-5 py-7">
+              <div className="w-10 h-10 mx-auto flex items-center justify-center border border-cb-line-1 bg-cb-bg-2 rounded-cb-1"><SquareTerminal size={17} className="text-cb-fg-2" /></div>
+              <p className="text-xs text-cb-fg-1 mt-3">Nenhum workspace aberto</p>
+              <p className="text-2xs text-cb-fg-3 mt-1">Escolha uma pasta abaixo ou abra um novo projeto.</p>
+              <button type="button" onClick={() => void openPath()} className="mt-3 h-cell-lg px-3 border border-cb-line-1 text-xs text-cb-fg-1 hover:text-cb-accent hover:border-cb-accent rounded-cb-1">abrir workspace</button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 grid grid-cols-1 lg:grid-cols-2 gap-2">
+            {tabs.map((tab, index) => (
+              <OpenWorkspaceRow key={tab.workspacePath} tab={tab} index={index} panes={panes} onOpen={setActiveTab} onClose={closeTab} onUnlink={(path, tabIndex) => void unlink(path, tabIndex)} />
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center justify-between pb-2 border-b border-cb-line-1">
+          <h2 className="cb-label">recentes · {recentOnly.length}</h2>
+          <span className="text-2xs text-cb-fg-3">clique na linha para abrir</span>
+        </div>
+
+        <div className="mt-2 border border-cb-line-1 bg-cb-bg-1 rounded-cb-1 overflow-hidden">
+          {loading ? (
+            <div className="h-20 flex items-center justify-center gap-2 text-xs text-cb-fg-3"><LoaderCircle size={12} className="animate-spin" /> carregando workspaces…</div>
+          ) : recentOnly.length === 0 ? (
+            <div className="h-20 flex items-center justify-center text-xs text-cb-fg-3">Nenhum workspace recente fora dos abertos.</div>
+          ) : recentOnly.map((path) => (
+            <RecentWorkspaceRow key={path} path={path} onOpen={(item) => void openPath(item)} onUnlink={(item) => void unlink(item)} busy={unlinking !== null} />
+          ))}
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0 ml-2">
-        {isOpen && <span className="text-[8px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full uppercase">aberto</span>}
-        <button onClick={() => onOpen(path)} className="opacity-0 group-hover:opacity-100 px-2 py-1 rounded text-[9px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all">
-          {isOpen ? 'Ir' : 'Abrir'}
-        </button>
-        <button onClick={() => onRemove(path)} className="opacity-60 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all" title="Desvincular — não apaga arquivos" aria-label={`Desvincular ${name}`}>
-          <Unlink size={11} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-export function WorkspacesPage() {
-  const [recents,   setRecents]   = useState<string[]>([]);
-  const [launching, setLaunching] = useState(false);
-
-  const tabs            = useNavStore(s => s.tabs) as any[];
-  const closeTab        = useNavStore(s => s.closeTab);
-  const setActiveTab    = useNavStore(s => s.setActiveTab);
-  const openWorkspace   = useNavStore(s => s.openWorkspace);
-  const setWorkspacePath = useWorkspaceStore(s => s.setPath);
-  const providers       = useProvidersStore(s => s.providers) as any[];
-  const loadProviders   = useProvidersStore(s => s.load);
-  const panes           = usePanesStore(s => s.panes) as any[];
-
-  useEffect(() => {
-    (window as any).codeBrainApp?.workspaces?.recent?.()
-      .then((d: string[]) => { if (d) setRecents(d); })
-      .catch(() => {});
-    loadProviders().catch(() => {});
-  }, []);
-
-  const handleOpen = useCallback(async (path?: string) => {
-    if (launching) return;
-    const selected = path ?? await (window as any).codeBrainApp?.workspace?.open?.();
-    if (!selected) return;
-    setLaunching(true);
-    setWorkspacePath(selected);
-    try { await (window as any).codeBrainApp?.workspaces?.touch?.(selected); } catch {}
-    openWorkspace(selected);
-    const prov = providers[0];
-    try {
-      await (window as any).codeBrainApp?.pty?.spawn?.({
-        agent: prov?.id === 'claude-oauth' ? 'claude' : (prov?.host ?? 'openclaude'), cwd: selected,
-        providerId: prov?.id,
-      });
-    } catch {}
-    setLaunching(false);
-  }, [launching, openWorkspace, setWorkspacePath, providers]);
-
-  // Auto-detect: only switch to existing tab, never spawn PTY
-  const hasAutoOpenedRef = React.useRef(false);
-  useEffect(() => {
-    if (hasAutoOpenedRef.current) return;
-    hasAutoOpenedRef.current = true;
-    const timer = setTimeout(() => {
-      (window as any).codeBrainApp?.workspace?.detect?.()
-        .then((result: { path: string; autoDetected: boolean } | null) => {
-          if (!result?.path) return;
-          const existingIdx = useNavStore.getState().tabs.findIndex((t: any) => t.workspacePath === result.path);
-          if (existingIdx >= 0) {
-            useNavStore.getState().setActiveTab(existingIdx);
-          }
-        })
-        .catch(() => {});
-    }, 500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleSwitch = (idx: number) => {
-    useNavStore.getState().setActiveTab(idx);
-  };
-
-  const handleCloseTab = (idx: number) => {
-    closeTab(idx);
-  };
-
-  const handleRemoveRecent = async (path: string) => {
-    try {
-      const result = await (window as any).codeBrainApp?.workspaces?.remove?.(path);
-      if (result?.ok) setRecents(r => r.filter(p => p !== path));
-    } catch {}
-  };
-
-  const handleUnlink = async (path: string, idx: number) => {
-    try {
-      const result = await (window as any).codeBrainApp?.workspaces?.remove?.(path);
-      if (!result?.ok) return;
-      closeTab(idx);
-      setRecents(r => r.filter(p => p !== path));
-    } catch {}
-  };
-
-  const recentNotOpen = recents.filter(r => !tabs.some((t: any) => t.workspacePath === r));
-
-  return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* Left sidebar — Providers */}
-      <aside className="w-56 border-r border-white/5 bg-[#0F0F13] hidden md:flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-white/5">
-          <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Providers</h3>
-          {providers.length === 0 ? (
-            <p className="text-[10px] text-slate-700 font-mono">Nenhum configurado</p>
-          ) : (
-            <div className="space-y-2">
-              {providers.map((p: any) => (
-                <div key={p.id} className="p-2.5 rounded-lg border border-white/5 bg-[#0A0A0B]/50">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <p className="text-[10px] font-bold text-slate-300 truncate">{p.label}</p>
-                  </div>
-                  <p className="text-[9px] font-mono text-slate-600 truncate">{p.type ?? 'custom'}</p>
-                  {(p.models ?? []).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {(p.models as string[]).slice(0, 2).map((m: string) => (
-                        <span key={m} className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 truncate max-w-[90px]">{m}</span>
-                      ))}
-                      {p.models.length > 2 && <span className="text-[8px] text-slate-600">+{p.models.length - 2}</span>}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="p-4 mt-auto">
-          <div className="p-3 rounded-lg bg-[#0A0A0B]/50 border border-white/5 text-center">
-            <p className="text-[9px] font-mono text-slate-600 uppercase tracking-widest">{panes.length} pane{panes.length !== 1 ? 's' : ''} total</p>
-            <p className="text-[9px] font-mono text-emerald-400 mt-0.5">{panes.filter((p: any) => p.status === 'running').length} rodando</p>
-          </div>
-        </div>
-      </aside>
-
-      {/* Center — open workspaces grid */}
-      <section className="flex-1 p-5 overflow-y-auto relative" style={{ scrollbarWidth: 'thin' }}>
-        <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-        <div className="relative z-10">
-          {/* Open workspaces */}
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-[15px] font-bold text-white">Workspaces</h1>
-              <p className="text-[10px] text-slate-500 mt-0.5">{tabs.length} aberto{tabs.length !== 1 ? 's' : ''} · {recents.length} recente{recents.length !== 1 ? 's' : ''}</p>
-            </div>
-            <button
-              onClick={() => handleOpen()}
-              disabled={launching}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#5855e5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4a47d6] disabled:opacity-60 transition-colors"
-            >
-              <Plus size={12} /> {launching ? 'Abrindo…' : 'Novo'}
-            </button>
-          </div>
-
-          {tabs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-4">
-              <Server size={40} className="text-slate-800" />
-              <div className="text-center">
-                <p className="text-[13px] font-bold text-slate-600">Nenhum workspace aberto</p>
-                <p className="text-[10px] text-slate-700 mt-1">Abra uma pasta para começar</p>
-              </div>
-              <button onClick={() => handleOpen()} className="px-4 py-2 rounded-lg bg-[#5855e5] text-white text-[11px] font-bold uppercase tracking-widest hover:bg-[#4a47d6] transition-colors">
-                Abrir Workspace
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
-              {tabs.map((tab: any, i: number) => (
-                <OpenWorkspaceCard
-                  key={tab.workspacePath ?? i}
-                  tab={tab} idx={i} panes={panes}
-                  onSwitch={handleSwitch}
-                  onClose={handleCloseTab}
-                  onUnlink={handleUnlink}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Recent (not open) */}
-          {recentNotOpen.length > 0 && (
-            <>
-              <div className="flex items-center justify-between mb-3 pt-2 border-t border-white/5">
-                <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Recentes (não abertos)</h2>
-                <span className="text-[9px] font-mono text-slate-700">{recentNotOpen.length}</span>
-              </div>
-              <div className="rounded-xl border border-white/5 bg-[#0A0A0B]/30 overflow-hidden">
-                {recentNotOpen.map((path: string) => (
-                  <RecentRow key={path} path={path} openTabs={tabs} onOpen={handleOpen} onRemove={handleRemoveRecent} />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </section>
-    </div>
+    </section>
   );
 }
