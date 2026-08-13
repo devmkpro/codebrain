@@ -9,8 +9,10 @@ import {
   GitPullRequest, SlidersHorizontal, Smartphone,
   Clock, UtensilsCrossed,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { Logo } from '../auth/Logo';
 import { Link, useRouter } from '../../lib/router';
+import { useModalsStore } from '../../stores/modals-store';
 import { useNavStore } from '../../stores/nav-store';
 import { usePanesStore } from '../../stores/panes-store';
 import { useAuthStore } from '../../stores/auth-store';
@@ -41,38 +43,51 @@ import { LibreWizard } from '../squads/LibreWizard';
 import { resolveSpawnTarget, HOST_LABELS } from '../../lib/resolve-spawn-target';
 
 // ─── Shared modal-state hook ──────────────────────────────────────────────────
+/**
+ * Estado dos modais globais.
+ *
+ * A implementação mudou para um store (`modals-store.tsx`) — a assinatura
+ * de retorno é a mesma, então os componentes deste arquivo não mudaram.
+ *
+ * O que mudou de comportamento: antes cada uma das três chamadas de
+ * `useModals()` criava um estado próprio e registrava o listener de
+ * Ctrl+Shift+M de novo, então o atalho alternava três Perf HUDs
+ * independentes. Agora o estado é um só e o atalho vive em
+ * `useModalShortcuts()`, registrado uma única vez pelo AppHeader.
+ */
 function useModals() {
-  const [showProviders, setShowProviders] = React.useState(false);
-  const [providersStep, setProvidersStep] = React.useState('list');
-  const [showSquad, setShowSquad] = React.useState(false);
-  const [showSquadWizard, setShowSquadWizard] = React.useState(false);
-  const [showDiag, setShowDiag] = React.useState(false);
-  const [showPerfHUD, setShowPerfHUD] = React.useState(false);
-  const [showLibreWizard, setShowLibreWizard] = React.useState(false);
+  return useModalsStore(
+    useShallow((state) => ({
+      showProviders: state.showProviders,
+      openProviders: state.openProviders,
+      closeProviders: state.closeProviders,
+      providersStep: state.providersStep,
+      showSquad: state.showSquad,
+      setShowSquad: state.setShowSquad,
+      showSquadWizard: state.showSquadWizard,
+      setShowSquadWizard: state.setShowSquadWizard,
+      showDiag: state.showDiag,
+      setShowDiag: state.setShowDiag,
+      showPerfHUD: state.showPerfHUD,
+      setShowPerfHUD: state.setShowPerfHUD,
+      showLibreWizard: state.showLibreWizard,
+      setShowLibreWizard: state.setShowLibreWizard,
+    })),
+  );
+}
 
-  // Ctrl+Shift+M toggles Performance HUD
+/** Atalhos dos modais. Chamar em um único lugar. */
+function useModalShortcuts() {
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.ctrlKey && e.shiftKey && e.key === 'M') {
         e.preventDefault();
-        setShowPerfHUD(v => !v);
+        useModalsStore.getState().togglePerfHUD();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-
-  const openProviders = (step = 'list') => { setProvidersStep(step); setShowProviders(true); };
-  const closeProviders = () => { setShowProviders(false); setProvidersStep('list'); };
-
-  return {
-    showProviders, openProviders, closeProviders, providersStep,
-    showSquad, setShowSquad,
-    showSquadWizard, setShowSquadWizard,
-    showDiag, setShowDiag,
-    showPerfHUD, setShowPerfHUD,
-    showLibreWizard, setShowLibreWizard,
-  };
 }
 
 // ─── Icon button ─────────────────────────────────────────────────────────────
@@ -1671,5 +1686,8 @@ function WorkspaceHeader() {
 export function AppHeader() {
   const onHome = useNavStore(s => s.onHome);
   const tabs = useNavStore(s => s.tabs);
+  // Registrado aqui, e só aqui: AppHeader está sempre montado, e HomeHeader /
+  // WorkspaceHeader se alternam.
+  useModalShortcuts();
   return onHome || (tabs as any[]).length === 0 ? <HomeHeader /> : <WorkspaceHeader />;
 }

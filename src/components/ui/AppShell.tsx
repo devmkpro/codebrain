@@ -15,6 +15,9 @@ import RecipeSuggestionPanel from '../recipe/RecipeSuggestionPanel';
 import { WhatsNewModal } from '../navigation/WhatsNewModal';
 import { useNavStore }   from '../../stores/nav-store';
 import { ClarifyPrompt } from '../clarify/ClarifyPrompt';
+import { CommandPalette } from '../palette/CommandPalette';
+import { useGlobalShortcuts } from '../palette/usePaletteShortcut';
+import { useFlag } from '../../stores/flags-store';
 
 interface Props {
   whatsNewOpen: boolean;
@@ -38,6 +41,12 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
   const onHome       = useNavStore(s => s.onHome);
   const tabs         = useNavStore(s => s.tabs) as any[];
   const activeTabIdx = useNavStore(s => s.activeTabIndex);
+
+  // Ctrl+K depende da flag; os atalhos declarados pelas ações valem sempre —
+  // eles substituíram os handlers que viviam soltos no App.tsx.
+  const paletteEnabled = useFlag('commandPalette');
+  useGlobalShortcuts(paletteEnabled);
+
   return (
     <RouterProvider>
       <div className="flex flex-col bg-[#0B0B0E] text-slate-200 overflow-hidden cb-surface" style={{ height: '100%' }}>
@@ -93,6 +102,7 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
       {/* Modais globais (fora do stacking context do conteúdo) */}
       <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} currentVersion={appVersion} />
       <ClarifyPrompt />
+      {paletteEnabled && <CommandPalette />}
 
       {workspaceToast && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[9999] animate-in fade-in zoom-in-95 duration-200">

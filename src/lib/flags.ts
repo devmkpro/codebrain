@@ -47,8 +47,12 @@ export const FLAG_DEFINITIONS = {
     label: "Command palette (Ctrl+K)",
     description:
       "Busca única sobre toda ação, painel e workspace. Funciona nos dois shells.",
-    default: false,
-    stage: "experimental",
+    // Ligada por padrão, ao contrário das outras: é puramente aditiva — não
+    // substitui nem esconde nada do shell atual — e é o maior ganho isolado
+    // de descoberta. Segurá-la atrás de um toggle que ninguém sabe que existe
+    // reproduziria justamente o problema que ela resolve.
+    default: true,
+    stage: "beta",
   },
   specKit: {
     key: "specKit",

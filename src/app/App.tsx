@@ -302,19 +302,11 @@ export function App() {
     const handler = e => {
       const meta = e.metaKey || e.ctrlKey;
       const cmd = e.metaKey;
-      if (meta && !e.shiftKey && e.key === "t") {
-        e.preventDefault();
-        handleAddPane();
-        return;
-      }
-      if (meta && !e.shiftKey && e.key === "w") {
-        e.preventDefault();
-        if (activePaneId) {
-          window.codeBrainApp?.pty.kill(activePaneId);
-          removePane(activePaneId);
-        }
-        return;
-      }
+      // Ctrl+T, Ctrl+W e os atalhos de zoom saíram daqui: agora são declarados
+      // pelas próprias ações (src/actions/core-actions.ts) e executados por
+      // useGlobalShortcuts. Fonte única — antes o atalho exibido na UI e o
+      // atalho que funcionava eram declarados em lugares diferentes e podiam
+      // divergir sem ninguém notar.
       if (cmd && !e.shiftKey && !e.ctrlKey && e.key >= "1" && e.key <= "9") {
         e.preventDefault();
         const idx = parseInt(e.key, 10) - 1;
@@ -371,25 +363,9 @@ export function App() {
         if (pane) setActive(pane.id);
         return;
       }
-      // Ctrl+= / Ctrl++ / Ctrl+Shift++ (ABNT2: + requires shift) → zoom UI
-      if (meta && (e.key === "=" || e.key === "+")) {
-        e.preventDefault();
-        increaseAppZoom();
-        return;
-      }
-      // Ctrl+- / Ctrl+_ → zoom out UI
-      if (meta && (e.key === "-" || e.key === "_")) {
-        e.preventDefault();
-        decreaseAppZoom();
-        return;
-      }
-      // Ctrl+0 → reset zoom UI + font size
-      if (meta && e.key === "0") {
-        e.preventDefault();
-        resetAppZoom();
-        resetFontSize();
-        return;
-      }
+      // Os atalhos de zoom também saíram daqui — as variantes de layout
+      // ("=" / "+" / "_") agora são tratadas por SHORTCUT_ALIASES no
+      // matcher de atalhos, em vez de espalhadas neste handler.
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
