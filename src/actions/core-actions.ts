@@ -15,6 +15,7 @@ import { useTasksStore } from "../stores/tasks-store";
 import { useTerminalSettings } from "../stores/terminal-settings-store";
 import { useSpecStore } from "../stores/spec-store";
 import { useWorkspaceStore } from "../stores/workspace-store";
+import { useOnboardingStore } from "../stores/onboarding-store";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    AÇÕES DO NÚCLEO
@@ -309,6 +310,15 @@ const coreActions: Action[] = [
     keywords: ["diagnóstico", "diagnostics", "saúde", "health", "debug", "problema"],
     icon: "Activity",
     run: () => useModalsStore.getState().setShowDiag(true),
+  },
+  {
+    id: "system.onboarding",
+    title: "Tour da nova interface",
+    subtitle: "Terminal-first, workspaces, agentes e Spec Kit",
+    group: "sistema",
+    keywords: ["onboarding", "novidades", "tour", "ajuda", "spec kit", "terminal first"],
+    icon: "Sparkles",
+    run: () => useOnboardingStore.getState().show(),
   },
   {
     id: "system.perfhud",

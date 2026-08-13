@@ -7,6 +7,7 @@ import { WorkspacesPage } from "../../views/home/WorkspacesPage";
 import { ClarifyPrompt } from "../clarify/ClarifyPrompt";
 import { ConversationPanel } from "../conversation/ConversationPanel";
 import { SpecPanel } from "../spec/SpecPanel";
+import { TerminalFirstOnboarding } from "../onboarding/TerminalFirstOnboarding";
 import { CronPanel } from "../cron/CronPanel";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { CommandPalette } from "../palette/CommandPalette";
@@ -124,6 +125,7 @@ export function ShellV2({ appVersion }: Props) {
 
       <CommandPalette />
       <ClarifyPrompt />
+      <TerminalFirstOnboarding />
     </RouterProvider>
   );
 }
