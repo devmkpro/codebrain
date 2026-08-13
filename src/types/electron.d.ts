@@ -381,6 +381,7 @@ export interface CodebrainApp {
   conversation: {
     list: (args: { paneId: string; workspace?: string; limit?: number }) => Promise<{ ok: boolean; messages?: AgentMessage[]; count?: number; error?: string }>;
     send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => Promise<{ ok: boolean; id?: string; error?: string }>;
+    onUpdated: (callback: (paneId: string) => void) => () => void;
   };
   spec: {
     list: (args: { workspace: string }) => Promise<any>;

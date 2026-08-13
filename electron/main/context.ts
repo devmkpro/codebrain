@@ -11,6 +11,7 @@ import { CliDetector } from "./cli-detector";
 import { AudioConfigStore } from "./audio-config-store";
 import { HooksManager } from "./services/hooks";
 import { createSessionWatchers, type SessionWatcherManager } from "./services/session-watchers";
+import { ConversationTurnTracker } from "./services/conversation-turns";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { createMemoryStore } = require("../../packages/memory/store.js");
@@ -94,6 +95,8 @@ export function createAppContext() {
   const AUDIO_CONFIG_FILE = path.join(DATA_DIR, "audio-config.json");
   const MEMORY_DB_FILE = path.join(DATA_DIR, "memory.db");
 
+  const memoryStore = createMemoryStore(MEMORY_DB_FILE);
+
   return {
     // Window
     mainWindow: null as BrowserWindow | null,
@@ -129,7 +132,9 @@ export function createAppContext() {
     configStore: new ConfigStore(),
     cliDetector: new CliDetector(),
     audioConfigStore: new AudioConfigStore(AUDIO_CONFIG_FILE),
-    memoryStore: createMemoryStore(MEMORY_DB_FILE),
+    memoryStore,
+    conversationTurns: new ConversationTurnTracker(),
+    paneTranscriptFiles: new Map<string, string>(),
     hooksManager: new HooksManager(),
     sessionWatchers: null as SessionWatcherManager | null,
     // Optional cost-tracking backend (budget/alerts/summary) — not yet wired to

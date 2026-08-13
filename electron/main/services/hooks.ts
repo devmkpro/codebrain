@@ -13,7 +13,7 @@ import { EventEmitter } from "node:events";
 import { exec } from "node:child_process";
 import log from "electron-log/main.js";
 import type { PtyManager } from "../pty-manager";
-import type { AppContext } from "../context";
+import { safeSend, type AppContext } from "../context";
 import { randomBytes } from "node:crypto";
 
 export type HookEventType =
@@ -308,15 +308,45 @@ export function setupHooks(hooks: HooksManager, ptyManager: PtyManager, ctx: App
   });
 
   // Wire PtyManager events → hooks
-  ptyManager.on("exit", (paneId: string, exitCode: number) => {
+  ptyManager.prependListener("exit", (paneId: string, exitCode: number) => {
+    persistConversationReply(paneId, true);
     const data = { exitCode, agent: ctx.paneConfigs.get(paneId)?.agent };
     hooks.fire("session_ended", data, paneId);
     recordLifecycle(paneId, `Sessão finalizada · código ${exitCode}`, "session_ended", data);
     hooks.fire("pane_exited", data, paneId);
   });
 
+  const persistConversationReply = (paneId: string, force = false) => {
+    const config = ctx.paneConfigs.get(paneId);
+    const reply = ctx.conversationTurns.complete({
+      paneId,
+      agent: config?.agent,
+      transcriptFile: ctx.paneTranscriptFiles.get(paneId),
+      force,
+    });
+    if (!reply) return;
+    try {
+      ctx.memoryStore?.saveAgentMessage?.({
+        fromPane: paneId,
+        toPane: "operator",
+        content: reply.content,
+        type: "answer",
+        parentId: reply.parentId,
+        workspace: reply.workspace || config?.cwd || ctx.currentWorkspacePath,
+      });
+      safeSend(ctx, "conversation:updated", paneId);
+    } catch (err) {
+      log.warn(`[conversation] Failed to persist reply for ${paneId}: ${String(err)}`);
+    }
+  };
+
+  ptyManager.on("output", (paneId: string, data: string) => {
+    ctx.conversationTurns.append(paneId, data);
+  });
+
   ptyManager.on("idle", ({ paneId, idle }: { paneId: string; idle: { lastOutput?: string[] } }) => {
     hooks.fire("pane_idle", { lastOutput: idle.lastOutput?.slice(-3) }, paneId);
+    persistConversationReply(paneId);
   });
 
   log.info("[hooks] Hooks system initialized with PtyManager wiring");

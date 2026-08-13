@@ -18,6 +18,7 @@ interface PaneInfo {
 
 interface CapturedSession {
   paneId: string;
+  transcriptFile?: string;
   session: {
     provider: string;
     id: string;
@@ -190,7 +191,7 @@ class CodexSessionWatcher extends BaseSessionWatcher {
       );
       if (matchingPanes.length !== 1) continue;
       this.captured.add(match.id);
-      this.emitCapture({ paneId: pane.paneId, session: { provider: "codex", id: match.id, capturedAt: Date.now(), confidence: "high", source: "session-file" } });
+      this.emitCapture({ paneId: pane.paneId, transcriptFile: match.file, session: { provider: "codex", id: match.id, capturedAt: Date.now(), confidence: "high", source: "session-file" } });
     }
   }
 }
@@ -445,6 +446,7 @@ export function createSessionWatchers(ctx: AppContext): SessionWatcherManager {
     try {
       const store = ctx.memoryStore;
       if (!store) return;
+      if (capture.transcriptFile) ctx.paneTranscriptFiles.set(capture.paneId, capture.transcriptFile);
       const workspace = ctx.currentWorkspacePath || capture.session.id;
       store.write({
         type: "episodic",
@@ -478,6 +480,7 @@ export function createSessionWatchers(ctx: AppContext): SessionWatcherManager {
     },
     unregisterPane(paneId: string) {
       activePanes.delete(paneId);
+      ctx.paneTranscriptFiles.delete(paneId);
       for (const w of watchers) w.unregisterPane(paneId);
       if (activePanes.size === 0) {
         for (const w of watchers) w.stop();

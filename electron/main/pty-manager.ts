@@ -743,6 +743,15 @@ export class PtyManager extends EventEmitter {
     }
   }
 
+  /** Submit a prompt as one ordered PTY operation (paste, then Enter). */
+  submit(paneId: string, data: string): void {
+    const state = this.panes.get(paneId);
+    if (!state) throw new Error(`pane not found: ${paneId}`);
+    const normalized = data.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    this.writeSilent(paneId, normalized, true);
+    (state.pty as any).write("\r");
+  }
+
   /**
    * Write text to PTY stdin while suppressing the echo from the output.
    * The PTY normally echoes stdin back as output — this method tracks the

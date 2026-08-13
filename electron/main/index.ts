@@ -204,6 +204,7 @@ app.whenReady().then(async () => {
     }
 
     ctx.sessionWatchers?.unregisterPane(paneId);
+    ctx.conversationTurns.discard(paneId);
     ctx.paneConfigs.delete(paneId);
     ctx.paneRegistry.delete(paneId);
   });

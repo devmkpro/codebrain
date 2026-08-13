@@ -139,7 +139,12 @@ export function registerPaneHandlers(ctx: AppContext): void {
         workspace: args?.workspace,
       });
       if (saved && !saved.ok) return saved;
-      ctx.ptyManager.write(toPane, `${content}\r`);
+      ctx.conversationTurns.begin({
+        paneId: toPane,
+        parentId: saved?.id,
+        workspace: args?.workspace,
+      });
+      ctx.ptyManager.submit(toPane, content);
       return { ok: true, id: saved?.id };
     } catch (err) {
       return { ok: false, error: String(err) };

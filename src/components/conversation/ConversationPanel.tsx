@@ -22,14 +22,23 @@ export function ConversationPanel() {
     return () => window.clearInterval(timer);
   }, [open, paneId, refresh]);
 
+  useEffect(() => {
+    if (!open || !paneId) return;
+    return window.codeBrainApp.conversation.onUpdated((updatedPaneId) => {
+      if (updatedPaneId === paneId) void refresh();
+    });
+  }, [open, paneId, refresh]);
+
   useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [messages]);
   if (!open || !paneId) return null;
 
   const submit = async () => {
-    if (await send(draft, replyTo)) {
-      setDraft("");
-      setReplyTo(undefined);
-    }
+    const content = draft.trim();
+    if (!content || sending) return;
+    const parentId = replyTo;
+    setDraft("");
+    setReplyTo(undefined);
+    if (!(await send(content, parentId))) setDraft((current) => current || content);
   };
 
   return (
@@ -49,8 +58,8 @@ export function ConversationPanel() {
         {messages.map((message) => {
           const mine = message.from_pane === "operator";
           return (
-            <button key={message.id} type="button" onClick={() => setReplyTo(message.id)} className={`block max-w-[88%] text-left px-3 py-2 border rounded-cb-1 ${mine ? "ml-auto bg-cb-accent-dim border-cb-accent text-cb-fg-0" : "mr-auto bg-cb-bg-2 border-cb-line-1 text-cb-fg-1"}`}>
-              <div className="flex gap-2 mb-1 text-2xs text-cb-fg-3"><span>{message.from_pane === "operator" ? "você" : message.from_pane.slice(0, 8)}</span><span>{message.type}</span><time>{timeLabel(message.created_at)}</time></div>
+            <button key={message.id} type="button" onClick={() => setReplyTo(message.id)} className={`block max-w-[88%] text-left px-3 py-2 border rounded-cb-1 transition-colors ${mine ? "ml-auto bg-cb-accent-wash border-cb-accent-dim text-cb-fg-0 hover:bg-cb-accent-wash-strong" : "mr-auto bg-cb-bg-2 border-cb-line-1 text-cb-fg-0 hover:border-cb-line-focus"}`}>
+              <div className={`flex gap-2 mb-1 text-2xs ${mine ? "text-cb-accent-bright" : "text-cb-fg-2"}`}><span>{message.from_pane === "operator" ? "você" : pane?.agent || message.from_pane.slice(0, 8)}</span><span>{message.type}</span><time>{timeLabel(message.created_at)}</time></div>
               <div className="text-xs whitespace-pre-wrap break-words">{message.content}</div>
             </button>
           );
@@ -62,7 +71,7 @@ export function ConversationPanel() {
         {replyTo && <div className="flex items-center justify-between text-2xs text-cb-fg-3 px-1 pb-1"><span>respondendo a {replyTo.slice(0, 12)}</span><button onClick={() => setReplyTo(undefined)}>cancelar</button></div>}
         {error && <div className="text-2xs text-cb-danger px-1 pb-1">{error}</div>}
         <div className="flex items-end gap-2">
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} rows={2} placeholder="Mensagem ao agente…" className="flex-1 resize-none bg-cb-bg-0 border border-cb-line-1 rounded-cb-1 px-2 py-1.5 text-xs text-cb-fg-0 outline-none focus:border-cb-accent" />
+          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!event.repeat) void submit(); } }} disabled={sending} rows={2} placeholder={sending ? "Enviando…" : "Mensagem ao agente…"} className="flex-1 resize-none bg-cb-bg-0 border border-cb-line-1 rounded-cb-1 px-2 py-1.5 text-xs text-cb-fg-0 outline-none focus:border-cb-accent disabled:opacity-60" />
           <button onClick={() => void submit()} disabled={sending || !draft.trim()} className="h-8 px-3 flex items-center gap-1 bg-cb-accent text-cb-bg-0 disabled:opacity-40 rounded-cb-1 text-xs"><Send size={12} /> enviar</button>
         </div>
       </footer>

@@ -171,6 +171,11 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
   conversation: {
     list: (args: { paneId: string; workspace?: string; limit?: number }) => ipcRenderer.invoke("conversation:list", args),
     send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => ipcRenderer.invoke("conversation:send", args),
+    onUpdated: (callback: (paneId: string) => void) => {
+      const handler = (_evt: unknown, paneId: string) => callback(paneId);
+      ipcRenderer.on("conversation:updated", handler);
+      return () => ipcRenderer.off("conversation:updated", handler);
+    },
   },
 
   spec: {

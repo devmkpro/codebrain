@@ -48,7 +48,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
   send: async (content, parentId) => {
     const paneId = get().paneId;
-    if (!paneId || !content.trim()) return false;
+    if (!paneId || !content.trim() || get().sending) return false;
     set({ sending: true, error: null });
     try {
       const result = await window.codeBrainApp.conversation.send({
