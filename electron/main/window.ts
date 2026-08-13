@@ -1,7 +1,38 @@
-import { BrowserWindow, app } from "electron";
+import { BrowserWindow, app, screen } from "electron";
 import * as path from "node:path";
 import { is } from "./platform";
 import { isUpdateInstallRequested } from "./auto-updater";
+
+/** Keep frameless windows inside the desktop work area (above the taskbar). */
+function constrainToWorkArea(win: BrowserWindow): void {
+  if (win.isDestroyed() || win.isMaximized() || win.isFullScreen()) return;
+
+  const bounds = win.getBounds();
+  const workArea = screen.getDisplayMatching(bounds).workArea;
+  const width = Math.min(bounds.width, workArea.width);
+  const height = Math.min(bounds.height, workArea.height);
+  const x = Math.min(Math.max(bounds.x, workArea.x), workArea.x + workArea.width - width);
+  const y = Math.min(Math.max(bounds.y, workArea.y), workArea.y + workArea.height - height);
+
+  if (x !== bounds.x || y !== bounds.y || width !== bounds.width || height !== bounds.height) {
+    win.setBounds({ x, y, width, height });
+  }
+}
+
+function keepWindowInWorkArea(win: BrowserWindow): void {
+  let queued = false;
+  const schedule = () => {
+    if (queued) return;
+    queued = true;
+    setTimeout(() => {
+      queued = false;
+      constrainToWorkArea(win);
+    }, 0);
+  };
+  win.on("move", schedule);
+  win.on("resize", schedule);
+  win.once("ready-to-show", schedule);
+}
 
 export function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -27,6 +58,7 @@ export function createWindow(): BrowserWindow {
       webviewTag: true,
     },
   });
+  keepWindowInWorkArea(win);
 
   // Reset zoom level on load — zoom factor is controlled by renderer via IPC (app:set-zoom)
   win.webContents.once("did-finish-load", () => {
@@ -132,6 +164,7 @@ export function createDetachedPaneWindow(paneId: string, workspacePath: string):
       webviewTag: true,
     },
   });
+  keepWindowInWorkArea(win);
 
   win.once("ready-to-show", () => win.show());
 
