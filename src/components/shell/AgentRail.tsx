@@ -2,6 +2,7 @@ import React from "react";
 import { ChevronLeft, ChevronRight, GripVertical, MessageSquare, Plus, X } from "lucide-react";
 import { usePanesStore } from "../../stores/panes-store";
 import { useShellStore } from "../../stores/shell-store";
+import { useNavStore } from "../../stores/nav-store";
 import { statusPresentation } from "./pane-status";
 import { useConversationStore } from "../../stores/conversation-store";
 import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
@@ -30,6 +31,27 @@ interface PaneLike {
   status?: string;
   kind?: string;
   cwd?: string;
+  workspacePath?: string;
+}
+
+function normalizedPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * A pane can run from a subfolder, but it still belongs to the workspace root
+ * selected in the header. Panes from another workspace stay alive; they just
+ * do not occupy this workspace's agent rail.
+ */
+export function belongsToWorkspace(pane: PaneLike, workspacePath?: string): boolean {
+  if (!workspacePath) return false;
+  const root = normalizedPath(workspacePath);
+  const candidate = normalizedPath(pane.workspacePath || pane.cwd || "");
+  return candidate === root || candidate.startsWith(`${root}/`);
+}
+
+export function panesForWorkspace(panes: PaneLike[], workspacePath?: string): PaneLike[] {
+  return panes.filter((pane) => belongsToWorkspace(pane, workspacePath));
 }
 
 function AgentRow({
@@ -101,12 +123,17 @@ export function AgentRail() {
   const activePaneId = usePanesStore((state) => state.activePaneId);
   const setActive = usePanesStore((state) => state.setActive);
   const removePane = usePanesStore((state) => state.removePane);
+  const tabs = useNavStore((state) => state.tabs) as Array<{ workspacePath: string }>;
+  const activeTabIndex = useNavStore((state) => state.activeTabIndex);
+  const onHome = useNavStore((state) => state.onHome);
 
   const collapsed = useShellStore((state) => state.railCollapsed);
   const toggleRail = useShellStore((state) => state.toggleRail);
   const openConversation = useConversationStore((state) => state.openFor);
   const openPaneLauncher = usePaneLauncherStore((state) => state.show);
   const [draggingPaneId, setDraggingPaneId] = React.useState<string | null>(null);
+  const activeWorkspacePath = !onHome ? tabs[activeTabIndex]?.workspacePath : undefined;
+  const workspacePanes = panesForWorkspace(panes, activeWorkspacePath);
 
   const closePane = React.useCallback((paneId: string) => {
     void window.codeBrainApp?.pty.kill(paneId);
@@ -135,7 +162,7 @@ export function AgentRail() {
       <div className="flex items-center h-cell-lg px-2 border-b border-cb-line-0 shrink-0">
         {!collapsed && (
           <span className="cb-label flex-1 truncate">
-            agentes · {panes.length}
+            agentes · {workspacePanes.length}
           </span>
         )}
         <button
@@ -150,15 +177,18 @@ export function AgentRail() {
       </div>
 
       <div className="cb-scroll flex-1 py-1 px-1" role="listbox" aria-label="Panes">
-        {panes.length === 0 ? (
+        {workspacePanes.length === 0 ? (
           !collapsed && (
             <p className="px-3 py-4 text-2xs text-cb-fg-3 leading-relaxed">
-              Nenhum agente. <br />
-              <span className="text-cb-fg-2">Ctrl+T</span> abre um.
+              {activeWorkspacePath ? (
+                <>Nenhum agente neste workspace. <br /><span className="text-cb-fg-2">Ctrl+T</span> abre um.</>
+              ) : (
+                <>Selecione um workspace para ver os agentes.</>
+              )}
             </p>
           )
         ) : (
-          panes.map((pane) => (
+          workspacePanes.map((pane) => (
             <AgentRow
               key={pane.id}
               pane={pane}
