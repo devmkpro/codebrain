@@ -12,7 +12,6 @@ interface LibreSpawnPayload {
   orchestrator: {
     providerId: string;
     model: string;
-    cli?: string;
     effort?: string;
     instructions?: string;
   };
@@ -35,12 +34,6 @@ const STEPS = [
   { id: "confirm", label: "Confirmar" },
 ];
 
-const CLI_OPTIONS = [
-  { value: "claude", label: "Claude Code CLI" },
-  { value: "openclaude", label: "OpenClaude" },
-  { value: "gemini", label: "Gemini CLI" },
-];
-
 const EFFORT_OPTIONS = [
   { value: "low", label: "Low" },
   { value: "normal", label: "Normal" },
@@ -54,7 +47,6 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
   const [slots, setSlots] = useState<LibreSlot[]>([]);
 
   // Orchestrator extra config shown before confirmation.
-  const [orchCli, setOrchCli] = useState("claude");
   const [orchEffort, setOrchEffort] = useState("normal");
   const [orchInstructions, setOrchInstructions] = useState("");
 
@@ -64,7 +56,6 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
       setStep(0);
       setOrchestrator(null);
       setSlots([]);
-      setOrchCli("claude");
       setOrchEffort("normal");
       setOrchInstructions("");
     }
@@ -72,8 +63,15 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
 
   if (!open) return null;
 
-  // ── Providers list (non-oauth, with models) ──
-  const eligibleProviders = providers.filter((p: any) => p.type !== "oauth" && (p.models?.length ?? 0) > 0);
+  // The provider owns the CLI compatibility boundary. OAuth providers (Claude,
+  // Codex) must be selectable too; the old filter hid Claude and encouraged
+  // users to override a generic CLI afterwards.
+  const eligibleProviders = providers.filter((p: any) => (p.models?.length ?? 0) > 0 && p.host);
+  const orchestratorProvider = providers.find((p: any) => p.id === orchestrator?.providerId);
+  const orchestratorCli = orchestratorProvider?.host === "claude" ? "Claude Code CLI"
+    : orchestratorProvider?.host === "codex" ? "Codex"
+      : orchestratorProvider?.host === "gemini" || orchestratorProvider?.host === "gemini-cli" ? "Gemini CLI"
+        : "OpenClaude";
 
   const workerAllocated = slots.reduce((s, sl) => s + sl.count, 0);
 
@@ -110,7 +108,6 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
     onSpawn({
       orchestrator: {
         ...orchestrator,
-        cli: orchCli,
         effort: orchEffort,
         instructions: orchInstructions.trim() || undefined,
       },
@@ -307,29 +304,15 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
           </div>
         )}
 
-        {/* ── STEP 3: Providers (orchestrator config) ── */}
+        {/* ── STEP 3: Orchestrator configuration ── */}
         {activeWorkspace && step === 3 && (
           <div className="space-y-4">
             <div className="text-[11px] text-zinc-400">Configure o <span className="text-violet-400 font-bold">Orquestrador</span>:</div>
 
-            {/* CLI */}
-            <div>
-              <div className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1.5">CLI do Orquestrador</div>
-              <div className="flex gap-2">
-                {CLI_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setOrchCli(opt.value)}
-                    className={`flex-1 py-2 rounded-lg border text-[10px] font-bold transition-colors ${
-                      orchCli === opt.value
-                        ? "border-violet-500/60 bg-violet-900/30 text-violet-300"
-                        : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+            <div className="rounded-lg border border-violet-500/25 bg-violet-900/15 px-3 py-2.5">
+              <div className="text-[9px] text-violet-400 uppercase tracking-widest">CLI compatível</div>
+              <div className="mt-1 text-[11px] text-zinc-200 font-bold">{orchestratorCli}</div>
+              <p className="mt-1 text-[9px] text-zinc-500">Definida automaticamente pelo provider e modelo escolhidos. Não é possível combinar Codex com Claude Code.</p>
             </div>
 
             {/* Effort */}
@@ -418,7 +401,7 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
                 {providers.find((p: any) => p.id === orchestrator.providerId)?.label ?? orchestrator.providerId}
               </div>
               <div className="flex gap-2 mt-1.5">
-                <span className="text-[8px] text-violet-300/70 bg-violet-900/30 rounded px-1.5 py-0.5">CLI: {orchCli}</span>
+                <span className="text-[8px] text-violet-300/70 bg-violet-900/30 rounded px-1.5 py-0.5">CLI: {orchestratorCli}</span>
                 <span className="text-[8px] text-emerald-300/70 bg-emerald-900/20 rounded px-1.5 py-0.5">effort: {orchEffort}</span>
               </div>
               {orchInstructions.trim() && (
