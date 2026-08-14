@@ -932,15 +932,16 @@ export async function spawnPaneInternal(
 
     log.info("[spawnPaneInternal]", { agent, providerId, model, providerType, cwd });
 
-    // Check if Claude CLI binary is missing (would silently fallback to openclaude)
+    // A provider selection is a strict CLI contract. Never replace Claude Code
+    // with OpenClaude (or any other shell) when the intended binary is absent.
     const cmdCheck = resolveCommand(agent as any, args);
-    if (cmdCheck.fellBackToOpenClaude) {
-      log.error("═══════════════════════════════════════════════════════════════");
-      log.error("[spawnPaneInternal] ⚠️  CLAUDE CLI NÃO INSTALADO!");
-      log.error(`[spawnPaneInternal] O binário "claude" não foi encontrado no PATH.`);
-      log.error(`[spawnPaneInternal] CAINDO PARA OPENCLAUDE — não é o Claude Code CLI original!`);
-      log.error(`[spawnPaneInternal] Para instalar: npm install -g @anthropic-ai/claude-code`);
-      log.error("═══════════════════════════════════════════════════════════════");
+    if (cmdCheck.unavailable) {
+      const install = agent === "claude"
+        ? "Instale com: npm install -g @anthropic-ai/claude-code"
+        : `Instale ou adicione o binário "${agent}" ao PATH.`;
+      const error = `A CLI ${agent === "claude" ? "Claude Code" : agent} não está disponível. ${install}`;
+      log.error(`[spawnPaneInternal] ${error}`);
+      return { ok: false, error };
     }
 
     if (isMimo) {

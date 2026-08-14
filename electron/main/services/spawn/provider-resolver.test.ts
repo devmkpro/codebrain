@@ -53,4 +53,26 @@ describe("provider resolver compatibility", () => {
     expect(result.providerId).toBe("codex-oauth");
     expect(result.model).not.toContain("claude");
   });
+
+  it("keeps a refreshed Claude OAuth model on the Claude Code CLI", () => {
+    const result = resolveProvider(context([{
+      id: "claude-oauth",
+      type: "oauth",
+      host: "claude",
+      models: ["claude-opus-5"],
+    }, {
+      id: "anthropic-legacy",
+      type: "anthropic-compat",
+      host: "openclaude",
+      models: ["claude-opus-5"],
+    }]), {
+      agent: "claude",
+      providerId: "claude-oauth",
+      model: "claude-opus-5",
+    });
+
+    expect(result.providerId).toBe("claude-oauth");
+    expect(result.agent).toBe("claude");
+    expect(result.model).toBe("claude-opus-5");
+  });
 });

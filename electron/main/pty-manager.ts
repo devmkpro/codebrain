@@ -417,48 +417,27 @@ function prependWindowsRuntimePath(resolvedBinary: string): void {
   } catch {}
 }
 
-export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { binary: string; args: string[]; fellBackToOpenClaude: boolean } {
+export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { binary: string; args: string[]; fellBackToOpenClaude: boolean; unavailable: boolean } {
   const defaults = AGENT_DEFAULTS[agent] ?? { binary: agent, args: [] };
   const binary = defaults.binary;
 
   if (agent === "shell") {
     const resolvedShell = which(binary) ?? binary;
-    return { binary: resolvedShell, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
+    return { binary: resolvedShell, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude: false, unavailable: false };
   }
 
   let resolved = which(binary);
-  let fellBackToOpenClaude = false;
-  if (!resolved && agent === "claude") {
-    // Claude CLI not installed — fall back to OpenClaude
-    resolved = which("openclaude");
-    if (resolved) {
-      fellBackToOpenClaude = true;
-      log.warn(`[pty] "claude" binary not found, falling back to "openclaude": ${resolved}`);
-    }
-  }
+  const fellBackToOpenClaude = false;
   if (!resolved && agent === "cursor") {
     // Cursor CLI installs as "cursor-agent" (Windows installer to %LOCALAPPDATA%\cursor-agent\)
     // or as "agent" subcommand on some platforms. Try "agent" as fallback.
     resolved = which("agent");
     if (resolved) log.info(`[pty] cursor: "cursor-agent" not found, using "agent": ${resolved}`);
   }
-  // Strip claude-specific CLI flags when falling back to openclaude
-  // OpenClaude handles provider routing via env vars, not CLI flags
-  if (fellBackToOpenClaude && extraArgs.length > 0) {
-    const filtered: string[] = [];
-    for (let i = 0; i < extraArgs.length; i++) {
-      if (extraArgs[i] === "--provider" || extraArgs[i] === "--model" || extraArgs[i] === "--permission-mode") {
-        i++; // skip the flag value
-        continue;
-      }
-      filtered.push(extraArgs[i]);
-    }
-    extraArgs = filtered;
-  }
   if (!resolved) {
     const fallback = defaultShell();
-    log.warn(`[pty] binary "${binary}" not found in PATH. Falling back to shell: ${fallback}`);
-    return { binary: fallback, args: [], fellBackToOpenClaude: false };
+    log.warn(`[pty] binary "${binary}" not found in PATH.`);
+    return { binary: fallback, args: [], fellBackToOpenClaude: false, unavailable: true };
   }
 
   if (IS_WIN) {
@@ -497,7 +476,7 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
             if (jsScript) {
               const nodeBinary = which("node") ?? process.env["NODE"] ?? "node";
               log.info(`[pty] Non-native .exe, using node script: ${nodeBinary} ${jsScript}`);
-              return { binary: nodeBinary, args: [jsScript, ...defaults.args, ...extraArgs], fellBackToOpenClaude };
+              return { binary: nodeBinary, args: [jsScript, ...defaults.args, ...extraArgs], fellBackToOpenClaude, unavailable: false };
             }
             log.warn(`[pty] Non-native .exe and no .cmd/.js fallback found: ${resolved}`);
           }
@@ -527,7 +506,7 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
           if (nodefs.existsSync(ps1Resolved)) {
             const powershell = `${process.env["SystemRoot"] ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
             log.info(`[pty] Windows PowerShell shim: ${resolved} → powershell ${ps1Resolved}`);
-            return { binary: powershell, args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1Resolved, ...defaults.args, ...extraArgs], fellBackToOpenClaude: false };
+            return { binary: powershell, args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1Resolved, ...defaults.args, ...extraArgs], fellBackToOpenClaude: false, unavailable: false };
           }
         }
       } catch {}
@@ -538,7 +517,7 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
       const nodeShim = resolveWindowsNodeShim(resolved, [...defaults.args, ...extraArgs]);
       if (nodeShim) {
         log.info(`[pty] Windows node shim: ${resolved} → node ${nodeShim.args[0]}`);
-        return { ...nodeShim, fellBackToOpenClaude: false };
+        return { ...nodeShim, fellBackToOpenClaude: false, unavailable: false };
       }
 
       // Step 3: fallback — run via cmd.exe using `call "path" args` pattern.
@@ -546,11 +525,11 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
       const comspec = process.env["COMSPEC"] ?? "cmd.exe";
       const cmdArgs = buildWindowsCmdLine(resolved, [...defaults.args, ...extraArgs]);
       log.info(`[pty] Windows cmd.exe fallback: ${comspec} ${cmdArgs.join(" ")}`);
-      return { binary: comspec, args: cmdArgs, fellBackToOpenClaude: false };
+      return { binary: comspec, args: cmdArgs, fellBackToOpenClaude: false, unavailable: false };
     }
   }
 
-  return { binary: resolved, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude };
+  return { binary: resolved, args: [...defaults.args, ...extraArgs], fellBackToOpenClaude, unavailable: false };
 }
 
 export function isTerminalAgent(agent: string): boolean {

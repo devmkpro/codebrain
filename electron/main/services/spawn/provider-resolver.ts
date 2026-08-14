@@ -58,11 +58,17 @@ export function resolveProvider(
     const registryModels = registryTemplate?.models ?? [];
     const anthropicTemplate = PROVIDER_REGISTRY.find((t) => t.id === "anthropic");
     const anthropicModels = anthropicTemplate?.models ?? [];
+    // Model refresh persists the OAuth catalog in the provider store. Keeping
+    // that list here is essential: otherwise a newly available Claude model
+    // (for example Opus 5) is treated as foreign and gets rerouted to a
+    // generic Anthropic/OpenClaude provider during validation.
+    const savedModels = ctx.providerStore.listFull()
+      .find((item: any) => item.id === "claude-oauth")?.models ?? [];
     provider = {
       id: "claude-oauth",
       type: "anthropic-compat",
       host: "claude",
-      models: [...new Set([...registryModels, ...anthropicModels])],
+      models: [...new Set([...savedModels, ...registryModels, ...anthropicModels])],
       env: {},
     };
     log.info(`[resolveProvider] claude-oauth → agent="claude", ${provider.models.length} models`);
