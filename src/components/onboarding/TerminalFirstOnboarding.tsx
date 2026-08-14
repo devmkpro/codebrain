@@ -16,7 +16,6 @@ import {
   X,
 } from "lucide-react";
 import { navigate } from "../../lib/router";
-import { useFlagsStore } from "../../stores/flags-store";
 import { useNavStore } from "../../stores/nav-store";
 import { useOnboardingStore } from "../../stores/onboarding-store";
 import { useSpecStore } from "../../stores/spec-store";
@@ -95,7 +94,6 @@ export function TerminalFirstOnboarding() {
   const step = useOnboardingStore((state) => state.step);
   const setStep = useOnboardingStore((state) => state.setStep);
   const finish = useOnboardingStore((state) => state.finish);
-  const setFlag = useFlagsStore((state) => state.setFlag);
   const tabs = useNavStore((state) => state.tabs);
   if (!visible) return null;
 
@@ -110,11 +108,6 @@ export function TerminalFirstOnboarding() {
       navigate("/workspaces");
     }
   };
-  const useClassic = () => {
-    finish();
-    setFlag("shellV2", false);
-  };
-
   return (
     <div className="fixed inset-0 flex items-center justify-center p-4 bg-cb-overlay" style={{ zIndex: "var(--cb-z-modal)" }} role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
       <div className="w-full max-w-[820px] bg-cb-bg-1 border border-cb-line-2 rounded-cb-2 shadow-2xl overflow-hidden">
@@ -122,7 +115,6 @@ export function TerminalFirstOnboarding() {
         <div className="flex border-b border-cb-line-0 px-4">{STEPS.map((label, index) => <button key={label} onClick={() => setStep(index)} className={`flex-1 py-2 text-2xs border-b ${step === index ? "text-cb-accent-bright border-cb-accent" : "text-cb-fg-3 border-transparent"}`}><span className="mr-1.5">0{index + 1}</span>{label}</button>)}</div>
         <main className="p-5 min-h-[390px]">{step === 0 ? <WelcomeStep /> : step === 1 ? <NavigationStep /> : <SpecKitStep />}</main>
         <footer className="min-h-14 px-4 py-3 border-t border-cb-line-0 flex flex-wrap items-center gap-2">
-          {step === 1 && <button onClick={useClassic} className="text-2xs text-cb-fg-3 hover:text-cb-fg-0 underline underline-offset-2">usar interface clássica</button>}
           <div className="flex-1" />
           {step > 0 && <button onClick={() => setStep(step - 1)} className="h-cell px-3 flex items-center gap-1 text-xs text-cb-fg-2 hover:text-cb-fg-0 border border-cb-line-1 rounded-cb-1"><ChevronLeft size={12}/> voltar</button>}
           {step < 2 ? <button onClick={() => setStep(step + 1)} className="h-cell px-4 flex items-center gap-1 bg-cb-accent text-cb-bg-0 text-xs font-semibold rounded-cb-1">continuar <ArrowRight size={12}/></button> : <><button onClick={finish} className="h-cell px-3 text-xs text-cb-fg-2 hover:text-cb-fg-0">concluir tour</button><button onClick={openSpecKit} className="h-cell px-4 flex items-center gap-2 bg-cb-accent text-cb-bg-0 text-xs font-semibold rounded-cb-1"><FileCode2 size={13}/> abrir Spec Kit</button></>}

@@ -17,7 +17,6 @@ import { useNavStore }   from '../../stores/nav-store';
 import { ClarifyPrompt } from '../clarify/ClarifyPrompt';
 import { CommandPalette } from '../palette/CommandPalette';
 import { useGlobalShortcuts } from '../palette/usePaletteShortcut';
-import { useFlag } from '../../stores/flags-store';
 import { ShellV2 } from '../shell/ShellV2';
 import { PaneLauncher } from '../panes/PaneLauncher';
 
@@ -44,24 +43,22 @@ export function AppShell({ whatsNewOpen, closeWhatsNew, appVersion, workspaceToa
   const tabs         = useNavStore(s => s.tabs) as any[];
   const activeTabIdx = useNavStore(s => s.activeTabIndex);
 
-  // Shell terminal-first é o padrão. A flag agora existe apenas como saída
-  // temporária para recuperar uma instalação caso haja regressão visual.
-  const shellV2 = useFlag('shellV2');
-
   // O palette é navegação estrutural do shell v2, não um extra opcional.
-  // Preferências antigas podem ter commandPalette=false; no shell novo isso
-  // não pode desativar o Ctrl+K prometido pela própria interface.
-  const paletteEnabled = useFlag('commandPalette') || shellV2;
+  // Preferências antigas não podem desativar o Ctrl+K prometido pela interface.
+  const paletteEnabled = true;
   useGlobalShortcuts(paletteEnabled);
-  if (shellV2) {
-    return (
-      <>
-        <ShellV2 appVersion={appVersion} />
-        <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} currentVersion={appVersion} />
-      </>
-    );
-  }
+  // Terminal-first é o único shell de produto. A interface clássica fica no
+  // código apenas durante a migração de componentes, mas não é mais acessível
+  // por flags, preferências antigas ou parâmetros de URL.
+  return (
+    <>
+      <ShellV2 appVersion={appVersion} />
+      <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} currentVersion={appVersion} />
+    </>
+  );
 
+  // Legacy shell retained below while its component-level routes are migrated.
+  // It is deliberately unreachable from the running application.
   return (
     <RouterProvider>
       <div className="flex flex-col bg-[#0B0B0E] text-slate-200 overflow-hidden cb-surface" style={{ height: '100%' }}>

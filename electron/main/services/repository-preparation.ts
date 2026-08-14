@@ -77,7 +77,12 @@ export function getRepositoryPreparationStatus(workspace: string): RepositoryPre
     if (!fs.statSync(root).isDirectory()) return { ok: false, initialized: false, workspace: root, stack: [], commands: [], skills: [], files: [], git: false, error: "Workspace inválido." };
     const details = detect(root);
     const files = PREPARATION_FILES.filter((file) => fs.existsSync(path.join(root, file)));
-    return { ok: true, initialized: fs.existsSync(path.join(root, ".codebrain", "baseline.json")), workspace: root, ...details, files, git: Boolean(git(root, ["rev-parse", "--is-inside-work-tree"])) };
+    // The preparation agent writes human-readable context files. It may
+    // deliberately avoid the machine baseline, so the recommendation must
+    // recognise its completed work instead of appearing forever.
+    const initialized = fs.existsSync(path.join(root, ".codebrain", "baseline.json"))
+      || fs.existsSync(path.join(root, ".codebrain", "context.md"));
+    return { ok: true, initialized, workspace: root, ...details, files, git: Boolean(git(root, ["rev-parse", "--is-inside-work-tree"])) };
   } catch (error) {
     return { ok: false, initialized: false, workspace, stack: [], commands: [], skills: [], files: [], git: false, error: error instanceof Error ? error.message : String(error) };
   }
