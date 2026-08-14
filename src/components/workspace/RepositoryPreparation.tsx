@@ -27,9 +27,25 @@ export function RepositoryPreparation({ workspacePath }: { workspacePath: string
     setDismissed(false);
     const preparationStatus = window.codeBrainApp?.workspace?.preparationStatus;
     if (!preparationStatus) return;
-    preparationStatus(workspacePath)
-      .then((result) => setStatus(result))
-      .catch(() => setStatus(null));
+    let cancelled = false;
+    const refresh = () => {
+      preparationStatus(workspacePath)
+        .then((result) => {
+          if (cancelled) return;
+          setStatus(result);
+          if (result?.initialized) {
+            setOpen(false);
+            setDismissed(true);
+          }
+        })
+        .catch(() => { if (!cancelled) setStatus(null); });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 8_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [workspacePath]);
 
   React.useEffect(() => {

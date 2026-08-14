@@ -509,13 +509,17 @@ function createMCPBridge(ptyManager, opts = {}) {
   // pane_spawned → upsertAgent + update context files
   // pane_exited → updateAgentStatus + update context files
   if (opts.hooksManager) {
-    opts.hooksManager.on("pane_spawned", ({ paneId, agent, model, providerId }) => {
+    opts.hooksManager.on("pane_spawned", ({ paneId, data }) => {
       try {
         const store = opts.memoryStore;
         if (!store) return;
+        const payload = data || {};
+        const agent = payload.agent;
+        const model = payload.model;
+        const providerId = payload.providerId;
         const label = paneLabels.get(paneId) || null;
         const role = roleMap.get(paneId) || "worker";
-        const workspace = opts.getCurrentWorkspacePath?.() || null;
+        const workspace = payload.cwd || opts.getCurrentWorkspacePath?.() || null;
         store.upsertAgent({ paneId, label, role, model, providerId, status: "active", workspace });
         // NOTE: Removed sendAgentNotification on pane_spawned — broadcasting to all
         // panes caused agents to react and loop. Agents discover peers via pane_list().
@@ -525,13 +529,16 @@ function createMCPBridge(ptyManager, opts = {}) {
         }
       } catch {}
     });
-    opts.hooksManager.on("pane_exited", ({ paneId }) => {
+    opts.hooksManager.on("pane_exited", ({ paneId, data }) => {
       try {
         const store = opts.memoryStore;
         if (!store) return;
+        const actor = store.actorGet?.({ paneId })?.actor;
+        const workspace = actor?.workspace || opts.getCurrentWorkspacePath?.() || null;
+        const exitCode = Number(data?.exitCode ?? 0);
         store.updateAgentStatus({ paneId, status: "exited" });
         // Update actor registry on exit
-        try { store.actorUpdateStatus?.({ paneId, status: 'idle', lastOutcome: 'success' }); } catch {}
+        try { store.actorUpdateStatus?.({ paneId, status: 'idle', lastOutcome: exitCode === 0 ? 'success' : 'error', lastError: exitCode === 0 ? undefined : `process exited with code ${exitCode}` }); } catch {}
         // NOTE: Removed sendAgentNotification on pane_exited — broadcasting caused
         // other agents to react unnecessarily. The orchestrator detects exits via pane_list().
         // Update context files to remove exited agent

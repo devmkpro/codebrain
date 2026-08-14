@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain } from "electron";
-import type { AppContext } from "../context";
+import { safeSend, type AppContext } from "../context";
 import { spawnPaneInternal } from "../services/pane-spawn";
 import { createDetachedPaneWindow } from "../window";
 
@@ -27,7 +27,25 @@ export function registerPaneHandlers(ctx: AppContext): void {
   });
 
   ipcMain.handle("pty:kill", async (_event, paneId: string) => {
-    try { ctx.ptyManager.kill(paneId); return { ok: true }; }
+    try {
+      const config = ctx.paneConfigs.get(paneId);
+      const actor = ctx.memoryStore?.actorGet?.({ paneId })?.actor;
+      ctx.ptyManager.kill(paneId);
+      // PtyManager.kill removes the in-memory PTY immediately. Do not wait
+      // for node-pty's eventual exit callback to reconcile the durable actor
+      // registry; otherwise the operations board can keep a closed pane as
+      // running until a later restart.
+      ctx.memoryStore?.actorUpdateStatus?.({
+        paneId,
+        status: "idle",
+        lastOutcome: "cancelled",
+        lastError: undefined,
+      });
+      ctx.memoryStore?.updateAgentStatus?.({ paneId, status: "exited" });
+      ctx.hooksManager.fire("worker_stopped", { agent: actor?.agent || config?.agent, reason: "user_closed" }, paneId);
+      safeSend(ctx, "operations:updated", { workspace: actor?.workspace || config?.cwd || ctx.currentWorkspacePath, at: Date.now() });
+      return { ok: true };
+    }
     catch (err) { return { ok: false, error: String(err) }; }
   });
 

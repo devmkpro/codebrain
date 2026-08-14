@@ -1758,6 +1758,21 @@ function createMemoryStore(dbPath) {
     },
 
     /**
+     * Return the durable communication stream for a workspace. The renderer
+     * uses this as the operational timeline; unlike getAgentMessages it is not
+     * tied to one recipient pane.
+     */
+    listAgentMessages({ workspace, limit = 100 } = {}) {
+      const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 500));
+      const rows = db.prepare(`
+        SELECT * FROM agent_messages
+        WHERE (@workspace IS NULL OR workspace = @workspace)
+        ORDER BY created_at DESC LIMIT @limit
+      `).all({ workspace: workspace || null, limit: safeLimit });
+      return { ok: true, messages: rows, count: rows.length };
+    },
+
+    /**
      * Mark a message as read.
      * @param {{ id: string }} opts
      */

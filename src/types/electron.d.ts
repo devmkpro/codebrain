@@ -1,5 +1,7 @@
 // Window API exposed by the Electron preload script via contextBridge
 
+import type { OperationsSnapshot } from "./operations";
+
 export interface AuthStatus {
   authenticated: boolean;
   email?: string;
@@ -390,6 +392,10 @@ export interface CodebrainApp {
     list: (args: { paneId: string; workspace?: string; limit?: number }) => Promise<{ ok: boolean; messages?: AgentMessage[]; count?: number; error?: string }>;
     send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => Promise<{ ok: boolean; id?: string; error?: string }>;
     onUpdated: (callback: (paneId: string) => void) => () => void;
+  };
+  operations: {
+    snapshot: (args?: { workspace?: string; limit?: number }) => Promise<OperationsSnapshot>;
+    onUpdated: (callback: (info: { workspace?: string; at: number }) => void) => () => void;
   };
   spec: {
     list: (args: { workspace: string }) => Promise<any>;

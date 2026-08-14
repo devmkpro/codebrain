@@ -179,6 +179,15 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     },
   },
 
+  operations: {
+    snapshot: (args?: { workspace?: string; limit?: number }) => ipcRenderer.invoke("operations:snapshot", args ?? {}),
+    onUpdated: (callback: (info: { workspace?: string; at: number }) => void) => {
+      const handler = (_evt: unknown, info: { workspace?: string; at: number }) => callback(info);
+      ipcRenderer.on("operations:updated", handler);
+      return () => ipcRenderer.off("operations:updated", handler);
+    },
+  },
+
   spec: {
     list: (args: { workspace: string }) => ipcRenderer.invoke("spec:list", args),
     create: (args: { workspace: string; answers: Record<string, string> }) => ipcRenderer.invoke("spec:create", args),

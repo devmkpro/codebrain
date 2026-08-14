@@ -14,9 +14,109 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "1.15.9",
-    "date": "em desenvolvimento",
+    "version": "1.20.2",
+    "date": "agosto 2026",
     "highlights": [
+      {
+        "kind": "fix",
+        "text": "derive CLI from selected provider"
+      }
+    ]
+  },
+  {
+    "version": "1.20.1",
+    "date": "agosto 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "enforce terminal-first and preparation state"
+      },
+      {
+        "kind": "fix",
+        "text": "preserve selected OAuth model CLI"
+      }
+    ]
+  },
+  {
+    "version": "1.20.0",
+    "date": "agosto 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add guided quick example"
+      },
+      {
+        "kind": "fix",
+        "text": "preserve requested interface scale"
+      },
+      {
+        "kind": "feat",
+        "text": "launch preparation agent"
+      },
+      {
+        "kind": "fix",
+        "text": "make remote panel follow light mode"
+      },
+      {
+        "kind": "feat",
+        "text": "prepare repository from detected stack"
+      },
+      {
+        "kind": "fix",
+        "text": "sync native titlebar overlay"
+      },
+      {
+        "kind": "fix",
+        "text": "submit agent messages to recipients"
+      },
+      {
+        "kind": "fix",
+        "text": "remove light viewport black gap"
+      },
+      {
+        "kind": "fix",
+        "text": "keep frameless windows above taskbar"
+      },
+      {
+        "kind": "fix",
+        "text": "replace IPC handlers on reload"
+      },
+      {
+        "kind": "fix",
+        "text": "restore light layout and package memory path"
+      },
+      {
+        "kind": "feat",
+        "text": "refresh provider model catalog"
+      },
+      {
+        "kind": "fix",
+        "text": "guard unlink IPC response"
+      },
+      {
+        "kind": "fix",
+        "text": "expose editable current model catalogs"
+      },
+      {
+        "kind": "feat",
+        "text": "show MCP route status"
+      },
+      {
+        "kind": "feat",
+        "text": "close and tile agents from rail"
+      },
+      {
+        "kind": "feat",
+        "text": "add safe unlink actions"
+      },
+      {
+        "kind": "fix",
+        "text": "sync agent replies with timeline"
+      },
+      {
+        "kind": "feat",
+        "text": "sync model catalogs automatically"
+      },
       {
         "kind": "fix",
         "text": "pin requested native agent provider"

@@ -107,6 +107,10 @@ Fase 1. Se o usuário disser "não" ou der outro URL, pare.
 10. **NUNCA** spawnar squad/sub-agente. Executar **TUDO** no próprio pane.
     Se o usuário insistir em squad, recusar e explicar que este skill é
     **single-agent** por design (o agente tem todas as ferramentas necessárias).
+11. **ENTRADA LITERAL:** se o usuário pedir para preencher ou digitar um valor,
+    usar exatamente o texto fornecido em browser_fill, browser_fill_form ou
+    browser_type. Nunca converter para Base64, URL encoding, hash ou outro
+    formato; o valor visível no campo deve ser idêntico ao pedido do usuário.
 
 ---
 

@@ -92,7 +92,7 @@ export interface SpawnPaneConfig {
 export async function spawnPaneInternal(
   ctx: AppContext,
   config: SpawnPaneConfig,
-): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; error?: string }> {
+): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; missionId?: string; error?: string }> {
   try {
     // Smart cwd resolution: explicit > most active pane workspace > global > home
     let cwd = config.cwd;
@@ -110,6 +110,29 @@ export async function spawnPaneInternal(
       } else {
         cwd = ctx.currentWorkspacePath;
       }
+    }
+
+    // The renderer's mission store is local UI state. The operational backend
+    // needs a durable mission id so actors, tasks, handoffs and messages can be
+    // joined after a restart. Reuse an explicit backend id, otherwise adopt the
+    // active mission for this workspace or create one on first spawn.
+    let operationalMissionId = config.missionId?.startsWith("mission_") ? config.missionId : undefined;
+    try {
+      const store = (ctx as any).memoryStore;
+      if (store?.resolveActiveMission && !operationalMissionId) {
+        const active = store.resolveActiveMission({ workspace: cwd });
+        operationalMissionId = active?.mission?.id;
+      }
+      if (!operationalMissionId && store?.createMission) {
+        const created = store.createMission({
+          title: `Workspace · ${path.basename(cwd || "projeto")}`,
+          summary: "Missão operacional criada automaticamente pelo primeiro pane.",
+          workspace: cwd,
+        });
+        operationalMissionId = created?.id;
+      }
+    } catch (error) {
+      log.warn("[spawnPaneInternal] backend mission resolution failed:", error instanceof Error ? error.message : String(error));
     }
 
     // ── Provider resolution (delegated to provider-resolver module) ────────────
@@ -990,7 +1013,7 @@ export async function spawnPaneInternal(
       squadOrchestratorWorkerId: config.squadOrchestratorWorkerId,
       taskId: config.taskId,
       activityId: config.activityId,
-      missionId: config.missionId,
+      missionId: operationalMissionId,
     });
     ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
 
@@ -1003,11 +1026,11 @@ export async function spawnPaneInternal(
         parentPaneId: config.parentPaneId,
         agent,
         cwd,
-        workspace: ctx.currentWorkspacePath,
+        workspace: cwd,
         providerId: providerId ?? undefined,
         model: model ?? undefined,
         role: config.role || "worker",
-        missionId: config.missionId,
+        missionId: operationalMissionId,
       });
     } catch {}
 
@@ -1037,6 +1060,7 @@ export async function spawnPaneInternal(
       providerId: providerId ?? undefined,
       model,
       cwd,
+      missionId: operationalMissionId,
     };
   } catch (err) {
     // Track provider health — failure

@@ -33,19 +33,14 @@ function createNativeChromeHandlers(cdpClient) {
   }
 
   /**
-   * Helper: encode a string to base64 and produce a JS expression that
-   * decodes it back to the original UTF-8 string in the browser.
+   * Return a JavaScript string literal for a user-provided form value.
    *
-   * The old pattern `decodeURIComponent(atob(b64))` BREAKS multi-byte
-   * UTF-8 chars (accents, emojis) because atob() returns Latin-1 bytes
-   * and decodeURIComponent expects percent-encoded sequences.
-   *
-   * Fix: percent-encode each byte before calling decodeURIComponent.
+   * Form text must reach the page exactly as requested. Do not base64-encode
+   * values here: that is only appropriate for binary/file transport, and
+   * would make a visible field contain the encoded payload.
    */
-  function _safeEncodeForJS(value) {
-    const b64 = Buffer.from(String(value ?? ''), 'utf8').toString('base64');
-    // Build JS that does: atob(b64) → raw latin1 string → percent-encode each byte → decodeURIComponent
-    return `(function(s){var r='';for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);r+='%'+('0'+c.toString(16)).slice(-2)}return decodeURIComponent(r)})("${b64}")`;
+  function _jsStringLiteral(value) {
+    return JSON.stringify(String(value ?? ""));
   }
 
   /**
@@ -270,7 +265,7 @@ function createNativeChromeHandlers(cdpClient) {
      * Handles all input types correctly with proper DOM events.
      */
     async formInput({ ref, value }) {
-      const encodedExpr = _safeEncodeForJS(value);
+      const valueExpr = _jsStringLiteral(value);
       const script = `
         (function() {
           if (!window.__claudeElementMap || !window.__claudeElementMap[${JSON.stringify(ref)}]) {
@@ -284,7 +279,7 @@ function createNativeChromeHandlers(cdpClient) {
           if (el.disabled) return { error: 'Element ' + ${JSON.stringify(ref)} + ' is disabled.' };
           if (el.readOnly) return { error: 'Element ' + ${JSON.stringify(ref)} + ' is readonly.' };
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          var v = ${encodedExpr};
+          var v = ${valueExpr};
           if (el instanceof HTMLSelectElement) {
             const opts = Array.from(el.options);
             const idx = opts.findIndex(o => o.value === String(v) || o.text === String(v));
@@ -432,7 +427,7 @@ function createNativeChromeHandlers(cdpClient) {
 
     async fill(selector, value, clearFirst) {
       // Single Runtime.evaluate: scroll + focus + set value + dispatch events
-      const encodedExpr = _safeEncodeForJS(value);
+      const valueExpr = _jsStringLiteral(value);
       const result = await evalJSON(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) return { ok: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
@@ -441,7 +436,7 @@ function createNativeChromeHandlers(cdpClient) {
         el.scrollIntoView({ block: 'center', behavior: 'instant' });
         el.focus();
         if (${!!clearFirst}) { el.value = ''; }
-        el.value = ${encodedExpr};
+        el.value = ${valueExpr};
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
         return { ok: true };

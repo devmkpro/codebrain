@@ -186,6 +186,13 @@ mcp__codebrain__browser_fill_form(
 mcp__codebrain__browser_click(selector: "button[type=submit]", paneId: "ABC123")
 ```
 
+**Regra de entrada literal (obrigatória):** quando o usuário pedir um valor
+para digitar ou preencher, envie exatamente esse texto para browser_fill,
+browser_fill_form ou browser_type. Nunca aplique Base64, URL encoding,
+hashing, transliteração ou qualquer outra transformação visível ao campo.
+Codificação só é permitida para transporte binário de arquivos, nunca para
+valores de formulário.
+
 ### Coordinate-Based Actions (CDP Mode Only)
 
 | Tool | Use case |

@@ -119,14 +119,37 @@ export function App() {
     return subscribeProviderUpdates();
   }, []);
   React.useEffect(() => {
+    const refreshNotifications = () => {
+      void useNotificationsStore.getState().fetchFromDB();
+    };
+    refreshNotifications();
+    const interval = window.setInterval(refreshNotifications, 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+  React.useEffect(() => {
     const off = window.codeBrainApp?.pty.onOutput?.((_paneId, data, _echo) => {
+      const livePane = usePanesStore.getState().panes.find((pane: any) => pane.id === _paneId);
+      if (livePane && ["booting", "idle"].includes(livePane.status)) {
+        usePanesStore.getState().updatePane(_paneId, { status: "running" });
+      }
       const url = extractUrl(data);
       if (url) {
         const current = useBrowserStore.getState().detectedUrl;
         if (current !== url) useBrowserStore.getState().setDetected(url);
       }
     });
-    return () => off?.();
+    const offExit = window.codeBrainApp?.pty.onExit?.((_paneId, exitCode) => {
+      const pane = usePanesStore.getState().panes.find((item: any) => item.id === _paneId);
+      if (!pane) return;
+      usePanesStore.getState().updatePane(_paneId, { status: "exited", exitCode, endedAt: Date.now() });
+      const workspaceName = basename(pane.workspacePath || pane.cwd || "workspace");
+      useNotificationsStore.getState().push(
+        "Sessão finalizada",
+        `${pane.agent || "agente"} · ${workspaceName}${typeof exitCode === "number" ? ` · código ${exitCode}` : ""}`,
+        exitCode === 0 ? "success" : "warning",
+      );
+    });
+    return () => { off?.(); offExit?.(); };
   }, []);
   const reconcileLivePanes = React.useCallback(async () => {
     const livePanes = await window.codeBrainApp?.pty.list?.();
