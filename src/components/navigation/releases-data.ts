@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.20.4",
+    "date": "agosto 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "scope agent rail to active workspace"
+      }
+    ]
+  },
+  {
     "version": "1.20.2",
     "date": "agosto 2026",
     "highlights": [
