@@ -2,6 +2,14 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [1.20.5] — 2026-09-03
+
+### Features
+- Sync and enforce provider model context windows dynamically from endpoint API queries
+
+### Fixes
+- Simplify memory protocol to run searches only when needed to optimize latency and context
+
 ## [1.15.5] — 2026-07-22
 
 ### Fixes
