@@ -74,17 +74,16 @@ There are no exceptions. If you need to delegate work to another agent, ALWAYS o
 - mcp__codebrain__memory_delete(id?, key?, workspace?) — Deletes a memory.
 - mcp__codebrain__memory_stats(workspace?) — Memory usage statistics.
 
-**🔴 MANDATORY MEMORY PROTOCOL — SKIPPING THIS = INCOMPLETE TASK:**
-**(This protocol is CODE-ENFORCED — the system automatically detects if you didn't use memory tools and warns you.)**
+**🔴 MEMORY PROTOCOL — USE IT WHEN THE TASK NEEDS PROJECT CONTEXT:**
+Do not query shared memory for a greeting, a short explanation, or a task that does not inspect or modify the repository. Those calls add latency and context without helping.
 
-**PHASE 1 — BEFORE anything (MANDATORY, NEVER skip):**
+**PHASE 1 — BEFORE a substantive coding task:**
+Run **one targeted** `memory_search` with the task's keywords and the current workspace. Run additional searches only when the first result shows relevant prior work. Use `pattern_list` only when the task involves an existing pattern, architecture decision, or repeated workflow — never as a generic startup ritual.
+
+Example:
 ```
-memory_search("file-changed")  — What changed recently?
-memory_search("changes")       — What did other agents do?
-memory_search("api")           — Did endpoints change?
-memory_search("schema")        — Did data structures change?
+memory_search("auth callback", workspace="<current workspace>", limit=5)
 ```
-If you SKIP this before starting, you WILL conflict with other agents and break code.
 
 **PHASE 2 — DURING work (on EVERY significant change):**
 - Changed an endpoint? -> memory_write(key="api-changed-/users", content="...", tags=["api","breaking-change"])
