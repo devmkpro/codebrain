@@ -258,7 +258,14 @@ export function ProviderForm({
               Models
             </p>
             {isOpenRouter ? (
-              <OpenRouterModelPicker selectedModels={models} onChange={setModels} />
+              <OpenRouterModelPicker
+                selectedModels={models}
+                onChange={setModels}
+                onContextWindows={windows => onChange({
+                  ...provider,
+                  modelContextWindows: { ...(provider.modelContextWindows ?? {}), ...windows },
+                })}
+              />
             ) : modelsBlock}
             <div className="flex gap-2 pt-2">
               <button onClick={runHealthCheck} disabled={healthChecking || !env[urlKey] || !env[tokenKey]} className="flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] bg-emerald-900/30 border border-emerald-700/40 text-emerald-400 hover:bg-emerald-800/40 hover:text-emerald-300 disabled:opacity-40 transition-colors cursor-pointer">

@@ -56,6 +56,7 @@ export function PaneLauncher() {
         cwd: workspace,
         providerId: target.providerId,
         model: target.model,
+        contextWindow: target.contextWindow,
         permissionMode,
         ...(Object.keys(target.env).length ? { env: target.env } : {}),
       });
@@ -67,6 +68,7 @@ export function PaneLauncher() {
         workspacePath: workspace,
         providerId: target.providerId,
         model: target.model,
+        contextWindow: target.contextWindow,
         permissionMode,
         externallySpawned: true,
       });

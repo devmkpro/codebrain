@@ -4,6 +4,8 @@ export interface Provider {
   type?: string;
   host?: string;
   models?: string[];
+  /** Context window in tokens, keyed by exact model ID when known. */
+  modelContextWindows?: Record<string, number>;
   env?: Record<string, string>;
   baseUrl?: string;
   [key: string]: unknown;

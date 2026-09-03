@@ -65,6 +65,7 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
       cwd: activeWorkspace,
       providerId: target.providerId,
       model: target.model,
+      contextWindow: target.contextWindow,
       permissionMode,
       ...(envKeys.length > 0 ? { env: target.env } : {}),
     }).then(result => {
@@ -72,7 +73,7 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
         notify("Erro ao abrir pane", result?.error ?? "spawn retornou erro", "error");
         return;
       }
-      addPane({ id: result.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: target.providerId, model: target.model, permissionMode, externallySpawned: true });
+      addPane({ id: result.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: target.providerId, model: target.model, contextWindow: target.contextWindow, permissionMode, externallySpawned: true });
     }).catch(err => {
       notify("Erro ao abrir pane", String(err), "error");
     });
@@ -123,10 +124,10 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
         providerDefaultModels,
       });
       const role = resolveRole(w.role);
-      const workerResult = await window.codeBrainApp?.pty.spawn({ agent: target.agent, cwd: activeWorkspace, activityId, providerId: target.providerId, model: target.model, permissionMode, role });
+      const workerResult = await window.codeBrainApp?.pty.spawn({ agent: target.agent, cwd: activeWorkspace, activityId, providerId: target.providerId, model: target.model, contextWindow: target.contextWindow, permissionMode, role });
       if (!workerResult?.ok || !workerResult.paneId) continue;
       workerPaneIds.push(workerResult.paneId);
-      addPane({ id: workerResult.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: target.providerId, model: target.model, externallySpawned: true, label: w.role } as any);
+      addPane({ id: workerResult.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: target.providerId, model: target.model, contextWindow: target.contextWindow, externallySpawned: true, label: w.role } as any);
     }
 
     if (workerPaneIds.length === 0) return;
@@ -160,14 +161,14 @@ ${JSON.stringify(workerConfig, null, 2)}
 
     const orchResult = await window.codeBrainApp?.pty.spawn({
       agent: orchTarget.agent, cwd: activeWorkspace, activityId, providerId: orchTarget.providerId,
-      model: orchTarget.model, permissionMode, sessionContext,
+      model: orchTarget.model, contextWindow: orchTarget.contextWindow, permissionMode, sessionContext,
       env: {
         SQUAD_WORKER_IDS: workerPaneIds.join(","),
         SQUAD_ACTIVITY_ID: activityId,
       },
     });
     if (orchResult?.ok && orchResult.paneId) {
-      addPane({ id: orchResult.paneId, agent: orchTarget.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: orchTarget.providerId, model: orchTarget.model, externallySpawned: true } as any);
+      addPane({ id: orchResult.paneId, agent: orchTarget.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, activityId, providerId: orchTarget.providerId, model: orchTarget.model, contextWindow: orchTarget.contextWindow, externallySpawned: true } as any);
     }
   };
 
@@ -178,24 +179,28 @@ ${JSON.stringify(workerConfig, null, 2)}
 
     for (const config of configs) {
       if (!config.providerId) continue;
-      const provider = providers.find(p => p.id === config.providerId);
       const preferredAgentForConfig = (() => { try { return localStorage.getItem('codebrain.preferredAgent') || undefined; } catch { return undefined; } })();
-      const isOpenRouterProv = provider?.type === "openai-compat" && ((provider?.id ?? "").startsWith("openrouter") || (provider?.baseUrl ?? "").toLowerCase().includes("openrouter"));
-      const agent = (isOpenRouterProv && preferredAgentForConfig === "claude") ? "claude" : (provider?.host ?? (provider?.type === "oauth" ? "claude" : "openclaude"));
       const validModel = resolveValidModel(config.providerId, config.model);
+      const target = resolveSpawnTarget({
+        providerId: config.providerId,
+        model: validModel,
+        providers,
+        preferredAgent: preferredAgentForConfig,
+        explicit: true,
+      });
 
       for (let i = 0; i < config.count; i++) {
         const label = config.label ? (config.count > 1 ? `${config.label} ${i + 1}` : config.label) : undefined;
         try {
           const result = await window.codeBrainApp?.pty.spawn({
-            agent, cwd: activeWorkspace, activityId,
-            providerId: config.providerId, model: validModel,
+            agent: target.agent, cwd: activeWorkspace, activityId,
+            providerId: target.providerId, model: target.model, contextWindow: target.contextWindow,
             permissionMode, label,
           });
           if (!result?.ok || !result.paneId) continue;
           addPane({
-            id: result.paneId, agent, cwd: activeWorkspace, workspacePath: activeWorkspace,
-            activityId, providerId: config.providerId, model: validModel,
+            id: result.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace,
+            activityId, providerId: target.providerId, model: target.model, contextWindow: target.contextWindow,
             missionId, externallySpawned: true,
           } as any);
         } catch (err) {

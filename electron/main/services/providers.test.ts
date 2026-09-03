@@ -95,8 +95,8 @@ describe("provider model discovery", () => {
   it("loads only tool-capable OpenRouter model IDs from the public catalog", async () => {
     const fetchMock = vi.fn(async () => jsonResponse({
       data: [
-        { id: "openai/gpt-5.6-sol" },
-        { id: "anthropic/claude-sonnet-5" },
+        { id: "openai/gpt-5.6-sol", context_length: 1000000 },
+        { id: "anthropic/claude-sonnet-5", context_length: 200000 },
         { id: "openai/text-embedding-3-small" },
       ],
     }));
@@ -108,7 +108,14 @@ describe("provider model discovery", () => {
       type: "openai-compat",
     });
 
-    expect(result).toEqual({ ok: true, models: ["openai/gpt-5.6-sol", "anthropic/claude-sonnet-5"] });
+    expect(result).toEqual({
+      ok: true,
+      models: ["openai/gpt-5.6-sol", "anthropic/claude-sonnet-5"],
+      modelContextWindows: {
+        "openai/gpt-5.6-sol": 1000000,
+        "anthropic/claude-sonnet-5": 200000,
+      },
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://openrouter.ai/api/v1/models?supported_parameters=tools",
       expect.objectContaining({ headers: expect.not.objectContaining({ Authorization: expect.anything() }) }),
@@ -117,7 +124,7 @@ describe("provider model discovery", () => {
 
   it("normalizes Gemini resource names", async () => {
     const fetchMock = vi.fn(async () => jsonResponse({
-      models: [{ name: "models/gemini-3.5-flash" }, { name: "models/text-embedding-004" }],
+      models: [{ name: "models/gemini-3.5-flash", inputTokenLimit: 1000000 }, { name: "models/text-embedding-004" }],
     }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -128,6 +135,7 @@ describe("provider model discovery", () => {
     });
 
     expect(result.models).toEqual(["gemini-3.5-flash"]);
+    expect(result.modelContextWindows).toEqual({ "gemini-3.5-flash": 1000000 });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=secret",
       expect.any(Object),

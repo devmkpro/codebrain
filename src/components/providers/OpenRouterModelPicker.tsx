@@ -10,9 +10,10 @@ interface OrModel {
 interface Props {
   selectedModels: string[];
   onChange: (models: string[]) => void;
+  onContextWindows?: (windows: Record<string, number>) => void;
 }
 
-export function OpenRouterModelPicker({ selectedModels, onChange }: Props) {
+export function OpenRouterModelPicker({ selectedModels, onChange, onContextWindows }: Props) {
   const [allModels, setAllModels] = React.useState<OrModel[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -28,6 +29,12 @@ export function OpenRouterModelPicker({ selectedModels, onChange }: Props) {
       const result = await (window as any).codeBrainApp?.providers?.listOpenRouterModels();
       if (result?.ok && result.models) {
         setAllModels(result.models);
+        const contextWindows = Object.fromEntries(
+          result.models
+            .filter((model: OrModel) => Number.isFinite(model.context_length) && model.context_length > 0)
+            .map((model: OrModel) => [model.id, model.context_length]),
+        );
+        if (Object.keys(contextWindows).length > 0) onContextWindows?.(contextWindows);
         setFetched(true);
       } else {
         setError(result?.error ?? "falha ao buscar modelos");

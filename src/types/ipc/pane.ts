@@ -2,6 +2,7 @@ export interface SpawnPaneConfig {
   agent?: string;
   providerId?: string;
   model?: string;
+  contextWindow?: number;
   cwd?: string;
   paneId?: string;
   args?: string[];
@@ -36,6 +37,7 @@ export interface PaneInfo {
   cwd: string;
   providerId?: string;
   model?: string;
+  contextWindow?: number;
   role?: string;
 }
 

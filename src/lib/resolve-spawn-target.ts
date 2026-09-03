@@ -9,6 +9,8 @@
 export interface SpawnTarget {
   providerId: string | undefined;
   model: string | undefined;
+  /** Provider-reported context window for the selected model. */
+  contextWindow?: number;
   agent: string;
   env: Record<string, string>;
 }
@@ -169,6 +171,7 @@ export function resolveSpawnTarget(opts: ResolveOpts & {
   return {
     providerId: nextProviderId,
     model: nextModel,
+    contextWindow: nextModel ? provider?.modelContextWindows?.[nextModel] : undefined,
     agent,
     env,
   };

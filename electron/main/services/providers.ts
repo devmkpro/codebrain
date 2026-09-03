@@ -269,7 +269,7 @@ export async function listModelsFromEndpoint(args: {
   baseUrl: string;
   apiKey: string;
   type: string;
-}): Promise<{ ok: boolean; models?: string[]; error?: string }> {
+}): Promise<{ ok: boolean; models?: string[]; modelContextWindows?: Record<string, number>; error?: string }> {
   const { baseUrl, type } = args;
   const apiKey = sanitizeApiKey(args.apiKey);
   const base = baseUrl.replace(/\/$/, '');
@@ -312,20 +312,44 @@ export async function listModelsFromEndpoint(args: {
     if (!response.ok) return { ok: false, error: `HTTP ${response.status}: ${response.statusText}` };
 
     const json = await response.json() as any;
-    let rawModels: Array<{ id?: string; name?: string }> = [];
+    let rawModels: Array<{
+      id?: string;
+      name?: string;
+      context_length?: number;
+      context_window?: number;
+      inputTokenLimit?: number;
+      input_token_limit?: number;
+      max_input_tokens?: number;
+      max_context_length?: number;
+    }> = [];
     if (Array.isArray(json)) rawModels = json;
     else if (Array.isArray(json.data)) rawModels = json.data;
     else if (Array.isArray(json.models)) rawModels = json.models;
 
+    const modelContextWindows: Record<string, number> = {};
     const models = [...new Set(rawModels
       .map((m: any) => {
         const raw: string = m.id || m.name || '';
         // Gemini returns "models/gemini-2.5-pro" — strip the prefix
-        return raw.startsWith('models/') ? raw.slice('models/'.length) : raw;
+        const id = raw.startsWith('models/') ? raw.slice('models/'.length) : raw;
+        // Providers use different names: OpenRouter uses context_length, while
+        // Gemini exposes inputTokenLimit. Keep only the model's input window;
+        // output-token limits are not context windows.
+        const contextLength = Number(
+          m.context_length
+          ?? m.context_window
+          ?? m.inputTokenLimit
+          ?? m.input_token_limit
+          ?? m.max_input_tokens
+          ?? m.max_context_length
+          ?? 0,
+        );
+        if (id && Number.isFinite(contextLength) && contextLength > 0) modelContextWindows[id] = contextLength;
+        return id;
       })
       .filter((id: string) => id && !isNonChatModel(id)))];
 
-    return { ok: true, models };
+    return { ok: true, models, ...(Object.keys(modelContextWindows).length > 0 ? { modelContextWindows } : {}) };
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -445,14 +469,22 @@ export async function syncProviderModels(
       failed.push({ providerId: provider.id, error: result.error || "Nenhum modelo retornado." });
       continue;
     }
+    const discoveredContextWindows = (result as any).modelContextWindows as Record<string, number> | undefined;
+    const hasNewContextWindows = Object.entries(discoveredContextWindows ?? {})
+      .some(([model, size]) => provider.modelContextWindows?.[model] !== size);
     const unchanged = JSON.stringify(provider.models ?? []) === JSON.stringify(models)
       && provider.modelsSyncSource === source
+      && !hasNewContextWindows
       && !(options.force && provider.modelsMode === "manual");
     if (!unchanged) {
       const resetNativeCatalog = options.force && ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot"].includes(provider.id);
+      const modelContextWindows = Object.keys(discoveredContextWindows ?? {}).length > 0
+        ? { ...(provider.modelContextWindows ?? {}), ...discoveredContextWindows }
+        : provider.modelContextWindows;
       ctx.providerStore.upsert({
         ...provider,
         models,
+        ...(modelContextWindows ? { modelContextWindows } : {}),
         ...(resetNativeCatalog ? { modelsMode: "auto" } : {}),
         modelsSyncedAt: Date.now(),
         modelsSyncSource: source,

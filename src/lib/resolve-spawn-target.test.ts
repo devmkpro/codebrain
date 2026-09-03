@@ -21,7 +21,28 @@ describe("resolveSpawnTarget", () => {
   });
 
   it("keeps a valid provider and model pair", () => {
-    const target = resolveSpawnTarget({ providerId: "claude-oauth", model: "claude-sonnet-4-6", providers });
+    const target = resolveSpawnTarget({ providerId: "claude-oauth", model: "claude-sonnet-4-6", providers: providers.map(p => p.id === "claude-oauth" ? { ...p, modelContextWindows: { "claude-sonnet-4-6": 200000 } } : p) });
     expect(target).toMatchObject({ providerId: "claude-oauth", model: "claude-sonnet-4-6", agent: "claude" });
+    expect(target.contextWindow).toBe(200000);
+  });
+
+  it("carries the OpenRouter model context window into the spawn target", () => {
+    const target = resolveSpawnTarget({
+      providerId: "openrouter-user",
+      model: "google/gemini-3.7-flash",
+      providers: [{
+        id: "openrouter-user",
+        type: "openai-compat",
+        host: "claude",
+        baseUrl: "https://openrouter.ai/api/v1",
+        models: ["google/gemini-3.7-flash"],
+        modelContextWindows: { "google/gemini-3.7-flash": 1000000 },
+      }],
+      preferredAgent: "claude",
+      explicit: true,
+    });
+
+    expect(target.contextWindow).toBe(1000000);
+    expect(target.agent).toBe("claude");
   });
 });

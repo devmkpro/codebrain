@@ -183,24 +183,21 @@ Os seguintes agentes estão ativos agora no mesmo workspace. Coordene com eles v
 }
 
 /**
- * Reads existing memories and patterns for the workspace and builds a
- * context block that is injected into the system prompt — forces agents
- * to be aware of shared knowledge from the start.
+ * Keeps shared memory lazy for a fresh pane. The legacy eager sample remains
+ * available only with CODEBRAIN_EAGER_MEMORY_CONTEXT=1 for diagnostics.
  */
 function buildMemoryContext(ctx: AppContext, workspace: string): string {
   try {
+    if (process.env.CODEBRAIN_EAGER_MEMORY_CONTEXT !== "1") {
+      return `\n\n## Memória Compartilhada do Workspace — SOB DEMANDA\n\nPara uma tarefa real de código, consulte \`mcp__codebrain__memory_search({ query: "<palavras-chave>", workspace: "${workspace}", limit: 5 })\` antes de editar. Use \`mcp__codebrain__pattern_list({ limit: 5 })\` somente quando a tarefa exigir planejamento ou padrões existentes. Não faça essas consultas para saudações ou perguntas simples.`;
+    }
     const store = ctx.memoryStore as any;
 
-    // Fetch a SMALL sample of recent memories — just enough to prove the memory
-    // is alive and worth searching. The agent pulls the rest via memory_search.
-    const memResult = store.list({ workspace, limit: 5 });
+    // Fetch only a tiny sample. The agent pulls the rest via memory_search.
+    const memResult = store.list({ workspace, limit: 3 });
     const memories: any[] = memResult?.memories ?? [];
 
-    // Top patterns only (sorted by quality_score DESC in the store)
-    const patResult = store.listPatterns({ limit: 5 });
-    const patterns: any[] = patResult?.patterns ?? [];
-
-    if (memories.length === 0 && patterns.length === 0) {
+    if (memories.length === 0) {
       // Even with no memories yet, enforce the read-first protocol
       return `\n\n## Memória Compartilhada do Workspace\n\n> **REGRA OBRIGATÓRIA:** Antes de iniciar QUALQUER tarefa, execute:\n> \`\`\`\n> mcp__codebrain__memory_search({ query: "<palavras-chave da tarefa>" })\n> mcp__codebrain__pattern_list({})\n> \`\`\`\n> A memória compartilhada é o único mecanismo de coordenação entre agentes no mesmo workspace. Ignorar este passo causa conflitos e retrabalho.\n\nNenhuma memória ou pattern registrado ainda para este workspace. Você é o primeiro agente aqui — comece a gravar descobertas com \`memory_write\` e patterns com \`pattern_write\`.`;
     }
@@ -218,14 +215,6 @@ function buildMemoryContext(ctx: AppContext, workspace: string): string {
       for (const m of memories) {
         const preview = (m.content ?? "").slice(0, 120).replace(/\n/g, " ");
         block += `- **[${m.type ?? "working"}]** \`${m.key ?? m.id}\`: ${preview}${m.content?.length > 120 ? "…" : ""}\n`;
-      }
-    }
-
-    if (patterns.length > 0) {
-      block += `\n**Top patterns (amostra — use \`pattern_list\` para o resto):**\n`;
-      for (const p of patterns) {
-        const preview = (p.description ?? "").slice(0, 120).replace(/\n/g, " ");
-        block += `- **[${p.pattern_type ?? "general"}]**: ${preview}${p.description?.length > 120 ? "…" : ""}\n`;
       }
     }
 
@@ -252,6 +241,16 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
 
   const allProviders = ctx.providerStore.listFull();
   const configuredProviders = allProviders.filter((p: any) => p.id !== "claude-oauth");
+  // Never duplicate a whole OpenRouter catalog into every new agent prompt.
+  // The provider picker owns the full list; agents only need a small preview.
+  const promptModels = (provider: any): string[] => {
+    const enhanced = ENHANCED_MODEL_MAP[provider.type ?? ""];
+    return (enhanced?.length > 0 ? enhanced : provider.models) ?? [];
+  };
+  const modelPreview = (models: string[], limit = 12): string => {
+    if (models.length <= limit) return models.join(", ") || "nenhum modelo listado";
+    return models.slice(0, limit).join(", ") + " … (+" + (models.length - limit) + " modelos; use o catálogo do provider)";
+  };
 
   // Dynamic workspace section
   let sysPrompt = CODEBRAIN_SYSTEM_PROMPT;
@@ -349,9 +348,8 @@ Chame \`mcp__codebrain__mission_context({ paneId: "${paneId}" })\` para descobri
   // Providers section — clean format for user-facing questions
   const providersInfo = configuredProviders
     .map((p: any) => {
-      const enhanced = ENHANCED_MODEL_MAP[p.type ?? ""];
-      const models = (enhanced?.length > 0 ? enhanced : p.models)?.join(", ") || "nenhum modelo listado";
-      return `* **${p.label}** (${p.type}): ${models}`;
+      const models = promptModels(p);
+      return `* **${p.label}** (${p.type}): ${modelPreview(models)}`;
     })
     .join("\n") || "nenhum provider configurado";
   sysPrompt += `\n\n## Providers e Modelos Disponíveis\n\n${providersInfo}\n\nQuando perguntar ao usuário qual modelo usar, apresente esta lista acima de forma clara (sem ids técnicos). O usuário escolhe por nome legível (ex: "haiku", "opus", "mimo v2.5 pro").`;
@@ -359,10 +357,14 @@ Chame \`mcp__codebrain__mission_context({ paneId: "${paneId}" })\` para descobri
   // Spawn guide with real provider data
   const spawnModels = configuredProviders
     .map((p: any) => {
-      const enhanced = ENHANCED_MODEL_MAP[p.type ?? ""];
-      const models: string[] = (enhanced?.length > 0 ? enhanced : p.models) ?? [];
+      const models = promptModels(p);
       const agentBin = p.host || "openclaude";
-      return models.map((m: string) => `  - **${m}** → providerId: "${p.id}", agent: "${agentBin}"`).join("\n");
+      const visible = models.slice(0, 16);
+      const lines = visible.map((m: string) => `  - **${m}** → providerId: "${p.id}", agent: "${agentBin}"`);
+      if (models.length > visible.length) {
+        lines.push(`  - … +${models.length - visible.length} modelos; consulte o catálogo do provider antes de escolher`);
+      }
+      return lines.join("\n");
     })
     .filter(Boolean)
     .join("\n");

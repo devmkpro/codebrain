@@ -13,6 +13,8 @@ export interface Provider {
   type?: "oauth" | "api-key" | "env";
   host?: string;
   models?: string[];
+  /** Context window in tokens, keyed by the exact model ID. */
+  modelContextWindows?: Record<string, number>;
   env?: Record<string, string>;
   [key: string]: unknown;
 }

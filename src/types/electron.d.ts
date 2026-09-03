@@ -18,6 +18,7 @@ export interface PtyConfig {
   claudeSessionId?: string;
   providerId?: string;
   model?: string;
+  contextWindow?: number;
   permissionMode?: string;
   role?: string;
   sessionContext?: string;

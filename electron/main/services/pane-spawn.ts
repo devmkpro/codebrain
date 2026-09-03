@@ -70,6 +70,7 @@ export interface SpawnPaneConfig {
   agent?: string;
   providerId?: string;
   model?: string;
+  contextWindow?: number;
   cwd?: string;
   paneId?: string;
   args?: string[];
@@ -154,7 +155,9 @@ export async function spawnPaneInternal(
     // Safety: Claude Code CLI only supports Anthropic-compatible providers.
     // Exception: OpenRouter supports the Anthropic protocol via ANTHROPIC_BASE_URL,
     // so openai-compat providers with OpenRouter base URL can run with agent=claude.
-    const isOpenRouterProvider = (provider?.id ?? "").startsWith("openrouter") || (provider?.baseUrl ?? "").includes("openrouter");
+    const isOpenRouterProvider = (provider?.id ?? "").startsWith("openrouter")
+      || (provider?.baseUrl ?? "").toLowerCase().includes("openrouter")
+      || Object.values(provider?.env ?? {}).some(value => typeof value === "string" && value.toLowerCase().includes("openrouter"));
     if (agent === "claude" && provider?.type && !["anthropic-compat", "mimo-compat", "oauth"].includes(provider.type)) {
       if (isOpenRouterProvider) {
         // OpenRouter supports Anthropic protocol — keep agent=claude and let the
@@ -327,6 +330,19 @@ export async function spawnPaneInternal(
     if (isClaudeCompatible) {
       if (provider?.label) env["CLAUDE_CODE_PROVIDER_NAME"] = provider.label;
       if (model) env["CLAUDE_CODE_MODEL_NAME"] = model;
+      const contextWindow = Number(config.contextWindow ?? provider?.modelContextWindows?.[model ?? ""] ?? 0);
+      if (Number.isFinite(contextWindow) && contextWindow > 0) {
+        // Claude Code otherwise falls back to 200k for unknown OpenRouter IDs.
+        // Keep the provider's real context window without changing the model ID.
+        env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = String(Math.floor(contextWindow));
+        log.info(`[spawnPaneInternal] Claude context window: ${Math.floor(contextWindow)} tokens for ${model ?? "default"}`);
+      } else if (isOpenRouterProvider) {
+        // Startup sync is intentionally asynchronous. If a pane is opened before
+        // the catalog arrives, let OpenRouter report the real window instead of
+        // Claude Code rejecting the model against its 200k unknown-model fallback.
+        env["CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT"] = "1";
+        log.info(`[spawnPaneInternal] OpenRouter context metadata pending for ${model ?? "default"}; deferring window enforcement to API`);
+      }
       if (provider) env["CLAUDE_CODE_PROVIDER_PROFILE_ENV_APPLIED"] = "1";
 
       // --provider flag tells the CLI which adapter to use.
@@ -1009,6 +1025,7 @@ export async function spawnPaneInternal(
       args,
       providerId: providerId ?? undefined,
       model: model ?? undefined,
+      contextWindow: config.contextWindow ?? provider?.modelContextWindows?.[model ?? ""] ?? undefined,
       role: config.role,
       squadOrchestratorWorkerId: config.squadOrchestratorWorkerId,
       taskId: config.taskId,

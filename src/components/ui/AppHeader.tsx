@@ -536,12 +536,13 @@ function Modals({ modals: m, activeWorkspace }: { modals: ReturnType<typeof useM
           activityId,
           providerId: target.providerId,
           model: target.model,
+          contextWindow: target.contextWindow,
           permissionMode: permMode,
           role: 'worker',
         });
         if (r?.ok && r.paneId) {
           workerIds.push(r.paneId);
-          addPane({ id: r.paneId, agent: target.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: target.providerId, model: target.model, externallySpawned: true });
+          addPane({ id: r.paneId, agent: target.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: target.providerId, model: target.model, contextWindow: target.contextWindow, externallySpawned: true });
         }
       }
     }
@@ -561,12 +562,13 @@ function Modals({ modals: m, activeWorkspace }: { modals: ReturnType<typeof useM
         activityId,
         providerId: orchTarget.providerId,
         model: orchTarget.model,
+        contextWindow: orchTarget.contextWindow,
         permissionMode: permMode,
         role: 'orchestrator',
         env: { SQUAD_WORKER_IDS: workerIds.join(','), SQUAD_ACTIVITY_ID: activityId },
       });
       if (orchRes?.ok && orchRes.paneId)
-        addPane({ id: orchRes.paneId, agent: orchTarget.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: orchTarget.providerId, model: orchTarget.model, externallySpawned: true });
+        addPane({ id: orchRes.paneId, agent: orchTarget.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: orchTarget.providerId, model: orchTarget.model, contextWindow: orchTarget.contextWindow, externallySpawned: true });
     }
   }, [activeWorkspace, addPane, permMode, providers]);
 
@@ -641,10 +643,10 @@ function useWorkspaceSquadSpawner() {
         providerDefaultModels,
       });
       const role = detectRole(w.role ?? '');
-      const r = await pty.spawn({ agent: target.agent, cwd: workspace, activityId, providerId: target.providerId, model: target.model, permissionMode: permMode, role });
+      const r = await pty.spawn({ agent: target.agent, cwd: workspace, activityId, providerId: target.providerId, model: target.model, contextWindow: target.contextWindow, permissionMode: permMode, role });
       if (!r?.ok || !r.paneId) continue;
       workerIds.push(r.paneId);
-      addPane({ id: r.paneId, agent: target.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: target.providerId, model: target.model, externallySpawned: true });
+      addPane({ id: r.paneId, agent: target.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: target.providerId, model: target.model, contextWindow: target.contextWindow, externallySpawned: true });
     }
     if (!workerIds.length) return;
 
@@ -658,12 +660,12 @@ function useWorkspaceSquadSpawner() {
     });
     const orchRes = await pty.spawn({
       agent: orchTarget.agent, cwd: workspace, activityId,
-      providerId: orchTarget.providerId, model: orchTarget.model,
+      providerId: orchTarget.providerId, model: orchTarget.model, contextWindow: orchTarget.contextWindow,
       permissionMode: permMode, role: 'orchestrator',
       env: { SQUAD_WORKER_IDS: workerIds.join(','), SQUAD_ACTIVITY_ID: activityId }
     });
     if (orchRes?.ok && orchRes.paneId)
-      addPane({ id: orchRes.paneId, agent: orchTarget.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: orchTarget.providerId, model: orchTarget.model, externallySpawned: true });
+      addPane({ id: orchRes.paneId, agent: orchTarget.agent, cwd: workspace, workspacePath: workspace, activityId, providerId: orchTarget.providerId, model: orchTarget.model, contextWindow: orchTarget.contextWindow, externallySpawned: true });
 
     // Switch to the workspace tab after spawning
     const tabIdx = useNavStore.getState().tabs.findIndex((t: any) => t.workspacePath === workspace);
@@ -830,8 +832,8 @@ function PaneMenu({
     });
 
     const envKeys = Object.keys(target.env);
-    (window as any).codeBrainApp?.pty.spawn({ agent: target.agent, cwd: activeWorkspace, providerId: target.providerId, model: target.model, permissionMode, ...(envKeys.length ? { env: target.env } : {}) })
-      .then((r: any) => { if (r?.ok && r.paneId) addPane({ id: r.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: target.providerId, model: target.model, permissionMode, externallySpawned: true }); })
+    (window as any).codeBrainApp?.pty.spawn({ agent: target.agent, cwd: activeWorkspace, providerId: target.providerId, model: target.model, contextWindow: target.contextWindow, permissionMode, ...(envKeys.length ? { env: target.env } : {}) })
+      .then((r: any) => { if (r?.ok && r.paneId) addPane({ id: r.paneId, agent: target.agent, cwd: activeWorkspace, workspacePath: activeWorkspace, providerId: target.providerId, model: target.model, contextWindow: target.contextWindow, permissionMode, externallySpawned: true }); })
       .catch(() => { });
   };
 

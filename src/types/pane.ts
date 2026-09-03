@@ -23,6 +23,7 @@ export interface Pane {
   subtaskId?: string;
   providerId?: string;
   model?: string;
+  contextWindow?: number;
   permissionMode?: string;
   role?: string;
   mission_id?: string;

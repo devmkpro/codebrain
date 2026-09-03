@@ -13,7 +13,7 @@ import { EventEmitter } from "node:events";
 import { exec } from "node:child_process";
 import log from "electron-log/main.js";
 import type { PtyManager } from "../pty-manager";
-import { safeSend, type AppContext } from "../context";
+import type { AppContext } from "../context";
 import { randomBytes } from "node:crypto";
 
 export type HookEventType =

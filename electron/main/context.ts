@@ -32,6 +32,7 @@ export interface PaneConfig {
   args: string[];
   providerId?: string;
   model?: string;
+  contextWindow?: number;
   hasAgent?: boolean;
   role?: string;
   squadOrchestratorWorkerId?: string;
