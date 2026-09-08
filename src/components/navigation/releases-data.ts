@@ -2,7 +2,7 @@
 // Run: node scripts/gen-releases.mjs
 
 export interface ReleaseHighlight {
-  kind: "feat" | "fix" | "security";
+  kind: "feat" | "fix" | "security" | "perf";
   text: string;
 }
 
@@ -13,6 +13,40 @@ export interface Release {
 }
 
 export const RELEASES: Release[] = [
+  {
+    "version": "1.21.0",
+    "date": "setembro 2026",
+    "highlights": [
+      {
+        "kind": "perf",
+        "text": "cut context cost below plain Claude Code"
+      }
+    ]
+  },
+  {
+    "version": "1.20.5",
+    "date": "setembro 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "sync and enforce model context windows dynamically"
+      },
+      {
+        "kind": "fix",
+        "text": "simplify memory protocol to run searches only when needed"
+      }
+    ]
+  },
+  {
+    "version": "1.20.4",
+    "date": "agosto 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "scope agent rail to active workspace"
+      }
+    ]
+  },
   {
     "version": "1.20.2",
     "date": "agosto 2026",

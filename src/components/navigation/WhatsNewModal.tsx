@@ -139,15 +139,57 @@ function FeatureItem({
 
 // ─── Demo text constants (built with String.fromCodePoint for safety) ─────────
 
-const DEMO1_TEXT = `${LDQUO}Spawn um squad com haiku backend e gemini flash frontend${RDQUO}`;
-const DEMO1_RESPONSE =
-  "Criando workers..." +
-  `\n\n  ${EMOJI_CHECK} backend: claude-haiku (OAuth)` +
-  `\n  ${EMOJI_CHECK} frontend: gemini-3-flash (API)` +
-  `\n  ${EMOJI_CHECK} ui-tester: gemini-3-flash-lite (API)`;
+const A_ACUTE = String.fromCodePoint(0xE1);
+const I_ACUTE = String.fromCodePoint(0xED);
 
-const DEMO2_TEXT = `${LDQUO}Troque o backend para opus${RDQUO}`;
-const DEMO2_RESPONSE = `Worker re-spawnado com claude-opus-4-7 ${EMOJI_CHECKMARK}`;
+const DEMO1_TEXT = `${LDQUO}ol${A_ACUTE}${RDQUO}`;
+const DEMO1_RESPONSE =
+  `Ol${A_ACUTE}! Em que posso ajudar?` +
+  `
+
+  ${EMOJI_CHECK} 15.757 tokens de entrada` +
+  `
+  ${EMOJI_CHECK} 16 de sa${I_ACUTE}da` +
+  `
+  ${EMOJI_CHECK} 1 turn`;
+
+const DEMO2_TEXT = `${LDQUO}e quanto custava antes?${RDQUO}`;
+const DEMO2_RESPONSE =
+  `188.631 de entrada ${EN_DASH} 534 de sa${I_ACUTE}da ${EN_DASH} 3 turns` +
+  `
+
+  Agora ${EMOJI_CHECKMARK} 12x menor que a 1.20` +
+  `
+  ${EMOJI_CHECKMARK} 3x menor que o Claude Code puro`;
+
+/**
+ * Input tokens for one greeting, measured with the CLI's own usage field
+ * (Opus 5, same prompt, same machine). Bar widths are relative to the worst
+ * case so the drop is legible at a glance.
+ */
+const COST_ROWS = [
+  {
+    label: `Codebrain 1.20`,
+    value: "188.631",
+    percent: 100,
+    color: "linear-gradient(90deg, rgba(239,68,68,0.75), rgba(239,68,68,0.45))",
+    textColor: "#f87171",
+  },
+  {
+    label: `Claude Code puro`,
+    value: "51.408",
+    percent: 27,
+    color: "linear-gradient(90deg, rgba(148,163,184,0.6), rgba(148,163,184,0.35))",
+    textColor: "#cbd5e1",
+  },
+  {
+    label: `Codebrain 1.21`,
+    value: "15.757",
+    percent: 8,
+    color: "linear-gradient(90deg, rgba(16,185,129,0.9), rgba(16,185,129,0.5))",
+    textColor: "#34d399",
+  },
+];
 
 // ─── Main modal ──────────────────────────────────────────────────────────────
 
@@ -269,10 +311,10 @@ export function WhatsNewModal({
             {/* Title + subtitle */}
             <div className="space-y-1.5">
               <h2 className="text-[22px] font-bold text-white tracking-tight">
-                Spawn Multi-Provider Corrigido
+                3&#215; mais barato que o Claude Code
               </h2>
               <p className="text-[13px] text-slate-400 leading-relaxed max-w-[420px] mx-auto">
-                Squads agora respeitam o provider e modelo configurado para cada worker
+                O mesmo trabalho com um ter&#231;o dos tokens &#8212; medido na API, n&#227;o estimado
               </p>
             </div>
           </div>
@@ -330,11 +372,11 @@ export function WhatsNewModal({
             </div>
           </div>
 
-          {/* ── Provider compatibility section ──────────────── */}
+          {/* -- Cost comparison: the headline of this release -- */}
           <div
             className="rounded-xl border border-white/[0.06] overflow-hidden"
             style={{
-              background: "linear-gradient(135deg, rgba(139,92,246,0.04), rgba(59,130,246,0.03))",
+              background: "linear-gradient(135deg, rgba(16,185,129,0.05), rgba(59,130,246,0.03))",
               opacity: phase >= 2 ? 1 : 0,
               transform: phase >= 2 ? "translateY(0)" : "translateY(8px)",
               transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.3s",
@@ -342,43 +384,56 @@ export function WhatsNewModal({
           >
             <div className="p-4 space-y-3">
               <div className="flex items-center gap-2">
-                <GearIcon size={14} className="text-violet-400" />
-                <span className="font-mono text-[10px] font-bold text-violet-400 uppercase tracking-[0.15em]">
-                  Compatibilidade Garantida
+                <GearIcon size={14} className="text-emerald-400" />
+                <span className="font-mono text-[10px] font-bold text-emerald-400 uppercase tracking-[0.15em]">
+                  Custo de um {LDQUO}ol{A_ACUTE}{RDQUO}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                O provider escolhido define a CLI e limita os modelos exibidos no novo pane:
+                Tokens de entrada por turno, mesma pergunta e mesmo modelo:
               </p>
-              {/* Provider route card */}
-              <div className="rounded-lg border border-white/[0.08] bg-[#0c0c18] p-3.5 space-y-2">
-                <div className="flex items-center gap-2">
-                  <BotIcon size={13} className="text-violet-400" />
-                  <span className="font-mono text-[11px] font-semibold text-white">OpenAI Codex</span>
-                </div>
-                <div className="pl-5 space-y-1.5">
-                  <p className="text-[11px] text-slate-400">
-                    CLI: Codex
-                  </p>
-                  <p className="text-[11px] text-slate-400">
-                    Modelo: gpt-5.5
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 pt-1.5 mt-1.5 border-t border-white/[0.04]">
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-medium"
+
+              <div className="space-y-2">
+                {COST_ROWS.map((row, i) => (
+                  <div
+                    key={row.label}
+                    className="flex items-center gap-3"
                     style={{
-                      background: "rgba(139,92,246,0.12)",
-                      color: "#c4b5fd",
-                      border: "1px solid rgba(139,92,246,0.15)",
+                      opacity: phase >= 2 ? 1 : 0,
+                      transform: phase >= 2 ? "translateX(0)" : "translateX(-6px)",
+                      transition: `all 0.45s cubic-bezier(0.16, 1, 0.3, 1) ${400 + i * 120}ms`,
                     }}
                   >
-                    {EMOJI_CHECK} provider e modelo compat&#237;veis
-                  </span>
-                </div>
+                    <span className="w-[104px] shrink-0 font-mono text-[10px] text-slate-400 leading-tight">
+                      {row.label}
+                    </span>
+                    <div className="flex-1 h-[18px] rounded bg-black/40 border border-white/[0.05] overflow-hidden">
+                      <div
+                        style={{
+                          height: "100%",
+                          width: phase >= 2 ? `${row.percent}%` : "0%",
+                          background: row.color,
+                          transition: `width 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${500 + i * 120}ms`,
+                        }}
+                      />
+                    </div>
+                    <span
+                      className="w-[58px] shrink-0 text-right font-mono text-[11px] font-semibold tabular-nums"
+                      style={{ color: row.textColor }}
+                    >
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
               </div>
+
+              <p className="text-[10px] text-slate-500 leading-relaxed pt-1 border-t border-white/[0.04]">
+                O ganho veio de parar de enviar schemas de ferramentas que o agente
+                nunca usa {EN_DASH} e de nunca gastar um turno extra numa sauda&#231;&#227;o.
+              </p>
             </div>
           </div>
+
 
           {/* ── Features list ───────────────────────────────── */}
           <div
@@ -389,32 +444,32 @@ export function WhatsNewModal({
             }}
           >
             <FeatureItem
-              icon={<GearIcon size={14} className="text-blue-400" />}
-              label="Escolha o provider antes do modelo"
+              icon={<CheckCircleIcon size={14} className="text-emerald-400" />}
+              label="Sauda&#231;&#227;o n&#227;o gasta mais 3 chamadas &#8212; agora &#233; 1"
               delay={0}
               visible={phase >= 2}
             />
             <FeatureItem
-              icon={<BotIcon size={14} className="text-violet-400" />}
-              label="Abre a CLI correta para cada provider"
+              icon={<GearIcon size={14} className="text-blue-400" />}
+              label="12 ferramentas no boot; as outras 197 sob demanda"
               delay={80}
               visible={phase >= 2}
             />
             <FeatureItem
-              icon={<CheckCircleIcon size={14} className="text-emerald-400" />}
-              label="Mostra somente modelos compat&#237;veis"
+              icon={<BotIcon size={14} className="text-violet-400" />}
+              label="Orquestrador n&#227;o recebe mais ferramentas de edi&#231;&#227;o"
               delay={160}
               visible={phase >= 2}
             />
             <FeatureItem
-              icon={<GearIcon size={14} className="text-violet-400" />}
-              label="Corrige prefer&#234;ncias antigas incompat&#237;veis"
+              icon={<BotIcon size={14} className="text-violet-400" />}
+              label="Novo bot&#227;o + time: squad multi-IA j&#225; configurado"
               delay={240}
               visible={phase >= 2}
             />
             <FeatureItem
-              icon={<CheckCircleIcon size={14} className="text-sky-400" />}
-              label="Provider continua sendo a fonte de verdade"
+              icon={<GearIcon size={14} className="text-sky-400" />}
+              label="Busca em todos os seletores de modelo"
               delay={320}
               visible={phase >= 2}
             />
@@ -430,7 +485,9 @@ export function WhatsNewModal({
             }}
           >
             <p className="text-[12px] text-slate-400 italic leading-relaxed">
-              Abra um novo pane e escolha o provider e o modelo em dois cliques.
+              Nada foi removido: as 197 ferramentas restantes continuam a um
+              <span className="font-mono not-italic text-slate-300"> enable_tool_group </span>
+              de dist&#226;ncia.
             </p>
 
             <button
