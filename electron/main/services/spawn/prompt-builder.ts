@@ -9,31 +9,7 @@ import {
   UI_TESTER_PROMPT,
   GEMINI_WORKER_PROMPT,
 } from "../prompts";
-import { MODEL_MAP_BY_TYPE } from "../constants";
 import { workspaceAccessInstruction } from "../../workspace-config-store";
-
-const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
-
-// Read version from package.json once at module load
-let _appVersion = "?";
-try {
-  const pkgPath = path.join(__dirname, "../../../../package.json");
-  _appVersion = JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version ?? "?";
-} catch {}
-
-/** Total MCP tools registered — updated at import time from the MCP index. */
-const MCP_TOOL_COUNT: number = (() => {
-  try {
-    // Count server.tool() calls in the MCP index — this is the source of truth.
-    const indexSrc = fs.readFileSync(
-      path.join(__dirname, "../../../../packages/mcp/index.js"),
-      "utf-8",
-    );
-    return (indexSrc.match(/server\.tool\(/g) ?? []).length;
-  } catch {
-    return 0;
-  }
-})();
 
 export interface PromptBuilderConfig {
   paneId: string;
@@ -42,342 +18,126 @@ export interface PromptBuilderConfig {
   role?: string;
   sessionContext?: string;
   agent?: string;
-  /** Squad callable list — injected into orchestrator system prompt */
   squadCallable?: object[];
-  /** High-level orchestrator instructions from Squad config */
   orchestratorInstructions?: string;
 }
-
 interface SkillManifest {
   id: string;
   name: string;
-  type: string;
   description?: string;
   triggers?: string[];
-  entrypoint?: string;
 }
 
-interface LoadedSkill {
-  manifest: SkillManifest;
-}
+function loadSkills(cwd: string): SkillManifest[] {
+  const dirs = [
+    path.join(cwd || "", ".codebrain", "skills"),
+    path.join(os.homedir(), ".codebrain", "skills"),
+  ];
+  const skills: SkillManifest[] = [];
+  const seen = new Set<string>();
 
-/**
- * Reads skill manifests from all skill directories in priority order:
- *   1. Project-local:  <cwd>/.codebrain/skills/
- *   2. Global:         ~/.codebrain/skills/
- *
- * Deduplicates by skill id (project takes priority over global).
- * Only manifests are read — full prompt.md content is lazy-loaded by the
- * agent via mcp__codebrain__skill_get when a trigger matches.
- */
-function loadSkills(cwd: string): LoadedSkill[] {
-  const skillDirs: string[] = [];
-
-  // 1. Project-local skills
-  const projectSkillsDir = path.join(cwd || "", ".codebrain", "skills");
-  if (fs.existsSync(projectSkillsDir)) skillDirs.push(projectSkillsDir);
-
-  // 2. Global skills (~/.codebrain/skills/)
-  const globalSkillsDir = path.join(os.homedir(), ".codebrain", "skills");
-  if (fs.existsSync(globalSkillsDir)) skillDirs.push(globalSkillsDir);
-
-  const loaded: LoadedSkill[] = [];
-  const seenIds = new Set<string>();
-
-  for (const dir of skillDirs) {
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
     try {
       for (const entry of fs.readdirSync(dir)) {
-        const skillDir = path.join(dir, entry);
-        const manifestPath = path.join(skillDir, "skill.json");
-        if (!fs.existsSync(manifestPath)) continue;
+        const file = path.join(dir, entry, "skill.json");
+        if (!fs.existsSync(file)) continue;
         try {
-          const manifest: SkillManifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-          if (!manifest.id || seenIds.has(manifest.id)) continue;
-          seenIds.add(manifest.id);
-
-          loaded.push({ manifest });
+          const manifest = JSON.parse(fs.readFileSync(file, "utf-8")) as SkillManifest;
+          if (!manifest.id || seen.has(manifest.id)) continue;
+          seen.add(manifest.id);
+          skills.push(manifest);
         } catch {}
       }
     } catch {}
   }
-
-  return loaded;
+  return skills;
 }
 
-/**
- * Builds the skills section of the system prompt.
- *
- * Lazy-load strategy (all CLIs): inject ONLY the summary table (id, description,
- * triggers). The full prompt.md is loaded on demand via mcp__codebrain__skill_get.
- * Injecting full content inline used to add ~95 KB (~24K tokens) of mostly
- * irrelevant instructions to EVERY agent on EVERY request.
- */
-function buildSkillsSection(cwd: string, _agent?: string): string {
+function buildSkillsSection(cwd: string): string {
   const skills = loadSkills(cwd);
   if (skills.length === 0) return "";
+  const rows = skills.map((skill) => {
+    const triggers = skill.triggers?.join(", ") || "-";
+    return `| \`${skill.id}\` | ${skill.description || skill.name} | ${triggers} |`;
+  }).join("\n");
 
-  const rows = skills
-    .map(s => {
-      const triggers = (s.manifest.triggers ?? []).join(", ") || "—";
-      return `| \`${s.manifest.id}\` | ${s.manifest.description ?? s.manifest.name} | ${triggers} |`;
-    })
-    .join("\n");
-
-  return `\n\n## Skills Disponíveis — CARREGUE SOB DEMANDA
-
-Você tem skills especializadas instaladas. A tabela abaixo lista apenas o resumo — o conteúdo completo NÃO está neste prompt.
-
-| Skill | Descrição | Triggers (palavras-chave) |
-|---|---|---|
-${rows}
-
-**REGRA OBRIGATÓRIA:** Se o pedido do usuário corresponder a um trigger:
-1. Chame \`mcp__codebrain__skill_get({ id: "<skill-id>" })\` para carregar o guia completo da skill
-2. Execute os passos retornados imediatamente — não pergunte, não explique
-
-NUNCA execute uma tarefa coberta por uma skill sem antes carregá-la via \`skill_get\`. NUNCA carregue skills cujos triggers não correspondem à tarefa atual.`;
+  return `\n\n## Skills (lazy)\nLoad a matching skill with \`skill_get({ id })\` before using it.\n\n| Skill | Description | Triggers |\n|---|---|---|\n${rows}`;
 }
 
-/**
- * Lists active agents in the same workspace so the new agent knows its teammates
- * and can coordinate from the start.
- */
 function buildActiveAgentsContext(ctx: AppContext, workspace: string, ownPaneId: string): string {
   try {
-    const livePanes = ctx.ptyManager.list().filter((p: any) => {
-      if (p.paneId === ownPaneId) return false; // skip self
-      if (ctx.detachedPaneIds.has(p.paneId)) return false;
-      const paneWs = p.workspacePath ?? p.cwd ?? "";
-      if (paneWs && workspace) {
-        try {
-          const path = require("node:path");
-          return path.resolve(paneWs) === path.resolve(workspace);
-        } catch { return false; }
-      }
-      return false;
+    const panes = ctx.ptyManager.list().filter((pane: any) => {
+      if (pane.paneId === ownPaneId || ctx.detachedPaneIds.has(pane.paneId)) return false;
+      const paneWorkspace = pane.workspacePath ?? pane.cwd ?? "";
+      return paneWorkspace && workspace && path.resolve(paneWorkspace) === path.resolve(workspace);
     });
-
-    if (livePanes.length === 0) return "";
-
-    let block = `\n\n## Agentes Ativos no Workspace — SEUS COLEGAS
-
-Os seguintes agentes estão ativos agora no mesmo workspace. Coordene com eles via \`pane_send_message\`:
-
-`;
-
-    for (const p of livePanes) {
-      const label = (p as any).label || p.agent || "agente";
-      const model = p.model ? ` [${p.model}]` : "";
-      const status = (p as any).status || "running";
-      block += `- **${label}**${model} — paneId: \`${p.paneId}\` (${status})\n`;
-    }
-
-    block += `
-**REGRA:** Quando finalizar sua tarefa, envie um resumo aos colegas via \`pane_send_message\`. Quando receber mensagem de um colega, responda imediatamente. Use \`pane_list()\` para ver o status atual dos panes.
-`;
-
-    return block;
+    if (panes.length === 0) return "";
+    return `\n\n## Active panes\n${panes.map((pane: any) => `- ${pane.label || pane.agent || "agent"} · ${pane.paneId}`).join("\n")}\nUse \`pane_send_message\` for short updates.`;
   } catch {
     return "";
   }
 }
 
-/**
- * Reads existing memories and patterns for the workspace and builds a
- * context block that is injected into the system prompt — forces agents
- * to be aware of shared knowledge from the start.
- */
-function buildMemoryContext(ctx: AppContext, workspace: string): string {
+function buildMemoryContext(): string {
+  return "\n\n## Shared context\nFor non-trivial work, call `memory_search` and `pattern_list` once before acting. Skip them for greetings and simple factual replies. Save durable decisions, fixes and results with `memory_write`; save reusable conventions with `pattern_write`.";
+}
+
+function buildProviderHint(ctx: AppContext): string {
   try {
-    const store = ctx.memoryStore as any;
-
-    // Fetch a SMALL sample of recent memories — just enough to prove the memory
-    // is alive and worth searching. The agent pulls the rest via memory_search.
-    const memResult = store.list({ workspace, limit: 5 });
-    const memories: any[] = memResult?.memories ?? [];
-
-    // Top patterns only (sorted by quality_score DESC in the store)
-    const patResult = store.listPatterns({ limit: 5 });
-    const patterns: any[] = patResult?.patterns ?? [];
-
-    if (memories.length === 0 && patterns.length === 0) {
-      // Even with no memories yet, enforce the read-first protocol
-      return `\n\n## Memória Compartilhada do Workspace\n\n> **REGRA OBRIGATÓRIA:** Antes de iniciar QUALQUER tarefa, execute:\n> \`\`\`\n> mcp__codebrain__memory_search({ query: "<palavras-chave da tarefa>" })\n> mcp__codebrain__pattern_list({})\n> \`\`\`\n> A memória compartilhada é o único mecanismo de coordenação entre agentes no mesmo workspace. Ignorar este passo causa conflitos e retrabalho.\n\nNenhuma memória ou pattern registrado ainda para este workspace. Você é o primeiro agente aqui — comece a gravar descobertas com \`memory_write\` e patterns com \`pattern_write\`.`;
-    }
-
-    let block = `\n\n## Memória Compartilhada do Workspace — LEIA ANTES DE AGIR
-
-> **REGRA OBRIGATÓRIA:** Você DEVE consultar \`mcp__codebrain__memory_search\` e \`mcp__codebrain__pattern_list\` ANTES de iniciar qualquer tarefa. Nunca repita trabalho que já está na memória. Sempre grave descobertas importantes via \`mcp__codebrain__memory_write\`.
-
-### Contexto atual do workspace \`${workspace}\`
-
-`;
-
-    if (memories.length > 0) {
-      block += `**Memórias mais recentes (amostra — use \`memory_search\` para o resto):**\n`;
-      for (const m of memories) {
-        const preview = (m.content ?? "").slice(0, 120).replace(/\n/g, " ");
-        block += `- **[${m.type ?? "working"}]** \`${m.key ?? m.id}\`: ${preview}${m.content?.length > 120 ? "…" : ""}\n`;
-      }
-    }
-
-    if (patterns.length > 0) {
-      block += `\n**Top patterns (amostra — use \`pattern_list\` para o resto):**\n`;
-      for (const p of patterns) {
-        const preview = (p.description ?? "").slice(0, 120).replace(/\n/g, " ");
-        block += `- **[${p.pattern_type ?? "general"}]**: ${preview}${p.description?.length > 120 ? "…" : ""}\n`;
-      }
-    }
-
-    block += `
-**PROTOCOLO OBRIGATÓRIO:**
-1. **INÍCIO DE CADA TAREFA** → chame \`memory_search\` com palavras-chave relevantes + \`pattern_list\` para ver padrões aplicáveis
-2. **DURANTE A TAREFA** → ao descobrir algo importante, grave imediatamente com \`memory_write\`
-3. **FIM DE CADA TAREFA** → grave o resultado e lições aprendidas; se descobriu um padrão útil, grave com \`pattern_write\`
-4. **NUNCA** comece uma tarefa sem antes verificar se já existe solução na memória
-`;
-
-    return block;
+    const providers = ctx.providerStore.listFull()
+      .filter((provider: any) => provider.id !== "claude-oauth")
+      .map((provider: any) => `${provider.label || provider.id} (${provider.id})`);
+    return providers.length ? `\n\nProviders configured: ${providers.join(", ")}. Use the pane_spawn schema for model details.` : "";
   } catch {
     return "";
   }
 }
 
-/**
- * Builds the Codebrain system prompt and writes it to a temp file.
- * Returns the path to pass via --system-prompt-file.
- */
+function buildOrchestratorContext(paneId: string, ctx: AppContext, squadCallable?: object[], instructions?: string): string {
+  let block = `\n\n## Orchestrator runtime\nFor delegation, activate \`coordination\`, inspect \`actor_list\`, reuse an idle compatible worker, then \`task_create\` → \`task_assign\` → \`pane_write\`. Never edit files yourself.\nYour paneId is \`${paneId}\`.\n`;
+  block += buildProviderHint(ctx);
+  if (squadCallable?.length) {
+    block += `\n\nSquad workers available (pass the list to pane_spawn):\n\`${JSON.stringify(squadCallable)}\``;
+  }
+  if (instructions?.trim()) block += `\n\nSquad instructions:\n${instructions.trim()}`;
+  return block;
+}
+
+function buildDelegatedWorkerContext(paneId: string): string {
+  return `\n\n## Delegated tasks\nDirect conversation needs no bootstrap. When a delegated task arrives, activate \`coordination\`, then call \`mission_context({ paneId: "${paneId}" })\` and \`task_list\`; claim the assigned task before editing. Complete with \`handoff_submit\`.`;
+}
+
+/** Builds the smallest useful system prompt for a pane and writes it to disk. */
 export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig): string {
-  const { paneId, cwd, model, role, sessionContext, agent, squadCallable, orchestratorInstructions } = config;
-
-  const allProviders = ctx.providerStore.listFull();
-  const configuredProviders = allProviders.filter((p: any) => p.id !== "claude-oauth");
-
-  // Dynamic workspace section
+  const { paneId, cwd, model, role, sessionContext, squadCallable, orchestratorInstructions } = config;
   let sysPrompt = CODEBRAIN_SYSTEM_PROMPT;
-  sysPrompt += `\n\n## Seu Workspace\n\nVocê está trabalhando no diretório:\n\`${cwd}\`\n\nTodos os caminhos de arquivo são relativos a este diretório.`;
-  sysPrompt += `\n\n## Seu ID de Pane\n\nSeu paneId é: \`${paneId}\`\n\nUse este ID como campo "from" ao enviar mensagens via mcp__codebrain__pane_send_message, e como campo "paneId" ao ler mensagens via mcp__codebrain__pane_read_messages.`;
 
-  // Inject shared memory + patterns — forces agents to read and reuse knowledge
-  sysPrompt += buildMemoryContext(ctx, cwd);
-
-  // Inject active agents in the workspace so this agent knows its teammates
+  sysPrompt += `\n\n## Workspace\n\`${cwd}\`\nPane: \`${paneId}\``;
+  sysPrompt += buildMemoryContext();
   sysPrompt += buildActiveAgentsContext(ctx, cwd, paneId);
 
-  // Workspace access policy — sandbox for file operations outside workspace
   const accessMode = ctx.workspaceConfigStore.getAccessMode(cwd);
-  sysPrompt += `\n\n## Workspace Access Policy\n\n${workspaceAccessInstruction(cwd, accessMode)}`;
+  sysPrompt += `\n\n## Workspace access\n${workspaceAccessInstruction(cwd, accessMode)}`;
 
-  // Role-specific prompt
-  let rolePrompt = "";
+  const rolePrompt = role === "orchestrator"
+    ? ORCHESTRATOR_PROMPT
+    : role === "ui-tester"
+      ? UI_TESTER_PROMPT || WORKER_PROMPT
+      : model?.startsWith("gemini")
+        ? GEMINI_WORKER_PROMPT || WORKER_PROMPT
+        : WORKER_PROMPT;
+  if (rolePrompt) sysPrompt += `\n\n${rolePrompt}`;
+  if (sessionContext?.trim()) sysPrompt += `\n\n## Session context\n${sessionContext.trim()}`;
+
   if (role === "orchestrator") {
-    rolePrompt = ORCHESTRATOR_PROMPT;
-  } else if (role === "ui-tester") {
-    rolePrompt = UI_TESTER_PROMPT || WORKER_PROMPT;
-  } else if (model?.startsWith("gemini")) {
-    rolePrompt = GEMINI_WORKER_PROMPT || WORKER_PROMPT;
+    sysPrompt += buildOrchestratorContext(paneId, ctx, squadCallable, orchestratorInstructions);
   } else {
-    rolePrompt = WORKER_PROMPT;
-  }
-  if (rolePrompt) sysPrompt += `\n\n---\n\n${rolePrompt}`;
-  if (sessionContext) sysPrompt += `\n\n---\n\n${sessionContext}`;
-
-  // Squad callable — inject into orchestrator so it knows which workers to spawn
-  if (role === "orchestrator" && squadCallable && squadCallable.length > 0) {
-    const callable = JSON.stringify(squadCallable, null, 2);
-    sysPrompt += `\n\n## Squad Workers Disponíveis (squadCallable)
-
-Ao spawnar workers para este squad, use os seguintes agents pré-configurados com o parâmetro \`squadCallable\`:
-
-\`\`\`json
-${callable}
-\`\`\`
-
-**Como usar:** Ao chamar \`mcp__codebrain__pane_spawn\`, passe o array inteiro como \`squadCallable\`. O sistema injeta automaticamente os workers para o orquestrador convocar por nome ou categoria.
-
-Cada agente tem: \`role\` (categoria), \`agentName\` (alias), \`cli\` (runtime), e opcionalmente \`providerId\`, \`model\`, \`effort\`, \`delegateOnly\`, \`leaf\`, \`invocable\`.`;
+    sysPrompt += buildDelegatedWorkerContext(paneId);
   }
 
-  // Orchestrator instructions from Squad config
-  if (role === "orchestrator" && orchestratorInstructions?.trim()) {
-    sysPrompt += `\n\n## Instruções Específicas do Squad\n\n${orchestratorInstructions.trim()}`;
-  }
+  sysPrompt += buildSkillsSection(cwd);
 
-  // Mission bootstrap — auto-discovery for non-orchestrator panes
-  if (role !== "orchestrator") {
-    sysPrompt += `\n\n## Missão — Bootstrap obrigatório
-
-No início da sua primeira ação, chame \`mcp__codebrain__mission_context({ paneId: "${paneId}" })\`.
-- Se **action='adopt'**: você é worker do orquestrador retornado. Reporte a ele via \`handoff_submit\` ao terminar.
-- Se **action='ask_if_orchestrator'**: use \`mcp__codebrain__question_ask\` perguntando ao usuário se você é o orquestrador desta missão. Se sim, chame:
-\`\`\`
-mcp__codebrain__pane_set_role({ paneId: "${paneId}", role: "orchestrator" })
-\`\`\`
-e crie/associe a missão com \`mcp__codebrain__mission_create\` / \`mcp__codebrain__mission_set\`.
-
-### 🔴 TASK BOARD — OBRIGATÓRIO
-
-Após descobrir sua missão, chame \`task_list({ mission_id: "..." })\`.
-1. Procure uma task com \`assigned_to\` = seu paneId (\`${paneId}\`)
-2. Se encontrou → \`task_move({ id, column: "in_progress" })\` ANTES de começar a trabalhar
-3. Se NÃO encontrou → \`handoff_submit({ paneId: "${paneId}", summary: "No task assigned", status: "blocked" })\` e AGUARDE o orquestrador
-4. NUNCA trabalhe sem uma task atribuída a você. O board é a fonte única de verdade.
-5. Ao terminar → \`task_move({ id, column: "done" })\` + \`handoff_submit\`
-6. Após completar, seu status volta para **idle**. O orquestrador pode delegar novas tasks a você via \`actor_list()\` + \`task_assign\`. Você NÃO precisa ser re-spawnado — permaneça disponível para novas tasks do board.
-
-Coordenação é pull-based via board, não conversa bidirecional.`;
-  } else {
-    // Orchestrator gets the non-execution reminder in MISSION_BOOTSTRAP too
-    sysPrompt += `\n\n## 🚫 Orquestrador NÃO edita arquivos — REPETIÇÃO OBRIGATÓRIA
-
-**Lembrete: você É orquestrador. NUNCA use Edit, Write, file_write, file_multi_edit, ou Bash para criar/modificar/deletar arquivos.**
-Se precisa mudar código → \`task_create\` + \`task_assign\` a um worker + \`pane_write\` com instruções detalhadas. FIM.
-
-## Missão — Orquestrador
-
-Chame \`mcp__codebrain__mission_context({ paneId: "${paneId}" })\` para descobrir ou criar sua missão.
-
-### Regras obrigatórias:
-1. **CRIE tasks** (\`mcp__codebrain__task_create\` com mission_id) para CADA subtask ANTES de delegar a workers
-2. **Atribua tasks** (\`mcp__codebrain__task_assign\`) ao paneId do worker responsável
-3. **NUNCA execute** o trabalho você mesmo — delegue SEMPRE (veja a seção "VOCÊ NÃO EXECUTA" no topo)
-4. Acompanhe progresso via \`mcp__codebrain__task_list({ mission_id })\` e \`mcp__codebrain__handoff_wait\`
-5. **Contador de confirmações:** para executar direto, o usuário DEVE confirmar 2x. Use \`mcp__codebrain__actor_set_metadata({ paneId: "${paneId}", metadata: { execution_confirmed: true, confirmations: 2 } })\` após as 2 confirmações. Sem isso, recuse e delegue.
-6. **🔴 REUSE PRIMEIRO:** ANTES de \`pane_spawn\`, chame \`actor_list()\`. Se algum worker tem \`available: true\`, DELEGUE a ele (\`task_assign\` + \`pane_write\`). Só spawne se NÃO houver worker idle compatível.`;
-  }
-
-  // Providers section — clean format for user-facing questions
-  const providersInfo = configuredProviders
-    .map((p: any) => {
-      const enhanced = ENHANCED_MODEL_MAP[p.type ?? ""];
-      const models = (enhanced?.length > 0 ? enhanced : p.models)?.join(", ") || "nenhum modelo listado";
-      return `* **${p.label}** (${p.type}): ${models}`;
-    })
-    .join("\n") || "nenhum provider configurado";
-  sysPrompt += `\n\n## Providers e Modelos Disponíveis\n\n${providersInfo}\n\nQuando perguntar ao usuário qual modelo usar, apresente esta lista acima de forma clara (sem ids técnicos). O usuário escolhe por nome legível (ex: "haiku", "opus", "mimo v2.5 pro").`;
-
-  // Spawn guide with real provider data
-  const spawnModels = configuredProviders
-    .map((p: any) => {
-      const enhanced = ENHANCED_MODEL_MAP[p.type ?? ""];
-      const models: string[] = (enhanced?.length > 0 ? enhanced : p.models) ?? [];
-      const agentBin = p.host || "openclaude";
-      return models.map((m: string) => `  - **${m}** → providerId: "${p.id}", agent: "${agentBin}"`).join("\n");
-    })
-    .filter(Boolean)
-    .join("\n");
-
-  sysPrompt += `\n\n## Spawning Novos Panes (Agentes)\n\nQuando o usuário pedir para spawnar, abrir, ou criar um novo agente/terminal/pane, use:\n\n\`\`\`javascript\nmcp__codebrain__pane_spawn({\n  agent: "<agent>",      // "openclaude" | "claude" | "gemini" | "codex" | "shell"\n  model: "<model>",      // modelo específico (veja abaixo)\n  label: "<nome>",       // label opcional para identificar\n  cwd: "<workspace>"     // workspace atual\n})\n\`\`\`\n\n**⚠️ PRIORIDADE ao escolher agente:**\n1. **Modelos Claude (haiku, sonnet, opus)** → \`agent: "claude"\` (Claude Code CLI oficial com OAuth do plano. O sistema detecta o CLI automaticamente.)\n2. **Modelos MIMO** → \`agent: "openclaude"\` com provider MIMO\n3. **Modelos Gemini via API** → \`agent: "openclaude"\` com provider Gemini\n4. **Gemini CLI nativo** (usuário pediu explicitamente "gemini cli") → \`agent: "gemini"\` com providerId: "gemini-cli"\n5. **Modelos OpenAI / Codex** → \`agent: "codex"\` com provider Codex\n6. **Padrão (sem especificar)** → \`openclaude\` com o primeiro provider disponível\n7. **NUNCA use \`shell\`** para agentes de IA\n\n**Agentes disponíveis:**\n- \`claude\` — Claude Code CLI oficial (OAuth plano, auto-detectado). Para modelos Claude (haiku/sonnet/opus).\n- \`openclaude\` — OpenClaude CLI (MIMO, Gemini API, Anthropic API, etc). Padrão para maioria dos modelos.\n- \`gemini\` — Google Gemini CLI nativo. Use SOMENTE quando o usuário pedir explicitamente "gemini cli".\n- \`codex\` — OpenAI Codex CLI. Use quando o usuário pedir modelos OpenAI ou codex.\n- \`shell\` — Terminal shell puro. SOMENTE para comandos de sistema.\n\n**Modelos → Parâmetros de spawn:**\n\n${spawnModels}\n\n**Exemplos:**\n- Claude Haiku (plano): \`pane_spawn({ agent: "claude", model: "claude-haiku-4-5-20251001" })\`\n- Claude Opus (plano): \`pane_spawn({ agent: "claude", model: "claude-opus-4-7" })\`\n- MIMO 2.5 Pro: \`pane_spawn({ agent: "openclaude", model: "mimo-v2.5-pro" })\`\n- Gemini Flash (via API/openclaude): \`pane_spawn({ agent: "openclaude", model: "gemini-3-flash-preview" })\`\n- Gemini CLI nativo: \`pane_spawn({ agent: "gemini", providerId: "gemini-cli" })\`\n- Codex (ChatGPT OAuth): \`pane_spawn({ agent: "codex", providerId: "codex-oauth" })\`\n- Shell puro: \`pane_spawn({ agent: "shell" })\``;
-
-  // Runtime metadata injected so the skill banner shows real values
-  const providerLabels = configuredProviders.map((p: any) => `${p.host || "openclaude"} (${p.type})`).join(", ") || "none";
-  sysPrompt += `\n\n## Codebrain Runtime\n\n- Version: ${_appVersion}\n- MCP Tools: ${MCP_TOOL_COUNT}\n- Providers: ${providerLabels}`;
-
-  // Skills section — inject all installed skills so every agent knows them
-  // Claude Code gets summary + Skill() invocation; other CLIs get full content inline
-  sysPrompt += buildSkillsSection(cwd, agent);
-
-  // Write to temp file (avoids Windows cmd-line length limit)
   const tmpDir = path.join(cwd || os.homedir(), ".codebrain", "tmp");
   try { fs.mkdirSync(tmpDir, { recursive: true }); } catch {}
   const promptFile = path.join(tmpDir, `sysprompt-${paneId}.txt`);

@@ -256,6 +256,12 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     perfSnap: () => ipcRenderer.invoke("diagnostics:perfSnap"),
   },
 
+  tokens: {
+    byPane: (args: { paneId: string }) => ipcRenderer.invoke("tokens:byPane", args),
+    byMission: (args: { missionId?: string; paneIds: string[] }) => ipcRenderer.invoke("tokens:byMission", args),
+    byWorkspace: (args: { workspacePath: string; sinceMs?: number }) => ipcRenderer.invoke("tokens:byWorkspace", args),
+  },
+
   mcp: {
     status: () => ipcRenderer.invoke("mcp:status"),
   },

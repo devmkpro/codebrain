@@ -27,11 +27,20 @@ import { create } from "zustand";
 /** Passo inicial do modal de Providers. */
 export type ProvidersStep = "list" | "pickTemplate" | string;
 
+/** Pre-filled squad passed to the wizard by the "+ time" launcher. */
+export interface SquadWizardPreset {
+  name: string;
+  orchestrator: { providerId: string; model: string };
+  workers: { id: string; role: string; providerId: string; model: string }[];
+  warnings?: string[];
+}
+
 interface ModalsState {
   showProviders: boolean;
   providersStep: ProvidersStep;
   showSquad: boolean;
   showSquadWizard: boolean;
+  squadWizardPreset: SquadWizardPreset | null;
   showDiag: boolean;
   showPerfHUD: boolean;
   showLibreWizard: boolean;
@@ -40,6 +49,8 @@ interface ModalsState {
   closeProviders: () => void;
   setShowSquad: (value: boolean) => void;
   setShowSquadWizard: (value: boolean) => void;
+  /** Opens the wizard pre-filled; clearing the flag also clears the preset. */
+  openSquadWizardWithPreset: (preset: SquadWizardPreset) => void;
   setShowDiag: (value: boolean) => void;
   setShowPerfHUD: (value: boolean) => void;
   togglePerfHUD: () => void;
@@ -53,6 +64,7 @@ export const useModalsStore = create<ModalsState>((set) => ({
   providersStep: "list",
   showSquad: false,
   showSquadWizard: false,
+  squadWizardPreset: null,
   showDiag: false,
   showPerfHUD: false,
   showLibreWizard: false,
@@ -60,7 +72,9 @@ export const useModalsStore = create<ModalsState>((set) => ({
   openProviders: (step = "list") => set({ showProviders: true, providersStep: step }),
   closeProviders: () => set({ showProviders: false, providersStep: "list" }),
   setShowSquad: (value) => set({ showSquad: value }),
-  setShowSquadWizard: (value) => set({ showSquadWizard: value }),
+  setShowSquadWizard: (value) =>
+    set(value ? { showSquadWizard: true } : { showSquadWizard: false, squadWizardPreset: null }),
+  openSquadWizardWithPreset: (preset) => set({ showSquadWizard: true, squadWizardPreset: preset }),
   setShowDiag: (value) => set({ showDiag: value }),
   setShowPerfHUD: (value) => set({ showPerfHUD: value }),
   togglePerfHUD: () => set((state) => ({ showPerfHUD: !state.showPerfHUD })),
@@ -72,6 +86,7 @@ export const useModalsStore = create<ModalsState>((set) => ({
       providersStep: "list",
       showSquad: false,
       showSquadWizard: false,
+      squadWizardPreset: null,
       showDiag: false,
       showLibreWizard: false,
       // O Perf HUD é um overlay de diagnóstico, não um modal — sobrevive.

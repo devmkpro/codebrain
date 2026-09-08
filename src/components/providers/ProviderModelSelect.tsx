@@ -1,4 +1,8 @@
-﻿import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { filterModels } from "../../lib/model-filter";
+
+/** Above this many models a plain <select> stops being usable, so we add a filter. */
+const SEARCH_THRESHOLD = 12;
 
 // ProviderModelSelect
 export function ProviderModelSelect({
@@ -13,6 +17,19 @@ export function ProviderModelSelect({
   const allowCustomModel = selectedProvider?.id === "openrouter" || models.length === 0;
   const isCustomModel = allowCustomModel && value.model && !models.includes(value.model);
   const [customInput, setCustomInput] = useState(value.model ?? "");
+  const [modelQuery, setModelQuery] = useState("");
+
+  const showSearch = models.length > SEARCH_THRESHOLD;
+  const visibleModels = useMemo(() => {
+    if (!showSearch) return models;
+    const filtered = filterModels(models, modelQuery);
+    // Keep the current selection listed even when it does not match, otherwise
+    // the <select> would silently display an option it no longer contains.
+    if (value.model && models.includes(value.model) && !filtered.includes(value.model)) {
+      return [value.model, ...filtered];
+    }
+    return filtered;
+  }, [models, modelQuery, showSearch, value.model]);
 
   return <div className="space-y-1.5">
       <p className="font-mono text-[9px] text-gray-600 uppercase tracking-widest">{label}</p>
@@ -20,6 +37,7 @@ export function ProviderModelSelect({
         <select value={selectedProvider?.id ?? ""} onChange={e => {
         const p = providers.find(pr => pr.id === e.target.value);
         const isCustom = p?.id === "openrouter" || (p?.models?.length ?? 0) === 0;
+        setModelQuery("");
         onChange({
           providerId: p?.id,
           model: isCustom ? customInput || "" : p?.models?.[0]
@@ -36,7 +54,7 @@ export function ProviderModelSelect({
           onChange({ providerId: value.providerId ?? selectedProvider?.id, model: newModel });
         }
       }} className="flex-1 bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-gray-200 focus:outline-none focus:border-indigo-500/40 appearance-none">
-            {models.map(m => <option key={m} value={m}>{m}</option>)}
+            {visibleModels.map(m => <option key={m} value={m}>{m}</option>)}
             {allowCustomModel && <option value="__custom__">Custom model...</option>}
           </select>}
         {(models.length === 0 || isCustomModel) && <input type="text" value={customInput} onChange={e => {
@@ -44,5 +62,19 @@ export function ProviderModelSelect({
         onChange({ providerId: value.providerId ?? selectedProvider?.id, model: e.target.value });
       }} placeholder="provider/model-name" spellCheck={false} className="flex-1 bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500/40" />}
       </div>
+      {showSearch && !isCustomModel && <div className="flex items-center gap-2">
+        <input
+          type="search"
+          value={modelQuery}
+          onChange={e => setModelQuery(e.target.value)}
+          placeholder={`Buscar entre ${models.length} modelos...`}
+          aria-label={`Buscar modelo${label ? ` — ${label}` : ""}`}
+          spellCheck={false}
+          className="flex-1 bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[10px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500/40"
+        />
+        <span className="font-mono text-[9px] text-gray-600 tabular-nums">
+          {visibleModels.length}/{models.length}
+        </span>
+      </div>}
     </div>;
 }

@@ -105,6 +105,20 @@ export function registerMiscHandlers(ctx: AppContext): void {
     return { ok: true, data: getTokenTracker().aggregateByWorkspace(args.workspacePath, args.sinceMs ?? 0) };
   });
 
+  ipcMain.handle("tokens:byMission", (_event, args: { paneIds: string[] }) => {
+    const totals = { input: 0, output: 0, cache_read: 0, cache_write: 0, cost_usd: 0 };
+    for (const paneId of args.paneIds ?? []) {
+      const row = getTokenTracker().aggregateByPane(paneId);
+      if (!row) continue;
+      totals.input += row.inputTokens;
+      totals.output += row.outputTokens;
+      totals.cache_read += row.cacheRead;
+      totals.cache_write += row.cacheWrite;
+      totals.cost_usd += row.costUsd;
+    }
+    return { ok: true, data: totals };
+  });
+
   // Auth stubs
   ipcMain.handle("auth:status", async () => ({ authenticated: true, email: "" }));
   ipcMain.handle("auth:logout", async () => {});

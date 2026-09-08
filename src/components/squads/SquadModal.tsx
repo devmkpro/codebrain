@@ -8,6 +8,7 @@ import { useProvidersStore } from "../../stores/providers-store";
 import { useSquadsStore, type SquadWorker } from "../../stores/squads-store";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { useNavStore } from "../../stores/nav-store";
+import type { SquadWizardPreset } from "../../stores/modals-store";
 import { ProviderModelSelect } from "../providers/ProviderModelSelect";
 import { ProvidersModal } from "../providers/ProvidersModal";
 import { FONT_OPTIONS, useTerminalSettings } from "../../stores/terminal-settings-store";
@@ -768,10 +769,13 @@ export function SquadWizard({
   open,
   onClose,
   onSpawn,
+  preset,
 }: {
   open: boolean;
   onClose: () => void;
   onSpawn?: (config: any) => void;
+  /** Pre-filled team from the "+ time" launcher. Every field stays editable. */
+  preset?: SquadWizardPreset | null;
 }) {
   const providers = useProvidersStore((s: any) => s.providers);
   const [step, setStep] = React.useState(1);
@@ -784,8 +788,18 @@ export function SquadWizard({
     tabs?.[activeTabIndex]?.workspacePath ?? tabs?.[0]?.workspacePath ?? null;
 
   React.useEffect(() => {
-    if (open) { setStep(1); setName(""); setOrchestrator({}); setWorkers([]); }
-  }, [open]);
+    if (!open) return;
+    if (preset) {
+      // Everything is filled, so open on the workers step — the one the user is
+      // most likely to tweak. The step indicator still walks back to 1 and 2.
+      setName(preset.name);
+      setOrchestrator({ ...preset.orchestrator });
+      setWorkers(preset.workers.map((w) => ({ ...w })));
+      setStep(3);
+      return;
+    }
+    setStep(1); setName(""); setOrchestrator({}); setWorkers([]);
+  }, [open, preset]);
 
   if (!open) return null;
 
@@ -871,6 +885,13 @@ export function SquadWizard({
 
           {step === 3 && (
             <div className="space-y-3">
+              {preset?.warnings?.length ? (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                  {preset.warnings.map((w) => (
+                    <p key={w} className="text-[11px] font-mono leading-relaxed text-amber-300/90">{w}</p>
+                  ))}
+                </div>
+              ) : null}
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">Workers ({workers.length})</p>
                 <button

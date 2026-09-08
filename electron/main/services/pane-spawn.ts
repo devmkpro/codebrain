@@ -8,6 +8,7 @@ import { resolveCommand } from "../pty-manager";
 import { MODEL_MAP_BY_TYPE, getProviderTypeForModel } from "./constants";
 import { resolveProvider } from "./spawn/provider-resolver";
 import { buildSystemPrompt } from "./spawn/prompt-builder";
+import { withCodexDeveloperInstructions, withNativeToolAllowlist } from "./spawn/native-tools";
 
 const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
@@ -112,27 +113,39 @@ export async function spawnPaneInternal(
       }
     }
 
-    // The renderer's mission store is local UI state. The operational backend
-    // needs a durable mission id so actors, tasks, handoffs and messages can be
-    // joined after a restart. Reuse an explicit backend id, otherwise adopt the
-    // active mission for this workspace or create one on first spawn.
+    // The renderer's mission store is local UI state. When coordination is
+    // active, the operational backend needs a durable mission id so actors,
+    // tasks, handoffs and messages can be joined after a restart. Direct
+    // conversations do not need mission/task state. Resolve or create a
+    // mission only when the pane is participating in coordination; this keeps
+    // the cheap path free of an unconditional SQLite round-trip.
+    const needsMission = Boolean(
+      config.missionId?.startsWith("mission_") ||
+      config.taskId ||
+      config.activityId ||
+      config.role === "orchestrator" ||
+      config.squadCallable?.length ||
+      config.orchestratorInstructions?.trim(),
+    );
     let operationalMissionId = config.missionId?.startsWith("mission_") ? config.missionId : undefined;
-    try {
-      const store = (ctx as any).memoryStore;
-      if (store?.resolveActiveMission && !operationalMissionId) {
-        const active = store.resolveActiveMission({ workspace: cwd });
-        operationalMissionId = active?.mission?.id;
+    if (needsMission) {
+      try {
+        const store = (ctx as any).memoryStore;
+        if (store?.resolveActiveMission && !operationalMissionId) {
+          const active = store.resolveActiveMission({ workspace: cwd });
+          operationalMissionId = active?.mission?.id;
+        }
+        if (!operationalMissionId && store?.createMission) {
+          const created = store.createMission({
+            title: `Workspace · ${path.basename(cwd || "projeto")}`,
+            summary: "Missão operacional criada automaticamente pelo primeiro pane.",
+            workspace: cwd,
+          });
+          operationalMissionId = created?.id;
+        }
+      } catch (error) {
+        log.warn("[spawnPaneInternal] backend mission resolution failed:", error instanceof Error ? error.message : String(error));
       }
-      if (!operationalMissionId && store?.createMission) {
-        const created = store.createMission({
-          title: `Workspace · ${path.basename(cwd || "projeto")}`,
-          summary: "Missão operacional criada automaticamente pelo primeiro pane.",
-          workspace: cwd,
-        });
-        operationalMissionId = created?.id;
-      }
-    } catch (error) {
-      log.warn("[spawnPaneInternal] backend mission resolution failed:", error instanceof Error ? error.message : String(error));
     }
 
     // ── Provider resolution (delegated to provider-resolver module) ────────────
@@ -172,10 +185,15 @@ export async function spawnPaneInternal(
     );
     const env: Record<string, string> = { ...(provider?.env ?? {}), ...configEnv };
 
-    const args = [...(config.args ?? [])];
+    let args = [...(config.args ?? [])];
     const isCodex = agent === "codex" || provider?.type === "codex";
     const isGeminiCli = agent === "gemini-cli" || agent === "gemini" || provider?.type === "gemini-cli";
     const isClaudeCompatible = !isCodex && !isGeminiCli && (agent === "openclaude" || agent === "claude");
+
+    // Claude Code otherwise sends every native tool schema on every request.
+    // Apply a role-specific capability boundary before adding the system
+    // prompt; OpenClaude and the other CLIs have different flag contracts.
+    args = withNativeToolAllowlist(args, agent, config.role);
 
     if (isClaudeCompatible && !args.includes("--permission-mode")) {
       args.push("--permission-mode", config.permissionMode ?? "bypassPermissions");
@@ -789,7 +807,7 @@ export async function spawnPaneInternal(
     }
 
     // ── Codex CLI branch (NOT Claude-compatible) ───────────────────────────────
-    // All config via CLI -c flags (short values) + model_instructions_file (path).
+    // All config via CLI -c flags (short values) + developer_instructions.
     // NO CODEX_HOME override — uses real ~/.codex/ with user's auth tokens.
     // Pattern reverse-engineered from the app (2026-05-30).
     if (isCodex) {
@@ -816,16 +834,14 @@ export async function spawnPaneInternal(
         args.push("-c", `mcp_servers.codebrain.default_tools_approval_mode=${tomlStr("approve")}`);
       }
 
-      // System prompt → file, then pass file PATH via -c (avoids error 206 = cmd too long)
+      // Codex has no system-prompt-file flag. Use its supported developer
+      // instruction override; the generated prompt remains provider-neutral.
       const instructionsFile = buildSystemPrompt(ctx, {
         paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
         squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
       });
-      if (!args.some((a: string) => a.includes("model_instructions_file="))) {
-        // Normalize to forward slashes for TOML compatibility
-        const normalizedPath = instructionsFile.replace(/\\/g, "/");
-        args.push("-c", `model_instructions_file=${tomlStr(normalizedPath)}`);
-      }
+      const instructions = fs.readFileSync(instructionsFile, "utf-8");
+      args = withCodexDeveloperInstructions(args, instructions);
 
       // API-key provider: forward the key. OAuth provider: rely on `codex login`.
       if (provider?.id !== "codex-oauth") {
@@ -918,16 +934,23 @@ export async function spawnPaneInternal(
         fs.mkdirSync(geminiDir, { recursive: true });
         fs.writeFileSync(contextAbsPath, promptContent, "utf-8");
 
-        // Add to contextFileName in settings.json
+        // Gemini CLI reads the configured context name from context.fileName.
+        // Keep existing names so the workspace's own GEMINI.md remains active.
         const settingsPath = path.join(geminiDir, "settings.json");
         let settings: Record<string, any> = {};
         try { settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8")); } catch {}
-        const currentContext = Array.isArray(settings.contextFileName)
-          ? settings.contextFileName.filter((item: any) => typeof item === "string")
-          : typeof settings.contextFileName === "string"
-            ? [settings.contextFileName]
+        const contextSettings = settings.context && typeof settings.context === "object"
+          ? settings.context
+          : {};
+        const currentContext = Array.isArray(contextSettings.fileName)
+          ? contextSettings.fileName.filter((item: any) => typeof item === "string")
+          : typeof contextSettings.fileName === "string"
+            ? [contextSettings.fileName]
             : ["GEMINI.md"];
-        settings.contextFileName = Array.from(new Set([...currentContext, contextRelPath]));
+        settings.context = {
+          ...contextSettings,
+          fileName: Array.from(new Set([...currentContext, contextRelPath])),
+        };
         // Atomic write for context file update too
         const tmpPath = `${settingsPath}.${process.pid}.${Date.now()}.tmp`;
         fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");

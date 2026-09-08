@@ -74,8 +74,8 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_spawn ─────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_spawn",
-    "Open a NEW VISIBLE terminal pane in the CodeBrain workspace grid, OR reuse an idle worker if one is compatible (default: reuseIdle=true). Returns paneId + reused flag. ALWAYS check actor_list() first to see available workers before spawning.",
+    "pane_spawn",
+    "Open a NEW VISIBLE terminal pane in the CodeBrain workspace grid, OR reuse an idle worker if one is compatible (default: reuseIdle=true). Returns paneId + reused flag. For squad coordination, activate the coordination group and check actor_list() first.",
     {
       cwd:          z.string().optional().describe("Working directory for the new pane. STRONGLY RECOMMENDED — always pass your workspace path here to ensure the pane opens in the correct project. If omitted, the system guesses from active panes."),
       agent:        z.enum(["claude", "codex", "gemini", "gemini-cli", "openclaude", "kimi", "cursor", "copilot", "shell"]).optional().describe("Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it (for example, Codex → codex). Omit only when the user did not choose a CLI."),
@@ -122,7 +122,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_spawn_and_wait ────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_spawn_and_wait",
+    "pane_spawn_and_wait",
     "Spawn a pane and BLOCK until it goes idle (run mode). Returns the pane output + parsed status header. Use when you need the result inline (like MiMo action:'run'). For fire-and-forget, use pane_spawn instead.",
     {
       cwd:          z.string().optional().describe("Working directory for the new pane."),
@@ -165,7 +165,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_kill_cascade ─────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_kill_cascade",
+    "pane_kill_cascade",
     "Kill a pane and ALL its registered children recursively (cancel cascade). Use when you want to terminate an orchestrator and all workers it spawned. Safe to call on leaf panes (no children) — just kills that one pane.",
     {
       paneId: z.string().describe("The pane to kill (with all its children)."),
@@ -182,7 +182,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__actor_status ──────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__actor_status",
+    "actor_status",
     "Get the actor registry entry for a pane: status (pending/running/idle/stuck/cancelled), turn_count, last_turn_time, last_error, parent_pane_id, description.",
     {
       paneId: z.string().describe("The pane ID to inspect."),
@@ -199,7 +199,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__actor_list ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__actor_list",
+    "actor_list",
     "List all active actors (panes) in the current workspace from the persistent registry. Shows status, turn count, parent hierarchy, stuck detection, and 'available' field (true = idle worker with no in_progress task, ready for delegation). More detailed than pane_list.",
     {
       include_terminal: z.boolean().optional().describe("Include already-completed panes (default false — only active ones)."),
@@ -216,7 +216,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__worker_find_idle ──────────────────────────────────────
   server.tool(
-    "mcp__codebrain__worker_find_idle",
+    "worker_find_idle",
     "Find an idle worker that is available for a new task. Returns the best candidate (lowest turn count) or null if none available. A worker is 'available' when: role=worker, status=idle, no kanban task in_progress assigned to it.",
     {
       model:      z.string().optional().describe("Filter by model (e.g. 'mimo-v2.5-pro'). Omit to match any model."),
@@ -251,7 +251,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_write ─────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_write",
+    "pane_write",
     "Write text or a prompt to an existing pane (simulates keyboard input into that terminal).",
     {
       paneId: z.string().describe("The target pane ID."),
@@ -271,7 +271,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_read ──────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_read",
+    "pane_read",
     "Read recent output from a pane's terminal buffer.",
     {
       paneId: z.string().describe("The target pane ID."),
@@ -290,7 +290,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_wait_idle ─────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_wait_idle",
+    "pane_wait_idle",
     "Wait until a pane becomes idle (no new output for ~3s). Call after pane_write to know when the agent finished.",
     {
       paneId:  z.string().describe("The pane to wait on."),
@@ -308,7 +308,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_list ──────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_list",
+    "pane_list",
     "List all active terminal panes in the current session, including panes created by the user via +Terminal. Returns paneId, label, providerId, model, status, isOrchestrator, and hasAgent (true if the pane has already received a pane_write or user input).",
     {},
     async () => {
@@ -324,7 +324,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_set_role ──────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_set_role",
+    "pane_set_role",
     "Mark an existing pane as a worker or orchestrator. Use this to claim panes created by the user via +Terminal and assign them a role in the squad.",
     {
       paneId: z.string().describe("The target pane ID (from pane_list or pane_spawn)."),
@@ -346,7 +346,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__todo_manager ───────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__todo_manager",
+    "todo_manager",
     "Manage the user-visible task list shown in the CodeBrain sidebar. Actions: set_tasks, add_task, move_to_task, read_list, mark_all_done.",
     {
       action: z.enum(["set_tasks", "add_task", "move_to_task", "read_list", "mark_all_done"])
@@ -374,7 +374,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__task_tree ─────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__task_tree",
+    "task_tree",
     "Manage hierarchical tasks with tree structure (T1, T1.1, T1.2). SQLite-backed, persistent. Actions: create, update, list, get, delete, gate. Gate returns incomplete tasks for pre-stop check.",
     {
       action: z.enum(["create", "update", "list", "get", "delete", "gate"])
@@ -424,7 +424,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__auto_dream ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__auto_dream",
+    "auto_dream",
     "Run auto-dream (consolidate working memories into semantic summaries) or auto-distill (extract repeated workflow patterns from trajectories). Use periodically for memory hygiene.",
     {
       mode: z.enum(["dream", "distill"]).describe("Mode: 'dream' consolidates working memories, 'distill' extracts workflow patterns from trajectories."),
@@ -451,7 +451,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_write_many ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_write_many",
+    "pane_write_many",
     "Write the same text to multiple panes at once. Useful for broadcasting a task prompt to all workers simultaneously.",
     {
       paneIds: z.array(z.string()).describe("Array of pane IDs to write to."),
@@ -470,7 +470,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_wait_many ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_wait_many",
+    "pane_wait_many",
     "Block until any or all of the listed worker panes go idle or submit a handoff. Use instead of polling pane_wait_idle in a loop — one call handles multiple workers efficiently. returnOn='any' returns as soon as the first worker finishes; returnOn='all' waits for every worker.",
     {
       paneIds:      z.array(z.string()).describe("Worker pane IDs to watch."),
@@ -495,7 +495,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__handoff_submit ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__handoff_submit",
+    "handoff_submit",
     "Worker calls this as its VERY LAST action when a task is complete. Automatically notifies the orchestrator pane with a [squad] message — no pane_write needed. The orchestrator can also use handoff_wait/handoff_list to poll results.",
     {
       paneId:    z.string().describe("The worker's pane ID."),
@@ -515,7 +515,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__handoff_wait ──────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__handoff_wait",
+    "handoff_wait",
     "Orchestrator waits for workers to submit their handoff results. Polls until returnOn condition is met or timeout.",
     {
       paneIds:    z.array(z.string()).describe("Worker pane IDs to wait for."),
@@ -534,7 +534,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__agent_list ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__agent_list",
+    "agent_list",
     "List all active and recently exited agents (panes) with their role, model, and status. Data is persisted in SQLite for session history.",
     {
       workspace: z.string().optional().describe("Filter by workspace path."),
@@ -552,7 +552,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__agent_messages ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__agent_messages",
+    "agent_messages",
     "Retrieve messages sent to a specific agent pane from other agents. Includes full message history persisted in SQLite (unlike pane_read_messages which uses file-based inbox).",
     {
       paneId:     z.string().describe("Target pane ID to get messages for."),
@@ -572,7 +572,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_send_message ──────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_send_message",
+    "pane_send_message",
     "Send a message to another agent pane and submit it as a new turn. Use type='task' for work assignments; type='update', 'question' and 'result' also wake the recipient so it can respond. NEVER use for task completion reporting — use handoff_submit instead.",
     {
       from:    z.string().describe("Your pane ID (sender)."),
@@ -704,7 +704,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_read_messages ─────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pane_read_messages",
+    "pane_read_messages",
     "Read messages sent to your pane from other agents. Check this before starting work and periodically during execution to catch updates from the orchestrator or other workers.",
     {
       paneId:    z.string().describe("Your pane ID — reads messages from your inbox."),
@@ -770,7 +770,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__memory_write ───────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__memory_write",
+    "memory_write",
     "Write to shared memory. Use this to persist context, decisions, and findings that other agents need to access. Memory types: episodic (events), semantic (knowledge), procedural (how-to), working (scratch).",
     {
       type:     z.enum(["episodic", "semantic", "procedural", "working"]).optional()
@@ -798,7 +798,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__memory_read ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__memory_read",
+    "memory_read",
     "Read a specific memory by id or key. Use this to retrieve context saved by other agents.",
     {
       id:        z.string().optional().describe("Memory ID to read."),
@@ -817,7 +817,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__memory_search ──────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__memory_search",
+    "memory_search",
     "Search shared memories by keyword. Searches across content, keys, and tags. Use this to find context saved by other agents.",
     {
       query:     z.string().describe("Search keyword or phrase."),
@@ -838,7 +838,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__memory_list ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__memory_list",
+    "memory_list",
     "List shared memories with optional filters. Returns most recent first.",
     {
       type:      z.enum(["episodic", "semantic", "procedural", "working"]).optional()
@@ -860,7 +860,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__memory_delete ──────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__memory_delete",
+    "memory_delete",
     "Delete a memory by id or key.",
     {
       id:        z.string().optional().describe("Memory ID to delete."),
@@ -879,7 +879,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__memory_stats ───────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__memory_stats",
+    "memory_stats",
     "Get shared memory statistics: count and size per memory type.",
     {
       workspace: z.string().optional().describe("Filter by workspace."),
@@ -896,7 +896,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__memory_digest ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__memory_digest",
+    "memory_digest",
     "Get a concise digest of what changed since your last turn: new memories, handoffs from other agents, and file changes. Call this at the start of every turn to stay aware of what teammates did. Automatically tracks your last-seen timestamp.",
     {
       since_ts: z.number().optional().describe("Unix timestamp (seconds) to get changes since. If omitted, uses your agent's last-seen timestamp automatically."),
@@ -919,7 +919,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__swarm_status ───────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__swarm_status",
+    "swarm_status",
     "Get swarm status: active workers, roles, health, topology, and counts. Use this to understand the current state of the agent swarm.",
     {},
     async () => {
@@ -934,7 +934,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__swarm_broadcast ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__swarm_broadcast",
+    "swarm_broadcast",
     "Broadcast a message to all active worker panes. Use for announcements that all workers should see (e.g. architecture changes, priority shifts).",
     {
       message: z.string().describe("The message to broadcast to all workers."),
@@ -952,7 +952,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__swarm_assign_task ──────────────────────────────────────
   server.tool(
-    "mcp__codebrain__swarm_assign_task",
+    "swarm_assign_task",
     "Assign a task to a specific worker by injecting a task message into its terminal. Prefer pane_send_message for detailed task assignments.",
     {
       paneId: z.string().describe("Target worker pane ID."),
@@ -971,7 +971,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__swarm_worker_health ────────────────────────────────────
   server.tool(
-    "mcp__codebrain__swarm_worker_health",
+    "swarm_worker_health",
     "Check health of a specific worker: is it alive, what's its recent output, what's its status.",
     {
       paneId: z.string().describe("Worker pane ID to check."),
@@ -988,7 +988,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__swarm_respawn ──────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__swarm_respawn",
+    "swarm_respawn",
     "Respawn a crashed worker. Creates a new pane with the same configuration as the original.",
     {
       paneId: z.string().describe("The pane ID of the crashed worker to respawn."),
@@ -1005,7 +1005,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__swarm_set_topology ─────────────────────────────────────
   server.tool(
-    "mcp__codebrain__swarm_set_topology",
+    "swarm_set_topology",
     "Set the swarm topology: hierarchical (orchestrator→workers), mesh (any-to-any), centralized (all→one).",
     {
       type: z.enum(["hierarchical", "mesh", "centralized"]).describe("Topology type."),
@@ -1026,7 +1026,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pattern_write ──────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pattern_write",
+    "pattern_write",
     "Save a learned pattern extracted from successful task trajectories. Use after completing a task to record what worked.",
     {
       pattern_type:      z.string().describe("Pattern category (e.g. 'api-design', 'refactor', 'test-strategy')."),
@@ -1046,7 +1046,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pattern_list ───────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pattern_list",
+    "pattern_list",
     "List learned patterns. Sorted by quality score (highest first).",
     {
       pattern_type: z.string().optional().describe("Filter by pattern type."),
@@ -1064,7 +1064,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pattern_update ─────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pattern_update",
+    "pattern_update",
     "Update a pattern's quality score after it was successfully applied.",
     {
       id:            z.string().describe("Pattern ID."),
@@ -1082,7 +1082,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pattern_delete ─────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__pattern_delete",
+    "pattern_delete",
     "Delete a learned pattern.",
     {
       id: z.string().describe("Pattern ID to delete."),
@@ -1103,7 +1103,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__trajectory_record ─────────────────────────────────────
   server.tool(
-    "mcp__codebrain__trajectory_record",
+    "trajectory_record",
     "Record a new trajectory (action sequence for a task). Returns trajectory ID for subsequent step additions.",
     {
       session_id:  z.string().optional().describe("Session ID for grouping."),
@@ -1128,7 +1128,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__trajectory_add_step ───────────────────────────────────
   server.tool(
-    "mcp__codebrain__trajectory_add_step",
+    "trajectory_add_step",
     "Add a step to an existing trajectory. Use for real-time action logging.",
     {
       id:   z.string().describe("Trajectory ID."),
@@ -1146,7 +1146,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__trajectory_update ─────────────────────────────────────
   server.tool(
-    "mcp__codebrain__trajectory_update",
+    "trajectory_update",
     "Update trajectory outcome (mark as success/failure after task completes).",
     {
       id:             z.string().describe("Trajectory ID."),
@@ -1166,7 +1166,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__trajectory_list ───────────────────────────────────────
   server.tool(
-    "mcp__codebrain__trajectory_list",
+    "trajectory_list",
     "List trajectories with optional filters (session, agent, outcome, task type).",
     {
       session_id: z.string().optional(),
@@ -1189,7 +1189,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__trajectory_get ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__trajectory_get",
+    "trajectory_get",
     "Get a single trajectory by ID with full step details.",
     { id: z.string().describe("Trajectory ID.") },
     async (args) => {
@@ -1204,7 +1204,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__trajectory_stats ──────────────────────────────────────
   server.tool(
-    "mcp__codebrain__trajectory_stats",
+    "trajectory_stats",
     "Get trajectory statistics: counts by outcome, average duration, average tool calls.",
     { workspace: z.string().optional() },
     async (args) => {
@@ -1219,7 +1219,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__trajectory_extract_patterns ───────────────────────────
   server.tool(
-    "mcp__codebrain__trajectory_extract_patterns",
+    "trajectory_extract_patterns",
     "Extract common action patterns from successful trajectories. Auto-saves high-frequency patterns.",
     {
       task_type:       z.string().optional().describe("Filter by task type."),
@@ -1238,7 +1238,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__trajectory_delete ─────────────────────────────────────
   server.tool(
-    "mcp__codebrain__trajectory_delete",
+    "trajectory_delete",
     "Delete a trajectory record.",
     { id: z.string().describe("Trajectory ID.") },
     async (args) => {
@@ -1257,7 +1257,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__file_read ──────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__file_read",
+    "file_read",
     "Read a file or list directory contents from the workspace. Returns file content (max 100KB) or directory listing.",
     {
       path:     z.string().describe("Relative or absolute path within the workspace."),
@@ -1275,7 +1275,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__file_budgeted_read ─────────────────────────────────────
   server.tool(
-    "mcp__codebrain__file_budgeted_read",
+    "file_budgeted_read",
     "Read a file within a token budget. Prioritizes structure (headers, function signatures) over body content. Returns headers-first when file exceeds budget. Use for large files to avoid context overflow.",
     {
       path:          z.string().describe("Relative or absolute path within the workspace."),
@@ -1294,7 +1294,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__file_write ─────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__file_write",
+    "file_write",
     "Write content to a file in the workspace. Creates parent directories if needed.",
     {
       path:        z.string().describe("Relative or absolute path within the workspace."),
@@ -1314,7 +1314,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__file_search ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__file_search",
+    "file_search",
     "Search for files by name pattern or content. Supports glob patterns (*.ts, **/*.tsx). Skips node_modules and .git.",
     {
       pattern: z.string().optional().describe("Glob pattern for filename matching (e.g. '*.ts', '**/*.tsx')."),
@@ -1338,7 +1338,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__system_info ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__system_info",
+    "system_info",
     "Get system information: OS, CPU, memory, Node version, workspace path.",
     {},
     async () => {
@@ -1353,7 +1353,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__system_diagnostics ─────────────────────────────────────
   server.tool(
-    "mcp__codebrain__system_diagnostics",
+    "system_diagnostics",
     "Get full diagnostics: system health, all pane statuses, MCP server health, memory usage.",
     {},
     async () => {
@@ -1372,7 +1372,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__worker_detect ──────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__worker_detect",
+    "worker_detect",
     "Scan text for task triggers (optimize, audit, document, refactor, benchmark, testgaps, deepdive). Use to detect if a background worker should be dispatched.",
     {
       text: z.string().describe("Text to scan for trigger patterns (e.g. a user prompt or task description)."),
@@ -1389,7 +1389,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__worker_list_triggers ───────────────────────────────────
   server.tool(
-    "mcp__codebrain__worker_list_triggers",
+    "worker_list_triggers",
     "List all available trigger definitions with their patterns and priorities.",
     {},
     async () => {
@@ -1404,7 +1404,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__provider_health ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__provider_health",
+    "provider_health",
     "Get provider health status: success/error counts, error rates, status (healthy/degraded/critical).",
     {},
     async () => {
@@ -1419,7 +1419,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__hooks_status ─────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__hooks_status",
+    "hooks_status",
     "Get hooks system status: registered hooks, event stats, recent lifecycle events.",
     {},
     async () => {
@@ -1434,7 +1434,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__hooks_log ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__hooks_log",
+    "hooks_log",
     "Get recent lifecycle hook events (pane_spawned, pane_exited, pane_idle, etc).",
     { limit: z.number().optional().describe("Max events to return (default 50)") },
     async (args) => {
@@ -1449,7 +1449,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__hooks_fire ───────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__hooks_fire",
+    "hooks_fire",
     "Fire a custom hook event. Useful for testing or automation triggers.",
     { type: z.string().describe("Hook event type (pane_spawned, pane_exited, pane_idle, task_started, task_completed, etc)"), data: z.record(z.unknown()).optional().describe("Event data payload") },
     async (args) => {
@@ -1464,7 +1464,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__skill_list ───────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__skill_list",
+    "skill_list",
     "List installed skills (prompt templates and squad templates). Returns skill manifests.",
     {
       type: z.enum(["prompt", "squad"]).optional().describe("Filter by skill type"),
@@ -1483,7 +1483,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__skill_get ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__skill_get",
+    "skill_get",
     "Get full skill content: manifest + all files (prompt.md, squad.json, README.md).",
     {
       id: z.string().describe("Skill ID (folder name in skills directory)"),
@@ -1502,7 +1502,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__skill_create ─────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__skill_create",
+    "skill_create",
     "Create a new skill locally. Use scope='project' to save in <cwd>/.codebrain/skills/ (project-specific), or scope='global' (default) to save in ~/.codebrain/skills/ (available everywhere).",
     {
       id: z.string().describe("Unique skill ID (used as folder name, e.g. 'my-skill')"),
@@ -1527,7 +1527,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__skill_delete ─────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__skill_delete",
+    "skill_delete",
     "Delete a locally created skill by ID. Removes the skill directory.",
     {
       id: z.string().describe("Skill ID to delete"),
@@ -1546,7 +1546,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__skill_install ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__skill_install",
+    "skill_install",
     "Install a skill from the GitLab registry to local ~/.codebrain/skills/.",
     { id: z.string().describe("Skill ID to install from registry") },
     async (args) => {
@@ -1561,7 +1561,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__skill_uninstall ──────────────────────────────────────
   server.tool(
-    "mcp__codebrain__skill_uninstall",
+    "skill_uninstall",
     "Uninstall a locally installed skill.",
     { id: z.string().describe("Skill ID to uninstall") },
     async (args) => {
@@ -1580,89 +1580,92 @@ function createCodebrainMCPServer(bridge) {
   // The SDK automatically sends notifications/tools/list_changed when enabled/disabled.
 
   const advancedToolGroups = {};
+  // Directly registered tools are classified after registration and disabled
+  // by default as well. Only the small core below is exposed on every turn.
+  const registeredToolGroups = new Map();
 
   // ── Consensus Tools ────────────────────────────────────────────────────────
   advancedToolGroups.consensus = [
-    server.tool("mcp__codebrain__swarm_vote", "Start a vote among agents. Modes: majority, unanimous, weighted.", { question: z.string(), options: z.array(z.string()).min(2), mode: z.enum(["majority","unanimous","weighted"]).optional(), timeoutMs: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmVote(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_cast_vote", "Cast a vote in an active vote.", { voteId: z.string(), paneId: z.string(), choice: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmCastVote(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_elect_leader", "Auto-elect a leader among workers based on capability score.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmElectLeader(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_consensus_status", "Get consensus status: leader, active votes, Raft/PBFT/Gossip node counts.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmConsensusStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__raft_start", "Start a Raft consensus node.", { nodeId: z.string(), peers: z.array(z.string()).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__raft_stop", "Stop a Raft node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__raft_append", "Append a command to the Raft log (leader only).", { nodeId: z.string(), command: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftAppend(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__raft_status", "Get status of all Raft nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__pbft_start", "Start a PBFT node.", { nodeId: z.string(), allNodes: z.array(z.string()) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__pbft_stop", "Stop a PBFT node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__pbft_propose", "Propose a request via PBFT (primary only).", { nodeId: z.string(), request: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftPropose(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__pbft_view_change", "Initiate PBFT view change.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftViewChange(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__pbft_status", "Get status of all PBFT nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__gossip_start", "Start a gossip node.", { nodeId: z.string(), peers: z.array(z.string()).optional(), fanout: z.number().optional(), intervalMs: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__gossip_stop", "Stop a gossip node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__gossip_set", "Set a value in gossip state (will be disseminated).", { nodeId: z.string(), key: z.string(), value: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipSet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__gossip_get", "Get a value from gossip state.", { nodeId: z.string(), key: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__gossip_sync", "Trigger manual gossip sync round.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipSync(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__gossip_status", "Get status of all gossip nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_vote", "Start a vote among agents. Modes: majority, unanimous, weighted.", { question: z.string(), options: z.array(z.string()).min(2), mode: z.enum(["majority","unanimous","weighted"]).optional(), timeoutMs: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmVote(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_cast_vote", "Cast a vote in an active vote.", { voteId: z.string(), paneId: z.string(), choice: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmCastVote(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_elect_leader", "Auto-elect a leader among workers based on capability score.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmElectLeader(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_consensus_status", "Get consensus status: leader, active votes, Raft/PBFT/Gossip node counts.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmConsensusStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("raft_start", "Start a Raft consensus node.", { nodeId: z.string(), peers: z.array(z.string()).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("raft_stop", "Stop a Raft node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("raft_append", "Append a command to the Raft log (leader only).", { nodeId: z.string(), command: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftAppend(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("raft_status", "Get status of all Raft nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("pbft_start", "Start a PBFT node.", { nodeId: z.string(), allNodes: z.array(z.string()) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("pbft_stop", "Stop a PBFT node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("pbft_propose", "Propose a request via PBFT (primary only).", { nodeId: z.string(), request: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftPropose(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("pbft_view_change", "Initiate PBFT view change.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftViewChange(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("pbft_status", "Get status of all PBFT nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("gossip_start", "Start a gossip node.", { nodeId: z.string(), peers: z.array(z.string()).optional(), fanout: z.number().optional(), intervalMs: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("gossip_stop", "Stop a gossip node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("gossip_set", "Set a value in gossip state (will be disseminated).", { nodeId: z.string(), key: z.string(), value: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipSet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("gossip_get", "Get a value from gossip state.", { nodeId: z.string(), key: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("gossip_sync", "Trigger manual gossip sync round.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipSync(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("gossip_status", "Get status of all gossip nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
   ];
 
   // ── Swarm Pipeline Tools ───────────────────────────────────────────────────
   advancedToolGroups.swarm = [
-    server.tool("mcp__codebrain__swarm_fan_out", "Distribute tasks to workers in parallel. Supports domain routing and batch mode.", { tasks: z.array(z.object({ taskId: z.string(), description: z.string(), targetWorker: z.string().optional(), domain: z.string().optional(), dependsOn: z.array(z.string()).optional() })), strategy: z.enum(["round_robin","least_loaded","random","domain_aware"]).optional(), batchMode: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmFanOut(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_fan_in", "Collect and merge results from parallel tasks.", { taskIds: z.array(z.string()), aggregationStrategy: z.enum(["merge","vote","best","domain_grouped"]).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmFanIn(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_pipeline", "Execute a chain of sequential tasks.", { steps: z.array(z.object({ stepId: z.string(), description: z.string(), targetWorker: z.string().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmPipeline(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_pipeline_status", "Check pipeline execution state.", { pipelineId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmPipelineStatus(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_complete_task", "Mark a pipeline task as complete with result.", { taskId: z.string(), result: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmCompleteTask(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_domain_status", "Get domain-based task routing status.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmDomainStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_worker_loads", "Get worker load distribution.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmWorkerLoads(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_steal_work", "Steal work from an overloaded worker.", { thiefId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmStealWork(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__swarm_score_agents", "Score and rank agents for a task type.", { taskType: z.string().optional(), requiredCapabilities: z.array(z.string()).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmScoreAgents(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__pane_bus_metrics", "Get MessageBus metrics: messages/sec, latency, queue depths.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.paneBusMetrics(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_fan_out", "Distribute tasks to workers in parallel. Supports domain routing and batch mode.", { tasks: z.array(z.object({ taskId: z.string(), description: z.string(), targetWorker: z.string().optional(), domain: z.string().optional(), dependsOn: z.array(z.string()).optional() })), strategy: z.enum(["round_robin","least_loaded","random","domain_aware"]).optional(), batchMode: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmFanOut(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_fan_in", "Collect and merge results from parallel tasks.", { taskIds: z.array(z.string()), aggregationStrategy: z.enum(["merge","vote","best","domain_grouped"]).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmFanIn(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_pipeline", "Execute a chain of sequential tasks.", { steps: z.array(z.object({ stepId: z.string(), description: z.string(), targetWorker: z.string().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmPipeline(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_pipeline_status", "Check pipeline execution state.", { pipelineId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmPipelineStatus(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_complete_task", "Mark a pipeline task as complete with result.", { taskId: z.string(), result: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmCompleteTask(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_domain_status", "Get domain-based task routing status.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmDomainStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_worker_loads", "Get worker load distribution.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmWorkerLoads(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_steal_work", "Steal work from an overloaded worker.", { thiefId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmStealWork(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("swarm_score_agents", "Score and rank agents for a task type.", { taskType: z.string().optional(), requiredCapabilities: z.array(z.string()).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmScoreAgents(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("pane_bus_metrics", "Get MessageBus metrics: messages/sec, latency, queue depths.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.paneBusMetrics(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
   ];
 
   // ── Background Worker Tools ────────────────────────────────────────────────
   advancedToolGroups.worker = [
-    server.tool("mcp__codebrain__worker_start", "Start a background maintenance worker.", { name: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__worker_stop", "Stop a background worker.", { name: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__worker_status", "Get status of all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__worker_alerts", "Get recent worker alerts.", { limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerAlerts(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__worker_start_all", "Start all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStartAll(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__worker_stop_all", "Stop all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStopAll(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__worker_execute_trigger", "Execute an on-demand trigger manually.", { triggerName: z.string(), context: z.object({}).passthrough().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerExecuteTrigger(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__worker_trigger_history", "Get trigger execution history.", { limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerTriggerHistory(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__worker_pattern_clusters", "Get k-means pattern clusters.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.workerManager.getPatternClusters(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__worker_force_evolution", "Force pattern evolution: prune + merge.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.workerManager.forcePatternEvolution(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_start", "Start a background maintenance worker.", { name: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_stop", "Stop a background worker.", { name: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_status", "Get status of all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_alerts", "Get recent worker alerts.", { limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerAlerts(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_start_all", "Start all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStartAll(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_stop_all", "Stop all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStopAll(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_execute_trigger", "Execute an on-demand trigger manually.", { triggerName: z.string(), context: z.object({}).passthrough().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerExecuteTrigger(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_trigger_history", "Get trigger execution history.", { limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerTriggerHistory(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_pattern_clusters", "Get k-means pattern clusters.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.workerManager.getPatternClusters(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("worker_force_evolution", "Force pattern evolution: prune + merge.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.workerManager.forcePatternEvolution(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
   ];
 
   // ── Knowledge Graph Tools ──────────────────────────────────────────────────
   advancedToolGroups.memory_advanced = [
-    server.tool("mcp__codebrain__memory_graph", "Get a memory node and its graph neighbors.", { memoryId: z.string(), depth: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryGraph(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__memory_rank", "Get PageRank scores for all memories.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryRank(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__memory_similar", "Find similar memories using cosine similarity.", { memoryId: z.string(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memorySimilar(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__memory_transfer", "Transfer a memory to a different scope (project/local/user).", { id: z.string(), target_scope: z.string() }, async ({ id, target_scope }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryTransfer({ id, targetScope: target_scope }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("memory_graph", "Get a memory node and its graph neighbors.", { memoryId: z.string(), depth: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryGraph(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("memory_rank", "Get PageRank scores for all memories.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryRank(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("memory_similar", "Find similar memories using cosine similarity.", { memoryId: z.string(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memorySimilar(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("memory_transfer", "Transfer a memory to a different scope (project/local/user).", { id: z.string(), target_scope: z.string() }, async ({ id, target_scope }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryTransfer({ id, targetScope: target_scope }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
   ];
 
   // ── Event Sourcing Tools ───────────────────────────────────────────────────
   advancedToolGroups.event = [
-    server.tool("mcp__codebrain__event_store", "Store an event in the event sourcing system. Append-only log per aggregate.", { aggregate_id: z.string(), aggregate_type: z.string().optional(), event_type: z.string(), payload: z.string().optional(), metadata: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventStore(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__event_replay", "Replay events for an aggregate from a sequence. Uses snapshots.", { aggregate_id: z.string(), from_sequence: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventReplay(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__event_list", "List events with optional filters.", { aggregate_id: z.string().optional(), event_type: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__event_snapshot", "Force a snapshot for an aggregate.", { aggregate_id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventSnapshot(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__event_stats", "Get event sourcing statistics.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventStats(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("event_store", "Store an event in the event sourcing system. Append-only log per aggregate.", { aggregate_id: z.string(), aggregate_type: z.string().optional(), event_type: z.string(), payload: z.string().optional(), metadata: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventStore(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("event_replay", "Replay events for an aggregate from a sequence. Uses snapshots.", { aggregate_id: z.string(), from_sequence: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventReplay(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("event_list", "List events with optional filters.", { aggregate_id: z.string().optional(), event_type: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("event_snapshot", "Force a snapshot for an aggregate.", { aggregate_id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventSnapshot(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("event_stats", "Get event sourcing statistics.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventStats(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
   ];
 
   // ── Mission Tools ───────────────────────────────────────────────────────
   advancedToolGroups.mission = [
-    server.tool("mcp__codebrain__mission_create", "Create a mission scoped to a git worktree.", { title: z.string(), summary: z.string().optional(), worktreePath: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionCreate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__mission_get", "Get mission details by ID.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__mission_list", "List missions with optional status filter.", { status: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__mission_set", "Update mission metadata.", { id: z.string(), updates: z.object({ title: z.string().optional(), summary: z.string().optional(), worktreePath: z.string().optional(), status: z.string().optional(), metadata: z.string().optional() }) }, async ({ id, updates }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionSet({ id, updates }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__mission_delete", "Delete a mission.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionDelete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__mission_context", "Auto-discover mission context for a pane. Resolves active mission, finds orchestrator, and determines role. Call on worker boot.", { paneId: z.string().describe("Your pane ID"), workspace: z.string().optional().describe("Workspace path filter"), mission_id: z.string().optional().describe("Specific mission ID (resolves active if omitted)") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionContext({ paneId: args.paneId, workspace: args.workspace, missionId: args.mission_id }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__task_create", "Create a kanban task for mission coordination. Columns: inbox, assigned, in_progress, done.", { title: z.string().describe("Task title"), description: z.string().optional(), column: z.string().optional(), priority: z.string().optional(), assigned_to: z.string().optional(), workspace: z.string().optional(), mission_id: z.string().optional().describe("Mission ID to scope this task") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskCreate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__task_list", "List kanban tasks with optional filters. Use mission_id to scope to a mission.", { column: z.string().optional(), assigned_to: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional(), mission_id: z.string().optional().describe("Filter by mission ID") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__task_move", "Move a kanban task to a different column.", { id: z.string(), column: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskMove(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__task_complete", "Complete a kanban task with optional result.", { id: z.string(), result: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskComplete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__task_assign", "Assign a kanban task to a pane/agent.", { id: z.string(), paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskAssign(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__task_delete", "Delete a kanban task.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskDelete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mission_create", "Create a mission scoped to a git worktree.", { title: z.string(), summary: z.string().optional(), worktreePath: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionCreate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mission_get", "Get mission details by ID.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mission_list", "List missions with optional status filter.", { status: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mission_set", "Update mission metadata.", { id: z.string(), updates: z.object({ title: z.string().optional(), summary: z.string().optional(), worktreePath: z.string().optional(), status: z.string().optional(), metadata: z.string().optional() }) }, async ({ id, updates }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionSet({ id, updates }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mission_delete", "Delete a mission.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionDelete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("mission_context", "Auto-discover mission context for a pane. Resolves active mission, finds orchestrator, and determines role. Call on worker boot.", { paneId: z.string().describe("Your pane ID"), workspace: z.string().optional().describe("Workspace path filter"), mission_id: z.string().optional().describe("Specific mission ID (resolves active if omitted)") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionContext({ paneId: args.paneId, workspace: args.workspace, missionId: args.mission_id }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("task_create", "Create a kanban task for mission coordination. Columns: inbox, assigned, in_progress, done.", { title: z.string().describe("Task title"), description: z.string().optional(), column: z.string().optional(), priority: z.string().optional(), assigned_to: z.string().optional(), workspace: z.string().optional(), mission_id: z.string().optional().describe("Mission ID to scope this task") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskCreate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("task_list", "List kanban tasks with optional filters. Use mission_id to scope to a mission.", { column: z.string().optional(), assigned_to: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional(), mission_id: z.string().optional().describe("Filter by mission ID") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("task_move", "Move a kanban task to a different column.", { id: z.string(), column: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskMove(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("task_complete", "Complete a kanban task with optional result.", { id: z.string(), result: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskComplete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("task_assign", "Assign a kanban task to a pane/agent.", { id: z.string(), paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskAssign(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("task_delete", "Delete a kanban task.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskDelete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
   ];
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1670,92 +1673,92 @@ function createCodebrainMCPServer(bridge) {
   // ════════════════════════════════════════════════════════════════════════════
 
   // ── Session Compaction (essential — context management) ───────────────────
-  server.tool("mcp__codebrain__session_compact", "Get compaction status and recommendation for a pane. When context pressure is high, use this to decide if older messages should be summarized.", { paneId: z.string().describe("Target pane ID"), preserveRecentTurns: z.number().optional().describe("Number of recent turns to preserve (default 5)"), summaryPrompt: z.string().optional().describe("Custom prompt for summarization") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.sessionCompact(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__session_compact_save", "Save a compaction summary after summarizing older messages. Frees context space.", { paneId: z.string(), sessionId: z.string().optional(), summary: z.string().describe("The summarized content"), messagesCompacted: z.number().optional(), tokensSaved: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.sessionCompactSave(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("session_compact", "Get compaction status and recommendation for a pane. When context pressure is high, use this to decide if older messages should be summarized.", { paneId: z.string().describe("Target pane ID"), preserveRecentTurns: z.number().optional().describe("Number of recent turns to preserve (default 5)"), summaryPrompt: z.string().optional().describe("Custom prompt for summarization") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.sessionCompact(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("session_compact_save", "Save a compaction summary after summarizing older messages. Frees context space.", { paneId: z.string(), sessionId: z.string().optional(), summary: z.string().describe("The summarized content"), messagesCompacted: z.number().optional(), tokensSaved: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.sessionCompactSave(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
 
   // ── Step Classification (essential — loop control) ────────────────────────
-  server.tool("mcp__codebrain__step_classify", "Classify an assistant step: final|continue|filtered|think-only|invalid|failed. Used for loop control decisions.", { output: z.string().optional(), hasPendingTools: z.boolean().optional(), hasError: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.stepClassify(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__step_classify_batch", "Classify multiple assistant steps at once.", { steps: z.array(z.object({ output: z.string().optional(), hasPendingTools: z.boolean().optional(), hasError: z.boolean().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.stepClassifyBatch(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("step_classify", "Classify an assistant step: final|continue|filtered|think-only|invalid|failed. Used for loop control decisions.", { output: z.string().optional(), hasPendingTools: z.boolean().optional(), hasError: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.stepClassify(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("step_classify_batch", "Classify multiple assistant steps at once.", { steps: z.array(z.object({ output: z.string().optional(), hasPendingTools: z.boolean().optional(), hasError: z.boolean().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.stepClassifyBatch(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
 
   // ── Text Loop Recovery (essential — prevents stuck agents) ────────────────
-  server.tool("mcp__codebrain__text_loop_check", "Check if an agent's text output is looping (3+ identical outputs). Injects recovery prompts.", { paneId: z.string(), output: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.textLoopCheck(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__text_loop_reset", "Reset text loop detection buffer for a pane.", { paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.textLoopReset(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("text_loop_check", "Check if an agent's text output is looping (3+ identical outputs). Injects recovery prompts.", { paneId: z.string(), output: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.textLoopCheck(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("text_loop_reset", "Reset text loop detection buffer for a pane.", { paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.textLoopReset(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
 
   // ── Goal / Stop Condition (essential — autonomous work) ──────────────────
-  server.tool("mcp__codebrain__goal_set", "Set a goal for a pane. An independent judge evaluates if the goal is truly satisfied before allowing the agent to stop.", { paneId: z.string(), goal: z.string().describe("The goal to achieve") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalSet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__goal_get", "Get current goal and judge verdicts for a pane.", { paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__goal_clear", "Clear the goal for a pane (manual override).", { paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalClear(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__goal_judge", "Record a judge's verdict on goal satisfaction. The judge should be an independent model that reads the transcript.", { paneId: z.string(), satisfied: z.boolean(), impossible: z.boolean().optional(), reason: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalJudge(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("goal_set", "Set a goal for a pane. An independent judge evaluates if the goal is truly satisfied before allowing the agent to stop.", { paneId: z.string(), goal: z.string().describe("The goal to achieve") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalSet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("goal_get", "Get current goal and judge verdicts for a pane.", { paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("goal_clear", "Clear the goal for a pane (manual override).", { paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalClear(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("goal_judge", "Record a judge's verdict on goal satisfaction. The judge should be an independent model that reads the transcript.", { paneId: z.string(), satisfied: z.boolean(), impossible: z.boolean().optional(), reason: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalJudge(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
 
   // ── Cross-Session History (essential — persistent memory) ─────────────────
-  server.tool("mcp__codebrain__history_search", "Search cross-session conversation history with FTS5. Filters: scope, session, kind, tool_name, time range.", { query: z.string(), scope: z.string().optional(), sessionId: z.string().optional(), kind: z.string().optional().describe("user_text|assistant_text|tool_input|tool_error|reasoning|tool_output"), toolName: z.string().optional(), since: z.number().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.historySearch(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__history_record", "Record a conversation message for cross-session history search.", { sessionId: z.string(), role: z.string(), content: z.string(), kind: z.string().optional(), toolName: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.historyRecord(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("history_search", "Search cross-session conversation history with FTS5. Filters: scope, session, kind, tool_name, time range.", { query: z.string(), scope: z.string().optional(), sessionId: z.string().optional(), kind: z.string().optional().describe("user_text|assistant_text|tool_input|tool_error|reasoning|tool_output"), toolName: z.string().optional(), since: z.number().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.historySearch(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("history_record", "Record a conversation message for cross-session history search.", { sessionId: z.string(), role: z.string(), content: z.string(), kind: z.string().optional(), toolName: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.historyRecord(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
 
   // ── Checkpoint (essential — session persistence) ──────────────────────────
-  server.tool("mcp__codebrain__checkpoint_write", "Save a checkpoint for long-running sessions. Preserves state across context limits.", { sessionId: z.string().optional(), content: z.string(), topic: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointWrite(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__checkpoint_read", "Read a saved checkpoint.", { sessionId: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointRead(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("checkpoint_write", "Save a checkpoint for long-running sessions. Preserves state across context limits.", { sessionId: z.string().optional(), content: z.string(), topic: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointWrite(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("checkpoint_read", "Read a saved checkpoint.", { sessionId: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointRead(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
 
   // ── Question Tool (essential — user interaction) ──────────────────────────
-  server.tool("mcp__codebrain__question_ask", "Ask the user a structured question with predefined options. Supports headless auto-resolve.", { paneId: z.string().optional(), question: z.string(), options: z.array(z.string()), allowCustom: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.questionAsk(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__question_answer", "Submit an answer to a pending question.", { questionId: z.string(), answer: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.questionAnswer(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__question_list", "List pending questions awaiting answers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.questionList(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("question_ask", "Ask the user a structured question with predefined options. Supports headless auto-resolve.", { paneId: z.string().optional(), question: z.string(), options: z.array(z.string()), allowCustom: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.questionAsk(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("question_answer", "Submit an answer to a pending question.", { questionId: z.string(), answer: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.questionAnswer(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("question_list", "List pending questions awaiting answers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.questionList(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
 
   // ── Multi-Edit (essential — convenience) ──────────────────────────────────
-  server.tool("mcp__codebrain__file_multi_edit", "Batch multiple edit operations on a single file in one call. Each edit specifies oldString/newString.", { path: z.string().describe("Absolute file path"), edits: z.array(z.object({ oldString: z.string(), newString: z.string().optional(), replaceAll: z.boolean().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.fileMultiEdit(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("file_multi_edit", "Batch multiple edit operations on a single file in one call. Each edit specifies oldString/newString.", { path: z.string().describe("Absolute file path"), edits: z.array(z.object({ oldString: z.string(), newString: z.string().optional(), replaceAll: z.boolean().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.fileMultiEdit(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
 
   // ── Provider Prompts (essential — model optimization) ─────────────────────
-  server.tool("mcp__codebrain__provider_prompt", "Get model-specific prompt additions optimized for the current model family (Claude, Gemini, GPT, MIMO).", { model: z.string().optional(), providerId: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.providerPrompt(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("mcp__codebrain__provider_prompt_list", "List all available provider prompt families.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.providerPromptList(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("provider_prompt", "Get model-specific prompt additions optimized for the current model family (Claude, Gemini, GPT, MIMO).", { model: z.string().optional(), providerId: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.providerPrompt(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool("provider_prompt_list", "List all available provider prompt families.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.providerPromptList(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
 
   console.log(`[MCP] 20 MiMo-Code ESSENTIAL tools registered (compaction, step-classify, text-loop, goal, history, checkpoint, question, multi-edit, provider-prompt)`);
 
   // ── Expanded Hooks Tools ───────────────────────────────────────────────────
   advancedToolGroups.hooks_advanced = [
-    server.tool("mcp__codebrain__hooks_export_logs", "Export hook logs in JSONL or CSV format.", { format: z.string().optional(), since: z.number().optional(), types: z.array(z.string()).optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksExportLogs(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__hooks_event_stats", "Get hook event statistics by type and correlation.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksEventStats(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__hooks_correlation_events", "Get all events for a correlation ID.", { correlation_id: z.string() }, async ({ correlation_id }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksCorrelationEvents({ correlationId: correlation_id }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("hooks_export_logs", "Export hook logs in JSONL or CSV format.", { format: z.string().optional(), since: z.number().optional(), types: z.array(z.string()).optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksExportLogs(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("hooks_event_stats", "Get hook event statistics by type and correlation.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksEventStats(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool("hooks_correlation_events", "Get all events for a correlation ID.", { correlation_id: z.string() }, async ({ correlation_id }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksCorrelationEvents({ correlationId: correlation_id }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
   ];
 
   // ── MiMo-Code: Session Advanced (10 tools) ───────────────────────────────
   advancedToolGroups.session_advanced = [
-    server.tool("mcp__codebrain__session_compaction_history", "Get compaction history for a session.", { sessionId: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.sessionCompactionHistory(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__snapshot_track", "Create a snapshot of the current workspace state for later revert.", { sessionId: z.string().optional(), messageIndex: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.snapshotTrack(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__snapshot_list", "List snapshots for a session.", { sessionId: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.snapshotList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__snapshot_revert", "Revert workspace to a specific snapshot.", { snapshotHash: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.snapshotRevert(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__checkpoint_validate", "Validate checkpoint quality: required sections, token budgets, ordering.", { content: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointValidate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__checkpoint_state", "Get checkpoint state for a session.", { sessionId: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointState(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__history_around", "Get messages around a specific message ID for context.", { messageId: z.number(), before: z.number().optional(), after: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.historyAround(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("session_compaction_history", "Get compaction history for a session.", { sessionId: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.sessionCompactionHistory(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("snapshot_track", "Create a snapshot of the current workspace state for later revert.", { sessionId: z.string().optional(), messageIndex: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.snapshotTrack(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("snapshot_list", "List snapshots for a session.", { sessionId: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.snapshotList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("snapshot_revert", "Revert workspace to a specific snapshot.", { snapshotHash: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.snapshotRevert(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("checkpoint_validate", "Validate checkpoint quality: required sections, token budgets, ordering.", { content: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointValidate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("checkpoint_state", "Get checkpoint state for a session.", { sessionId: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointState(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("history_around", "Get messages around a specific message ID for context.", { messageId: z.number(), before: z.number().optional(), after: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.historyAround(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
   ];
 
   // ── MiMo-Code: LSP (12 tools) — semantic code navigation ────────────────
   advancedToolGroups.lsp = [
-    server.tool("mcp__codebrain__lsp_start", "Start a language server for a given language.", { language: z.string().describe("typescript|python|rust|go|javascript"), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_stop", "Stop a language server.", { language: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_servers", "List running language servers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspServers(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_go_to_definition", "Go to definition of a symbol at a specific position.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspGoToDefinition(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_find_references", "Find all references to a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspFindReferences(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_hover", "Get hover info (type, docs) for a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspHover(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_document_symbol", "Get document symbols (outline) for a file.", { file: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspDocumentSymbol(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_workspace_symbol", "Search for symbols across the workspace.", { query: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspWorkspaceSymbol(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_go_to_implementation", "Go to implementation of a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspGoToImplementation(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_prepare_call_hierarchy", "Prepare call hierarchy for a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspPrepareCallHierarchy(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_incoming_calls", "Get incoming calls to a function.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspIncomingCalls(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__lsp_outgoing_calls", "Get outgoing calls from a function.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspOutgoingCalls(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_start", "Start a language server for a given language.", { language: z.string().describe("typescript|python|rust|go|javascript"), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_stop", "Stop a language server.", { language: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_servers", "List running language servers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspServers(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_go_to_definition", "Go to definition of a symbol at a specific position.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspGoToDefinition(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_find_references", "Find all references to a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspFindReferences(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_hover", "Get hover info (type, docs) for a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspHover(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_document_symbol", "Get document symbols (outline) for a file.", { file: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspDocumentSymbol(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_workspace_symbol", "Search for symbols across the workspace.", { query: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspWorkspaceSymbol(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_go_to_implementation", "Go to implementation of a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspGoToImplementation(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_prepare_call_hierarchy", "Prepare call hierarchy for a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspPrepareCallHierarchy(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_incoming_calls", "Get incoming calls to a function.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspIncomingCalls(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("lsp_outgoing_calls", "Get outgoing calls from a function.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspOutgoingCalls(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
   ];
 
   // ── MiMo-Code: Advanced Workflows (11 tools) — max mode, compose, plan ──
   advancedToolGroups.workflows = [
-    server.tool("mcp__codebrain__max_mode_run", "Run a prompt in MAX MODE: N parallel candidates, judge selects best. Higher quality for complex tasks.", { prompt: z.string(), candidates: z.number().optional().describe("Number of candidates (2-10, default 5)"), judgeModel: z.string().optional(), judgeCriteria: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.maxModeRun(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__max_mode_candidate", "Submit a candidate result for judge evaluation in max mode.", { runId: z.string(), candidateIndex: z.number(), output: z.string(), approach: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.maxModeCandidate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__max_mode_judge", "Judge selects the best candidate from submitted results.", { runId: z.string(), candidates: z.array(z.object({ index: z.number(), output: z.string(), approach: z.string().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.maxModeJudge(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__compose_start", "Start a specs-driven compose workflow: plan → execute → test → debug → verify → merge.", { spec: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.composeStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__compose_advance", "Advance to the next compose phase.", { composeId: z.string(), currentPhase: z.number(), phaseResult: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.composeAdvance(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__compose_phases", "Get the list of compose workflow phases.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.composePhases(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__plan_start", "Start a read-only planning session. Cannot edit files — only analyze and produce a plan.", { paneId: z.string().optional(), goal: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__plan_save", "Save a plan document to disk.", { planId: z.string().optional(), content: z.string(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planSave(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__plan_read", "Read a saved plan document.", { planId: z.string(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planRead(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__plan_list", "List saved plans for the workspace.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("mcp__codebrain__plan_exit", "Exit plan mode and optionally switch to build mode.", { paneId: z.string().optional(), switchToBuild: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planExit(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("max_mode_run", "Run a prompt in MAX MODE: N parallel candidates, judge selects best. Higher quality for complex tasks.", { prompt: z.string(), candidates: z.number().optional().describe("Number of candidates (2-10, default 5)"), judgeModel: z.string().optional(), judgeCriteria: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.maxModeRun(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("max_mode_candidate", "Submit a candidate result for judge evaluation in max mode.", { runId: z.string(), candidateIndex: z.number(), output: z.string(), approach: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.maxModeCandidate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("max_mode_judge", "Judge selects the best candidate from submitted results.", { runId: z.string(), candidates: z.array(z.object({ index: z.number(), output: z.string(), approach: z.string().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.maxModeJudge(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("compose_start", "Start a specs-driven compose workflow: plan → execute → test → debug → verify → merge.", { spec: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.composeStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("compose_advance", "Advance to the next compose phase.", { composeId: z.string(), currentPhase: z.number(), phaseResult: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.composeAdvance(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("compose_phases", "Get the list of compose workflow phases.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.composePhases(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("plan_start", "Start a read-only planning session. Cannot edit files — only analyze and produce a plan.", { paneId: z.string().optional(), goal: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("plan_save", "Save a plan document to disk.", { planId: z.string().optional(), content: z.string(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planSave(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("plan_read", "Read a saved plan document.", { planId: z.string(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planRead(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("plan_list", "List saved plans for the workspace.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool("plan_exit", "Exit plan mode and optionally switch to build mode.", { paneId: z.string().optional(), switchToBuild: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planExit(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
   ];
 
   // ── DISABLE all advanced tool groups on startup ─────────────────────────
@@ -1765,27 +1768,14 @@ function createCodebrainMCPServer(bridge) {
   const advancedToolCount = Object.values(advancedToolGroups).reduce((sum, refs) => sum + refs.length, 0);
   console.log(`[MCP] ${advancedToolCount} advanced tools disabled (activate via enable_tool_group)`);
 
-  // ── RE-ENABLE essential advanced groups (always available) ─────────────
-  // Only groups the squad bootstrap protocol depends on stay always-on:
-  // - mission: mission_context/task_* — every worker calls these on boot
-  // session_advanced and memory_advanced moved to on-demand (enable_tool_group)
-  // to cut default tools/list token overhead per agent.
-  const essentialAdvancedGroups = ["mission"];
-  for (const name of essentialAdvancedGroups) {
-    const refs = advancedToolGroups[name];
-    if (refs) refs.forEach(ref => ref.enable());
-  }
-  console.log(`[MCP] Essential advanced groups enabled: ${essentialAdvancedGroups.join(", ")}`);
-
   // ── Meta-tools: enable_tool_group + tool_groups (always enabled) ────────
   const activatedGroups = new Set();
 
   server.tool(
-    "mcp__codebrain__enable_tool_group",
-    "Activate additional MCP tool groups on demand. Call this BEFORE using tools from disabled groups. ALWAYS-ON group (no activation needed): mission (12). ON-DEMAND groups: browser (60), fetch (5), swarm (10), worker (10), consensus (19), event (5), hooks_advanced (3), lsp (12), workflows (11), session_advanced (7), memory_advanced (4). Essential tools (pane, memory, pattern, file, task, hooks, skill, system, todo, agent, provider, handoff, goal, checkpoint, compaction) are always available. BROWSER WORKFLOW: (1) enable_tool_group('browser') → (2) browser_launch() → (3) browser_navigate(url).",
+    "enable_tool_group",
+    "Activate the smallest additional MCP group needed before using a disabled tool. Default core: pane, memory_search/write, pattern_list, task_list/move. Groups include coordination, files, skills, providers, memory_advanced, session_advanced, workflows, browser and fetch.",
     {
-      group: z.enum(["browser", "fetch", "swarm", "worker", "consensus", "event", "mission", "memory_advanced", "hooks_advanced", "session_advanced", "lsp", "workflows"])
-        .describe("Tool group to activate. Use tool_groups() to see all available groups."),
+      group: z.string().min(1).describe("Group name. Use tool_groups() when unsure."),
     },
     async ({ group }) => {
       try {
@@ -1805,10 +1795,18 @@ function createCodebrainMCPServer(bridge) {
           activatedGroups.add(group);
           return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, tools_enabled: 5, message: "Fetch tools activated. You can now use browser_fetch* tools." }) }] };
         }
-        // Other advanced groups: just enable the already-registered tools
-        const refs = advancedToolGroups[group];
+        // Advanced and direct registered groups are enabled the same way.
+        // A few names (memory_advanced, session_advanced, workflows) have
+        // both kinds of references and must enable both sets.
+        const refs = [
+          ...(advancedToolGroups[group] || []),
+          ...(registeredToolGroups.get(group) || []),
+        ];
         if (!refs) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: `Unknown group: ${group}. Available: ${Object.keys(advancedToolGroups).join(", ")}` }) }], isError: true };
+          return { content: [{ type: "text", text: JSON.stringify({ error: `Unknown group: ${group}. Available: ${[...Object.keys(advancedToolGroups), ...registeredToolGroups.keys()].join(", ")}` }) }], isError: true };
+        }
+        if (refs.length === 0) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: `Unknown group: ${group}. Available: ${[...Object.keys(advancedToolGroups), ...registeredToolGroups.keys()].join(", ")}` }) }], isError: true };
         }
         refs.forEach(ref => ref.enable());
         activatedGroups.add(group);
@@ -1820,7 +1818,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__tool_groups",
+    "tool_groups",
     "List all available MCP tool groups with their status (enabled/disabled) and tool count. Use enable_tool_group to activate disabled groups.",
     {},
     async () => {
@@ -1833,8 +1831,15 @@ function createCodebrainMCPServer(bridge) {
         // Browser, fetch, and MR are lazy (registered on demand, not in advancedToolGroups)
         groups.push({ name: "browser", toolCount: 60, enabled: activatedGroups.has("browser") });
         groups.push({ name: "fetch", toolCount: 5, enabled: activatedGroups.has("fetch") });
-        groups.push({ name: "lsp", toolCount: 12, enabled: activatedGroups.has("lsp") });
-        groups.push({ name: "workflows", toolCount: 11, enabled: activatedGroups.has("workflows") });
+        for (const [name, refs] of registeredToolGroups) {
+          const existing = groups.find(group => group.name === name);
+          if (existing) {
+            existing.toolCount += refs.length;
+            existing.enabled = existing.enabled || refs.some(ref => ref.enabled !== false);
+          } else {
+            groups.push({ name, toolCount: refs.length, enabled: refs.some(ref => ref.enabled !== false) });
+          }
+        }
         const totalTools = Object.keys(server._registeredTools || {}).length;
         const enabledTools = Object.values(server._registeredTools || {}).filter(t => t.enabled !== false).length;
         return { content: [{ type: "text", text: JSON.stringify({ groups, enabled: enabledTools, total: totalTools }, null, 2) }] };
@@ -1849,7 +1854,7 @@ function createCodebrainMCPServer(bridge) {
   // ═══════════════════════════════════════════════════════════════════════════
 
   server.tool(
-    "mcp__codebrain__memory_import_claude",
+    "memory_import_claude",
     "Import ALL Claude Code native memory files (~/.claude/projects/*/memory/*.md) into Codebrain's SQLite store. Enables cross-project knowledge sharing.",
     {},
     async () => {
@@ -1863,7 +1868,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__memory_bridge_status",
+    "memory_bridge_status",
     "Get auto-memory bridge status: how many Claude Code memories exist, how many imported, which projects.",
     {},
     async () => {
@@ -1877,7 +1882,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__memory_scan_claude",
+    "memory_scan_claude",
     "Scan for available Claude Code memory files without importing. Lists all projects and their memory files.",
     {},
     async () => {
@@ -1891,7 +1896,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__security_scan",
+    "security_scan",
     "Scan workspace for security issues: hardcoded secrets (API keys, passwords, tokens), vulnerabilities (SQL/command injection, eval), and code smells. Returns structured findings with severity levels.",
     {
       path: z.string().optional().describe("Directory to scan (default: current workspace)"),
@@ -1909,7 +1914,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__security_status",
+    "security_status",
     "Get the last security scan result from memory. Shows findings summary and status.",
     {},
     async () => {
@@ -1925,7 +1930,7 @@ function createCodebrainMCPServer(bridge) {
   // ── Transcript Watcher Tools (Overclock port) ──────────────────────────────
 
   server.tool(
-    "mcp__codebrain__transcript_watcher_start",
+    "transcript_watcher_start",
     "Start watching CLI transcripts (Claude Code, Codex) for token usage tracking. Tails JSONL files in ~/.claude/projects/ and ~/.codex/sessions/. Idempotent — safe to call multiple times.",
     {
       workspace: z.string().optional().describe("Workspace path to watch (default: current workspace)"),
@@ -1942,7 +1947,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__transcript_watcher_stop",
+    "transcript_watcher_stop",
     "Stop all transcript watchers and release file handles.",
     {},
     async () => {
@@ -1956,7 +1961,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__transcript_watcher_status",
+    "transcript_watcher_status",
     "Get transcript watcher diagnostics: which directories are being watched, how many file offsets are tracked, active session-to-pane mappings.",
     {},
     async () => {
@@ -1970,7 +1975,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__transcript_watcher_token_summary",
+    "transcript_watcher_token_summary",
     "Get token usage summary from CLI transcripts. Filter by session, agent, or time range. Returns per-model breakdowns of input/output/cache tokens.",
     {
       sessionId: z.string().optional().describe("Filter by session ID"),
@@ -1990,7 +1995,7 @@ function createCodebrainMCPServer(bridge) {
   // ── Remote Bridge Tools (Overclock port) ────────────────────────────────────
 
   server.tool(
-    "mcp__codebrain__remote_bridge_start",
+    "remote_bridge_start",
     "Start the Remote Bridge WSS server for thin-client (iPhone) control. Generates self-signed TLS cert on first run. Pairing code rotates every 5 min. Default port 8789.",
     {
       port: z.number().optional().describe("Port to listen on (default: 8789, or CODEBRAIN_REMOTE_PORT env)"),
@@ -2006,7 +2011,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__remote_bridge_stop",
+    "remote_bridge_stop",
     "Stop the Remote Bridge WSS server.",
     {},
     async () => {
@@ -2020,7 +2025,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__remote_bridge_status",
+    "remote_bridge_status",
     "Get Remote Bridge status: running state, port, connected/authenticated clients, current pairing code expiry, token count.",
     {},
     async () => {
@@ -2034,7 +2039,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__remote_bridge_pair_code",
+    "remote_bridge_pair_code",
     "Get the current 6-digit pairing code for remote client authentication. Code rotates every 5 minutes.",
     {},
     async () => {
@@ -2048,7 +2053,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__remote_bridge_revoke_tokens",
+    "remote_bridge_revoke_tokens",
     "Revoke all issued remote bridge tokens. Forces all connected devices to re-pair.",
     {},
     async () => {
@@ -2064,7 +2069,7 @@ function createCodebrainMCPServer(bridge) {
   // ── Remote Spawn Tools (Overclock port) ─────────────────────────────────────
 
   server.tool(
-    "mcp__codebrain__remote_spawn_detect_clis",
+    "remote_spawn_detect_clis",
     "Detect which agent CLIs (claude, codex, gemini) are available on a remote host via SSH. Validates host alias for safety. Uses BatchMode=yes for fast fail on password-only hosts.",
     {
       host: z.string().describe("SSH host alias (from ~/.ssh/config). Only alphanumeric, dots, hyphens allowed."),
@@ -2080,7 +2085,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__remote_spawn_probe",
+    "remote_spawn_probe",
     "Probe SSH connectivity to a remote host. Returns reachable status and latency.",
     {
       host: z.string().describe("SSH host alias"),
@@ -2096,7 +2101,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__remote_spawn_parse_ref",
+    "remote_spawn_parse_ref",
     "Parse an ssh:// workspace reference into host and path components.",
     {
       ref: z.string().describe("SSH URL reference (e.g. ssh://myhost/home/user/project)"),
@@ -2112,7 +2117,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__intelligence_consolidate",
+    "intelligence_consolidate",
     "Run the full intelligence pipeline: RETRIEVE (search memory+patterns), JUDGE (evaluate quality), DISTILL (extract new patterns from trajectories), CONSOLIDATE (promote short-term→long-term, dream, prune stale). One-shot intelligence maintenance pass.",
     {
       query: z.string().optional().describe("Optional search query for the RETRIEVE step"),
@@ -2133,7 +2138,7 @@ function createCodebrainMCPServer(bridge) {
   // Ported from Overclock's harnessAssistant.js (enrichCatalog + proposeRecipes).
 
   server.tool(
-    "mcp__codebrain__recipe_enrich_catalog",
+    "recipe_enrich_catalog",
     "Classify all installed agents and skills by role (orchestrator/backend/frontend/tester/browser/general) with a short 'when/how to use' blurb. Uses LLM to annotate. Cached for 24h unless force=true.",
     {
       model: z.string().optional().describe("Override LLM model for the enrichment pass"),
@@ -2150,7 +2155,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__recipe_propose",
+    "recipe_propose",
     "Propose 2-4 buildable deliverables (recipes) based on available agents, skills, and LLMs. Each recipe is an executable orchestration plan with ordered steps, favorite model, questions for scope, and delivery definition.",
     {
       model: z.string().optional().describe("Override LLM model for the proposal pass"),
@@ -2169,7 +2174,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__recipe_get_catalog",
+    "recipe_get_catalog",
     "Get the cached enriched catalog (agents + skills with roles and blurbs). Returns the last enrichment result without making an LLM call.",
     {},
     async () => {
@@ -2183,7 +2188,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__recipe_save",
+    "recipe_save",
     "Save a recipe (orchestration plan) for later use. The recipe can be recalled and executed by the orchestrator.",
     {
       recipe: z.object({
@@ -2213,7 +2218,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__recipe_list",
+    "recipe_list",
     "List all saved recipes (orchestration plans). Returns recipe names, deliverables, and step counts.",
     {},
     async () => {
@@ -2227,7 +2232,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__recipe_delete",
+    "recipe_delete",
     "Delete a saved recipe by name.",
     {
       name: z.string().describe("Recipe name to delete"),
@@ -2243,7 +2248,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__recipe_ingredients",
+    "recipe_ingredients",
     "List all available ingredients: agents, skills, and LLMs currently configured in the system. Use this to see what's in the 'pantry' before proposing recipes.",
     {},
     async () => {
@@ -2262,7 +2267,7 @@ function createCodebrainMCPServer(bridge) {
   // are silently skipped (handles laptop-closed case).
 
   server.tool(
-    "mcp__codebrain__cron_create",
+    "cron_create",
     "Create a scheduled cron job that spawns a pane at recurring times. Uses standard 5-field cron expressions (minute hour day-of-month month day-of-week, e.g. '*/5 * * * *' for every 5min, '0 9 * * 1-5' for weekdays at 9am). Jobs auto-start their tick loop on creation.",
     {
       name: z.string().describe("Human-readable job name (e.g. 'morning-standup', 'hourly-health-check')"),
@@ -2284,7 +2289,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__cron_list",
+    "cron_list",
     "List all cron jobs. Filter by workspace or status (active/paused). Shows schedule, next fire time, last fire time, and error state.",
     {
       workspace: z.string().optional().describe("Filter by workspace path"),
@@ -2301,7 +2306,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__cron_delete",
+    "cron_delete",
     "Delete a cron job by ID. Stops it from firing permanently.",
     {
       id: z.string().describe("Cron job ID to delete"),
@@ -2317,7 +2322,7 @@ function createCodebrainMCPServer(bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__cron_update",
+    "cron_update",
     "Update a cron job: pause/resume, change schedule, update task prompt, etc. When schedule changes, next_fire_at is recalculated automatically.",
     {
       id: z.string().describe("Cron job ID to update"),
@@ -2339,6 +2344,67 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ── Minimal default surface ───────────────────────────────────────────────
+  // The SDK registers every tool so groups can be enabled later, but only the
+  // tools below are advertised on a fresh session. This removes schema cost
+  // without removing capability: enable_tool_group() re-enables the group.
+  const coreToolNames = new Set([
+    "pane_spawn",
+    "pane_write",
+    "pane_read",
+    "pane_list",
+    "pane_send_message",
+    "pane_read_messages",
+    "memory_search",
+    "memory_write",
+    "pattern_list",
+    "task_list",
+    "task_move",
+    "enable_tool_group",
+  ]);
+  const advancedRefs = new Set(Object.values(advancedToolGroups).flat());
+  const groupForTool = (name) => {
+    if (name.startsWith("pane_")) return "coordination";
+    if (name.startsWith("actor_") || name.startsWith("agent_") || name.startsWith("handoff_")) return "coordination";
+    if (name.startsWith("file_")) return "files";
+    if (name.startsWith("skill_")) return "skills";
+    if (name.startsWith("provider_")) return "providers";
+    if (name.startsWith("memory_")) return "memory_advanced";
+    if (name.startsWith("pattern_")) return "patterns";
+    if (name.startsWith("hooks_")) return "hooks";
+    if (name.startsWith("session_") || name.startsWith("checkpoint_") || name.startsWith("history_") || name.startsWith("transcript_")) return "session_advanced";
+    if (name.startsWith("recipe_") || name.startsWith("plan_") || name.startsWith("compose_") || name.startsWith("max_mode_")) return "workflows";
+    if (name.startsWith("remote_") || name.startsWith("cron_")) return "remote";
+    if (name.startsWith("system_") || name.startsWith("security_")) return "system";
+    if (name === "tool_groups") return "system";
+    if (name.startsWith("todo_") || name.startsWith("trajectory_") || name.startsWith("intelligence_")) return "advanced";
+    return "advanced";
+  };
+
+  for (const [name, ref] of Object.entries(server._registeredTools || {})) {
+    if (coreToolNames.has(name)) {
+      ref.enable();
+      continue;
+    }
+    // Advanced groups already own their references and stay disabled until
+    // their existing group is requested (mission, swarm, consensus, etc.).
+    if (advancedRefs.has(ref)) continue;
+    const group = groupForTool(name);
+    ref.disable();
+    const refs = registeredToolGroups.get(group) || [];
+    refs.push(ref);
+    registeredToolGroups.set(group, refs);
+  }
+
+  // Delegation needs mission/task tools as one atomic opt-in group.
+  if (advancedToolGroups.mission) {
+    registeredToolGroups.set("coordination", [
+      ...(registeredToolGroups.get("coordination") || []),
+      ...advancedToolGroups.mission,
+    ]);
+  }
+  console.log(`[MCP] Core tools enabled: ${coreToolNames.size}; optional groups: ${[...registeredToolGroups.keys()].join(", ")}`);
+
   return server;
 }
 
@@ -2349,7 +2415,7 @@ function createCodebrainMCPServer(bridge) {
 function registerBrowserTools(server, bridge) {
   // ── MANDATORY GUIDE (must be called before any browser tool) ───────────
   server.tool(
-    "mcp__codebrain__browser_guide",
+    "browser_guide",
     "MANDATORY: Read this BEFORE using any browser tool. Returns best-practices, navigation rules, and anti-patterns. You MUST call this tool first — other browser tools will not work correctly without this knowledge.",
     {},
     async () => {
@@ -2454,7 +2520,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── Navigation ──────────────────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_navigate",
+    "browser_navigate",
     "Navigate the browser pane to a URL. Returns final URL and title after load.",
     { url: z.string().describe("URL to navigate to"), pane_id: z.string().optional().describe("Browser pane ID (auto-detected if omitted)") },
     async (args) => {
@@ -2464,7 +2530,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_open",
+    "browser_open",
     "Open a NEW browser pane and navigate to a URL. Returns the new paneId.",
     { url: z.string().describe("URL to open") },
     async (args) => {
@@ -2474,7 +2540,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_get_pane_id",
+    "browser_get_pane_id",
     "Get the current active browser pane ID. Use this to recover from pane ID loss.",
     {},
     async () => {
@@ -2484,7 +2550,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_record_pane",
+    "browser_record_pane",
     "Record/update the active browser pane ID. Call this after opening a browser to maintain persistence.",
     { pane_id: z.string().describe("The browser pane ID to record as active") },
     async (args) => {
@@ -2494,7 +2560,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_list_panes",
+    "browser_list_panes",
     "List all active browser panes and show which one is currently active.",
     {},
     async () => {
@@ -2504,7 +2570,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_clear_pane_cache",
+    "browser_clear_pane_cache",
     "Clear the browser pane cache. Use if you need to reset the active pane state.",
     {},
     async () => {
@@ -2514,7 +2580,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_back",
+    "browser_back",
     "Go back in browser history.",
     { pane_id: z.string().optional() },
     async (args) => {
@@ -2524,7 +2590,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_forward",
+    "browser_forward",
     "Go forward in browser history.",
     { pane_id: z.string().optional() },
     async (args) => {
@@ -2534,7 +2600,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_reload",
+    "browser_reload",
     "Reload the current page. Pass hard=true to bypass cache.",
     { hard: z.boolean().optional().describe("Hard reload (ignore cache)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2545,7 +2611,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── DOM Reading ─────────────────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_get_html",
+    "browser_get_html",
     "Get HTML content for scraping. Without a selector, returns only meaningful body content (strips <script>, <style>, <meta>, <link>, comments, icon SVGs). With a selector, returns that element's clean HTML. Response is auto-truncated at 50k chars.",
     { selector: z.string().optional().describe("CSS selector (omit for clean body HTML)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2562,7 +2628,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_get_text",
+    "browser_get_text",
     "Get visible text content (no HTML tags) of the page or element.",
     { selector: z.string().optional().describe("CSS selector (omit for body)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2572,7 +2638,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_get_accessibility_tree",
+    "browser_get_accessibility_tree",
     "Get the accessibility tree (roles, labels, bounds) of the page. Best for AI understanding of page structure.",
     { max_depth: z.number().optional().describe("Max tree depth (default 10)"), max_nodes: z.number().optional().describe("Max nodes to return (default 300)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2582,7 +2648,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_find_by_text",
+    "browser_find_by_text",
     "Find elements by their visible text content. Optionally filter by role (button, link, input, heading, etc).",
     { text: z.string().describe("Text to search for"), role: z.string().optional().describe("ARIA role filter"), exact: z.boolean().optional().describe("Exact match"), pane_id: z.string().optional() },
     async (args) => {
@@ -2592,7 +2658,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_get_element_info",
+    "browser_get_element_info",
     "Get comprehensive info about an element: bounds, attributes, role, value, visibility, disabled state.",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
@@ -2602,7 +2668,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_get_url",
+    "browser_get_url",
     "Get the current URL and page title.",
     { pane_id: z.string().optional() },
     async (args) => {
@@ -2613,7 +2679,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── DOM Interaction ─────────────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_click",
+    "browser_click",
     "Click an element matching the CSS selector. Dispatches full mouse event sequence.",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
@@ -2623,7 +2689,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_fill",
+    "browser_fill",
     "Fill an input or textarea with a value. Dispatches focus, input, and change events.",
     { selector: z.string().describe("CSS selector"), value: z.string().describe("Value to fill"), clear_first: z.boolean().optional().describe("Clear field before filling"), pane_id: z.string().optional() },
     async (args) => {
@@ -2633,7 +2699,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_select",
+    "browser_select",
     "Select an option in a <select> element by value or visible text.",
     { selector: z.string().describe("CSS selector for <select>"), value_or_text: z.string().describe("Option value or visible text"), pane_id: z.string().optional() },
     async (args) => {
@@ -2643,7 +2709,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_check",
+    "browser_check",
     "Check or uncheck a checkbox/radio. Omit checked to toggle.",
     { selector: z.string().describe("CSS selector"), checked: z.boolean().optional().describe("true=check, false=uncheck, omit=toggle"), pane_id: z.string().optional() },
     async (args) => {
@@ -2653,7 +2719,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_clear",
+    "browser_clear",
     "Clear an input field (select all + delete).",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
@@ -2663,7 +2729,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_focus",
+    "browser_focus",
     "Focus an element without clicking it.",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
@@ -2673,7 +2739,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_hover",
+    "browser_hover",
     "Hover over an element (triggers :hover CSS, tooltips, dropdowns).",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
@@ -2684,7 +2750,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── Coordinate-based Interaction ────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_click_at",
+    "browser_click_at",
     "Click at exact screen coordinates. Useful when selector is unreliable.",
     { x: z.number().describe("X coordinate"), y: z.number().describe("Y coordinate"), button: z.enum(["left", "right", "middle"]).optional().describe("Mouse button (default left)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2694,7 +2760,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_hover_at",
+    "browser_hover_at",
     "Hover at exact screen coordinates.",
     { x: z.number(), y: z.number(), pane_id: z.string().optional() },
     async (args) => {
@@ -2704,7 +2770,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_drag",
+    "browser_drag",
     "Drag from (x1,y1) to (x2,y2). Steps controls interpolation smoothness.",
     { x1: z.number(), y1: z.number(), x2: z.number(), y2: z.number(), steps: z.number().optional().describe("Interpolation steps (default 10)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2714,7 +2780,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_scroll",
+    "browser_scroll",
     "Scroll the page or a specific element.",
     { selector: z.string().optional().describe("CSS selector (omit for page)"), direction: z.enum(["up", "down", "left", "right"]).describe("Scroll direction"), amount: z.number().describe("Pixels to scroll"), pane_id: z.string().optional() },
     async (args) => {
@@ -2725,7 +2791,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── Keyboard ────────────────────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_type",
+    "browser_type",
     "Type text character by character into the focused element.",
     { text: z.string().describe("Text to type"), delay_ms: z.number().optional().describe("Delay between keystrokes in ms (0=instant)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2735,7 +2801,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_key",
+    "browser_key",
     "Press a single key: Enter, Escape, Tab, Backspace, ArrowUp, ArrowDown, Delete, F5, etc.",
     { key: z.string().describe("Key name"), pane_id: z.string().optional() },
     async (args) => {
@@ -2745,7 +2811,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_shortcut",
+    "browser_shortcut",
     "Keyboard shortcut: Ctrl+A, Ctrl+Z, Ctrl+Shift+I, Meta+R, Alt+F4, etc.",
     { keys: z.string().describe("Shortcut combo, e.g. 'Ctrl+Shift+I'"), pane_id: z.string().optional() },
     async (args) => {
@@ -2756,7 +2822,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── Wait / Assertions ───────────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_wait_for",
+    "browser_wait_for",
     "Wait for an element to appear and be visible in the DOM.",
     { selector: z.string().describe("CSS selector"), timeout_ms: z.number().optional().describe("Timeout in ms (default 5000)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2766,7 +2832,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_wait_for_text",
+    "browser_wait_for_text",
     "Wait for text to appear on the page or within a specific element.",
     { text: z.string().describe("Text to wait for"), selector: z.string().optional().describe("Scope selector (omit for whole page)"), timeout_ms: z.number().optional(), pane_id: z.string().optional() },
     async (args) => {
@@ -2776,7 +2842,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_wait_for_url",
+    "browser_wait_for_url",
     "Wait for the URL to match a pattern (string substring or regex).",
     { pattern: z.string().describe("URL pattern (string or regex)"), timeout_ms: z.number().optional(), pane_id: z.string().optional() },
     async (args) => {
@@ -2786,7 +2852,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_wait_for_load",
+    "browser_wait_for_load",
     "Wait for the page to finish loading (network idle).",
     { timeout_ms: z.number().optional().describe("Timeout in ms (default 10000)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2797,7 +2863,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── Screenshots ─────────────────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_screenshot",
+    "browser_screenshot",
     "Capture a screenshot. Without full_page: captures the visible viewport. With full_page: resizes the webview to capture the ENTIRE scrollable page (up to 8192px height), not just the visible area. Returns file path + textual page description. Do NOT read the PNG — use the text description.",
     { full_page: z.boolean().optional().describe("Capture the entire scrollable page (not just viewport)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2811,7 +2877,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_screenshot_element",
+    "browser_screenshot_element",
     "Capture a screenshot of a specific element. Saves to .codebrain/screenshots/. Also returns the element's text content — do NOT read the PNG file.",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
@@ -2825,7 +2891,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_annotate",
+    "browser_annotate",
     "Draw boxes, arrows, or text labels on an existing screenshot. Saves _annotated.png.",
     { path: z.string().describe("Path to screenshot file"), annotations: z.array(z.object({
       type: z.enum(["box", "arrow", "text"]),
@@ -2841,7 +2907,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── Console & Network Logs ──────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_console_log",
+    "browser_console_log",
     "Read ALL browser console entries: console.log/warn/error/info/debug, uncaught JS errors (window.onerror), and unhandled promise rejections. Each entry has timestamp, level, message, and source location. Use level='error' to find all bugs. Filter by level, time, and limit.",
     { level: z.string().optional().describe("Console level filter"), since_ms: z.number().optional().describe("Only entries from last N ms"), limit: z.number().optional().describe("Max entries to return"), pane_id: z.string().optional() },
     async (args) => {
@@ -2851,7 +2917,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_clear_console",
+    "browser_clear_console",
     "Clear the stored browser console log.",
     {},
     async () => {
@@ -2861,7 +2927,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_network_log",
+    "browser_network_log",
     "Read captured network activity: fetch, XHR/AJAX, WebSocket (sent AND received messages with full data), resource loads. Filter by URL, method, status ('5xx','4xx'). Default limit: 50. WebSocket entries have type='ws_send' (outgoing) or type='ws_message' (incoming) with a 'data' field containing the message content.",
     { url_filter: z.string().optional().describe("URL substring filter"), method: z.string().optional().describe("HTTP method (GET, POST, etc)"), status: z.string().optional().describe("Status code or range (e.g. '200', '5xx')"), since_ms: z.number().optional(), limit: z.number().optional().describe("Max entries (default 50)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2871,7 +2937,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_network_wait",
+    "browser_network_wait",
     "Wait for a specific network request or WebSocket message to happen. Matches against URL and WebSocket data content. Useful to confirm an API call or WS message was made after a UI action.",
     { pattern: z.string().describe("URL substring to match"), method: z.string().optional().describe("HTTP method filter"), timeout_ms: z.number().optional().describe("Timeout in ms (default 10000)") },
     async (args) => {
@@ -2881,7 +2947,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_clear_network",
+    "browser_clear_network",
     "Clear the stored network request log.",
     {},
     async () => {
@@ -2892,7 +2958,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── Request Log (SQLite-backed auto-intercept) ──────────────────────────
   server.tool(
-    "mcp__codebrain__browser_requests_log",
+    "browser_requests_log",
     "Query ALL captured HTTP requests from SQLite (auto-intercepted, always-on). Returns full request+response details: URL, method, status, headers, body, timing, site URL. Filter by url_filter, method, status, since_ms, site_url. Default limit: 100.",
     { url_filter: z.string().optional().describe("URL substring filter"), method: z.string().optional().describe("HTTP method filter (GET, POST, etc)"), status: z.number().optional().describe("HTTP status code filter"), site_url: z.string().optional().describe("Site URL filter"), since_ms: z.number().optional().describe("Only requests after this timestamp (ms)"), limit: z.number().optional().describe("Max results (default 100)"), offset: z.number().optional().describe("Pagination offset") },
     async (args) => {
@@ -2902,7 +2968,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_requests_search",
+    "browser_requests_search",
     "Search captured requests by text content (URL, request body, response body). Full-text search across all stored data.",
     { query: z.string().describe("Search text"), url: z.string().optional().describe("URL filter"), limit: z.number().optional().describe("Max results (default 50)") },
     async (args) => {
@@ -2912,7 +2978,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_requests_stats",
+    "browser_requests_stats",
     "Get statistics about all captured requests: total count, by method, by status, top sites, recent requests.",
     {},
     async () => {
@@ -2922,7 +2988,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_requests_export",
+    "browser_requests_export",
     "Export captured requests as JSON or CSV. Use for bulk analysis or sharing.",
     { format: z.enum(["json", "csv"]).optional().describe("Export format (default: json)"), limit: z.number().optional().describe("Max requests to export (default 10000)") },
     async (args) => {
@@ -2932,7 +2998,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_requests_clear",
+    "browser_requests_clear",
     "Clear all captured requests from the SQLite log.",
     {},
     async () => {
@@ -2943,7 +3009,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── JavaScript Eval ─────────────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_eval",
+    "browser_eval",
     "Execute arbitrary JavaScript in the page context and return the result. Use for advanced interactions not covered by other tools.",
     { javascript: z.string().describe("JavaScript code to execute"), pane_id: z.string().optional() },
     async (args) => {
@@ -2954,7 +3020,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── Composite / Batch Tools ────────────────────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_click_text",
+    "browser_click_text",
     "Find an element by its visible text and click it in a single fast call. Use instead of find_by_text + click.",
     { text: z.string().describe("Text to find and click"), role: z.string().optional().describe("ARIA role filter (button, link, etc)"), pane_id: z.string().optional() },
     async (args) => {
@@ -2964,7 +3030,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_fill_form",
+    "browser_fill_form",
     "Fill multiple form fields in a single fast call. Use instead of multiple fill() calls.",
     { fields: z.array(z.object({ selector: z.string(), value: z.string() })).describe("Array of {selector, value} pairs"), pane_id: z.string().optional() },
     async (args) => {
@@ -2974,7 +3040,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_page_summary",
+    "browser_page_summary",
     "Get URL, title, visible text, links, inputs, and buttons in a single fast call. Use instead of get_url + get_text + find_by_text.",
     { pane_id: z.string().optional() },
     async (args) => {
@@ -2990,7 +3056,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_mode — Detect current browser mode (CDP vs webview) ────
   server.tool(
-    "mcp__codebrain__browser_mode",
+    "browser_mode",
     "Detect if using native Chrome (CDP) or embedded webview. Returns current browser mode, port, and connection status.",
     {},
     async () => {
@@ -3001,7 +3067,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_computer — Mouse/keyboard/screen via CDP ──────────────
   server.tool(
-    "mcp__codebrain__browser_computer",
+    "browser_computer",
     "Perform mouse, keyboard, and screen actions on the native browser via CDP. Actions: left_click, right_click, double_click, triple_click, left_click_drag, type, key, screenshot, wait, scroll, scroll_to, hover, zoom. Requires Chrome with --remote-debugging-port.",
     {
       action: z.enum([
@@ -3024,7 +3090,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_find — Natural language element search via CDP ────────
   server.tool(
-    "mcp__codebrain__browser_find",
+    "browser_find",
     "Find elements on the page by natural language query. Returns matching elements with coordinates and center points. Requires Chrome CDP.",
     {
       query: z.string().describe("Natural language query to find elements (e.g. 'Submit button', 'email input', 'navigation menu')"),
@@ -3038,7 +3104,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_tabs_list — List all open Chrome tabs ─────────────────
   server.tool(
-    "mcp__codebrain__browser_tabs_list",
+    "browser_tabs_list",
     "List all open browser tabs in the native Chrome instance. Returns tab ID, title, URL, and active status. Requires Chrome CDP.",
     {},
     async () => {
@@ -3049,7 +3115,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_tabs_create — Open new tab in Chrome ──────────────────
   server.tool(
-    "mcp__codebrain__browser_tabs_create",
+    "browser_tabs_create",
     "Create a new browser tab in the native Chrome instance. Returns the new tab ID. Requires Chrome CDP.",
     { url: z.string().optional().describe("URL to open in the new tab (default: about:blank)") },
     async (args) => {
@@ -3060,7 +3126,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_tabs_close — Close a Chrome tab ───────────────────────
   server.tool(
-    "mcp__codebrain__browser_tabs_close",
+    "browser_tabs_close",
     "Close a browser tab in the native Chrome instance by tab ID. Requires Chrome CDP.",
     { tab_id: z.string().describe("Tab ID to close (from browser_tabs_list)") },
     async (args) => {
@@ -3071,7 +3137,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_batch — Execute multiple browser actions in one call ──
   server.tool(
-    "mcp__codebrain__browser_batch",
+    "browser_batch",
     "Execute multiple browser tool calls sequentially in one round trip. Reduces latency for multi-step operations. Requires Chrome CDP.",
     {
       actions: z.array(z.object({
@@ -3087,7 +3153,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_upload_file — Upload files to file input ───────────────
   server.tool(
-    "mcp__codebrain__browser_upload_file",
+    "browser_upload_file",
     "Upload files to a file input element using base64-encoded content. Works with <input type='file'> elements. Requires Chrome CDP.",
     {
       selector: z.string().describe("CSS selector for the file input element"),
@@ -3105,7 +3171,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_upload_image — Upload image to element ─────────────────
   server.tool(
-    "mcp__codebrain__browser_upload_image",
+    "browser_upload_image",
     "Upload an image to an element (file input or drop zone). Creates a File object from base64 data and dispatches appropriate events. Useful for chat interfaces with image upload. Requires Chrome CDP.",
     {
       selector: z.string().describe("Target element selector (file input or drop zone)"),
@@ -3120,7 +3186,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_resize_window — Resize browser window ──────────────────
   server.tool(
-    "mcp__codebrain__browser_resize_window",
+    "browser_resize_window",
     "Resize the browser window to specific dimensions. Requires Chrome CDP.",
     {
       width: z.number().describe("New width in pixels"),
@@ -3134,7 +3200,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_gif_creator — GIF recording ────────────────────────────
   server.tool(
-    "mcp__codebrain__browser_gif_creator",
+    "browser_gif_creator",
     "Manage GIF recording of browser actions. Actions: start_recording, stop_recording, export, clear. NOTE: Full GIF recording requires the Claude Chrome extension's offscreen document — this is a stub that returns status info.",
     {
       action: z.enum(["start_recording", "stop_recording", "export", "clear"]).describe("GIF action to perform"),
@@ -3148,7 +3214,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_shortcuts_list — List shortcuts ────────────────────────
   server.tool(
-    "mcp__codebrain__browser_shortcuts_list",
+    "browser_shortcuts_list",
     "List available browser shortcuts/bookmarks. NOTE: Full shortcuts require the Claude Chrome extension — this returns available navigation shortcuts.",
     {},
     async () => {
@@ -3159,7 +3225,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_shortcuts_execute — Execute shortcut ───────────────────
   server.tool(
-    "mcp__codebrain__browser_shortcuts_execute",
+    "browser_shortcuts_execute",
     "Execute a saved shortcut/bookmark. NOTE: Full shortcuts require the Claude Chrome extension — use browser_navigate as alternative.",
     {
       shortcut_id: z.string().describe("Shortcut ID to execute"),
@@ -3174,7 +3240,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   // Intercept, modify, block, or mock HTTP requests in real-time.
 
   server.tool(
-    "mcp__codebrain__browser_intercept_requests",
+    "browser_intercept_requests",
     "Enable request interception via CDP Fetch domain. Pauses matching requests so they can be modified, blocked, or mocked. Requires Chrome CDP.",
     {
       url_patterns: z.array(z.string()).optional().describe("URL patterns to intercept (wildcards). Default: ['*'] (all)"),
@@ -3188,7 +3254,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_continue_request",
+    "browser_continue_request",
     "Continue an intercepted (paused) request. Optionally modify URL, method, headers, or POST body. Requires Chrome CDP.",
     {
       request_id: z.string().describe("Paused request ID"),
@@ -3211,7 +3277,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_fulfill_request",
+    "browser_fulfill_request",
     "Fulfill an intercepted request with a custom mock response. Requires Chrome CDP.",
     {
       request_id: z.string().describe("Paused request ID"),
@@ -3230,7 +3296,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_fail_request",
+    "browser_fail_request",
     "Block/fail an intercepted request. Use to block ads, trackers, or specific API calls. Requires Chrome CDP.",
     {
       request_id: z.string().describe("Paused request ID"),
@@ -3243,7 +3309,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_continue_response",
+    "browser_continue_response",
     "Continue an intercepted response (modify headers/body after server responds). Requires Chrome CDP.",
     {
       request_id: z.string().describe("Paused request ID"),
@@ -3262,7 +3328,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_stop_intercepting",
+    "browser_stop_intercepting",
     "Disable request interception. Let all requests flow normally. Requires Chrome CDP.",
     {},
     async () => {
@@ -3272,7 +3338,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   );
 
   server.tool(
-    "mcp__codebrain__browser_get_paused_requests",
+    "browser_get_paused_requests",
     "Get all paused (intercepted) requests. Returns request ID, URL, method, headers, body for each. Requires Chrome CDP.",
     {},
     async () => {
@@ -3283,7 +3349,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_launch — Auto-launch native Chrome ────────────────────────
   server.tool(
-    "mcp__codebrain__browser_launch",
+    "browser_launch",
     "Launch a native Chrome/Chromium browser with remote debugging enabled, or connect to an already-running instance. Auto-detects Chrome/Brave/Chromium on Windows and Linux/macOS. Returns { ok, launched, port, pid }. After this, all browser_* tools use the native browser (much more capable than the embedded webview).",
     {
       url: z.string().optional().describe("URL to open after launch (default: about:blank)"),
@@ -3301,7 +3367,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_form_input — Form filling by element ref ──────────────────
   server.tool(
-    "mcp__codebrain__browser_form_input",
+    "browser_form_input",
     "Set a value in a form element using an element reference from browser_get_accessibility_tree. Handles all input types: text, select (by value or text), checkbox (boolean), radio, date, range, number, textarea. More reliable than browser_fill for complex inputs. Requires Chrome CDP.",
     {
       ref: z.string().describe("Element reference ID from browser_get_accessibility_tree (e.g. 'ref_5')"),
@@ -3318,7 +3384,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   // ── browser_get_article_text — Smart article extraction ───────────────
   server.tool(
-    "mcp__codebrain__browser_get_article_text",
+    "browser_get_article_text",
     "Extract the main article/content text from the current page intelligently. Tries article/main/[role=main] selectors, then common content class names, then falls back to body. Returns clean plain text without HTML. Much better than browser_get_text() for news articles, blog posts, and content-heavy pages. Works in both webview and CDP modes.",
     {
       max_chars: z.number().optional().describe("Maximum characters to return (default: 50000)"),
@@ -3341,7 +3407,7 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 function registerFetchTools(server, bridge) {
 
   server.tool(
-    "mcp__codebrain__browser_fetch",
+    "browser_fetch",
     "Make an HTTP request with TLS fingerprinting (simulates Chrome/Firefox). Returns {status, headers, body, contentType, timing, cfBlocked}. Use this FIRST for scraping — it's faster and lighter than browser tools. If cfBlocked=true, fall back to browser_open + browser_wait_for.",
     {
       url: z.string().describe("URL to fetch"),
@@ -3362,7 +3428,7 @@ function registerFetchTools(server, bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__browser_fetch_json",
+    "browser_fetch_json",
     "Fetch a URL and auto-parse JSON response. Shortcut for API calls. Returns parsed JSON object directly. If response is not JSON, returns warning.",
     {
       url: z.string().describe("URL to fetch"),
@@ -3383,7 +3449,7 @@ function registerFetchTools(server, bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__browser_fetch_html",
+    "browser_fetch_html",
     "Fetch HTML from a URL with TLS fingerprinting. Strips scripts/styles, auto-truncated at 50k chars. Use for scraping — faster than browser_navigate + browser_get_html. Falls back to browser_* tools if Cloudflare is detected (cfBlocked=true in response).",
     {
       url: z.string().describe("URL to fetch"),
@@ -3402,7 +3468,7 @@ function registerFetchTools(server, bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__browser_fetch_batch",
+    "browser_fetch_batch",
     "Fetch multiple URLs in parallel (max 10). Returns array of responses. Use for scraping multiple pages simultaneously. Each response includes status, body, timing, and cfBlocked flag.",
     {
       urls: z.array(z.string()).min(1).max(10).describe("Array of URLs to fetch (max 10)"),
@@ -3424,7 +3490,7 @@ function registerFetchTools(server, bridge) {
   );
 
   server.tool(
-    "mcp__codebrain__browser_fetch_cookies",
+    "browser_fetch_cookies",
     "Manage HTTP cookies for fetch requests. Actions: list (get all cookies), set (add a cookie), clear (remove cookies). Cookies persist across fetch calls in the same session.",
     {
       action: z.enum(["list", "set", "clear"]).describe("Action: list, set, or clear cookies"),

@@ -1,0 +1,5 @@
+[
+  { "name": "greeting", "prompt": "olá" },
+  { "name": "factual", "prompt": "Qual é a regra de resposta para uma saudação?" },
+  { "name": "compact-output", "prompt": "Responda apenas: OK|teste curto|-" }
+]

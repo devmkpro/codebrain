@@ -30,6 +30,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:token-budget": "node scripts/check-token-budget.mjs",
+    "test:token-measure": "node scripts/check-token-budget.mjs --measure",
     "lint": "npm run typecheck && npm run typecheck:node",
     "format": "prettier --write \"{src,electron,packages}/**/*.{ts,tsx,js,css}\"",
     "format:check": "prettier --check \"{src,electron,packages}/**/*.{ts,tsx,js,css}\""
@@ -104,6 +106,7 @@
     },
     "files": [
       "out/**",
+      "prompts/**",
       "!out/**/*.map",
       "packages/**"
     ],

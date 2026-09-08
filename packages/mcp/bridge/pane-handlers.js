@@ -9,19 +9,9 @@ const { clarifyBroadcastPayload } = require("./clarify-broadcast.js");
  * This is code-level enforcement — not just a prompt suggestion.
  */
 const MEMORY_PROTOCOL_PREFIX = `
-🔴 MEMORY PROTOCOL (CODE-ENFORCED — you MUST follow this):
-• BEFORE working: memory_search("file-changed"), memory_search("changes"), memory_search("api"), memory_search("schema")
-• DURING work: memory_write() for EVERY significant change (api, schema, component, decision, fix)
-• AFTER completion: memory_write(type="episodic", key="completed-<task>", content="summary", tags=["result"])
-• ALWAYS: pattern_write() for new patterns discovered. NEVER create .md files for knowledge — use MCP memory/patterns only.
-• REUSE workers: call pane_list() or actor_list() before spawning. If a worker with the right label exists and is idle, send it a new task via pane_write.
-• SPAWN + WAIT: use pane_spawn_and_wait() when you need the result inline (blocks until idle, parses return header). Use pane_spawn() for fire-and-forget.
-• KILL CASCADE: use pane_kill_cascade(paneId) to kill a pane AND all its registered children at once.
-• ACTOR STATUS: use actor_status(paneId) or actor_list() to check turn count, stuck detection, and parent hierarchy.
-• TASK COMPLETION: When you finish a task assigned by the orchestrator, call mcp__codebrain__handoff_submit({paneId:"<your pane id>", summary:"...", status:"done"|"blocked"|"error", artifacts:[...]}) as your VERY LAST action. The orchestrator will be notified automatically. NEVER try to pane_write back to the orchestrator yourself.
-• WAIT BEFORE SEND: Always call pane_wait_idle(paneId) BEFORE pane_write to ensure the agent is at its prompt. If busy, pane_write interrupts the current task.
-• Skipping memory = INCOMPLETE TASK. The system tracks whether you used memory tools.
-──────────────────────────────────────────
+Contexto: para task não trivial, use memory_search + pattern_list uma vez antes de agir.
+Entrega: use handoff_submit ao concluir; registre decisões duráveis com memory_write.
+Coordenação: pane_write entrega tasks; pane_send_message envia updates curtos.
 `.trim();
 
 /**
@@ -30,8 +20,7 @@ const MEMORY_PROTOCOL_PREFIX = `
  * Ensures workers always terminate via handoff_submit instead of going idle silently.
  */
 const WORKER_CONTRACT_FOOTER = `
-
-— Worker contract: when you finish this task, call mcp__codebrain__handoff_submit({ paneId: "<your_pane_id>", summary: "...", status: "done"|"blocked"|"error", artifacts: [...] }) as your VERY LAST action. The orchestrator is waiting on your result; simply going idle does NOT signal completion.`;
+Final da task: chame mcp__codebrain__handoff_submit({ paneId: "<your_pane_id>", summary: "...", status: "done"|"blocked"|"error", artifacts: [...] }) como última ação.`;
 
 /**
  * Orchestrator no-edit warning — injected on first write to orchestrator panes.
@@ -39,11 +28,7 @@ const WORKER_CONTRACT_FOOTER = `
  * This reinforces the prompt-based rule with a visible code-level warning.
  */
 const ORCHESTRATOR_NO_EDIT_BANNER = `
-🚫 ORCHESTRATOR NO-EDIT GUARD (CODE-ENFORCED):
-You are an ORCHESTRATOR. NEVER use Edit/Write/file_write/file_multi_edit/Bash to modify files.
-If you need code changed → task_create + task_assign to a worker + pane_write with instructions.
-Violating this rule wastes tokens, degrades context, and breaks the multi-agent architecture.
-──────────────────────────────────────────
+ORCHESTRATOR: não edite arquivos nem rode Bash para implementar. Use task_create → task_assign → pane_write.
 `.trim();
 
 // Stuck detection: 5 minutes without output → fire event
@@ -438,7 +423,10 @@ function createPaneHandlers(ptyManager, opts) {
         const existing = opts.paneMemoryState.get(paneId);
         const isFirstWrite = !existing;
         const isAfterIdle = existing?.wentIdleSinceLastWrite === true;
-        if (isFirstWrite || isAfterIdle) {
+        // Keep greetings and short conversational writes at one turn. The
+        // protocol is useful for delegated work, not for every user message.
+        const isTaskWrite = text.length > 80 || /\b(task|tarefa|implement|corrig|refactor|refator|test|teste)\b/i.test(text);
+        if ((isFirstWrite || isAfterIdle) && isTaskWrite) {
           finalText = MEMORY_PROTOCOL_PREFIX + "\n\n" + text;
         }
         // Track pane state
@@ -785,11 +773,19 @@ function createPaneHandlers(ptyManager, opts) {
       let parsedStatus = null;
       let parsedSummary = null;
       if (lines && lines.length > 0) {
-        const outputText = lines.join('\n');
-        const statusMatch = outputText.match(/\*\*Status\*\*:\s*(success|partial|failed|blocked)/i);
-        const summaryMatch = outputText.match(/\*\*Summary\*\*:\s*(.+)/i);
-        if (statusMatch) parsedStatus = statusMatch[1].toLowerCase();
-        if (summaryMatch) parsedSummary = summaryMatch[1].trim();
+        const outputText = lines.join('\n').replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g, '');
+        // Compact worker contract: STATUS|summary|files. Keep the legacy
+        // markdown parser for older workers and external CLIs.
+        const compactMatch = outputText.match(/(?:^|\n)\s*(OK|PART|FAIL|BLOCK)\|([^|\r\n]*)\|([^\r\n]*)/i);
+        if (compactMatch) {
+          parsedStatus = ({ OK: 'success', PART: 'partial', FAIL: 'failed', BLOCK: 'blocked' })[compactMatch[1].toUpperCase()] || null;
+          parsedSummary = compactMatch[2].trim();
+        } else {
+          const statusMatch = outputText.match(/\*\*Status\*\*:\s*(success|partial|failed|blocked)/i);
+          const summaryMatch = outputText.match(/\*\*Summary\*\*:\s*(.+)/i);
+          if (statusMatch) parsedStatus = statusMatch[1].toLowerCase();
+          if (summaryMatch) parsedSummary = summaryMatch[1].trim();
+        }
       }
 
       return {

@@ -13,6 +13,8 @@
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   model?: string;
   totalTokens?: number;
 }
@@ -46,6 +48,19 @@ export function parseTokenUsage(lines: string[]): TokenUsage | null {
  * Also matches: { "inputTokens": 1234, "outputTokens": 567 }
  */
 function parseJsonTokenBlock(lines: string[]): TokenUsage | null {
+  // Gemini headless JSON and Codex JSON events are nested objects. Parse
+  // complete JSON values first so the aggregate usage object wins over a
+  // per-model child object; keep the regex path below for mixed PTY lines.
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const parsed = JSON.parse(stripAnsi(lines[i]));
+      const usage = findStructuredUsage(parsed);
+      if (usage) return usage;
+    } catch {
+      // PTY output usually mixes JSON with progress text; use regex fallback.
+    }
+  }
+
   // Join lines to catch multi-line JSON
   const joined = lines.join("\n");
 
@@ -65,7 +80,14 @@ function parseJsonTokenBlock(lines: string[]): TokenUsage | null {
       const inputTokens = parseInt(m[1], 10);
       const outputTokens = parseInt(m[2], 10);
       if (inputTokens > 0 || outputTokens > 0) {
-        const result: TokenUsage = { inputTokens, outputTokens };
+        const cacheReadMatch = joined.match(/"(?:cache_read_input_tokens|cached_content_token_count|cached)"\s*:\s*(\d+)/);
+        const cacheWriteMatch = joined.match(/"(?:cache_creation_input_tokens|cache_write_input_tokens)"\s*:\s*(\d+)/);
+        const result: TokenUsage = {
+          inputTokens,
+          outputTokens,
+          cacheReadTokens: cacheReadMatch ? parseInt(cacheReadMatch[1], 10) : 0,
+          cacheWriteTokens: cacheWriteMatch ? parseInt(cacheWriteMatch[1], 10) : 0,
+        };
         // Try to extract model from the same JSON block
         const modelMatch = joined.match(/"model"\s*:\s*"([^"]+)"/);
         if (modelMatch) result.model = modelMatch[1];
@@ -78,6 +100,46 @@ function parseJsonTokenBlock(lines: string[]): TokenUsage | null {
   }
 
   return null;
+}
+
+function findStructuredUsage(value: unknown, inheritedModel?: string): TokenUsage | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const model = typeof record.model === "string" ? record.model : inheritedModel;
+  const input = numberFrom(record, [
+    "input_tokens", "inputTokens", "prompt_tokens", "promptTokenCount",
+  ]) ?? numberFrom(record.tokens, ["prompt", "input"]);
+  const output = numberFrom(record, [
+    "output_tokens", "outputTokens", "completion_tokens", "candidatesTokenCount",
+  ]) ?? numberFrom(record.tokens, ["candidates", "output"]);
+  if (input !== undefined && output !== undefined && (input > 0 || output > 0)) {
+    return {
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: numberFrom(record, [
+        "cache_read_input_tokens", "cacheReadTokens", "cached_content_token_count", "cached",
+      ]) ?? 0,
+      cacheWriteTokens: numberFrom(record, ["cache_creation_input_tokens", "cacheWriteTokens"]) ?? 0,
+      model,
+      totalTokens: numberFrom(record, ["total_tokens", "totalTokens", "totalTokenCount"]),
+    };
+  }
+
+  const values = Object.values(record);
+  for (let i = values.length - 1; i >= 0; i--) {
+    const nested = findStructuredUsage(values[i], model);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function numberFrom(value: unknown, keys: string[]): number | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    if (typeof record[key] === "number" && Number.isFinite(record[key])) return record[key] as number;
+  }
+  return undefined;
 }
 
 /**

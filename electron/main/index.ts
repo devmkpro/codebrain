@@ -6,6 +6,7 @@
  */
 import { app, session } from "electron";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import log from "electron-log/main.js";
 
 import { platform } from "./platform";
@@ -23,6 +24,8 @@ import { refreshAllWorkspaces, clearCodexGlobalConfig } from "./services/workspa
 import { ensureClaudeSettings } from "./services/pane-spawn";
 import { setupDiscordRPC, teardownDiscordRPC } from "./discord-rpc";
 import { createSessionWatchers } from "./services/session-watchers";
+import { parseTokenUsage, type TokenUsage } from "./token-parser";
+import { getTokenTracker } from "./services/token-tracker";
 
 log.initialize();
 
@@ -83,6 +86,86 @@ app.whenReady().then(async () => {
   const discordClientId = ctx.configStore.get().discordClientId as string | undefined;
   setupDiscordRPC(discordClientId);
 
+  // PTY token accounting — parse the usage summary once per completed turn.
+  // Some CLIs report cumulative totals, so only the delta since the previous
+  // observation is persisted. This wires the existing tracker to real pane
+  // output instead of waiting for a renderer caller that may never arrive.
+  const lastPaneUsage = new Map<string, TokenUsage>();
+  let modelCosts: Record<string, { input?: number; output?: number; cache_read?: number; cache_write?: number }> | null = null;
+  const estimateUsageCostUsd = (model: string | undefined, usage: { input: number; output: number; cacheRead: number; cacheWrite: number }): number => {
+    try {
+      if (!modelCosts) {
+        const costModule = require(path.join(app.getAppPath(), "packages", "mcp", "bridge", "cost-tracker.js"));
+        modelCosts = costModule.DEFAULT_MODEL_COSTS ?? {};
+      }
+      const exact = model ? modelCosts?.[model] : undefined;
+      const match = exact || (model
+        ? Object.entries(modelCosts ?? {}).find(([key]) => model.startsWith(key) || key.startsWith(model))?.[1]
+        : undefined);
+      const costs = match || modelCosts?.default || { input: 3, output: 15 };
+      const perMillion = 1_000_000;
+      return (
+        (usage.input / perMillion) * (costs.input ?? 0) +
+        (usage.output / perMillion) * (costs.output ?? 0) +
+        (usage.cacheRead / perMillion) * (costs.cache_read ?? 0) +
+        (usage.cacheWrite / perMillion) * (costs.cache_write ?? 0)
+      );
+    } catch {
+      return 0;
+    }
+  };
+  const recordPaneUsage = (paneId: string) => {
+    try {
+      const usage = parseTokenUsage(ctx.ptyManager.read(paneId, 200));
+      if (!usage) return;
+
+      const current = {
+        input: usage.inputTokens || 0,
+        output: usage.outputTokens || 0,
+        cacheRead: usage.cacheReadTokens || 0,
+        cacheWrite: usage.cacheWriteTokens || 0,
+      };
+      const previous = lastPaneUsage.get(paneId);
+      if (previous && previous.inputTokens === current.input && previous.outputTokens === current.output &&
+          (previous.cacheReadTokens || 0) === current.cacheRead && (previous.cacheWriteTokens || 0) === current.cacheWrite) return;
+
+      // JSONL Claude usage is per response; only CLIs that explicitly expose
+      // total_tokens are treated as cumulative snapshots.
+      const isCumulative = previous && usage.totalTokens !== undefined && previous.totalTokens !== undefined &&
+        usage.totalTokens >= previous.totalTokens;
+      const delta = isCumulative
+        ? {
+            input: Math.max(0, current.input - previous.inputTokens),
+            output: Math.max(0, current.output - previous.outputTokens),
+            cacheRead: Math.max(0, current.cacheRead - (previous.cacheReadTokens || 0)),
+            cacheWrite: Math.max(0, current.cacheWrite - (previous.cacheWriteTokens || 0)),
+          }
+        : current;
+      if (delta.input || delta.output || delta.cacheRead || delta.cacheWrite) {
+        const paneModel = usage.model || ctx.paneConfigs.get(paneId)?.model;
+        getTokenTracker().recordTokens(
+          paneId,
+          delta.input,
+          delta.output,
+          delta.cacheRead,
+          delta.cacheWrite,
+          estimateUsageCostUsd(paneModel, delta),
+          ctx.paneConfigs.get(paneId)?.cwd || ctx.currentWorkspacePath,
+        );
+      }
+      lastPaneUsage.set(paneId, {
+        inputTokens: current.input,
+        outputTokens: current.output,
+        cacheReadTokens: current.cacheRead,
+        cacheWriteTokens: current.cacheWrite,
+        model: usage.model,
+        totalTokens: usage.totalTokens,
+      });
+    } catch (err) {
+      log.debug?.("[token-tracker] pane usage parse skipped", err);
+    }
+  };
+
   // PTY event forwarding — batched at 16ms to reduce IPC overhead during heavy output
   const PTY_OUTPUT_FLUSH_MS = 16;
   const ptyOutputBatches = new Map<string, string[]>();
@@ -120,7 +203,11 @@ app.whenReady().then(async () => {
   ctx.ptyManager.on("output-echo", (paneId: string, data: string) => {
     enqueuePtyOutput(paneId, data, true);
   });
+  ctx.ptyManager.on("idle", ({ paneId }: { paneId: string }) => {
+    recordPaneUsage(paneId);
+  });
   ctx.ptyManager.on("exit", (paneId: string, exitCode: number) => {
+    recordPaneUsage(paneId);
     safeSend(ctx, "pty:exit", paneId, exitCode);
 
     // Auto-save to session history BEFORE deleting config/registry
@@ -148,6 +235,7 @@ app.whenReady().then(async () => {
 
     ctx.sessionWatchers?.unregisterPane(paneId);
     ctx.conversationTurns.discard(paneId);
+    lastPaneUsage.delete(paneId);
     ctx.paneConfigs.delete(paneId);
     ctx.paneRegistry.delete(paneId);
   });

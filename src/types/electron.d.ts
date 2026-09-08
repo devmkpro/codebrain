@@ -341,6 +341,14 @@ export interface CostTaskSummaryData {
   totalTasks: number;
 }
 
+export interface TokenCounts {
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_write: number;
+  cost_usd: number;
+}
+
 export interface CodebrainApp {
   app: {
     version: () => Promise<string>;
@@ -453,6 +461,11 @@ export interface CodebrainApp {
       paneCount: number;
       panes: Array<{ paneId: string; agent: string; pid: number | null; rssMB: number; cpu: number }>;
     }>;
+  };
+  tokens: {
+    byPane: (args: { paneId: string }) => Promise<{ ok: boolean; data?: TokenCounts | null; error?: string }>;
+    byMission: (args: { missionId?: string; paneIds: string[] }) => Promise<{ ok: boolean; data?: TokenCounts; error?: string }>;
+    byWorkspace: (args: { workspacePath: string; sinceMs?: number }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
   };
   mcp: {
     status: () => Promise<McpStatus>;

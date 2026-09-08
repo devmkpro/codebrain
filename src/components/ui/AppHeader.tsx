@@ -66,6 +66,7 @@ function useModals() {
       setShowSquad: state.setShowSquad,
       showSquadWizard: state.showSquadWizard,
       setShowSquadWizard: state.setShowSquadWizard,
+      squadWizardPreset: state.squadWizardPreset,
       showDiag: state.showDiag,
       setShowDiag: state.setShowDiag,
       showPerfHUD: state.showPerfHUD,
@@ -574,7 +575,7 @@ function Modals({ modals: m, activeWorkspace }: { modals: ReturnType<typeof useM
     <>
       <ProvidersModal open={m.showProviders} initialStep={m.providersStep} onClose={m.closeProviders} />
       <SquadModal open={m.showSquad} onClose={() => m.setShowSquad(false)} onSpawn={handleSpawnSquad} />
-      <SquadWizard open={m.showSquadWizard} onClose={() => m.setShowSquadWizard(false)} onSpawn={handleSpawnSquad} />
+      <SquadWizard open={m.showSquadWizard} onClose={() => m.setShowSquadWizard(false)} onSpawn={handleSpawnSquad} preset={m.squadWizardPreset} />
       <DiagnosticsModal open={m.showDiag} activeWorkspace={activeWorkspace} onClose={() => m.setShowDiag(false)} />
       <LibreWizard open={m.showLibreWizard} onClose={() => m.setShowLibreWizard(false)} onSpawn={handleLibreSpawn} activeWorkspace={activeWorkspace} />
       <PerfHUD visible={m.showPerfHUD} />
