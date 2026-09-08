@@ -18,6 +18,10 @@ export const RELEASES: Release[] = [
     "date": "setembro 2026",
     "highlights": [
       {
+        "kind": "feat",
+        "text": "lead the release with the measured cost drop"
+      },
+      {
         "kind": "perf",
         "text": "cut context cost below plain Claude Code"
       }
