@@ -1,6 +1,7 @@
 import React from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { appStorage } from "./persist-storage";
 
 // FONT_OPTIONS, useTerminalSettings, TERMINAL_THEMES
 export const FONT_OPTIONS = [{
@@ -85,6 +86,7 @@ export const useTerminalSettings = create()(persist((set, get) => ({
   })
 }), {
   name: "codebrain-app-terminal-settings",
+  storage: appStorage,
   version: 5,
   // Migrate persisted settings across versions.
   migrate: persisted => {

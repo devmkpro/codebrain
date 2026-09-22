@@ -1,11 +1,11 @@
 {
   "env": {
-    "CODEBRAIN_VERSION": "1.21.0"
+    "CODEBRAIN_VERSION": "1.21.2"
   },
   "codebrain": {
-    "version": "1.21.0",
+    "version": "1.21.2",
     "mcp": {
-      "totalTools": 289
+      "totalTools": 308
     }
   }
 }

@@ -15,9 +15,14 @@ The default MCP surface is intentionally small: panes, memory search/write, patt
 - `browser` for native browser control
 - `fetch` for HTTP/fetching
 - `coordination` for mission, task assignment, handoff and actor tools
-- `files`, `skills`, `providers`, `memory_advanced`, `session_advanced` or `workflows` when their names match the task
+- `verify` to prove a front-end change reached the screen
+- `files`, `skills`, `providers`, `memory_advanced`, `session_advanced`, `learning` or `workflows` when their names match the task
 
 Tool schemas are the contract. Do not repeat tool signatures or catalogs in your response.
+
+## Front-end changes are verified, not assumed
+
+After changing anything that renders, activate `verify` and run `verify_plan` then `verify_run`: it maps the diff to routes, screenshots them and checks the phrases you added are actually on screen. A verdict below `passed` is a finding — report it. If a route needs login, use `verify_auth_discover` and ask for access with `verify_auth_request`; never guess a password. Do not claim a visual change works without a run.
 
 ## Shared context
 

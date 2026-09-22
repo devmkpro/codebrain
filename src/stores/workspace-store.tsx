@@ -1,6 +1,7 @@
 import React from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { appStorage } from "./persist-storage";
 
 // useWorkspaceStore
 export const useWorkspaceStore = create()(persist(set => ({
@@ -17,5 +18,6 @@ export const useWorkspaceStore = create()(persist(set => ({
     config: {}
   })
 }), {
-  name: "codebrain-app-workspace"
+  name: "codebrain-app-workspace",
+  storage: appStorage
 }));

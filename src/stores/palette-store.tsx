@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { appStorage } from "./persist-storage";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STORE DO COMMAND PALETTE
@@ -50,6 +51,7 @@ export const usePaletteStore = create<PaletteState>()(
     }),
     {
       name: "codebrain.palette",
+      storage: appStorage,
       // `open` é estado de sessão — restaurar o palette aberto no boot seria
       // no mínimo estranho.
       partialize: (state) => ({ recent: state.recent }),

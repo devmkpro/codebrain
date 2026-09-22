@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { appStorage } from "./persist-storage";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STORE DO SHELL V2
@@ -31,7 +32,7 @@ export const useShellStore = create<ShellState>()(
       setRailCollapsed: (value) => set({ railCollapsed: value }),
       setDensity: (value) => set({ density: value }),
     }),
-    { name: "codebrain.shell" },
+    { name: "codebrain.shell", storage: appStorage },
   ),
 );
 

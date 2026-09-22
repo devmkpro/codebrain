@@ -59,10 +59,31 @@ Codebrain is an **Electron desktop app** where multiple AI agents work together 
 git clone https://gitlab.com/maikeofc18/codebrain.git
 cd codebrain
 npm install
+npm install-scripts approve better-sqlite3 electron esbuild
+npm run setup:native
 npm run dev
 ```
 
 That's it. Hot reload is instant.
+
+### Por que `setup:native` é obrigatório
+
+O `better-sqlite3` é módulo nativo, e o Codebrain abre o mesmo banco a partir de
+dois runtimes com **ABI diferente**: o processo main do Electron e o servidor MCP
+stdio, que roda no Node do sistema. Um `npm install` resolve só um lado — o
+`prebuild-install` baixa o binário do **Node**, e o Electron então morre no load,
+antes de qualquer janela:
+
+```
+Error: better-sqlite3: nenhum binário compatível com este runtime
+```
+
+`npm run setup:native` deixa os dois no lugar, na ordem certa: copia o binário de
+ABI de Node para `resources/native/` (de onde o MCP stdio e o `vitest` o pegam) e
+só depois troca o de `node_modules` pelo de ABI do Electron. O script é
+idempotente e dispensa o download quando já está correto. Se o app ou o
+`npm run dev` estiver de pé, feche antes: no Windows um `.node` carregado não pode
+ser sobrescrito.
 
 ### MCP sem abrir o Codebrain
 
@@ -101,6 +122,12 @@ no pacote instalado, encerre o processo `codebrain --mcp-server`.
 | `Ctrl+M` / `Cmd+M` | Minimize window |
 | `Escape` | Minimize window |
 
+O DevTools abre junto com o app em dev. O frontend dele escreve no stdout ruído
+que não é do Codebrain — `Unknown VE context: language-mismatch` do visual
+logging, e `Autofill.enable` / `Autofill.setAddresses` respondidos com `-32601`
+porque o Electron não implementa esse domínio do CDP. Para um log de arranque
+limpo, `CODEBRAIN_NO_DEVTOOLS=1 npm run dev`; o `F12` continua abrindo.
+
 ---
 
 ## Build Executable
@@ -138,6 +165,57 @@ Output goes to `dist/`.
 
 If NSIS fails with symlink errors, enable **Developer Mode**:
 `Settings > System > For Developers` or run the terminal as Administrator.
+
+#### `npm i` deixa install scripts pendentes
+
+O npm 11 não roda install script sem aprovação. Depois de `npm install` você verá:
+
+```
+npm warn install-scripts 3 packages have install scripts not yet covered by allowScripts:
+npm warn install-scripts   better-sqlite3@12.11.1 ...
+npm warn install-scripts   electron@33.4.11 ...
+npm warn install-scripts   esbuild@0.25.12 ...
+```
+
+Sem aprovar, o binário do Electron e o do esbuild nunca são baixados e o
+`better-sqlite3` não é compilado — daí `'electron-vite' não é reconhecido`:
+
+```bash
+npm install-scripts approve better-sqlite3 electron esbuild
+```
+
+#### `Electron failed to install correctly` no Node 26
+
+Sintoma: a aprovação acima roda, `node_modules/electron/dist` fica com **um
+único arquivo** (`LICENSES.chromium.html`), `path.txt` não é criado, e o
+`install.js` do Electron **termina com código 0 sem erro nenhum**.
+
+Causa: o `extract-zip` (via `yauzl`), usado pelo instalador do Electron, não
+funciona no Node 26 — a promise de extração nem resolve nem rejeita, então o
+instalador acha que terminou. O zip em cache está íntegro; o extrator é que
+para na primeira entrada. `npm audit` também lista `extract-zip` como
+vulnerável, e a correção dele vem junto de um major novo do `electron-builder`.
+
+Duas saídas:
+
+1. **Rodar o projeto em Node LTS (22 ou 24)**, onde o instalador funciona. É a
+   saída durável, porque todo `npm i` novo repete o problema no Node 26.
+2. **Extrair à mão**, uma vez, fazendo o que o `install.js` faria:
+
+```powershell
+$dist = "node_modules\electron\dist"
+Remove-Item $dist -Recurse -Force -ErrorAction SilentlyContinue
+$zip = (Get-ChildItem "$env:LOCALAPPDATA\electron\Cache" -Recurse -Filter *.zip)[0].FullName
+Expand-Archive -LiteralPath $zip -DestinationPath $dist -Force
+Set-Content node_modules\electron\path.txt -Value "electron.exe" -NoNewline
+```
+
+O Node 26 também expõe um `localStorage` global próprio, que só funciona com
+`--localstorage-file` e tem precedência sobre o do jsdom. É por isso que os
+stores persistidos passam `storage: appStorage`
+(`src/stores/persist-storage.ts`) em vez de deixar o zustand capturar o global
+cru — sem isso, cinco testes de renderer quebram em
+`Cannot read properties of undefined (reading 'setItem')`.
 
 ---
 
@@ -387,6 +465,64 @@ All tools work in **dual mode**: native Chrome via CDP (auto-detected on port 92
 | `worker_dispatch` | Spawn background worker for detected trigger |
 | `worker_list_bg` | List active background workers |
 
+### Lessons — correções aprendidas (4 tools)
+
+Persistem entre panes e sessões. O aprendizado existente (`patterns`, `trajectories`) é endógeno: nasce de trajetória bem-sucedida e é pontuado. Uma lição é o oposto — é a regra que o **usuário** ditou, categórica, sem score, válida até alguém removê-la.
+
+| Tool | What it does |
+|------|-------------|
+| `lesson_add` | Salva uma correção (`rule` + `negative`). `repo_scope` limita a regra a um projeto. `status` é a verdade: só `created`/`enriched` gravaram |
+| `lesson_list` | Lista as aplicáveis ao workspace (globais + escopo casando) |
+| `lesson_remove` | Remove por id ou por trecho da regra |
+| `lesson_context` | Devolve o bloco pronto para injetar no prompt |
+
+`lesson_add` é a única promoção ao core MCP (13/15), porque uma correção chega sem aviso, possivelmente antes de qualquer `enable_tool_group`.
+
+### Work ledger — estado retomável (5 tools)
+
+| Tool | What it does |
+|------|-------------|
+| `ledger_record` | Um passo: `phase`, `next` como intenção concreta, `tried_approach` + `tried_rejected_because`, `artifacts` (merge, não substituição). Mudar `phase` exige `event` + `event_kind` |
+| `ledger_read` | Estado completo + eventos + tudo que foi descartado |
+| `ledger_snapshot` | Bloco compacto para reinjetar; vazio em fase terminal |
+| `ledger_list` | Workstreams em aberto no workspace |
+| `agent_boot_context` | Lições aplicáveis + ledger do workstream numa chamada. Primeira coisa que um worker lê |
+
+Fecha um buraco concreto do par goal/judge: `goal_judge` reentra até 12 vezes e o veredito não carrega nada do que já falhou, então um loop consegue gastar as reentradas repetindo a mesma abordagem. `goal_judge_ledger` registra o veredito negativo como abordagem descartada e devolve o histórico junto.
+
+### Verify — prova visual de alteração de front-end (9 tools)
+
+Fecha o ciclo que faltava: **o agente não afirma que mexeu na tela sem ter olhado.** Ativar com `enable_tool_group("verify")`.
+
+```
+verify_plan          git → rotas afetadas → servidor vivo → marcadores
+  ↓ (se a página exigir login)
+verify_auth_discover → verify_auth_request → verify_auth_approve → verify_login
+  ↓
+verify_run           navega, tira print, lê texto e console → veredito
+verify_report        evidências e veredito por rota
+```
+
+| Tool | What it does |
+|------|-------------|
+| `verify_plan` | Lê a árvore de trabalho (ou um `base` ref), detecta o framework, mapeia arquivo → **rota candidata com confiança e evidência**, sonda portas de loopback e extrai os **marcadores**: as frases que o diff adicionou. Não abre navegador |
+| `verify_run` | Abre cada rota, grava o print em `.codebrain/verify/<run_id>/`, lê texto e erros de console, e decide se os marcadores **aparecem** |
+| `verify_report` | Veredito por rota, caminhos dos prints, erros de console |
+| `verify_auth_discover` | Rota real de login, usuários do banco local com seus papéis, e qual deles tem credencial declarada no seeder do próprio repositório. Ordena pelo encaixe em `feature_context` |
+| `verify_auth_request` | Cria concessão **pendente** e mostra o pedido no pane. Nenhum login acontece aqui |
+| `verify_auth_approve` / `verify_auth_revoke` / `verify_auth_list` | Ciclo de vida da concessão (TTL padrão 1h) |
+| `verify_login` | Executa o login de uma concessão aprovada: modo `seeder` digita a credencial versionada, modo `manual` espera o usuário digitar no painel Browser |
+
+**Veredito, não otimismo.** `passed` só sai quando toda frase adicionada no diff aparece na tela. Os outros estados são informativos de propósito: `not-visible` (rota errada, build sem reload, ou a alteração não chegou à UI), `partial`, `auth-required` (a rota caiu num login), `inconclusive` (nenhum marcador extraível — o print precisa de olho humano), `unreachable`. Nenhum caminho reporta sucesso com base num print que ninguém leu.
+
+**Regras de acesso, e por quê:**
+
+- **Nenhuma tool devolve senha ou hash.** Sai `credentialAvailable` + a procedência `arquivo:linha`. Resultado de tool vira transcript, e transcript não é lugar de credencial.
+- **Nenhuma senha é adivinhada.** Não há lista, não há variação. Isso seria credential stuffing contra o banco do próprio usuário, e ser local não muda o que é.
+- **Só dois modos de login.** `seeder` usa a credencial declarada no seeder/fixture versionado — texto de desenvolvimento, lido no instante de digitar, nunca armazenado. `manual` abre a tela e espera o humano digitar no painel Browser.
+- **`verify_grants` não tem coluna para segredo.** É registro de consentimento com prazo, não cofre; o schema impede o atalho.
+- **Alvo é sempre loopback ou faixa privada**, barrado no handler e outra vez no armazém.
+
 ### Skills (6 tools)
 
 | Tool | What it does |
@@ -419,6 +555,7 @@ codebrain/
 │   │   │   ├── pipeline-handlers.js  Fan-out/fan-in/pipeline
 │   │   │   ├── background-workers.js 7 maintenance daemons
 │   │   │   ├── consensus-handlers.js Voting + leader election
+│   │   │   ├── lessons-ledger-handlers.js  Lições + ledger + juiz informado
 │   │   │   ├── cdp-client.js         Chrome DevTools Protocol client
 │   │   │   ├── native-chrome-handlers.js  CDP browser commands
 │   │   │   └── ...                   pane, browser, memory, swarm, etc.
@@ -426,6 +563,7 @@ codebrain/
 │   │   └── bridge.js       Handler composition + auto-notify
 │   └── memory/             Shared memory store
 │       ├── store.js        SQLite-backed memory + graph-aware search
+│       ├── lessons-ledger.js  Correções do usuário + ledger de trabalho
 │       ├── vector-store.js TF-IDF cosine similarity (pure JS)
 │       └── knowledge-graph.js  Nodes, edges, PageRank, communities
 ├── prompts/                Squad system prompts

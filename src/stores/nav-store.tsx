@@ -1,6 +1,7 @@
 import React from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { appStorage } from "./persist-storage";
 
 // tabToView, deriveView, useNavStore
 function tabToView(tab) {
@@ -268,6 +269,7 @@ export const useNavStore = create()(persist((set, get) => ({
   }
 }), {
   name: "codebrain-app-nav",
+  storage: appStorage,
   skipHydration: true,
   // Persist structural state only; `view` is derived, `navigate`/etc are functions
   partialize: s => ({

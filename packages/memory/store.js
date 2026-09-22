@@ -5,6 +5,8 @@ const fs = require("node:fs");
 const { KnowledgeGraph } = require("./knowledge-graph.js");
 const { tokenize, buildTfIdf, cosineSimilarity } = require("./vector-store.js");
 const { runMigrations, applyConnectionPragmas, getVersion } = require("./migrations.js");
+const { createLessonsLedgerApi } = require("./lessons-ledger.js");
+const { createVerifyStore } = require("./verify-store.js");
 const { migrations: schemaMigrations } = require("./schema-migrations.js");
 const { loadDatabase } = require("./sqlite.js");
 
@@ -488,6 +490,14 @@ function createMemoryStore(dbPath) {
     log: (msg) => console.log(msg),
   });
 
+  // ── Correções aprendidas + ledger de trabalho ─────────────────────────────
+  // Depende das tabelas da migração v2, por isso fica depois do runner.
+  const lessonsLedger = createLessonsLedgerApi(db);
+
+  // ── Verificação visual: concessões de acesso + execuções ──────────────────
+  // Tabelas da migração v3.
+  const verifyStore = createVerifyStore(db);
+
   // ── Knowledge Graph + Vector Store ────────────────────────────────────────
   let knowledgeGraph;
   try {
@@ -732,6 +742,14 @@ function createMemoryStore(dbPath) {
 
   // ── Public API ────────────────────────────────────────────────────────────
   return {
+    // Correções aprendidas + ledger de trabalho (ver lessons-ledger.js).
+    // Espalhado primeiro, de propósito: se um dia um método daqui colidir com
+    // um do store, o do store ganha e a colisão não passa silenciosa.
+    ...lessonsLedger,
+
+    // Verificação visual de front-end (ver verify-store.js).
+    ...verifyStore,
+
     /**
      * Versão de schema deste banco (PRAGMA user_version).
      * Exposto para diagnóstico — a tela de sistema mostra isto junto do

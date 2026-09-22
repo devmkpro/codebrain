@@ -104,7 +104,11 @@ export function getOperationsSnapshot(ctx: AppContext, workspacePath?: string, l
   if (missionBuckets.size === 0) missionBuckets.set(`workspace:${workspace}`, { raw: undefined, ...unassigned });
 
   const activities = latestActivities(actors, messages, handoffs);
-  const missions: OperationalMission[] = Array.from(missionBuckets.entries()).map(([id, bucket]) => {
+  // O retorno é anotado no callback, não só na variável: o `.sort()` encadeado
+  // depois do `.map()` corta o tipo contextual de `missions`, e sem ele o
+  // ternário `raw ? "backend" : "derived"` era alargado para `string`, que não
+  // encaixa no union literal de OperationalMission.source.
+  const missions: OperationalMission[] = Array.from(missionBuckets.entries()).map(([id, bucket]): OperationalMission => {
     const raw = bucket.raw;
     const lane = laneForMission(bucket.actors, bucket.tasks, bucket.handoffs);
     const running = bucket.actors.filter((actor) => actor.live !== false && ["pending", "running", "working", "active"].includes(actor.status)).length;

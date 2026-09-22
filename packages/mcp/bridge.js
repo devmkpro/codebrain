@@ -17,6 +17,8 @@ const { createSkillHandlers } = require("./bridge/skill-handlers.js");
 const { createKanbanHandlers } = require("./bridge/kanban-handlers.js");
 const { createMissionHandlers } = require("./bridge/mission-handlers.js");
 const { createFetchHandlers } = require("./bridge/fetch-handlers.js");
+const { createLessonsLedgerHandlers } = require("./bridge/lessons-ledger-handlers.js");
+const { createVerifyHandlers } = require("./bridge/verify-handlers.js");
 
 // ── MiMo-Code Features (25 new features) ───────────────────────────────────
 const { createCompactionHandlers } = require("./bridge/compaction-handlers.js");
@@ -635,6 +637,22 @@ function createMCPBridge(ptyManager, opts = {}) {
   const composeModeHandlers = createComposeModeHandlers(sharedOpts);
   const planAgentHandlers = createPlanAgentHandlers(sharedOpts);
 
+  // ── Correções aprendidas + ledger de trabalho ───────────────────────────
+  // Recebe goalHandlers porque goalJudgeWithLedger consome o veredito do juiz
+  // e o enriquece com as abordagens já descartadas. Instanciado depois de
+  // goalHandlers, de propósito.
+  const lessonsLedgerHandlers = createLessonsLedgerHandlers({ ...sharedOpts, goalHandlers });
+
+  // ── Verificação visual de front-end ─────────────────────────────────────
+  // Composição, não duplicação: navega e tira print pelos handlers de browser
+  // que já existem, e usa questionHandlers para tornar o pedido de acesso
+  // visível no pane. Instanciado depois dos dois.
+  const verifyHandlers = createVerifyHandlers({
+    ...sharedOpts,
+    browserHandlers,
+    questionHandlers,
+  });
+
   // ── Start stuck detection scanner (MiMo-inspired) ──────────────────────────
   // Scans actor_registry every 60s for actors stuck in 'running' for >5 minutes.
   // Marks them as 'stuck' and fires hooks for UI notification.
@@ -761,6 +779,10 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...maxModeHandlers,
     ...composeModeHandlers,
     ...planAgentHandlers,
+    // Correções aprendidas + ledger de trabalho
+    ...lessonsLedgerHandlers,
+    // Verificação visual de alteração de front-end
+    ...verifyHandlers,
     // Gap-closing handlers
     ...autoMemoryHandlers,
     ...securityHandlers,

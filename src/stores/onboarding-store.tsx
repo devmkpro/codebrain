@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { appStorage } from "./persist-storage";
 
 interface OnboardingState {
   completed: boolean;
@@ -22,6 +23,7 @@ export const useOnboardingStore = create<OnboardingState>()(
     }),
     {
       name: "codebrain.onboarding.terminal-first",
+      storage: appStorage,
       version: 1,
       partialize: (state) => ({ completed: state.completed }),
       merge: (persisted, current) => {

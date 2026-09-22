@@ -123,7 +123,15 @@ export function createWindow(): BrowserWindow {
 
   if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
     win.loadURL(process.env["ELECTRON_RENDERER_URL"]);
-    win.webContents.openDevTools();
+    // Abrir o DevTools continua sendo o padrão em dev. O escape existe porque o
+    // frontend do DevTools despeja no stdout ruído que não é nosso — o
+    // "Unknown VE context" do visual logging dele e os `Autofill.enable` /
+    // `Autofill.setAddresses` respondidos com -32601, já que o Electron não
+    // implementa esse domínio do CDP. Com CODEBRAIN_NO_DEVTOOLS=1 o log de
+    // arranque fica legível; F12 continua abrindo o DevTools quando precisar.
+    if (process.env["CODEBRAIN_NO_DEVTOOLS"] !== "1") {
+      win.webContents.openDevTools();
+    }
   } else {
     win.loadFile(path.join(__dirname, "../renderer/index.html"));
   }

@@ -93,9 +93,16 @@ function loadDatabase() {
     }
   }
 
+  // A mensagem precisa dizer o que resolve ESTE caso. Ela mandava rodar
+  // `prebuild:native`, que só COPIA o binário de Node do sistema para
+  // resources/native/ — não traz o de ABI do Electron, que é justamente o que
+  // falta quando o app morre no load depois de um `npm install` limpo.
   throw new Error(
-    "better-sqlite3: ABI incompatível e nenhum binário de Node do sistema encontrado " +
-      "em resources/native/. Rode 'npm run prebuild:native' antes de buildar.",
+    "better-sqlite3: nenhum binário compatível com este runtime " +
+      `(NODE_MODULE_VERSION ${process.versions.modules}). ` +
+      "Rode 'npm run setup:native', que deixa os dois no lugar: ABI do Electron " +
+      "em node_modules (processo main) e ABI do Node do sistema em " +
+      "resources/native/ (servidor MCP stdio).",
   );
 }
 

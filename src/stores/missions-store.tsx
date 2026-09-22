@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { appStorage } from './persist-storage';
 import { nanoid } from 'nanoid';
 
 export type MissionStatus = 'active' | 'running' | 'blocked' | 'ready_to_integrate' | 'archived';
@@ -201,7 +202,7 @@ export const useMissionsStore = create<MissionsState>()(
         }
       },
     }),
-    { name: 'codebrain-missions' },
+    { name: 'codebrain-missions', storage: appStorage },
   ),
 );
 

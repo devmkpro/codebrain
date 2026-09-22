@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { appStorage } from "./persist-storage";
 import { useShallow } from "zustand/react/shallow";
 import {
   defaultFlags,
@@ -40,6 +41,7 @@ export const useFlagsStore = create<FlagsState>()(
     }),
     {
       name: "codebrain.flags",
+      storage: appStorage,
       version: 1,
       // A versão 0 foi distribuída enquanto shellV2 tinha default false. Uma
       // preferência `false` daquela fase era só o valor semeado pelo produto,

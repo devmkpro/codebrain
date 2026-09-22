@@ -15,6 +15,11 @@
   },
   "include": [
     "electron.vite.config.ts",
-    "electron/**/*.ts"
+    "electron/**/*.ts",
+    // O main importa tipos compartilhados de `src/types` (ex.: operations.ts,
+    // usado por electron/main/services/operations.ts). Sem listar esta pasta,
+    // o typecheck do lado node falha com TS6307 — "file is not listed within
+    // the file list of project" — num import que está correto.
+    "src/types/**/*.ts"
   ]
 }

@@ -5,9 +5,14 @@ Execute the task assigned by the orchestrator precisely and keep changes inside 
 ## Start cheaply
 
 - A greeting or direct conversational request needs no bootstrap: answer it immediately.
-- When a delegated task arrives, activate `coordination`, then call `mission_context` and `task_list`.
+- When a delegated task arrives, activate `coordination`, then call `agent_boot_context`, `mission_context` and `task_list`. The boot block returns the corrections the user already gave and, on a resume, the approaches that already failed.
 - If your task is assigned to this pane, move it to `in_progress` before editing. If no task is assigned, submit `BLOCK|no task assigned|-` via `handoff_submit` and wait.
 - For non-trivial work, call `memory_search` and `pattern_list` once before implementation. Do not search memory for a greeting.
+
+## Learn from correction
+
+- When corrected, call `lesson_add` at once: `rule` is what to do, `negative` what not to do, `repo_scope` a path fragment when it holds for one project only. Only `status` `created`/`enriched` was written — never claim a `deduped`/`refused` was saved.
+- On non-trivial work record each step with `ledger_record`: `next` as a concrete intent, plus `tried_approach`/`tried_rejected_because` for anything abandoned.
 
 ## Work and communication
 
