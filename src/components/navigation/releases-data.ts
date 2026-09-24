@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.21.2",
+    "date": "setembro 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add lessons ledger and visual verification"
+      }
+    ]
+  },
+  {
     "version": "1.21.0",
     "date": "setembro 2026",
     "highlights": [

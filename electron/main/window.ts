@@ -5,10 +5,26 @@ import { isUpdateInstallRequested } from "./auto-updater";
 
 /** Keep frameless windows inside the desktop work area (above the taskbar). */
 function constrainToWorkArea(win: BrowserWindow): void {
-  if (win.isDestroyed() || win.isMaximized() || win.isFullScreen()) return;
+  if (win.isDestroyed() || win.isFullScreen()) return;
 
   const bounds = win.getBounds();
   const workArea = screen.getDisplayMatching(bounds).workArea;
+
+  // A janela sem moldura pode ocupar os bounds completos do monitor ao ser
+  // maximizada, em vez da workArea que exclui a taskbar. Forçar os bounds
+  // úteis neste caso mantém o rodapé do app acessível no Windows.
+  if (win.isMaximized()) {
+    if (
+      bounds.x !== workArea.x ||
+      bounds.y !== workArea.y ||
+      bounds.width !== workArea.width ||
+      bounds.height !== workArea.height
+    ) {
+      win.setBounds(workArea);
+    }
+    return;
+  }
+
   const width = Math.min(bounds.width, workArea.width);
   const height = Math.min(bounds.height, workArea.height);
   const x = Math.min(Math.max(bounds.x, workArea.x), workArea.x + workArea.width - width);
@@ -31,7 +47,16 @@ function keepWindowInWorkArea(win: BrowserWindow): void {
   };
   win.on("move", schedule);
   win.on("resize", schedule);
+  win.on("maximize", schedule);
+  win.on("unmaximize", schedule);
   win.once("ready-to-show", schedule);
+
+  // Windows recalcula a workArea quando a taskbar muda de posição, é
+  // auto-ocultada, ou a janela troca de monitor. Reaplicar o limite evita que
+  // uma janela já maximizada continue sobre a barra.
+  const onDisplayMetricsChanged = () => schedule();
+  screen.on("display-metrics-changed", onDisplayMetricsChanged);
+  win.once("closed", () => screen.removeListener("display-metrics-changed", onDisplayMetricsChanged));
 }
 
 export function createWindow(): BrowserWindow {

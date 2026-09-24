@@ -1809,8 +1809,16 @@ function createCodebrainMCPServer(bridge) {
   const advancedToolCount = Object.values(advancedToolGroups).reduce((sum, refs) => sum + refs.length, 0);
   console.log(`[MCP] ${advancedToolCount} advanced tools disabled (activate via enable_tool_group)`);
 
+  // Browser schemas must be present in the *initial* tools/list response.
+  // MCP clients commonly keep that catalog for the entire agent turn, so
+  // registering browser_* only after enable_tool_group("browser") made the
+  // activation report success while agents still had no browser_open tool to
+  // call. Browser itself remains operationally lazy: Chrome/CDP starts only
+  // when a browser tool is actually invoked.
+  registerBrowserTools(server, bridge);
+
   // ── Meta-tools: enable_tool_group + tool_groups (always enabled) ────────
-  const activatedGroups = new Set();
+  const activatedGroups = new Set(["browser"]);
 
   server.tool(
     "enable_tool_group",
@@ -1825,11 +1833,10 @@ function createCodebrainMCPServer(bridge) {
           return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, message: `${group} tools already active.` }) }] };
         }
 
-        // Browser and fetch tools are registered lazily (not at startup)
+        // Fetch tools are registered lazily. Browser tools are registered at
+        // startup so agent clients can discover their schemas before a turn.
         if (group === "browser") {
-          registerBrowserTools(server, bridge);
-          activatedGroups.add(group);
-          return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, tools_enabled: 60, message: "Browser tools activated. You can now use browser_* tools." }) }] };
+          return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, tools_enabled: 60, message: "Browser tools are already available." }) }] };
         }
         if (group === "fetch") {
           registerFetchTools(server, bridge);
@@ -2402,6 +2409,7 @@ function createCodebrainMCPServer(bridge) {
     "task_list",
     "task_move",
     "enable_tool_group",
+    "tool_groups",
     // Uma única promoção ao core, e por um motivo que nenhum grupo resolve:
     // a correção do usuário chega SEM AVISO, no meio de uma conversa que
     // talvez não tenha ativado grupo nenhum. Se `lesson_add` exigisse
@@ -2439,7 +2447,10 @@ function createCodebrainMCPServer(bridge) {
   };
 
   for (const [name, ref] of Object.entries(server._registeredTools || {})) {
-    if (coreToolNames.has(name)) {
+    // Browser tools are discoverable from the first MCP tools/list response.
+    // See the registration note above: disabling them here would leave an
+    // agent with an "active" group but no callable browser_* schema.
+    if (coreToolNames.has(name) || name.startsWith("browser_")) {
       ref.enable();
       continue;
     }
