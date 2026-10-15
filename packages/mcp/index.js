@@ -77,31 +77,75 @@ function createCodebrainMCPServer(bridge) {
     "pane_spawn",
     "Open a NEW VISIBLE terminal pane in the CodeBrain workspace grid, OR reuse an idle worker if one is compatible (default: reuseIdle=true). Returns paneId + reused flag. For squad coordination, activate the coordination group and check actor_list() first.",
     {
-      cwd:          z.string().optional().describe("Working directory for the new pane. STRONGLY RECOMMENDED — always pass your workspace path here to ensure the pane opens in the correct project. If omitted, the system guesses from active panes."),
-      agent:        z.enum(["claude", "codex", "gemini", "gemini-cli", "openclaude", "kimi", "cursor", "copilot", "shell"]).optional().describe("Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it (for example, Codex → codex). Omit only when the user did not choose a CLI."),
-      providerId:   z.string().optional().describe("Provider ID to use for the new pane."),
-      model:        z.string().optional().describe("Model to use for the new pane."),
-      label:        z.string().optional().describe("A short label to identify this pane in pane_list (e.g. 'backend', 'frontend', 'ui-tester'). Helps the orchestrator reuse existing workers."),
-      description:  z.string().optional().describe("Short description of the task this pane will perform. Stored in actor registry for status/monitoring."),
-      parentPaneId: z.string().optional().describe("The pane_id of the parent/orchestrator that spawned this pane. Used for cancel cascade and hierarchy tracking."),
-      reuseIdle:    z.boolean().optional().default(true).describe("If true (default), automatically reuse a compatible idle worker instead of spawning a new pane. Set to false to force a new spawn."),
+      cwd: z
+        .string()
+        .optional()
+        .describe(
+          "Working directory for the new pane. STRONGLY RECOMMENDED — always pass your workspace path here to ensure the pane opens in the correct project. If omitted, the system guesses from active panes."
+        ),
+      agent: z
+        .enum([
+          "claude",
+          "codex",
+          "gemini",
+          "gemini-cli",
+          "openclaude",
+          "kimi",
+          "cursor",
+          "copilot",
+          "shell",
+        ])
+        .optional()
+        .describe(
+          "Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it (for example, Codex → codex). Omit only when the user did not choose a CLI."
+        ),
+      providerId: z.string().optional().describe("Provider ID to use for the new pane."),
+      model: z.string().optional().describe("Model to use for the new pane."),
+      label: z
+        .string()
+        .optional()
+        .describe(
+          "A short label to identify this pane in pane_list (e.g. 'backend', 'frontend', 'ui-tester'). Helps the orchestrator reuse existing workers."
+        ),
+      description: z
+        .string()
+        .optional()
+        .describe(
+          "Short description of the task this pane will perform. Stored in actor registry for status/monitoring."
+        ),
+      parentPaneId: z
+        .string()
+        .optional()
+        .describe(
+          "The pane_id of the parent/orchestrator that spawned this pane. Used for cancel cascade and hierarchy tracking."
+        ),
+      reuseIdle: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe(
+          "If true (default), automatically reuse a compatible idle worker instead of spawning a new pane. Set to false to force a new spawn."
+        ),
     },
     async (args) => {
       try {
         const result = await bridge.spawnPane({
-          agent:        args.agent,
-          cwd:          args.cwd,
-          providerId:   args.providerId,
-          model:        args.model,
-          label:        args.label,
-          description:  args.description,
+          agent: args.agent,
+          cwd: args.cwd,
+          providerId: args.providerId,
+          model: args.model,
+          label: args.label,
+          description: args.description,
           parentPaneId: args.parentPaneId,
-          reuseIdle:    args.reuseIdle ?? true,
+          reuseIdle: args.reuseIdle ?? true,
         });
 
         const paneId = result?.paneId;
         if (!paneId || result?.error) {
-          return { content: [{ type: "text", text: `error: ${result?.error ?? "spawn failed"}` }], isError: true };
+          return {
+            content: [{ type: "text", text: `error: ${result?.error ?? "spawn failed"}` }],
+            isError: true,
+          };
         }
         const out = {
           paneId,
@@ -125,38 +169,79 @@ function createCodebrainMCPServer(bridge) {
     "pane_spawn_and_wait",
     "Spawn a pane and BLOCK until it goes idle (run mode). Returns the pane output + parsed status header. Use when you need the result inline (like MiMo action:'run'). For fire-and-forget, use pane_spawn instead.",
     {
-      cwd:          z.string().optional().describe("Working directory for the new pane."),
-      agent:        z.enum(["claude", "codex", "gemini", "gemini-cli", "openclaude", "kimi", "cursor", "copilot"]).optional().describe("Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it."),
-      providerId:   z.string().optional().describe("Provider ID to use."),
-      model:        z.string().optional().describe("Model to use."),
-      label:        z.string().optional().describe("Label to identify this pane."),
-      description:  z.string().min(1).describe("Short description of the task (3-5 words). Required."),
-      parentPaneId: z.string().optional().describe("Parent orchestrator pane_id for hierarchy tracking."),
-      reuseIdle:    z.boolean().optional().default(true).describe("If true (default), reuse a compatible idle worker instead of spawning new."),
-      timeout_ms:   z.number().int().positive().optional().describe("Max wait time in milliseconds (default 600000 = 10 min)."),
+      cwd: z.string().optional().describe("Working directory for the new pane."),
+      agent: z
+        .enum([
+          "claude",
+          "codex",
+          "gemini",
+          "gemini-cli",
+          "openclaude",
+          "kimi",
+          "cursor",
+          "copilot",
+        ])
+        .optional()
+        .describe(
+          "Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it."
+        ),
+      providerId: z.string().optional().describe("Provider ID to use."),
+      model: z.string().optional().describe("Model to use."),
+      label: z.string().optional().describe("Label to identify this pane."),
+      description: z
+        .string()
+        .min(1)
+        .describe("Short description of the task (3-5 words). Required."),
+      parentPaneId: z
+        .string()
+        .optional()
+        .describe("Parent orchestrator pane_id for hierarchy tracking."),
+      reuseIdle: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("If true (default), reuse a compatible idle worker instead of spawning new."),
+      timeout_ms: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Max wait time in milliseconds (default 600000 = 10 min)."),
     },
     async (args) => {
       try {
         const result = await bridge.paneSpawnAndWait({
-          agent:        args.agent,
-          cwd:          args.cwd,
-          providerId:   args.providerId,
-          model:        args.model,
-          label:        args.label,
-          description:  args.description,
+          agent: args.agent,
+          cwd: args.cwd,
+          providerId: args.providerId,
+          model: args.model,
+          label: args.label,
+          description: args.description,
           parentPaneId: args.parentPaneId,
-          reuseIdle:    args.reuseIdle ?? true,
-          timeoutMs:    args.timeout_ms,
+          reuseIdle: args.reuseIdle ?? true,
+          timeoutMs: args.timeout_ms,
         });
-        if (!result.ok) return { content: [{ type: "text", text: `error: ${result.error}` }], isError: true };
-        const output = (result.lines || []).join('\n').slice(-8000); // cap to avoid context overflow
-        return { content: [{ type: "text", text: JSON.stringify({
-          paneId: result.paneId,
-          timedOut: result.timedOut,
-          reportedStatus: result.reportedStatus,
-          reportedSummary: result.reportedSummary,
-          output,
-        }, null, 2) }] };
+        if (!result.ok)
+          return { content: [{ type: "text", text: `error: ${result.error}` }], isError: true };
+        const output = (result.lines || []).join("\n").slice(-8000); // cap to avoid context overflow
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  paneId: result.paneId,
+                  timedOut: result.timedOut,
+                  reportedStatus: result.reportedStatus,
+                  reportedSummary: result.reportedSummary,
+                  output,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -173,7 +258,9 @@ function createCodebrainMCPServer(bridge) {
     async (args) => {
       try {
         await bridge.killPaneCascade(args.paneId);
-        return { content: [{ type: "text", text: JSON.stringify({ ok: true, paneId: args.paneId }) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify({ ok: true, paneId: args.paneId }) }],
+        };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -202,7 +289,10 @@ function createCodebrainMCPServer(bridge) {
     "actor_list",
     "List all active actors (panes) in the current workspace from the persistent registry. Shows status, turn count, parent hierarchy, stuck detection, and 'available' field (true = idle worker with no in_progress task, ready for delegation). More detailed than pane_list.",
     {
-      include_terminal: z.boolean().optional().describe("Include already-completed panes (default false — only active ones)."),
+      include_terminal: z
+        .boolean()
+        .optional()
+        .describe("Include already-completed panes (default false — only active ones)."),
     },
     async (args) => {
       try {
@@ -219,9 +309,18 @@ function createCodebrainMCPServer(bridge) {
     "worker_find_idle",
     "Find an idle worker that is available for a new task. Returns the best candidate (lowest turn count) or null if none available. A worker is 'available' when: role=worker, status=idle, no kanban task in_progress assigned to it.",
     {
-      model:      z.string().optional().describe("Filter by model (e.g. 'mimo-v2.5-pro'). Omit to match any model."),
-      providerId: z.string().optional().describe("Filter by provider ID. Omit to match any provider."),
-      agent:      z.string().optional().describe("Filter by agent binary (e.g. 'openclaude'). Omit to match any agent."),
+      model: z
+        .string()
+        .optional()
+        .describe("Filter by model (e.g. 'mimo-v2.5-pro'). Omit to match any model."),
+      providerId: z
+        .string()
+        .optional()
+        .describe("Filter by provider ID. Omit to match any provider."),
+      agent: z
+        .string()
+        .optional()
+        .describe("Filter by agent binary (e.g. 'openclaude'). Omit to match any agent."),
     },
     async (args) => {
       try {
@@ -231,18 +330,36 @@ function createCodebrainMCPServer(bridge) {
           agent: args.agent,
         });
         if (!candidate) {
-          return { content: [{ type: "text", text: JSON.stringify({ ok: true, found: false, message: "No idle worker available matching criteria." }) }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  ok: true,
+                  found: false,
+                  message: "No idle worker available matching criteria.",
+                }),
+              },
+            ],
+          };
         }
-        return { content: [{ type: "text", text: JSON.stringify({
-          ok: true,
-          found: true,
-          paneId: candidate.pane_id,
-          model: candidate.model,
-          providerId: candidate.provider_id,
-          agent: candidate.agent,
-          turnCount: candidate.turn_count || 0,
-          message: `Idle worker ${candidate.pane_id.slice(0, 8)} available (${candidate.model || 'any model'}, ${candidate.turn_count || 0} turns). Use pane_write to delegate a task.`,
-        }) }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                ok: true,
+                found: true,
+                paneId: candidate.pane_id,
+                model: candidate.model,
+                providerId: candidate.provider_id,
+                agent: candidate.agent,
+                turnCount: candidate.turn_count || 0,
+                message: `Idle worker ${candidate.pane_id.slice(0, 8)} available (${candidate.model || "any model"}, ${candidate.turn_count || 0} turns). Use pane_write to delegate a task.`,
+              }),
+            },
+          ],
+        };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -255,7 +372,7 @@ function createCodebrainMCPServer(bridge) {
     "Write text or a prompt to an existing pane (simulates keyboard input into that terminal).",
     {
       paneId: z.string().describe("The target pane ID."),
-      text:   z.string().describe("Text to send to the pane's stdin."),
+      text: z.string().describe("Text to send to the pane's stdin."),
       submit: z.boolean().optional().describe("If true, append a newline to submit as a command."),
     },
     async (args) => {
@@ -275,7 +392,7 @@ function createCodebrainMCPServer(bridge) {
     "Read recent output from a pane's terminal buffer.",
     {
       paneId: z.string().describe("The target pane ID."),
-      lastN:  z.number().optional().describe("Number of recent lines to return (default 200)."),
+      lastN: z.number().optional().describe("Number of recent lines to return (default 200)."),
     },
     async (args) => {
       try {
@@ -293,7 +410,7 @@ function createCodebrainMCPServer(bridge) {
     "pane_wait_idle",
     "Wait until a pane becomes idle (no new output for ~3s). Call after pane_write to know when the agent finished.",
     {
-      paneId:  z.string().describe("The pane to wait on."),
+      paneId: z.string().describe("The pane to wait on."),
       timeout: z.number().optional().describe("Max milliseconds to wait (default 300000 = 5 min)."),
     },
     async (args) => {
@@ -328,14 +445,22 @@ function createCodebrainMCPServer(bridge) {
     "Mark an existing pane as a worker or orchestrator. Use this to claim panes created by the user via +Terminal and assign them a role in the squad.",
     {
       paneId: z.string().describe("The target pane ID (from pane_list or pane_spawn)."),
-      role:   z.enum(["worker", "orchestrator"]).describe('Role to assign: "worker" or "orchestrator".'),
-      mission_id: z.string().optional().describe("Optional mission ID to associate this pane with."),
+      role: z
+        .enum(["worker", "orchestrator"])
+        .describe('Role to assign: "worker" or "orchestrator".'),
+      mission_id: z
+        .string()
+        .optional()
+        .describe("Optional mission ID to associate this pane with."),
     },
     async (args) => {
       try {
         const result = await bridge.setRole(args.paneId, args.role, args.mission_id);
         if (!result?.ok) {
-          return { content: [{ type: "text", text: `error: ${result?.error ?? "unknown error"}` }], isError: true };
+          return {
+            content: [{ type: "text", text: `error: ${result?.error ?? "unknown error"}` }],
+            isError: true,
+          };
         }
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       } catch (err) {
@@ -349,18 +474,17 @@ function createCodebrainMCPServer(bridge) {
     "todo_manager",
     "Manage the user-visible task list shown in the CodeBrain sidebar. Actions: set_tasks, add_task, move_to_task, read_list, mark_all_done.",
     {
-      action: z.enum(["set_tasks", "add_task", "move_to_task", "read_list", "mark_all_done"])
-               .describe("Action to perform."),
-      tasks: z.array(z.string()).optional()
-               .describe("For set_tasks: ordered list of task names."),
-      task: z.string().optional()
-              .describe("For add_task: task name to add."),
-      moveToTask: z.string().optional()
-                   .describe("For move_to_task: task name to activate (marks previous ones done)."),
-      taskNameActive: z.string().optional()
-                       .describe("Display name while the task is in-progress."),
-      taskNameComplete: z.string().optional()
-                         .describe("Display name when the task is done."),
+      action: z
+        .enum(["set_tasks", "add_task", "move_to_task", "read_list", "mark_all_done"])
+        .describe("Action to perform."),
+      tasks: z.array(z.string()).optional().describe("For set_tasks: ordered list of task names."),
+      task: z.string().optional().describe("For add_task: task name to add."),
+      moveToTask: z
+        .string()
+        .optional()
+        .describe("For move_to_task: task name to activate (marks previous ones done)."),
+      taskNameActive: z.string().optional().describe("Display name while the task is in-progress."),
+      taskNameComplete: z.string().optional().describe("Display name when the task is done."),
     },
     async (args) => {
       try {
@@ -377,12 +501,18 @@ function createCodebrainMCPServer(bridge) {
     "task_tree",
     "Manage hierarchical tasks with tree structure (T1, T1.1, T1.2). SQLite-backed, persistent. Actions: create, update, list, get, delete, gate. Gate returns incomplete tasks for pre-stop check.",
     {
-      action: z.enum(["create", "update", "list", "get", "delete", "gate"])
-               .describe("Action: create, update, list, get, delete, gate."),
-      id: z.string().optional().describe("Task ID (pattern: T1, T1.1, T1.2). Required for create/update/get/delete."),
+      action: z
+        .enum(["create", "update", "list", "get", "delete", "gate"])
+        .describe("Action: create, update, list, get, delete, gate."),
+      id: z
+        .string()
+        .optional()
+        .describe("Task ID (pattern: T1, T1.1, T1.2). Required for create/update/get/delete."),
       description: z.string().optional().describe("Task description. Required for create."),
-      status: z.enum(["open", "in_progress", "blocked", "done", "abandoned"]).optional()
-               .describe("New status for update action."),
+      status: z
+        .enum(["open", "in_progress", "blocked", "done", "abandoned"])
+        .optional()
+        .describe("New status for update action."),
       parentId: z.string().optional().describe("Parent task ID for create (makes this a subtask)."),
       owner: z.string().optional().describe("Pane ID of the assigned agent."),
       sessionId: z.string().optional().describe("Session ID for grouping."),
@@ -391,17 +521,38 @@ function createCodebrainMCPServer(bridge) {
     async (args) => {
       try {
         const store = opts.memoryStore;
-        if (!store) return { content: [{ type: "text", text: "error: memory store not available" }], isError: true };
+        if (!store)
+          return {
+            content: [{ type: "text", text: "error: memory store not available" }],
+            isError: true,
+          };
         let result;
         switch (args.action) {
           case "create":
-            result = store.taskTreeCreate({ id: args.id, description: args.description, parentId: args.parentId, sessionId: args.sessionId, owner: args.owner, workspace: args.workspace });
+            result = store.taskTreeCreate({
+              id: args.id,
+              description: args.description,
+              parentId: args.parentId,
+              sessionId: args.sessionId,
+              owner: args.owner,
+              workspace: args.workspace,
+            });
             break;
           case "update":
-            result = store.taskTreeUpdate({ id: args.id, status: args.status, owner: args.owner, workspace: args.workspace });
+            result = store.taskTreeUpdate({
+              id: args.id,
+              status: args.status,
+              owner: args.owner,
+              workspace: args.workspace,
+            });
             break;
           case "list":
-            result = store.taskTreeList({ sessionId: args.sessionId, status: args.status, workspace: args.workspace, parentId: args.parentId });
+            result = store.taskTreeList({
+              sessionId: args.sessionId,
+              status: args.status,
+              workspace: args.workspace,
+              parentId: args.parentId,
+            });
             break;
           case "get":
             result = store.taskTreeGet({ id: args.id });
@@ -427,20 +578,39 @@ function createCodebrainMCPServer(bridge) {
     "auto_dream",
     "Run auto-dream (consolidate working memories into semantic summaries) or auto-distill (extract repeated workflow patterns from trajectories). Use periodically for memory hygiene.",
     {
-      mode: z.enum(["dream", "distill"]).describe("Mode: 'dream' consolidates working memories, 'distill' extracts workflow patterns from trajectories."),
+      mode: z
+        .enum(["dream", "distill"])
+        .describe(
+          "Mode: 'dream' consolidates working memories, 'distill' extracts workflow patterns from trajectories."
+        ),
       workspace: z.string().optional().describe("Workspace to scope the operation."),
-      maxAge: z.number().optional().describe("For dream: max age in seconds of working memories to consolidate (default: 7 days)."),
-      minOccurrences: z.number().optional().describe("For distill: minimum occurrences to count as pattern (default: 2)."),
+      maxAge: z
+        .number()
+        .optional()
+        .describe(
+          "For dream: max age in seconds of working memories to consolidate (default: 7 days)."
+        ),
+      minOccurrences: z
+        .number()
+        .optional()
+        .describe("For distill: minimum occurrences to count as pattern (default: 2)."),
     },
     async (args) => {
       try {
         const store = opts.memoryStore;
-        if (!store) return { content: [{ type: "text", text: "error: memory store not available" }], isError: true };
+        if (!store)
+          return {
+            content: [{ type: "text", text: "error: memory store not available" }],
+            isError: true,
+          };
         let result;
         if (args.mode === "dream") {
           result = store.autoDream({ workspace: args.workspace, maxAge: args.maxAge });
         } else {
-          result = store.autoDistill({ workspace: args.workspace, minOccurrences: args.minOccurrences });
+          result = store.autoDistill({
+            workspace: args.workspace,
+            minOccurrences: args.minOccurrences,
+          });
         }
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
@@ -455,12 +625,16 @@ function createCodebrainMCPServer(bridge) {
     "Write the same text to multiple panes at once. Useful for broadcasting a task prompt to all workers simultaneously.",
     {
       paneIds: z.array(z.string()).describe("Array of pane IDs to write to."),
-      text:    z.string().describe("Text to send to each pane's stdin."),
-      submit:  z.boolean().optional().describe("If true (default), append newline to submit."),
+      text: z.string().describe("Text to send to each pane's stdin."),
+      submit: z.boolean().optional().describe("If true (default), append newline to submit."),
     },
     async (args) => {
       try {
-        const result = await bridge.writeManyPanes({ paneIds: args.paneIds, text: args.text, submit: args.submit !== false });
+        const result = await bridge.writeManyPanes({
+          paneIds: args.paneIds,
+          text: args.text,
+          submit: args.submit !== false,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
@@ -473,10 +647,18 @@ function createCodebrainMCPServer(bridge) {
     "pane_wait_many",
     "Block until any or all of the listed worker panes go idle or submit a handoff. Use instead of polling pane_wait_idle in a loop — one call handles multiple workers efficiently. returnOn='any' returns as soon as the first worker finishes; returnOn='all' waits for every worker.",
     {
-      paneIds:      z.array(z.string()).describe("Worker pane IDs to watch."),
-      returnOn:     z.enum(["any", "all"]).optional().describe("'any' = return on first completion (default), 'all' = wait for every worker."),
-      timeoutMs:    z.number().optional().describe("Max wait time in ms (default 300000 = 5 min)."),
-      matchStrings: z.array(z.string()).optional().describe("Optional text patterns — if any pane's recent output contains one, it counts as done."),
+      paneIds: z.array(z.string()).describe("Worker pane IDs to watch."),
+      returnOn: z
+        .enum(["any", "all"])
+        .optional()
+        .describe("'any' = return on first completion (default), 'all' = wait for every worker."),
+      timeoutMs: z.number().optional().describe("Max wait time in ms (default 300000 = 5 min)."),
+      matchStrings: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional text patterns — if any pane's recent output contains one, it counts as done."
+        ),
     },
     async (args) => {
       try {
@@ -498,10 +680,17 @@ function createCodebrainMCPServer(bridge) {
     "handoff_submit",
     "Worker calls this as its VERY LAST action when a task is complete. Automatically notifies the orchestrator pane with a [squad] message — no pane_write needed. The orchestrator can also use handoff_wait/handoff_list to poll results.",
     {
-      paneId:    z.string().describe("The worker's pane ID."),
-      summary:   z.string().describe("Brief summary of what was accomplished or what blocked progress."),
-      status:    z.enum(["done", "blocked", "error"]).describe("Result status: done (success), blocked (needs help), error (failed)."),
-      artifacts: z.array(z.string()).optional().describe("List of artifact paths or identifiers produced (e.g. file paths, URLs)."),
+      paneId: z.string().describe("The worker's pane ID."),
+      summary: z
+        .string()
+        .describe("Brief summary of what was accomplished or what blocked progress."),
+      status: z
+        .enum(["done", "blocked", "error"])
+        .describe("Result status: done (success), blocked (needs help), error (failed)."),
+      artifacts: z
+        .array(z.string())
+        .optional()
+        .describe("List of artifact paths or identifiers produced (e.g. file paths, URLs)."),
     },
     async (args) => {
       try {
@@ -518,13 +707,20 @@ function createCodebrainMCPServer(bridge) {
     "handoff_wait",
     "Orchestrator waits for workers to submit their handoff results. Polls until returnOn condition is met or timeout.",
     {
-      paneIds:    z.array(z.string()).describe("Worker pane IDs to wait for."),
-      returnOn:   z.enum(["any", "all"]).optional().describe("Return when: 'any' (first result) or 'all' (every worker). Default: all."),
-      timeoutMs:  z.number().optional().describe("Max wait time in ms (default 300000 = 5 min)."),
+      paneIds: z.array(z.string()).describe("Worker pane IDs to wait for."),
+      returnOn: z
+        .enum(["any", "all"])
+        .optional()
+        .describe("Return when: 'any' (first result) or 'all' (every worker). Default: all."),
+      timeoutMs: z.number().optional().describe("Max wait time in ms (default 300000 = 5 min)."),
     },
     async (args) => {
       try {
-        const result = await bridge.handoffWait({ paneIds: args.paneIds, returnOn: args.returnOn || "all", timeoutMs: args.timeoutMs || 300000 });
+        const result = await bridge.handoffWait({
+          paneIds: args.paneIds,
+          returnOn: args.returnOn || "all",
+          timeoutMs: args.timeoutMs || 300000,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
@@ -538,7 +734,7 @@ function createCodebrainMCPServer(bridge) {
     "List all active and recently exited agents (panes) with their role, model, and status. Data is persisted in SQLite for session history.",
     {
       workspace: z.string().optional().describe("Filter by workspace path."),
-      limit:     z.number().optional().describe("Max results (default 50)."),
+      limit: z.number().optional().describe("Max results (default 50)."),
     },
     async (args) => {
       try {
@@ -555,14 +751,19 @@ function createCodebrainMCPServer(bridge) {
     "agent_messages",
     "Retrieve messages sent to a specific agent pane from other agents. Includes full message history persisted in SQLite (unlike pane_read_messages which uses file-based inbox).",
     {
-      paneId:     z.string().describe("Target pane ID to get messages for."),
+      paneId: z.string().describe("Target pane ID to get messages for."),
       unreadOnly: z.boolean().optional().describe("If true, only return unread messages."),
-      workspace:  z.string().optional().describe("Filter by workspace path."),
-      limit:      z.number().optional().describe("Max results (default 50)."),
+      workspace: z.string().optional().describe("Filter by workspace path."),
+      limit: z.number().optional().describe("Max results (default 50)."),
     },
     async (args) => {
       try {
-        const result = await bridge.agentMessages({ paneId: args.paneId, unreadOnly: args.unreadOnly, workspace: args.workspace, limit: args.limit });
+        const result = await bridge.agentMessages({
+          paneId: args.paneId,
+          unreadOnly: args.unreadOnly,
+          workspace: args.workspace,
+          limit: args.limit,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
@@ -575,11 +776,17 @@ function createCodebrainMCPServer(bridge) {
     "pane_send_message",
     "Send a message to another agent pane and submit it as a new turn. Use type='task' for work assignments; type='update', 'question' and 'result' also wake the recipient so it can respond. NEVER use for task completion reporting — use handoff_submit instead.",
     {
-      from:    z.string().describe("Your pane ID (sender)."),
-      to:      z.string().describe("Target pane ID (recipient)."),
-      content: z.string().describe("Message content — be specific and include all context the recipient needs."),
-      type:    z.enum(["task", "update", "question", "result"]).optional()
-                 .describe("Message type: task (assign work), update (notify about changes), question (ask something), result (report completion). Default: update."),
+      from: z.string().describe("Your pane ID (sender)."),
+      to: z.string().describe("Target pane ID (recipient)."),
+      content: z
+        .string()
+        .describe("Message content — be specific and include all context the recipient needs."),
+      type: z
+        .enum(["task", "update", "question", "result"])
+        .optional()
+        .describe(
+          "Message type: task (assign work), update (notify about changes), question (ask something), result (report completion). Default: update."
+        ),
     },
     async (args) => {
       try {
@@ -592,13 +799,15 @@ function createCodebrainMCPServer(bridge) {
             const resolvedRecipient = path.resolve(recipientWorkspace);
             if (resolvedSender !== resolvedRecipient) {
               return {
-                content: [{
-                  type: "text",
-                  text: JSON.stringify({
-                    ok: false,
-                    error: `Cannot send message: sender pane "${args.from}" is in workspace "${senderWorkspace}" but recipient pane "${args.to}" is in workspace "${recipientWorkspace}". Cross-workspace messaging is not allowed.`
-                  })
-                }],
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify({
+                      ok: false,
+                      error: `Cannot send message: sender pane "${args.from}" is in workspace "${senderWorkspace}" but recipient pane "${args.to}" is in workspace "${recipientWorkspace}". Cross-workspace messaging is not allowed.`,
+                    }),
+                  },
+                ],
                 isError: true,
               };
             }
@@ -644,13 +853,17 @@ function createCodebrainMCPServer(bridge) {
           }
         } catch {}
         try {
-          bridge.hooksManager?.fire?.("message_sent", {
-            from: args.from,
-            to: args.to,
-            type: msgType,
-            messageId: id,
-            preview: args.content.slice(0, 200),
-          }, args.from);
+          bridge.hooksManager?.fire?.(
+            "message_sent",
+            {
+              from: args.from,
+              to: args.to,
+              type: msgType,
+              messageId: id,
+              preview: args.content.slice(0, 200),
+            },
+            args.from
+          );
         } catch {}
         // Deliver message to recipient's PTY stdin.
         // Every explicit agent-to-agent message is a new turn. Writing a
@@ -659,7 +872,8 @@ function createCodebrainMCPServer(bridge) {
         try {
           const shortFrom = args.from.slice(0, 8);
           const typeLabel = msgType.toUpperCase();
-          const preview = args.content.length > 200 ? args.content.slice(0, 200) + "..." : args.content;
+          const preview =
+            args.content.length > 200 ? args.content.slice(0, 200) + "..." : args.content;
 
           if (msgType === "task" && typeof bridge.writePane === "function") {
             // "task" messages wake the recipient — full pane_write with submit
@@ -669,12 +883,16 @@ function createCodebrainMCPServer(bridge) {
             const wakeMsg = `[MESSAGE from ${shortFrom} | ${typeLabel}] ${preview}`;
             await bridge.messagePane(args.to, wakeMsg, true);
           }
-          bridge.hooksManager?.fire?.("message_received", {
-            from: args.from,
-            to: args.to,
-            type: msgType,
-            messageId: id,
-          }, args.to);
+          bridge.hooksManager?.fire?.(
+            "message_received",
+            {
+              from: args.from,
+              to: args.to,
+              type: msgType,
+              messageId: id,
+            },
+            args.to
+          );
         } catch {}
 
         // ── Desktop notification for incoming message ─────────────────────
@@ -707,9 +925,11 @@ function createCodebrainMCPServer(bridge) {
     "pane_read_messages",
     "Read messages sent to your pane from other agents. Check this before starting work and periodically during execution to catch updates from the orchestrator or other workers.",
     {
-      paneId:    z.string().describe("Your pane ID — reads messages from your inbox."),
-      unreadOnly: z.boolean().optional()
-                    .describe("If true (default), only return unread messages. Set false to read all."),
+      paneId: z.string().describe("Your pane ID — reads messages from your inbox."),
+      unreadOnly: z
+        .boolean()
+        .optional()
+        .describe("If true (default), only return unread messages. Set false to read all."),
     },
     async (args) => {
       try {
@@ -717,9 +937,11 @@ function createCodebrainMCPServer(bridge) {
         const inbox = paneInbox(args.paneId);
         if (!fs.existsSync(inbox)) {
           // Double-check after a small delay (Windows fsync race)
-          await new Promise(r => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 100));
           if (!fs.existsSync(inbox)) {
-            return { content: [{ type: "text", text: JSON.stringify({ messages: [], count: 0 }) }] };
+            return {
+              content: [{ type: "text", text: JSON.stringify({ messages: [], count: 0 }) }],
+            };
           }
         }
 
@@ -730,7 +952,10 @@ function createCodebrainMCPServer(bridge) {
           if (recipientWorkspace) recipientWorkspace = path.resolve(recipientWorkspace);
         }
 
-        const files = fs.readdirSync(inbox).filter(f => f.endsWith(".json")).sort();
+        const files = fs
+          .readdirSync(inbox)
+          .filter((f) => f.endsWith(".json"))
+          .sort();
         const messages = [];
         for (const file of files) {
           const filePath = path.join(inbox, file);
@@ -757,7 +982,9 @@ function createCodebrainMCPServer(bridge) {
             process.stderr.write(`[pane_read_messages] Error reading ${file}: ${readErr}\n`);
           }
         }
-        return { content: [{ type: "text", text: JSON.stringify({ messages, count: messages.length }) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify({ messages, count: messages.length }) }],
+        };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -773,18 +1000,24 @@ function createCodebrainMCPServer(bridge) {
     "memory_write",
     "Write to shared memory. Use this to persist context, decisions, and findings that other agents need to access. Memory types: episodic (events), semantic (knowledge), procedural (how-to), working (scratch).",
     {
-      type:     z.enum(["episodic", "semantic", "procedural", "working"]).optional()
-                  .describe("Memory type. Default: working."),
-      key:      z.string().describe("Unique key for this memory (e.g. 'api-schema-users', 'decision-auth-jwt')."),
-      content:  z.string().describe("The memory content to store."),
-      tags:     z.array(z.string()).optional()
-                  .describe("Tags for categorization and search (e.g. ['api', 'backend', 'decision'])."),
-      agent_id: z.string().optional()
-                  .describe("ID of the agent writing this memory."),
-      workspace: z.string().optional()
-                   .describe("Workspace path. Defaults to current workspace."),
-      id:       z.string().optional()
-                  .describe("If provided and exists, updates the existing memory instead of creating."),
+      type: z
+        .enum(["episodic", "semantic", "procedural", "working"])
+        .optional()
+        .describe("Memory type. Default: working."),
+      key: z
+        .string()
+        .describe("Unique key for this memory (e.g. 'api-schema-users', 'decision-auth-jwt')."),
+      content: z.string().describe("The memory content to store."),
+      tags: z
+        .array(z.string())
+        .optional()
+        .describe("Tags for categorization and search (e.g. ['api', 'backend', 'decision'])."),
+      agent_id: z.string().optional().describe("ID of the agent writing this memory."),
+      workspace: z.string().optional().describe("Workspace path. Defaults to current workspace."),
+      id: z
+        .string()
+        .optional()
+        .describe("If provided and exists, updates the existing memory instead of creating."),
     },
     async (args) => {
       try {
@@ -801,8 +1034,8 @@ function createCodebrainMCPServer(bridge) {
     "memory_read",
     "Read a specific memory by id or key. Use this to retrieve context saved by other agents.",
     {
-      id:        z.string().optional().describe("Memory ID to read."),
-      key:       z.string().optional().describe("Memory key to read (returns most recent)."),
+      id: z.string().optional().describe("Memory ID to read."),
+      key: z.string().optional().describe("Memory key to read (returns most recent)."),
       workspace: z.string().optional().describe("Workspace scope."),
     },
     async (args) => {
@@ -820,11 +1053,13 @@ function createCodebrainMCPServer(bridge) {
     "memory_search",
     "Search shared memories by keyword. Searches across content, keys, and tags. Use this to find context saved by other agents.",
     {
-      query:     z.string().describe("Search keyword or phrase."),
-      type:      z.enum(["episodic", "semantic", "procedural", "working"]).optional()
-                   .describe("Filter by memory type."),
+      query: z.string().describe("Search keyword or phrase."),
+      type: z
+        .enum(["episodic", "semantic", "procedural", "working"])
+        .optional()
+        .describe("Filter by memory type."),
       workspace: z.string().optional().describe("Filter by workspace."),
-      limit:     z.number().optional().describe("Max results (default 20)."),
+      limit: z.number().optional().describe("Max results (default 20)."),
     },
     async (args) => {
       try {
@@ -841,12 +1076,14 @@ function createCodebrainMCPServer(bridge) {
     "memory_list",
     "List shared memories with optional filters. Returns most recent first.",
     {
-      type:      z.enum(["episodic", "semantic", "procedural", "working"]).optional()
-                   .describe("Filter by memory type."),
-      agent_id:  z.string().optional().describe("Filter by agent ID."),
+      type: z
+        .enum(["episodic", "semantic", "procedural", "working"])
+        .optional()
+        .describe("Filter by memory type."),
+      agent_id: z.string().optional().describe("Filter by agent ID."),
       workspace: z.string().optional().describe("Filter by workspace."),
-      limit:     z.number().optional().describe("Max results (default 50)."),
-      offset:    z.number().optional().describe("Pagination offset."),
+      limit: z.number().optional().describe("Max results (default 50)."),
+      offset: z.number().optional().describe("Pagination offset."),
     },
     async (args) => {
       try {
@@ -863,8 +1100,8 @@ function createCodebrainMCPServer(bridge) {
     "memory_delete",
     "Delete a memory by id or key.",
     {
-      id:        z.string().optional().describe("Memory ID to delete."),
-      key:       z.string().optional().describe("Memory key to delete."),
+      id: z.string().optional().describe("Memory ID to delete."),
+      key: z.string().optional().describe("Memory key to delete."),
       workspace: z.string().optional().describe("Workspace scope."),
     },
     async (args) => {
@@ -899,13 +1136,27 @@ function createCodebrainMCPServer(bridge) {
     "memory_digest",
     "Get a concise digest of what changed since your last turn: new memories, handoffs from other agents, and file changes. Call this at the start of every turn to stay aware of what teammates did. Automatically tracks your last-seen timestamp.",
     {
-      since_ts: z.number().optional().describe("Unix timestamp (seconds) to get changes since. If omitted, uses your agent's last-seen timestamp automatically."),
-      pane_id:  z.string().optional().describe("Your pane ID — used to track your last-seen timestamp. If omitted, returns changes since since_ts or 0."),
-      limit:    z.number().optional().describe("Max items to return (default 15)."),
+      since_ts: z
+        .number()
+        .optional()
+        .describe(
+          "Unix timestamp (seconds) to get changes since. If omitted, uses your agent's last-seen timestamp automatically."
+        ),
+      pane_id: z
+        .string()
+        .optional()
+        .describe(
+          "Your pane ID — used to track your last-seen timestamp. If omitted, returns changes since since_ts or 0."
+        ),
+      limit: z.number().optional().describe("Max items to return (default 15)."),
     },
     async (args) => {
       try {
-        const result = await bridge.memoryDigest({ since_ts: args.since_ts, pane_id: args.pane_id, limit: args.limit });
+        const result = await bridge.memoryDigest({
+          since_ts: args.since_ts,
+          pane_id: args.pane_id,
+          limit: args.limit,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
@@ -938,7 +1189,7 @@ function createCodebrainMCPServer(bridge) {
     "Broadcast a message to all active worker panes. Use for announcements that all workers should see (e.g. architecture changes, priority shifts).",
     {
       message: z.string().describe("The message to broadcast to all workers."),
-      from:    z.string().optional().describe("Sender identification (usually orchestrator pane ID)."),
+      from: z.string().optional().describe("Sender identification (usually orchestrator pane ID)."),
     },
     async (args) => {
       try {
@@ -956,8 +1207,8 @@ function createCodebrainMCPServer(bridge) {
     "Assign a task to a specific worker by injecting a task message into its terminal. Prefer pane_send_message for detailed task assignments.",
     {
       paneId: z.string().describe("Target worker pane ID."),
-      task:   z.string().describe("Task description to assign."),
-      from:   z.string().optional().describe("Sender identification."),
+      task: z.string().describe("Task description to assign."),
+      from: z.string().optional().describe("Sender identification."),
     },
     async (args) => {
       try {
@@ -1029,10 +1280,15 @@ function createCodebrainMCPServer(bridge) {
     "pattern_write",
     "Save a learned pattern extracted from successful task trajectories. Use after completing a task to record what worked.",
     {
-      pattern_type:      z.string().describe("Pattern category (e.g. 'api-design', 'refactor', 'test-strategy')."),
-      description:       z.string().describe("What the pattern describes and when to apply it."),
-      source_trajectory: z.string().optional().describe("The task/actions that led to this pattern."),
-      quality_score:     z.number().optional().describe("Confidence score 0-1 (default 0.5)."),
+      pattern_type: z
+        .string()
+        .describe("Pattern category (e.g. 'api-design', 'refactor', 'test-strategy')."),
+      description: z.string().describe("What the pattern describes and when to apply it."),
+      source_trajectory: z
+        .string()
+        .optional()
+        .describe("The task/actions that led to this pattern."),
+      quality_score: z.number().optional().describe("Confidence score 0-1 (default 0.5)."),
     },
     async (args) => {
       try {
@@ -1050,7 +1306,7 @@ function createCodebrainMCPServer(bridge) {
     "List learned patterns. Sorted by quality score (highest first).",
     {
       pattern_type: z.string().optional().describe("Filter by pattern type."),
-      limit:        z.number().optional().describe("Max results (default 20)."),
+      limit: z.number().optional().describe("Max results (default 20)."),
     },
     async (args) => {
       try {
@@ -1067,7 +1323,7 @@ function createCodebrainMCPServer(bridge) {
     "pattern_update",
     "Update a pattern's quality score after it was successfully applied.",
     {
-      id:            z.string().describe("Pattern ID."),
+      id: z.string().describe("Pattern ID."),
       quality_score: z.number().describe("New quality score 0-1."),
     },
     async (args) => {
@@ -1106,15 +1362,21 @@ function createCodebrainMCPServer(bridge) {
     "trajectory_record",
     "Record a new trajectory (action sequence for a task). Returns trajectory ID for subsequent step additions.",
     {
-      session_id:  z.string().optional().describe("Session ID for grouping."),
-      agent_id:    z.string().optional().describe("Agent performing the task."),
-      workspace:   z.string().optional().describe("Workspace path."),
-      task_type:   z.string().optional().describe("Type of task (e.g., 'refactor', 'feature', 'bugfix')."),
-      steps:       z.array(z.record(z.unknown())).optional().describe("Initial action steps."),
-      outcome:     z.enum(["success", "failure", "partial", "unknown"]).optional().describe("Task outcome."),
+      session_id: z.string().optional().describe("Session ID for grouping."),
+      agent_id: z.string().optional().describe("Agent performing the task."),
+      workspace: z.string().optional().describe("Workspace path."),
+      task_type: z
+        .string()
+        .optional()
+        .describe("Type of task (e.g., 'refactor', 'feature', 'bugfix')."),
+      steps: z.array(z.record(z.unknown())).optional().describe("Initial action steps."),
+      outcome: z
+        .enum(["success", "failure", "partial", "unknown"])
+        .optional()
+        .describe("Task outcome."),
       outcome_detail: z.string().optional().describe("Details about the outcome."),
       duration_ms: z.number().optional().describe("Total task duration in ms."),
-      tool_calls:  z.number().optional().describe("Number of tool calls made."),
+      tool_calls: z.number().optional().describe("Number of tool calls made."),
     },
     async (args) => {
       try {
@@ -1131,7 +1393,7 @@ function createCodebrainMCPServer(bridge) {
     "trajectory_add_step",
     "Add a step to an existing trajectory. Use for real-time action logging.",
     {
-      id:   z.string().describe("Trajectory ID."),
+      id: z.string().describe("Trajectory ID."),
       step: z.record(z.unknown()).describe("Step data (action, tool, params, result, duration)."),
     },
     async (args) => {
@@ -1149,10 +1411,10 @@ function createCodebrainMCPServer(bridge) {
     "trajectory_update",
     "Update trajectory outcome (mark as success/failure after task completes).",
     {
-      id:             z.string().describe("Trajectory ID."),
-      outcome:        z.enum(["success", "failure", "partial", "unknown"]).describe("Final outcome."),
+      id: z.string().describe("Trajectory ID."),
+      outcome: z.enum(["success", "failure", "partial", "unknown"]).describe("Final outcome."),
       outcome_detail: z.string().optional().describe("Details about the outcome."),
-      duration_ms:    z.number().optional().describe("Final duration in ms."),
+      duration_ms: z.number().optional().describe("Final duration in ms."),
     },
     async (args) => {
       try {
@@ -1170,12 +1432,12 @@ function createCodebrainMCPServer(bridge) {
     "List trajectories with optional filters (session, agent, outcome, task type).",
     {
       session_id: z.string().optional(),
-      agent_id:   z.string().optional(),
-      workspace:  z.string().optional(),
-      outcome:    z.enum(["success", "failure", "partial", "unknown"]).optional(),
-      task_type:  z.string().optional(),
-      limit:      z.number().optional().describe("Max results (default 20)."),
-      offset:     z.number().optional(),
+      agent_id: z.string().optional(),
+      workspace: z.string().optional(),
+      outcome: z.enum(["success", "failure", "partial", "unknown"]).optional(),
+      task_type: z.string().optional(),
+      limit: z.number().optional().describe("Max results (default 20)."),
+      offset: z.number().optional(),
     },
     async (args) => {
       try {
@@ -1222,9 +1484,12 @@ function createCodebrainMCPServer(bridge) {
     "trajectory_extract_patterns",
     "Extract common action patterns from successful trajectories. Auto-saves high-frequency patterns.",
     {
-      task_type:       z.string().optional().describe("Filter by task type."),
-      min_occurrences: z.number().optional().describe("Minimum occurrences to count as pattern (default 2)."),
-      workspace:       z.string().optional(),
+      task_type: z.string().optional().describe("Filter by task type."),
+      min_occurrences: z
+        .number()
+        .optional()
+        .describe("Minimum occurrences to count as pattern (default 2)."),
+      workspace: z.string().optional(),
     },
     async (args) => {
       try {
@@ -1260,7 +1525,7 @@ function createCodebrainMCPServer(bridge) {
     "file_read",
     "Read a file or list directory contents from the workspace. Returns file content (max 100KB) or directory listing.",
     {
-      path:     z.string().describe("Relative or absolute path within the workspace."),
+      path: z.string().describe("Relative or absolute path within the workspace."),
       encoding: z.string().optional().describe("File encoding (default: utf-8)."),
     },
     async (args) => {
@@ -1278,9 +1543,12 @@ function createCodebrainMCPServer(bridge) {
     "file_budgeted_read",
     "Read a file within a token budget. Prioritizes structure (headers, function signatures) over body content. Returns headers-first when file exceeds budget. Use for large files to avoid context overflow.",
     {
-      path:          z.string().describe("Relative or absolute path within the workspace."),
-      budgetTokens:  z.number().optional().describe("Token budget for the read (default: 4000). ~4 chars per token."),
-      encoding:      z.string().optional().describe("File encoding (default: utf-8)."),
+      path: z.string().describe("Relative or absolute path within the workspace."),
+      budgetTokens: z
+        .number()
+        .optional()
+        .describe("Token budget for the read (default: 4000). ~4 chars per token."),
+      encoding: z.string().optional().describe("File encoding (default: utf-8)."),
     },
     async (args) => {
       try {
@@ -1297,10 +1565,13 @@ function createCodebrainMCPServer(bridge) {
     "file_write",
     "Write content to a file in the workspace. Creates parent directories if needed.",
     {
-      path:        z.string().describe("Relative or absolute path within the workspace."),
-      content:     z.string().describe("Content to write."),
-      encoding:    z.string().optional().describe("File encoding (default: utf-8)."),
-      createDirs:  z.boolean().optional().describe("Create parent directories if they don't exist (default: true)."),
+      path: z.string().describe("Relative or absolute path within the workspace."),
+      content: z.string().describe("Content to write."),
+      encoding: z.string().optional().describe("File encoding (default: utf-8)."),
+      createDirs: z
+        .boolean()
+        .optional()
+        .describe("Create parent directories if they don't exist (default: true)."),
     },
     async (args) => {
       try {
@@ -1317,10 +1588,16 @@ function createCodebrainMCPServer(bridge) {
     "file_search",
     "Search for files by name pattern or content. Supports glob patterns (*.ts, **/*.tsx). Skips node_modules and .git.",
     {
-      pattern: z.string().optional().describe("Glob pattern for filename matching (e.g. '*.ts', '**/*.tsx')."),
+      pattern: z
+        .string()
+        .optional()
+        .describe("Glob pattern for filename matching (e.g. '*.ts', '**/*.tsx')."),
       content: z.string().optional().describe("Search for files containing this text."),
-      path:    z.string().optional().describe("Base directory for search. Defaults to workspace root."),
-      limit:   z.number().optional().describe("Max results (default 20)."),
+      path: z
+        .string()
+        .optional()
+        .describe("Base directory for search. Defaults to workspace root."),
+      limit: z.number().optional().describe("Max results (default 20)."),
     },
     async (args) => {
       try {
@@ -1375,7 +1652,9 @@ function createCodebrainMCPServer(bridge) {
     "worker_detect",
     "Scan text for task triggers (optimize, audit, document, refactor, benchmark, testgaps, deepdive). Use to detect if a background worker should be dispatched.",
     {
-      text: z.string().describe("Text to scan for trigger patterns (e.g. a user prompt or task description)."),
+      text: z
+        .string()
+        .describe("Text to scan for trigger patterns (e.g. a user prompt or task description)."),
     },
     async (args) => {
       try {
@@ -1451,7 +1730,14 @@ function createCodebrainMCPServer(bridge) {
   server.tool(
     "hooks_fire",
     "Fire a custom hook event. Useful for testing or automation triggers.",
-    { type: z.string().describe("Hook event type (pane_spawned, pane_exited, pane_idle, task_started, task_completed, etc)"), data: z.record(z.unknown()).optional().describe("Event data payload") },
+    {
+      type: z
+        .string()
+        .describe(
+          "Hook event type (pane_spawned, pane_exited, pane_idle, task_started, task_completed, etc)"
+        ),
+      data: z.record(z.unknown()).optional().describe("Event data payload"),
+    },
     async (args) => {
       try {
         const result = await bridge.hooksFire({ type: args.type, data: args.data });
@@ -1468,12 +1754,24 @@ function createCodebrainMCPServer(bridge) {
     "List installed skills (prompt templates and squad templates). Returns skill manifests.",
     {
       type: z.enum(["prompt", "squad"]).optional().describe("Filter by skill type"),
-      scope: z.enum(["global", "project"]).optional().describe("'global' = ~/.codebrain/skills, 'project' = <cwd>/.codebrain/skills. Omit to list both."),
-      cwd: z.string().optional().describe("Project directory for project-scoped skills (defaults to current workspace)"),
+      scope: z
+        .enum(["global", "project"])
+        .optional()
+        .describe(
+          "'global' = ~/.codebrain/skills, 'project' = <cwd>/.codebrain/skills. Omit to list both."
+        ),
+      cwd: z
+        .string()
+        .optional()
+        .describe("Project directory for project-scoped skills (defaults to current workspace)"),
     },
     async (args) => {
       try {
-        const result = await bridge.skillList({ type: args.type, scope: args.scope, cwd: args.cwd });
+        const result = await bridge.skillList({
+          type: args.type,
+          scope: args.scope,
+          cwd: args.cwd,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
@@ -1487,7 +1785,10 @@ function createCodebrainMCPServer(bridge) {
     "Get full skill content: manifest + all files (prompt.md, squad.json, README.md).",
     {
       id: z.string().describe("Skill ID (folder name in skills directory)"),
-      scope: z.enum(["global", "project"]).optional().describe("Search scope. Omit to search project first, then global."),
+      scope: z
+        .enum(["global", "project"])
+        .optional()
+        .describe("Search scope. Omit to search project first, then global."),
       cwd: z.string().optional().describe("Project directory for project-scoped skills"),
     },
     async (args) => {
@@ -1512,8 +1813,16 @@ function createCodebrainMCPServer(bridge) {
       type: z.enum(["prompt", "squad"]).optional().describe("Skill type (default: 'prompt')"),
       version: z.string().optional().describe("Version string (default: '1.0.0')"),
       tags: z.array(z.string()).optional().describe("Tags for categorization"),
-      scope: z.enum(["global", "project"]).optional().describe("'global' = ~/.codebrain/skills (default, available to all projects), 'project' = <cwd>/.codebrain/skills (only this project)"),
-      cwd: z.string().optional().describe("Project directory when scope='project'. Defaults to current workspace."),
+      scope: z
+        .enum(["global", "project"])
+        .optional()
+        .describe(
+          "'global' = ~/.codebrain/skills (default, available to all projects), 'project' = <cwd>/.codebrain/skills (only this project)"
+        ),
+      cwd: z
+        .string()
+        .optional()
+        .describe("Project directory when scope='project'. Defaults to current workspace."),
     },
     async (args) => {
       try {
@@ -1531,7 +1840,10 @@ function createCodebrainMCPServer(bridge) {
     "Delete a locally created skill by ID. Removes the skill directory.",
     {
       id: z.string().describe("Skill ID to delete"),
-      scope: z.enum(["global", "project"]).optional().describe("Where to look. Omit to search project first, then global."),
+      scope: z
+        .enum(["global", "project"])
+        .optional()
+        .describe("Where to look. Omit to search project first, then global."),
       cwd: z.string().optional().describe("Project directory for project-scoped skills"),
     },
     async (args) => {
@@ -1584,88 +1896,1003 @@ function createCodebrainMCPServer(bridge) {
   // by default as well. Only the small core below is exposed on every turn.
   const registeredToolGroups = new Map();
 
+  // Browser-backed scraping uses isolated Python/UC processes. Schemas are
+  // registered now; Chrome itself starts only after the group is activated
+  // and scraping_session_start is called.
+  advancedToolGroups.scraping = registerScrapingTools(server, bridge);
+
   // ── Consensus Tools ────────────────────────────────────────────────────────
   advancedToolGroups.consensus = [
-    server.tool("swarm_vote", "Start a vote among agents. Modes: majority, unanimous, weighted.", { question: z.string(), options: z.array(z.string()).min(2), mode: z.enum(["majority","unanimous","weighted"]).optional(), timeoutMs: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmVote(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_cast_vote", "Cast a vote in an active vote.", { voteId: z.string(), paneId: z.string(), choice: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmCastVote(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_elect_leader", "Auto-elect a leader among workers based on capability score.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmElectLeader(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_consensus_status", "Get consensus status: leader, active votes, Raft/PBFT/Gossip node counts.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmConsensusStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("raft_start", "Start a Raft consensus node.", { nodeId: z.string(), peers: z.array(z.string()).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("raft_stop", "Stop a Raft node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("raft_append", "Append a command to the Raft log (leader only).", { nodeId: z.string(), command: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftAppend(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("raft_status", "Get status of all Raft nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.raftStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("pbft_start", "Start a PBFT node.", { nodeId: z.string(), allNodes: z.array(z.string()) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("pbft_stop", "Stop a PBFT node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("pbft_propose", "Propose a request via PBFT (primary only).", { nodeId: z.string(), request: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftPropose(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("pbft_view_change", "Initiate PBFT view change.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftViewChange(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("pbft_status", "Get status of all PBFT nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.pbftStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("gossip_start", "Start a gossip node.", { nodeId: z.string(), peers: z.array(z.string()).optional(), fanout: z.number().optional(), intervalMs: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("gossip_stop", "Stop a gossip node.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("gossip_set", "Set a value in gossip state (will be disseminated).", { nodeId: z.string(), key: z.string(), value: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipSet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("gossip_get", "Get a value from gossip state.", { nodeId: z.string(), key: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("gossip_sync", "Trigger manual gossip sync round.", { nodeId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipSync(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("gossip_status", "Get status of all gossip nodes.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.gossipStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool(
+      "swarm_vote",
+      "Start a vote among agents. Modes: majority, unanimous, weighted.",
+      {
+        question: z.string(),
+        options: z.array(z.string()).min(2),
+        mode: z.enum(["majority", "unanimous", "weighted"]).optional(),
+        timeoutMs: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmVote(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "swarm_cast_vote",
+      "Cast a vote in an active vote.",
+      { voteId: z.string(), paneId: z.string(), choice: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmCastVote(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "swarm_elect_leader",
+      "Auto-elect a leader among workers based on capability score.",
+      {},
+      async () => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmElectLeader(), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "swarm_consensus_status",
+      "Get consensus status: leader, active votes, Raft/PBFT/Gossip node counts.",
+      {},
+      async () => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmConsensusStatus(), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "raft_start",
+      "Start a Raft consensus node.",
+      { nodeId: z.string(), peers: z.array(z.string()).optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.raftStart(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("raft_stop", "Stop a Raft node.", { nodeId: z.string() }, async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.raftStop(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "raft_append",
+      "Append a command to the Raft log (leader only).",
+      { nodeId: z.string(), command: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.raftAppend(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("raft_status", "Get status of all Raft nodes.", {}, async () => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.raftStatus(), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "pbft_start",
+      "Start a PBFT node.",
+      { nodeId: z.string(), allNodes: z.array(z.string()) },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.pbftStart(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("pbft_stop", "Stop a PBFT node.", { nodeId: z.string() }, async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.pbftStop(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "pbft_propose",
+      "Propose a request via PBFT (primary only).",
+      { nodeId: z.string(), request: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.pbftPropose(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "pbft_view_change",
+      "Initiate PBFT view change.",
+      { nodeId: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.pbftViewChange(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("pbft_status", "Get status of all PBFT nodes.", {}, async () => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.pbftStatus(), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "gossip_start",
+      "Start a gossip node.",
+      {
+        nodeId: z.string(),
+        peers: z.array(z.string()).optional(),
+        fanout: z.number().optional(),
+        intervalMs: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.gossipStart(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("gossip_stop", "Stop a gossip node.", { nodeId: z.string() }, async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.gossipStop(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "gossip_set",
+      "Set a value in gossip state (will be disseminated).",
+      { nodeId: z.string(), key: z.string(), value: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.gossipSet(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "gossip_get",
+      "Get a value from gossip state.",
+      { nodeId: z.string(), key: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.gossipGet(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "gossip_sync",
+      "Trigger manual gossip sync round.",
+      { nodeId: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.gossipSync(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("gossip_status", "Get status of all gossip nodes.", {}, async () => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.gossipStatus(), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
   ];
 
   // ── Swarm Pipeline Tools ───────────────────────────────────────────────────
   advancedToolGroups.swarm = [
-    server.tool("swarm_fan_out", "Distribute tasks to workers in parallel. Supports domain routing and batch mode.", { tasks: z.array(z.object({ taskId: z.string(), description: z.string(), targetWorker: z.string().optional(), domain: z.string().optional(), dependsOn: z.array(z.string()).optional() })), strategy: z.enum(["round_robin","least_loaded","random","domain_aware"]).optional(), batchMode: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmFanOut(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_fan_in", "Collect and merge results from parallel tasks.", { taskIds: z.array(z.string()), aggregationStrategy: z.enum(["merge","vote","best","domain_grouped"]).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmFanIn(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_pipeline", "Execute a chain of sequential tasks.", { steps: z.array(z.object({ stepId: z.string(), description: z.string(), targetWorker: z.string().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmPipeline(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_pipeline_status", "Check pipeline execution state.", { pipelineId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmPipelineStatus(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_complete_task", "Mark a pipeline task as complete with result.", { taskId: z.string(), result: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmCompleteTask(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_domain_status", "Get domain-based task routing status.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmDomainStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_worker_loads", "Get worker load distribution.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmWorkerLoads(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_steal_work", "Steal work from an overloaded worker.", { thiefId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmStealWork(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("swarm_score_agents", "Score and rank agents for a task type.", { taskType: z.string().optional(), requiredCapabilities: z.array(z.string()).optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.swarmScoreAgents(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("pane_bus_metrics", "Get MessageBus metrics: messages/sec, latency, queue depths.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.paneBusMetrics(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool(
+      "swarm_fan_out",
+      "Distribute tasks to workers in parallel. Supports domain routing and batch mode.",
+      {
+        tasks: z.array(
+          z.object({
+            taskId: z.string(),
+            description: z.string(),
+            targetWorker: z.string().optional(),
+            domain: z.string().optional(),
+            dependsOn: z.array(z.string()).optional(),
+          })
+        ),
+        strategy: z.enum(["round_robin", "least_loaded", "random", "domain_aware"]).optional(),
+        batchMode: z.boolean().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmFanOut(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "swarm_fan_in",
+      "Collect and merge results from parallel tasks.",
+      {
+        taskIds: z.array(z.string()),
+        aggregationStrategy: z.enum(["merge", "vote", "best", "domain_grouped"]).optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmFanIn(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "swarm_pipeline",
+      "Execute a chain of sequential tasks.",
+      {
+        steps: z.array(
+          z.object({
+            stepId: z.string(),
+            description: z.string(),
+            targetWorker: z.string().optional(),
+          })
+        ),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmPipeline(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "swarm_pipeline_status",
+      "Check pipeline execution state.",
+      { pipelineId: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.swarmPipelineStatus(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "swarm_complete_task",
+      "Mark a pipeline task as complete with result.",
+      { taskId: z.string(), result: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmCompleteTask(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("swarm_domain_status", "Get domain-based task routing status.", {}, async () => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.swarmDomainStatus(), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool("swarm_worker_loads", "Get worker load distribution.", {}, async () => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.swarmWorkerLoads(), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "swarm_steal_work",
+      "Steal work from an overloaded worker.",
+      { thiefId: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmStealWork(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "swarm_score_agents",
+      "Score and rank agents for a task type.",
+      { taskType: z.string().optional(), requiredCapabilities: z.array(z.string()).optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.swarmScoreAgents(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "pane_bus_metrics",
+      "Get MessageBus metrics: messages/sec, latency, queue depths.",
+      {},
+      async () => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.paneBusMetrics(), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
   ];
 
   // ── Background Worker Tools ────────────────────────────────────────────────
   advancedToolGroups.worker = [
-    server.tool("worker_start", "Start a background maintenance worker.", { name: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("worker_stop", "Stop a background worker.", { name: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("worker_status", "Get status of all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStatus(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("worker_alerts", "Get recent worker alerts.", { limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerAlerts(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("worker_start_all", "Start all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStartAll(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("worker_stop_all", "Stop all background workers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerStopAll(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("worker_execute_trigger", "Execute an on-demand trigger manually.", { triggerName: z.string(), context: z.object({}).passthrough().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerExecuteTrigger(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("worker_trigger_history", "Get trigger execution history.", { limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.workerTriggerHistory(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("worker_pattern_clusters", "Get k-means pattern clusters.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.workerManager.getPatternClusters(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("worker_force_evolution", "Force pattern evolution: prune + merge.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(bridge.workerManager.forcePatternEvolution(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool(
+      "worker_start",
+      "Start a background maintenance worker.",
+      { name: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.workerStart(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("worker_stop", "Stop a background worker.", { name: z.string() }, async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.workerStop(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool("worker_status", "Get status of all background workers.", {}, async () => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.workerStatus(), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "worker_alerts",
+      "Get recent worker alerts.",
+      { limit: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.workerAlerts(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("worker_start_all", "Start all background workers.", {}, async () => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.workerStartAll(), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool("worker_stop_all", "Stop all background workers.", {}, async () => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.workerStopAll(), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "worker_execute_trigger",
+      "Execute an on-demand trigger manually.",
+      { triggerName: z.string(), context: z.object({}).passthrough().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.workerExecuteTrigger(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "worker_trigger_history",
+      "Get trigger execution history.",
+      { limit: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.workerTriggerHistory(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("worker_pattern_clusters", "Get k-means pattern clusters.", {}, async () => {
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(bridge.workerManager.getPatternClusters(), null, 2),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "worker_force_evolution",
+      "Force pattern evolution: prune + merge.",
+      {},
+      async () => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(bridge.workerManager.forcePatternEvolution(), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
   ];
 
   // ── Knowledge Graph Tools ──────────────────────────────────────────────────
   advancedToolGroups.memory_advanced = [
-    server.tool("memory_graph", "Get a memory node and its graph neighbors.", { memoryId: z.string(), depth: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryGraph(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("memory_rank", "Get PageRank scores for all memories.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryRank(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("memory_similar", "Find similar memories using cosine similarity.", { memoryId: z.string(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memorySimilar(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("memory_transfer", "Transfer a memory to a different scope (project/local/user).", { id: z.string(), target_scope: z.string() }, async ({ id, target_scope }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.memoryTransfer({ id, targetScope: target_scope }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool(
+      "memory_graph",
+      "Get a memory node and its graph neighbors.",
+      { memoryId: z.string(), depth: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.memoryGraph(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "memory_rank",
+      "Get PageRank scores for all memories.",
+      { workspace: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.memoryRank(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "memory_similar",
+      "Find similar memories using cosine similarity.",
+      { memoryId: z.string(), limit: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.memorySimilar(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "memory_transfer",
+      "Transfer a memory to a different scope (project/local/user).",
+      { id: z.string(), target_scope: z.string() },
+      async ({ id, target_scope }) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  await bridge.memoryTransfer({ id, targetScope: target_scope }),
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
   ];
 
   // ── Event Sourcing Tools ───────────────────────────────────────────────────
   advancedToolGroups.event = [
-    server.tool("event_store", "Store an event in the event sourcing system. Append-only log per aggregate.", { aggregate_id: z.string(), aggregate_type: z.string().optional(), event_type: z.string(), payload: z.string().optional(), metadata: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventStore(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("event_replay", "Replay events for an aggregate from a sequence. Uses snapshots.", { aggregate_id: z.string(), from_sequence: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventReplay(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("event_list", "List events with optional filters.", { aggregate_id: z.string().optional(), event_type: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("event_snapshot", "Force a snapshot for an aggregate.", { aggregate_id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventSnapshot(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("event_stats", "Get event sourcing statistics.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.eventStats(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool(
+      "event_store",
+      "Store an event in the event sourcing system. Append-only log per aggregate.",
+      {
+        aggregate_id: z.string(),
+        aggregate_type: z.string().optional(),
+        event_type: z.string(),
+        payload: z.string().optional(),
+        metadata: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.eventStore(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "event_replay",
+      "Replay events for an aggregate from a sequence. Uses snapshots.",
+      { aggregate_id: z.string(), from_sequence: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.eventReplay(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "event_list",
+      "List events with optional filters.",
+      {
+        aggregate_id: z.string().optional(),
+        event_type: z.string().optional(),
+        limit: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.eventList(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "event_snapshot",
+      "Force a snapshot for an aggregate.",
+      { aggregate_id: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.eventSnapshot(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "event_stats",
+      "Get event sourcing statistics.",
+      { workspace: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.eventStats(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
   ];
 
   // ── Mission Tools ───────────────────────────────────────────────────────
   advancedToolGroups.mission = [
-    server.tool("mission_create", "Create a mission scoped to a git worktree.", { title: z.string(), summary: z.string().optional(), worktreePath: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionCreate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mission_get", "Get mission details by ID.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mission_list", "List missions with optional status filter.", { status: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mission_set", "Update mission metadata.", { id: z.string(), updates: z.object({ title: z.string().optional(), summary: z.string().optional(), worktreePath: z.string().optional(), status: z.string().optional(), metadata: z.string().optional() }) }, async ({ id, updates }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionSet({ id, updates }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mission_delete", "Delete a mission.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionDelete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("mission_context", "Auto-discover mission context for a pane. Resolves active mission, finds orchestrator, and determines role. Call on worker boot.", { paneId: z.string().describe("Your pane ID"), workspace: z.string().optional().describe("Workspace path filter"), mission_id: z.string().optional().describe("Specific mission ID (resolves active if omitted)") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.missionContext({ paneId: args.paneId, workspace: args.workspace, missionId: args.mission_id }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("task_create", "Create a kanban task for mission coordination. Columns: inbox, assigned, in_progress, done.", { title: z.string().describe("Task title"), description: z.string().optional(), column: z.string().optional(), priority: z.string().optional(), assigned_to: z.string().optional(), workspace: z.string().optional(), mission_id: z.string().optional().describe("Mission ID to scope this task") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskCreate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("task_list", "List kanban tasks with optional filters. Use mission_id to scope to a mission.", { column: z.string().optional(), assigned_to: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional(), mission_id: z.string().optional().describe("Filter by mission ID") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("task_move", "Move a kanban task to a different column.", { id: z.string(), column: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskMove(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("task_complete", "Complete a kanban task with optional result.", { id: z.string(), result: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskComplete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("task_assign", "Assign a kanban task to a pane/agent.", { id: z.string(), paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskAssign(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("task_delete", "Delete a kanban task.", { id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.taskDelete(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool(
+      "mission_create",
+      "Create a mission scoped to a git worktree.",
+      {
+        title: z.string(),
+        summary: z.string().optional(),
+        worktreePath: z.string().optional(),
+        workspace: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.missionCreate(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("mission_get", "Get mission details by ID.", { id: z.string() }, async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.missionGet(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "mission_list",
+      "List missions with optional status filter.",
+      {
+        status: z.string().optional(),
+        workspace: z.string().optional(),
+        limit: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.missionList(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "mission_set",
+      "Update mission metadata.",
+      {
+        id: z.string(),
+        updates: z.object({
+          title: z.string().optional(),
+          summary: z.string().optional(),
+          worktreePath: z.string().optional(),
+          status: z.string().optional(),
+          metadata: z.string().optional(),
+        }),
+      },
+      async ({ id, updates }) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.missionSet({ id, updates }), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("mission_delete", "Delete a mission.", { id: z.string() }, async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.missionDelete(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "mission_context",
+      "Auto-discover mission context for a pane. Resolves active mission, finds orchestrator, and determines role. Call on worker boot.",
+      {
+        paneId: z.string().describe("Your pane ID"),
+        workspace: z.string().optional().describe("Workspace path filter"),
+        mission_id: z
+          .string()
+          .optional()
+          .describe("Specific mission ID (resolves active if omitted)"),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  await bridge.missionContext({
+                    paneId: args.paneId,
+                    workspace: args.workspace,
+                    missionId: args.mission_id,
+                  }),
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "task_create",
+      "Create a kanban task for mission coordination. Columns: inbox, assigned, in_progress, done.",
+      {
+        title: z.string().describe("Task title"),
+        description: z.string().optional(),
+        column: z.string().optional(),
+        priority: z.string().optional(),
+        assigned_to: z.string().optional(),
+        workspace: z.string().optional(),
+        mission_id: z.string().optional().describe("Mission ID to scope this task"),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.taskCreate(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "task_list",
+      "List kanban tasks with optional filters. Use mission_id to scope to a mission.",
+      {
+        column: z.string().optional(),
+        assigned_to: z.string().optional(),
+        workspace: z.string().optional(),
+        limit: z.number().optional(),
+        mission_id: z.string().optional().describe("Filter by mission ID"),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [{ type: "text", text: JSON.stringify(await bridge.taskList(args), null, 2) }],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "task_move",
+      "Move a kanban task to a different column.",
+      { id: z.string(), column: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [{ type: "text", text: JSON.stringify(await bridge.taskMove(args), null, 2) }],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "task_complete",
+      "Complete a kanban task with optional result.",
+      { id: z.string(), result: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.taskComplete(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "task_assign",
+      "Assign a kanban task to a pane/agent.",
+      { id: z.string(), paneId: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.taskAssign(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("task_delete", "Delete a kanban task.", { id: z.string() }, async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.taskDelete(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    }),
   ];
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1673,30 +2900,279 @@ function createCodebrainMCPServer(bridge) {
   // ════════════════════════════════════════════════════════════════════════════
 
   // ── Session Compaction (essential — context management) ───────────────────
-  server.tool("session_compact", "Get compaction status and recommendation for a pane. When context pressure is high, use this to decide if older messages should be summarized.", { paneId: z.string().describe("Target pane ID"), preserveRecentTurns: z.number().optional().describe("Number of recent turns to preserve (default 5)"), summaryPrompt: z.string().optional().describe("Custom prompt for summarization") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.sessionCompact(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("session_compact_save", "Save a compaction summary after summarizing older messages. Frees context space.", { paneId: z.string(), sessionId: z.string().optional(), summary: z.string().describe("The summarized content"), messagesCompacted: z.number().optional(), tokensSaved: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.sessionCompactSave(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "session_compact",
+    "Get compaction status and recommendation for a pane. When context pressure is high, use this to decide if older messages should be summarized.",
+    {
+      paneId: z.string().describe("Target pane ID"),
+      preserveRecentTurns: z
+        .number()
+        .optional()
+        .describe("Number of recent turns to preserve (default 5)"),
+      summaryPrompt: z.string().optional().describe("Custom prompt for summarization"),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.sessionCompact(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "session_compact_save",
+    "Save a compaction summary after summarizing older messages. Frees context space.",
+    {
+      paneId: z.string(),
+      sessionId: z.string().optional(),
+      summary: z.string().describe("The summarized content"),
+      messagesCompacted: z.number().optional(),
+      tokensSaved: z.number().optional(),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.sessionCompactSave(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
   // ── Step Classification (essential — loop control) ────────────────────────
-  server.tool("step_classify", "Classify an assistant step: final|continue|filtered|think-only|invalid|failed. Used for loop control decisions.", { output: z.string().optional(), hasPendingTools: z.boolean().optional(), hasError: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.stepClassify(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("step_classify_batch", "Classify multiple assistant steps at once.", { steps: z.array(z.object({ output: z.string().optional(), hasPendingTools: z.boolean().optional(), hasError: z.boolean().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.stepClassifyBatch(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "step_classify",
+    "Classify an assistant step: final|continue|filtered|think-only|invalid|failed. Used for loop control decisions.",
+    {
+      output: z.string().optional(),
+      hasPendingTools: z.boolean().optional(),
+      hasError: z.boolean().optional(),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.stepClassify(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "step_classify_batch",
+    "Classify multiple assistant steps at once.",
+    {
+      steps: z.array(
+        z.object({
+          output: z.string().optional(),
+          hasPendingTools: z.boolean().optional(),
+          hasError: z.boolean().optional(),
+        })
+      ),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.stepClassifyBatch(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
   // ── Text Loop Recovery (essential — prevents stuck agents) ────────────────
-  server.tool("text_loop_check", "Check if an agent's text output is looping (3+ identical outputs). Injects recovery prompts.", { paneId: z.string(), output: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.textLoopCheck(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("text_loop_reset", "Reset text loop detection buffer for a pane.", { paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.textLoopReset(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "text_loop_check",
+    "Check if an agent's text output is looping (3+ identical outputs). Injects recovery prompts.",
+    { paneId: z.string(), output: z.string() },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.textLoopCheck(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "text_loop_reset",
+    "Reset text loop detection buffer for a pane.",
+    { paneId: z.string() },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.textLoopReset(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
   // ── Goal / Stop Condition (essential — autonomous work) ──────────────────
-  server.tool("goal_set", "Set a goal for a pane. An independent judge evaluates if the goal is truly satisfied before allowing the agent to stop.", { paneId: z.string(), goal: z.string().describe("The goal to achieve") }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalSet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("goal_get", "Get current goal and judge verdicts for a pane.", { paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalGet(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("goal_clear", "Clear the goal for a pane (manual override).", { paneId: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalClear(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("goal_judge", "Record a judge's verdict on goal satisfaction. The judge should be an independent model that reads the transcript.", { paneId: z.string(), satisfied: z.boolean(), impossible: z.boolean().optional(), reason: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalJudge(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "goal_set",
+    "Set a goal for a pane. An independent judge evaluates if the goal is truly satisfied before allowing the agent to stop.",
+    { paneId: z.string(), goal: z.string().describe("The goal to achieve") },
+    async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.goalSet(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "goal_get",
+    "Get current goal and judge verdicts for a pane.",
+    { paneId: z.string() },
+    async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.goalGet(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "goal_clear",
+    "Clear the goal for a pane (manual override).",
+    { paneId: z.string() },
+    async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.goalClear(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "goal_judge",
+    "Record a judge's verdict on goal satisfaction. The judge should be an independent model that reads the transcript.",
+    {
+      paneId: z.string(),
+      satisfied: z.boolean(),
+      impossible: z.boolean().optional(),
+      reason: z.string().optional(),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.goalJudge(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
   // ── Cross-Session History (essential — persistent memory) ─────────────────
-  server.tool("history_search", "Search cross-session conversation history with FTS5. Filters: scope, session, kind, tool_name, time range.", { query: z.string(), scope: z.string().optional(), sessionId: z.string().optional(), kind: z.string().optional().describe("user_text|assistant_text|tool_input|tool_error|reasoning|tool_output"), toolName: z.string().optional(), since: z.number().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.historySearch(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("history_record", "Record a conversation message for cross-session history search.", { sessionId: z.string(), role: z.string(), content: z.string(), kind: z.string().optional(), toolName: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.historyRecord(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "history_search",
+    "Search cross-session conversation history with FTS5. Filters: scope, session, kind, tool_name, time range.",
+    {
+      query: z.string(),
+      scope: z.string().optional(),
+      sessionId: z.string().optional(),
+      kind: z
+        .string()
+        .optional()
+        .describe("user_text|assistant_text|tool_input|tool_error|reasoning|tool_output"),
+      toolName: z.string().optional(),
+      since: z.number().optional(),
+      limit: z.number().optional(),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.historySearch(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "history_record",
+    "Record a conversation message for cross-session history search.",
+    {
+      sessionId: z.string(),
+      role: z.string(),
+      content: z.string(),
+      kind: z.string().optional(),
+      toolName: z.string().optional(),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.historyRecord(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
   // ── Checkpoint (essential — session persistence) ──────────────────────────
-  server.tool("checkpoint_write", "Save a checkpoint for long-running sessions. Preserves state across context limits.", { sessionId: z.string().optional(), content: z.string(), topic: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointWrite(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("checkpoint_read", "Read a saved checkpoint.", { sessionId: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointRead(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "checkpoint_write",
+    "Save a checkpoint for long-running sessions. Preserves state across context limits.",
+    { sessionId: z.string().optional(), content: z.string(), topic: z.string().optional() },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.checkpointWrite(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "checkpoint_read",
+    "Read a saved checkpoint.",
+    { sessionId: z.string().optional() },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.checkpointRead(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
   // ── Lessons + ledger: só o núcleo fica sempre ligado ──────────────────────
   // Três tools são always-on por motivo concreto: uma correção do usuário
@@ -1705,71 +3181,751 @@ function createCodebrainMCPServer(bridge) {
   // (`agent_boot_context`) — exigir enable_tool_group nessas três é garantir
   // que o agente pule a etapa. O resto vive no grupo `learning`, desligado por
   // padrão, junto das demais tools avançadas.
-  server.tool("lesson_add", "Save a user correction or preference that persists across ALL future panes and sessions. Call this whenever the user corrects you or says 'always'/'never'/'remember'. Put what to DO in `rule` and what NOT to do in `negative`. Set `repo_scope` to a path fragment (e.g. 'app-mobile') when the rule is true of only ONE project — it is then injected only in that workspace. The returned `status` is authoritative: only 'created' and 'enriched' mean something was written; 'deduped' and 'refused' mean NOTHING was saved, so do not tell the user the lesson was stored.", { rule: z.string(), negative: z.string().optional(), category: z.enum(["tool", "preference", "knowledge"]).optional(), repo_scope: z.string().optional(), pane_id: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lessonAdd(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("ledger_record", "Record one step of long-running work into a durable ledger that survives context limits and pane restarts. Write `next` as a CONCRETE INTENT ('add the Windows branch to _safe_chmod, the test already fails'), never a status word. Pass `tried_approach` + `tried_rejected_because` for any approach you abandoned — that is what stops a later re-entry from re-walking it. Changing `phase` REQUIRES `event` + `event_kind`; phases 'done' and 'abandoned' are terminal. Omitted fields keep their stored value, and `artifacts` is merged, not replaced.", { session_id: z.string(), goal: z.string().optional(), phase: z.string().optional(), next: z.string().optional(), event: z.string().optional(), event_kind: z.enum(["blocked", "decision", "note", "phase", "progress", "tried", "unblocked"]).optional(), tried_approach: z.string().optional(), tried_rejected_because: z.string().optional(), artifacts: z.record(z.string()).optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.ledgerRecord(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("agent_boot_context", "Get this agent's boot block in one call: the user corrections that apply to this workspace, plus the ledger of the workstream being resumed (goal, phase, next step, and every approach already rejected). Read it BEFORE starting real work — it is what stops you repeating an error the user already corrected or an approach that already failed.", { session_id: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.agentBootContext(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "lesson_add",
+    "Save a user correction or preference that persists across ALL future panes and sessions. Call this whenever the user corrects you or says 'always'/'never'/'remember'. Put what to DO in `rule` and what NOT to do in `negative`. Set `repo_scope` to a path fragment (e.g. 'app-mobile') when the rule is true of only ONE project — it is then injected only in that workspace. The returned `status` is authoritative: only 'created' and 'enriched' mean something was written; 'deduped' and 'refused' mean NOTHING was saved, so do not tell the user the lesson was stored.",
+    {
+      rule: z.string(),
+      negative: z.string().optional(),
+      category: z.enum(["tool", "preference", "knowledge"]).optional(),
+      repo_scope: z.string().optional(),
+      pane_id: z.string().optional(),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.lessonAdd(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "ledger_record",
+    "Record one step of long-running work into a durable ledger that survives context limits and pane restarts. Write `next` as a CONCRETE INTENT ('add the Windows branch to _safe_chmod, the test already fails'), never a status word. Pass `tried_approach` + `tried_rejected_because` for any approach you abandoned — that is what stops a later re-entry from re-walking it. Changing `phase` REQUIRES `event` + `event_kind`; phases 'done' and 'abandoned' are terminal. Omitted fields keep their stored value, and `artifacts` is merged, not replaced.",
+    {
+      session_id: z.string(),
+      goal: z.string().optional(),
+      phase: z.string().optional(),
+      next: z.string().optional(),
+      event: z.string().optional(),
+      event_kind: z
+        .enum(["blocked", "decision", "note", "phase", "progress", "tried", "unblocked"])
+        .optional(),
+      tried_approach: z.string().optional(),
+      tried_rejected_because: z.string().optional(),
+      artifacts: z.record(z.string()).optional(),
+      workspace: z.string().optional(),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.ledgerRecord(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "agent_boot_context",
+    "Get this agent's boot block in one call: the user corrections that apply to this workspace, plus the ledger of the workstream being resumed (goal, phase, next step, and every approach already rejected). Read it BEFORE starting real work — it is what stops you repeating an error the user already corrected or an approach that already failed.",
+    {
+      session_id: z.string().optional(),
+      workspace: z.string().optional(),
+      limit: z.number().optional(),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.agentBootContext(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
   // ── Question Tool (essential — user interaction) ──────────────────────────
-  server.tool("question_ask", "Ask the user a structured question with predefined options. Supports headless auto-resolve.", { paneId: z.string().optional(), question: z.string(), options: z.array(z.string()), allowCustom: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.questionAsk(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("question_answer", "Submit an answer to a pending question.", { questionId: z.string(), answer: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.questionAnswer(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("question_list", "List pending questions awaiting answers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.questionList(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "question_ask",
+    "Ask the user a structured question with predefined options. Supports headless auto-resolve.",
+    {
+      paneId: z.string().optional(),
+      question: z.string(),
+      options: z.array(z.string()),
+      allowCustom: z.boolean().optional(),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.questionAsk(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "question_answer",
+    "Submit an answer to a pending question.",
+    { questionId: z.string(), answer: z.string() },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.questionAnswer(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool("question_list", "List pending questions awaiting answers.", {}, async () => {
+    try {
+      return {
+        content: [{ type: "text", text: JSON.stringify(await bridge.questionList(), null, 2) }],
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+    }
+  });
 
   // ── Multi-Edit (essential — convenience) ──────────────────────────────────
-  server.tool("file_multi_edit", "Batch multiple edit operations on a single file in one call. Each edit specifies oldString/newString.", { path: z.string().describe("Absolute file path"), edits: z.array(z.object({ oldString: z.string(), newString: z.string().optional(), replaceAll: z.boolean().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.fileMultiEdit(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "file_multi_edit",
+    "Batch multiple edit operations on a single file in one call. Each edit specifies oldString/newString.",
+    {
+      path: z.string().describe("Absolute file path"),
+      edits: z.array(
+        z.object({
+          oldString: z.string(),
+          newString: z.string().optional(),
+          replaceAll: z.boolean().optional(),
+        })
+      ),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.fileMultiEdit(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
   // ── Provider Prompts (essential — model optimization) ─────────────────────
-  server.tool("provider_prompt", "Get model-specific prompt additions optimized for the current model family (Claude, Gemini, GPT, MIMO).", { model: z.string().optional(), providerId: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.providerPrompt(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
-  server.tool("provider_prompt_list", "List all available provider prompt families.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.providerPromptList(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } });
+  server.tool(
+    "provider_prompt",
+    "Get model-specific prompt additions optimized for the current model family (Claude, Gemini, GPT, MIMO).",
+    { model: z.string().optional(), providerId: z.string().optional() },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.providerPrompt(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+  server.tool(
+    "provider_prompt_list",
+    "List all available provider prompt families.",
+    {},
+    async () => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.providerPromptList(), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
 
-  console.log(`[MCP] 20 MiMo-Code ESSENTIAL tools registered (compaction, step-classify, text-loop, goal, history, checkpoint, question, multi-edit, provider-prompt)`);
+  console.log(
+    `[MCP] 20 MiMo-Code ESSENTIAL tools registered (compaction, step-classify, text-loop, goal, history, checkpoint, question, multi-edit, provider-prompt)`
+  );
 
   // ── Expanded Hooks Tools ───────────────────────────────────────────────────
   advancedToolGroups.hooks_advanced = [
-    server.tool("hooks_export_logs", "Export hook logs in JSONL or CSV format.", { format: z.string().optional(), since: z.number().optional(), types: z.array(z.string()).optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksExportLogs(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("hooks_event_stats", "Get hook event statistics by type and correlation.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksEventStats(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
-    server.tool("hooks_correlation_events", "Get all events for a correlation ID.", { correlation_id: z.string() }, async ({ correlation_id }) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.hooksCorrelationEvents({ correlationId: correlation_id }), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; } }),
+    server.tool(
+      "hooks_export_logs",
+      "Export hook logs in JSONL or CSV format.",
+      {
+        format: z.string().optional(),
+        since: z.number().optional(),
+        types: z.array(z.string()).optional(),
+        limit: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.hooksExportLogs(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "hooks_event_stats",
+      "Get hook event statistics by type and correlation.",
+      {},
+      async () => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.hooksEventStats(), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "hooks_correlation_events",
+      "Get all events for a correlation ID.",
+      { correlation_id: z.string() },
+      async ({ correlation_id }) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  await bridge.hooksCorrelationEvents({ correlationId: correlation_id }),
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+        }
+      }
+    ),
   ];
 
   // ── MiMo-Code: Session Advanced (10 tools) ───────────────────────────────
   advancedToolGroups.session_advanced = [
-    server.tool("session_compaction_history", "Get compaction history for a session.", { sessionId: z.string().optional(), workspace: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.sessionCompactionHistory(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("snapshot_track", "Create a snapshot of the current workspace state for later revert.", { sessionId: z.string().optional(), messageIndex: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.snapshotTrack(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("snapshot_list", "List snapshots for a session.", { sessionId: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.snapshotList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("snapshot_revert", "Revert workspace to a specific snapshot.", { snapshotHash: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.snapshotRevert(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("checkpoint_validate", "Validate checkpoint quality: required sections, token budgets, ordering.", { content: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointValidate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("checkpoint_state", "Get checkpoint state for a session.", { sessionId: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.checkpointState(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("history_around", "Get messages around a specific message ID for context.", { messageId: z.number(), before: z.number().optional(), after: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.historyAround(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool(
+      "session_compaction_history",
+      "Get compaction history for a session.",
+      {
+        sessionId: z.string().optional(),
+        workspace: z.string().optional(),
+        limit: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.sessionCompactionHistory(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "snapshot_track",
+      "Create a snapshot of the current workspace state for later revert.",
+      { sessionId: z.string().optional(), messageIndex: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.snapshotTrack(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "snapshot_list",
+      "List snapshots for a session.",
+      { sessionId: z.string().optional(), limit: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.snapshotList(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "snapshot_revert",
+      "Revert workspace to a specific snapshot.",
+      { snapshotHash: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.snapshotRevert(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "checkpoint_validate",
+      "Validate checkpoint quality: required sections, token budgets, ordering.",
+      { content: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.checkpointValidate(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "checkpoint_state",
+      "Get checkpoint state for a session.",
+      { sessionId: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.checkpointState(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "history_around",
+      "Get messages around a specific message ID for context.",
+      { messageId: z.number(), before: z.number().optional(), after: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.historyAround(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
   ];
 
   // ── MiMo-Code: LSP (12 tools) — semantic code navigation ────────────────
   advancedToolGroups.lsp = [
-    server.tool("lsp_start", "Start a language server for a given language.", { language: z.string().describe("typescript|python|rust|go|javascript"), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_stop", "Stop a language server.", { language: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspStop(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_servers", "List running language servers.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspServers(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_go_to_definition", "Go to definition of a symbol at a specific position.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspGoToDefinition(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_find_references", "Find all references to a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspFindReferences(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_hover", "Get hover info (type, docs) for a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspHover(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_document_symbol", "Get document symbols (outline) for a file.", { file: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspDocumentSymbol(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_workspace_symbol", "Search for symbols across the workspace.", { query: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspWorkspaceSymbol(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_go_to_implementation", "Go to implementation of a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspGoToImplementation(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_prepare_call_hierarchy", "Prepare call hierarchy for a symbol.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspPrepareCallHierarchy(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_incoming_calls", "Get incoming calls to a function.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspIncomingCalls(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lsp_outgoing_calls", "Get outgoing calls from a function.", { file: z.string(), line: z.number(), character: z.number() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lspOutgoingCalls(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool(
+      "lsp_start",
+      "Start a language server for a given language.",
+      {
+        language: z.string().describe("typescript|python|rust|go|javascript"),
+        workspace: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [{ type: "text", text: JSON.stringify(await bridge.lspStart(args), null, 2) }],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("lsp_stop", "Stop a language server.", { language: z.string() }, async (args) => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.lspStop(args), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }),
+    server.tool("lsp_servers", "List running language servers.", {}, async () => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.lspServers(), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "lsp_go_to_definition",
+      "Go to definition of a symbol at a specific position.",
+      { file: z.string(), line: z.number(), character: z.number() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.lspGoToDefinition(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lsp_find_references",
+      "Find all references to a symbol.",
+      { file: z.string(), line: z.number(), character: z.number() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.lspFindReferences(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lsp_hover",
+      "Get hover info (type, docs) for a symbol.",
+      { file: z.string(), line: z.number(), character: z.number() },
+      async (args) => {
+        try {
+          return {
+            content: [{ type: "text", text: JSON.stringify(await bridge.lspHover(args), null, 2) }],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lsp_document_symbol",
+      "Get document symbols (outline) for a file.",
+      { file: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.lspDocumentSymbol(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lsp_workspace_symbol",
+      "Search for symbols across the workspace.",
+      { query: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.lspWorkspaceSymbol(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lsp_go_to_implementation",
+      "Go to implementation of a symbol.",
+      { file: z.string(), line: z.number(), character: z.number() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.lspGoToImplementation(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lsp_prepare_call_hierarchy",
+      "Prepare call hierarchy for a symbol.",
+      { file: z.string(), line: z.number(), character: z.number() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.lspPrepareCallHierarchy(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lsp_incoming_calls",
+      "Get incoming calls to a function.",
+      { file: z.string(), line: z.number(), character: z.number() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.lspIncomingCalls(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lsp_outgoing_calls",
+      "Get outgoing calls from a function.",
+      { file: z.string(), line: z.number(), character: z.number() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.lspOutgoingCalls(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
   ];
 
   // ── MiMo-Code: Advanced Workflows (11 tools) — max mode, compose, plan ──
   advancedToolGroups.workflows = [
-    server.tool("max_mode_run", "Run a prompt in MAX MODE: N parallel candidates, judge selects best. Higher quality for complex tasks.", { prompt: z.string(), candidates: z.number().optional().describe("Number of candidates (2-10, default 5)"), judgeModel: z.string().optional(), judgeCriteria: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.maxModeRun(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("max_mode_candidate", "Submit a candidate result for judge evaluation in max mode.", { runId: z.string(), candidateIndex: z.number(), output: z.string(), approach: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.maxModeCandidate(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("max_mode_judge", "Judge selects the best candidate from submitted results.", { runId: z.string(), candidates: z.array(z.object({ index: z.number(), output: z.string(), approach: z.string().optional() })) }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.maxModeJudge(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("compose_start", "Start a specs-driven compose workflow: plan → execute → test → debug → verify → merge.", { spec: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.composeStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("compose_advance", "Advance to the next compose phase.", { composeId: z.string(), currentPhase: z.number(), phaseResult: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.composeAdvance(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("compose_phases", "Get the list of compose workflow phases.", {}, async () => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.composePhases(), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("plan_start", "Start a read-only planning session. Cannot edit files — only analyze and produce a plan.", { paneId: z.string().optional(), goal: z.string().optional(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planStart(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("plan_save", "Save a plan document to disk.", { planId: z.string().optional(), content: z.string(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planSave(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("plan_read", "Read a saved plan document.", { planId: z.string(), workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planRead(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("plan_list", "List saved plans for the workspace.", { workspace: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("plan_exit", "Exit plan mode and optionally switch to build mode.", { paneId: z.string().optional(), switchToBuild: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.planExit(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool(
+      "max_mode_run",
+      "Run a prompt in MAX MODE: N parallel candidates, judge selects best. Higher quality for complex tasks.",
+      {
+        prompt: z.string(),
+        candidates: z.number().optional().describe("Number of candidates (2-10, default 5)"),
+        judgeModel: z.string().optional(),
+        judgeCriteria: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.maxModeRun(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "max_mode_candidate",
+      "Submit a candidate result for judge evaluation in max mode.",
+      {
+        runId: z.string(),
+        candidateIndex: z.number(),
+        output: z.string(),
+        approach: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.maxModeCandidate(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "max_mode_judge",
+      "Judge selects the best candidate from submitted results.",
+      {
+        runId: z.string(),
+        candidates: z.array(
+          z.object({ index: z.number(), output: z.string(), approach: z.string().optional() })
+        ),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.maxModeJudge(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "compose_start",
+      "Start a specs-driven compose workflow: plan → execute → test → debug → verify → merge.",
+      { spec: z.string().optional(), workspace: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.composeStart(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "compose_advance",
+      "Advance to the next compose phase.",
+      { composeId: z.string(), currentPhase: z.number(), phaseResult: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.composeAdvance(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool("compose_phases", "Get the list of compose workflow phases.", {}, async () => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.composePhases(), null, 2) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }),
+    server.tool(
+      "plan_start",
+      "Start a read-only planning session. Cannot edit files — only analyze and produce a plan.",
+      {
+        paneId: z.string().optional(),
+        goal: z.string().optional(),
+        workspace: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.planStart(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "plan_save",
+      "Save a plan document to disk.",
+      { planId: z.string().optional(), content: z.string(), workspace: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [{ type: "text", text: JSON.stringify(await bridge.planSave(args), null, 2) }],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "plan_read",
+      "Read a saved plan document.",
+      { planId: z.string(), workspace: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [{ type: "text", text: JSON.stringify(await bridge.planRead(args), null, 2) }],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "plan_list",
+      "List saved plans for the workspace.",
+      { workspace: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [{ type: "text", text: JSON.stringify(await bridge.planList(args), null, 2) }],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "plan_exit",
+      "Exit plan mode and optionally switch to build mode.",
+      { paneId: z.string().optional(), switchToBuild: z.boolean().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [{ type: "text", text: JSON.stringify(await bridge.planExit(args), null, 2) }],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
   ];
 
   // ── Learning: gestão de correções + leitura do ledger (7 tools) ──────────
@@ -1777,13 +3933,131 @@ function createCodebrainMCPServer(bridge) {
   // ledger inteiro, reentrada informada do juiz. Ativar com
   // enable_tool_group("learning").
   advancedToolGroups.learning = [
-    server.tool("lesson_list", "List saved user corrections. Scoped to the current workspace by default (global lessons plus those whose repo_scope matches this path); pass all_workspaces to see every one.", { category: z.enum(["tool", "preference", "knowledge"]).optional(), all_workspaces: z.boolean().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lessonList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lesson_remove", "Delete lessons by id, or every lesson whose rule or negative contains a substring.", { query: z.string().optional(), id: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lessonRemove(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("lesson_context", "Get only the applicable user corrections as a ready-to-inject prompt block, without the ledger. Prefer agent_boot_context, which returns both in one call.", { workspace: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.lessonContext(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("ledger_read", "Read a workstream's full ledger: goal, phase, next step, artifacts, recent events and every rejected approach. Treat it as authoritative over your own recollection after a compaction or a pane restart.", { session_id: z.string(), event_limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.ledgerRead(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("ledger_snapshot", "Get a compact re-injectable text block of one workstream's state. Returns empty on a terminal phase, so a finished workstream is not reopened.", { session_id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.ledgerSnapshot(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("ledger_list", "List workstream ledgers in this workspace, unfinished ones by default. Use to find what work is still in flight.", { include_terminal: z.boolean().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.ledgerList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("goal_judge_ledger", "Record a judge verdict AND get back what was already tried. Prefer this over goal_judge inside an autonomous loop: a bare verdict carries no memory of failed approaches, which is how a loop burns all 12 re-entries repeating one. A non-satisfied verdict is logged to the ledger as a rejected approach.", { paneId: z.string(), session_id: z.string().optional(), satisfied: z.boolean(), impossible: z.boolean().optional(), reason: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.goalJudgeWithLedger(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool(
+      "lesson_list",
+      "List saved user corrections. Scoped to the current workspace by default (global lessons plus those whose repo_scope matches this path); pass all_workspaces to see every one.",
+      {
+        category: z.enum(["tool", "preference", "knowledge"]).optional(),
+        all_workspaces: z.boolean().optional(),
+        limit: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.lessonList(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lesson_remove",
+      "Delete lessons by id, or every lesson whose rule or negative contains a substring.",
+      { query: z.string().optional(), id: z.string().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.lessonRemove(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "lesson_context",
+      "Get only the applicable user corrections as a ready-to-inject prompt block, without the ledger. Prefer agent_boot_context, which returns both in one call.",
+      { workspace: z.string().optional(), limit: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.lessonContext(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "ledger_read",
+      "Read a workstream's full ledger: goal, phase, next step, artifacts, recent events and every rejected approach. Treat it as authoritative over your own recollection after a compaction or a pane restart.",
+      { session_id: z.string(), event_limit: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.ledgerRead(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "ledger_snapshot",
+      "Get a compact re-injectable text block of one workstream's state. Returns empty on a terminal phase, so a finished workstream is not reopened.",
+      { session_id: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.ledgerSnapshot(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "ledger_list",
+      "List workstream ledgers in this workspace, unfinished ones by default. Use to find what work is still in flight.",
+      { include_terminal: z.boolean().optional(), limit: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.ledgerList(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "goal_judge_ledger",
+      "Record a judge verdict AND get back what was already tried. Prefer this over goal_judge inside an autonomous loop: a bare verdict carries no memory of failed approaches, which is how a loop burns all 12 re-entries repeating one. A non-satisfied verdict is logged to the ledger as a rejected approach.",
+      {
+        paneId: z.string(),
+        session_id: z.string().optional(),
+        satisfied: z.boolean(),
+        impossible: z.boolean().optional(),
+        reason: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.goalJudgeWithLedger(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
   ];
 
   // ── Verify: prova visual de que a alteração de front-end chegou à tela ───
@@ -1791,23 +4065,234 @@ function createCodebrainMCPServer(bridge) {
   // rotas → servidor → marcadores) → verify_auth_* se a página exigir login →
   // verify_run (print + texto + console → veredito) → verify_report.
   advancedToolGroups.verify = [
-    server.tool("verify_plan", "Plan a visual verification of the frontend changes in this git repo. Reads the working tree (or a base ref) for changed files, detects the framework, maps changed files to candidate ROUTES with a confidence and the evidence for each, probes loopback ports for a live dev server, and extracts MARKERS — the human-readable phrases the diff added — which is what later proves the change actually reached the screen. Opens no browser. Returns a run_id to pass to verify_run.", { base: z.string().optional().describe("Base ref to diff against, e.g. 'origin/main'. Omit to use the uncommitted working tree."), extra_ports: z.array(z.number()).optional().describe("Extra loopback ports to probe beyond the framework defaults"), feature_context: z.string().optional().describe("What the feature is about — used later to pick a login role that fits"), session_id: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.verifyPlan(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("verify_run", "Open every planned route in the browser, screenshot it to the run's evidence directory, read the page text and console errors, and decide whether the diff's markers actually APPEAR on screen. Verdicts: passed (every added phrase visible), partial, not-visible (route wrong, build stale, or the change never reached the UI), auth-required (the route redirected to a login — authenticate with verify_login first), inconclusive (no marker was extractable, so a human must read the screenshot), unreachable. Never reports passed on an unread screenshot.", { run_id: z.string(), routes: z.array(z.string()).optional().describe("Override the planned routes"), base_url: z.string().optional().describe("Loopback base URL; a public host is refused"), full_page: z.boolean().optional(), pane_id: z.string().optional(), settle_ms: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.verifyRun(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("verify_report", "Read a verification run — verdict per route, screenshot paths, console errors — or list the recent runs when run_id is omitted.", { run_id: z.string().optional(), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.verifyReport(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("verify_auth_discover", "Find how to log into the LOCAL app to reach an authenticated page: the real login route from the project's own routes, the login candidates from the local database with their roles, and which of them has a development credential declared in the repo's own seeders/fixtures. Candidates are ranked by fit to `feature_context`, so a driver-panel change prefers a driver account over an admin. NEVER returns a password or a hash, and NEVER guesses one — it returns `credentialAvailable` plus the file:line provenance. Reading a non-sqlite database boots the framework CLI; the result always says which method was used.", { feature_context: z.string().optional().describe("The feature being verified, e.g. 'driver earnings screen' — drives role ranking"), allow_framework_cli: z.boolean().optional().describe("Allow `php artisan tinker` / `manage.py shell` to read a non-sqlite DB (default true). Set false to restrict to direct sqlite reads."), limit: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.verifyAuthDiscover(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("verify_auth_request", "Ask the user for permission to log in as a specific identity against a LOCAL url. Creates a PENDING grant and shows the request in the pane — no login happens until verify_auth_approve. mode 'seeder' uses the credential declared in the repo (pass credential_source as 'file:line' from verify_auth_discover, which is re-checked against the file); mode 'manual' means the agent opens the login screen and waits for the user to type it in the Browser panel. A non-local base_url is refused.", { base_url: z.string(), identity: z.string(), role: z.string().optional(), mode: z.enum(["seeder", "manual"]).optional(), reason: z.string().optional().describe("Why this access is needed — shown to the user"), credential_source: z.string().optional().describe("'file:line' from verify_auth_discover; required for mode 'seeder'"), pane_id: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.verifyAuthRequest(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("verify_auth_approve", "Approve a pending login grant (the user's decision — relay it, never assume it). The grant expires; default TTL is one hour.", { grant_id: z.string(), approved_by: z.string().optional(), ttl_seconds: z.number().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.verifyAuthApprove(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("verify_auth_revoke", "Revoke a login grant, pending or approved.", { grant_id: z.string() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.verifyAuthRevoke(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("verify_auth_list", "List login grants for this workspace and their status.", { include_expired: z.boolean().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.verifyAuthList(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
-    server.tool("verify_login", "Perform the login of an APPROVED grant. mode 'seeder' reads the password from the versioned seeder at the moment of typing — the value is never returned, logged, or stored. mode 'manual' opens the login screen and polls until the user has authenticated in the Browser panel, where real mouse and keyboard work. Success is leaving the login screen (or matching success_selector / success_url_pattern), never a fixed sleep.", { grant_id: z.string(), login_route: z.string().optional(), success_selector: z.string().optional(), success_url_pattern: z.string().optional(), timeout_ms: z.number().optional().describe("How long to wait for a manual login (default 120000)"), pane_id: z.string().optional() }, async (args) => { try { return { content: [{ type: "text", text: JSON.stringify(await bridge.verifyLogin(args), null, 2) }] }; } catch (err) { return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true }; } }),
+    server.tool(
+      "verify_plan",
+      "Plan a visual verification of the frontend changes in this git repo. Reads the working tree (or a base ref) for changed files, detects the framework, maps changed files to candidate ROUTES with a confidence and the evidence for each, probes loopback ports for a live dev server, and extracts MARKERS — the human-readable phrases the diff added — which is what later proves the change actually reached the screen. Opens no browser. Returns a run_id to pass to verify_run.",
+      {
+        base: z
+          .string()
+          .optional()
+          .describe(
+            "Base ref to diff against, e.g. 'origin/main'. Omit to use the uncommitted working tree."
+          ),
+        extra_ports: z
+          .array(z.number())
+          .optional()
+          .describe("Extra loopback ports to probe beyond the framework defaults"),
+        feature_context: z
+          .string()
+          .optional()
+          .describe("What the feature is about — used later to pick a login role that fits"),
+        session_id: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.verifyPlan(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "verify_run",
+      "Open every planned route in the browser, screenshot it to the run's evidence directory, read the page text and console errors, and decide whether the diff's markers actually APPEAR on screen. Verdicts: passed (every added phrase visible), partial, not-visible (route wrong, build stale, or the change never reached the UI), auth-required (the route redirected to a login — authenticate with verify_login first), inconclusive (no marker was extractable, so a human must read the screenshot), unreachable. Never reports passed on an unread screenshot.",
+      {
+        run_id: z.string(),
+        routes: z.array(z.string()).optional().describe("Override the planned routes"),
+        base_url: z.string().optional().describe("Loopback base URL; a public host is refused"),
+        full_page: z.boolean().optional(),
+        pane_id: z.string().optional(),
+        settle_ms: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.verifyRun(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "verify_report",
+      "Read a verification run — verdict per route, screenshot paths, console errors — or list the recent runs when run_id is omitted.",
+      { run_id: z.string().optional(), limit: z.number().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.verifyReport(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "verify_auth_discover",
+      "Find how to log into the LOCAL app to reach an authenticated page: the real login route from the project's own routes, the login candidates from the local database with their roles, and which of them has a development credential declared in the repo's own seeders/fixtures. Candidates are ranked by fit to `feature_context`, so a driver-panel change prefers a driver account over an admin. NEVER returns a password or a hash, and NEVER guesses one — it returns `credentialAvailable` plus the file:line provenance. Reading a non-sqlite database boots the framework CLI; the result always says which method was used.",
+      {
+        feature_context: z
+          .string()
+          .optional()
+          .describe(
+            "The feature being verified, e.g. 'driver earnings screen' — drives role ranking"
+          ),
+        allow_framework_cli: z
+          .boolean()
+          .optional()
+          .describe(
+            "Allow `php artisan tinker` / `manage.py shell` to read a non-sqlite DB (default true). Set false to restrict to direct sqlite reads."
+          ),
+        limit: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(await bridge.verifyAuthDiscover(args), null, 2),
+              },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "verify_auth_request",
+      "Ask the user for permission to log in as a specific identity against a LOCAL url. Creates a PENDING grant and shows the request in the pane — no login happens until verify_auth_approve. mode 'seeder' uses the credential declared in the repo (pass credential_source as 'file:line' from verify_auth_discover, which is re-checked against the file); mode 'manual' means the agent opens the login screen and waits for the user to type it in the Browser panel. A non-local base_url is refused.",
+      {
+        base_url: z.string(),
+        identity: z.string(),
+        role: z.string().optional(),
+        mode: z.enum(["seeder", "manual"]).optional(),
+        reason: z.string().optional().describe("Why this access is needed — shown to the user"),
+        credential_source: z
+          .string()
+          .optional()
+          .describe("'file:line' from verify_auth_discover; required for mode 'seeder'"),
+        pane_id: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.verifyAuthRequest(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "verify_auth_approve",
+      "Approve a pending login grant (the user's decision — relay it, never assume it). The grant expires; default TTL is one hour.",
+      {
+        grant_id: z.string(),
+        approved_by: z.string().optional(),
+        ttl_seconds: z.number().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.verifyAuthApprove(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "verify_auth_revoke",
+      "Revoke a login grant, pending or approved.",
+      { grant_id: z.string() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.verifyAuthRevoke(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "verify_auth_list",
+      "List login grants for this workspace and their status.",
+      { include_expired: z.boolean().optional() },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.verifyAuthList(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
+    server.tool(
+      "verify_login",
+      "Perform the login of an APPROVED grant. mode 'seeder' reads the password from the versioned seeder at the moment of typing — the value is never returned, logged, or stored. mode 'manual' opens the login screen and polls until the user has authenticated in the Browser panel, where real mouse and keyboard work. Success is leaving the login screen (or matching success_selector / success_url_pattern), never a fixed sleep.",
+      {
+        grant_id: z.string(),
+        login_route: z.string().optional(),
+        success_selector: z.string().optional(),
+        success_url_pattern: z.string().optional(),
+        timeout_ms: z
+          .number()
+          .optional()
+          .describe("How long to wait for a manual login (default 120000)"),
+        pane_id: z.string().optional(),
+      },
+      async (args) => {
+        try {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(await bridge.verifyLogin(args), null, 2) },
+            ],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+        }
+      }
+    ),
   ];
 
-  // ── DISABLE all advanced tool groups on startup ─────────────────────────
-  for (const refs of Object.values(advancedToolGroups)) {
-    refs.forEach(ref => ref.disable());
+  // ── DISABLE advanced groups on startup, except the UC browser route ────
+  // A browser request is commonly phrased as just "open the browser". If UC
+  // is hidden behind enable_tool_group, agents select the host's computer-use
+  // extension before they can discover Codebrain's driver. Expose its schemas
+  // from the first tools/list response; Chrome still starts lazily on demand.
+  const defaultAdvancedGroups = new Set(["scraping"]);
+  for (const [group, refs] of Object.entries(advancedToolGroups)) {
+    if (defaultAdvancedGroups.has(group)) continue;
+    refs.forEach((ref) => ref.disable());
   }
-  const advancedToolCount = Object.values(advancedToolGroups).reduce((sum, refs) => sum + refs.length, 0);
-  console.log(`[MCP] ${advancedToolCount} advanced tools disabled (activate via enable_tool_group)`);
+  const advancedToolCount = Object.values(advancedToolGroups).reduce(
+    (sum, refs) => sum + refs.length,
+    0
+  );
+  console.log(
+    `[MCP] ${advancedToolCount - advancedToolGroups.scraping.length} advanced tools disabled; UC scraping is available by default`
+  );
 
   // Browser schemas must be present in the *initial* tools/list response.
   // MCP clients commonly keep that catalog for the entire agent turn, so
@@ -1818,11 +4303,11 @@ function createCodebrainMCPServer(bridge) {
   registerBrowserTools(server, bridge);
 
   // ── Meta-tools: enable_tool_group + tool_groups (always enabled) ────────
-  const activatedGroups = new Set(["browser"]);
+  const activatedGroups = new Set(["browser", "scraping"]);
 
   server.tool(
     "enable_tool_group",
-    "Activate the smallest additional MCP group needed before using a disabled tool. Default core: pane, memory_search/write, pattern_list, task_list/move, lesson_add. Groups include coordination, files, skills, providers, memory_advanced, session_advanced, workflows, learning, verify, browser and fetch.",
+    "Activate the smallest additional MCP group needed before using a disabled tool. Default core: pane, memory_search/write, pattern_list, task_list/move, lesson_add. Groups include coordination, files, skills, providers, memory_advanced, session_advanced, workflows, learning, verify, browser, fetch and scraping.",
     {
       group: z.string().min(1).describe("Group name. Use tool_groups() when unsure."),
     },
@@ -1830,18 +4315,53 @@ function createCodebrainMCPServer(bridge) {
       try {
         // Idempotent: skip if already activated
         if (activatedGroups.has(group)) {
-          return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, message: `${group} tools already active.` }) }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  ok: true,
+                  group,
+                  message: `${group} tools already active.`,
+                }),
+              },
+            ],
+          };
         }
 
         // Fetch tools are registered lazily. Browser tools are registered at
         // startup so agent clients can discover their schemas before a turn.
         if (group === "browser") {
-          return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, tools_enabled: 60, message: "Browser tools are already available." }) }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  ok: true,
+                  group,
+                  tools_enabled: 60,
+                  message: "Browser tools are already available.",
+                }),
+              },
+            ],
+          };
         }
         if (group === "fetch") {
           registerFetchTools(server, bridge);
           activatedGroups.add(group);
-          return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, tools_enabled: 5, message: "Fetch tools activated. You can now use browser_fetch* tools." }) }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  ok: true,
+                  group,
+                  tools_enabled: 5,
+                  message: "Fetch tools activated. You can now use browser_fetch* tools.",
+                }),
+              },
+            ],
+          };
         }
         // Advanced and direct registered groups are enabled the same way.
         // A few names (memory_advanced, session_advanced, workflows) have
@@ -1851,16 +4371,51 @@ function createCodebrainMCPServer(bridge) {
           ...(registeredToolGroups.get(group) || []),
         ];
         if (!refs) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: `Unknown group: ${group}. Available: ${[...Object.keys(advancedToolGroups), ...registeredToolGroups.keys()].join(", ")}` }) }], isError: true };
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: `Unknown group: ${group}. Available: ${[...Object.keys(advancedToolGroups), ...registeredToolGroups.keys()].join(", ")}`,
+                }),
+              },
+            ],
+            isError: true,
+          };
         }
         if (refs.length === 0) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: `Unknown group: ${group}. Available: ${[...Object.keys(advancedToolGroups), ...registeredToolGroups.keys()].join(", ")}` }) }], isError: true };
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: `Unknown group: ${group}. Available: ${[...Object.keys(advancedToolGroups), ...registeredToolGroups.keys()].join(", ")}`,
+                }),
+              },
+            ],
+            isError: true,
+          };
         }
-        refs.forEach(ref => ref.enable());
+        refs.forEach((ref) => ref.enable());
         activatedGroups.add(group);
-        return { content: [{ type: "text", text: JSON.stringify({ ok: true, group, tools_enabled: refs.length, message: `${group} tools activated (${refs.length} tools now available).` }) }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                ok: true,
+                group,
+                tools_enabled: refs.length,
+                message: `${group} tools activated (${refs.length} tools now available).`,
+              }),
+            },
+          ],
+        };
       } catch (err) {
-        return { content: [{ type: "text", text: `Error activating group ${group}: ${err.message}` }], isError: true };
+        return {
+          content: [{ type: "text", text: `Error activating group ${group}: ${err.message}` }],
+          isError: true,
+        };
       }
     }
   );
@@ -1880,17 +4435,30 @@ function createCodebrainMCPServer(bridge) {
         groups.push({ name: "browser", toolCount: 60, enabled: activatedGroups.has("browser") });
         groups.push({ name: "fetch", toolCount: 5, enabled: activatedGroups.has("fetch") });
         for (const [name, refs] of registeredToolGroups) {
-          const existing = groups.find(group => group.name === name);
+          const existing = groups.find((group) => group.name === name);
           if (existing) {
             existing.toolCount += refs.length;
-            existing.enabled = existing.enabled || refs.some(ref => ref.enabled !== false);
+            existing.enabled = existing.enabled || refs.some((ref) => ref.enabled !== false);
           } else {
-            groups.push({ name, toolCount: refs.length, enabled: refs.some(ref => ref.enabled !== false) });
+            groups.push({
+              name,
+              toolCount: refs.length,
+              enabled: refs.some((ref) => ref.enabled !== false),
+            });
           }
         }
         const totalTools = Object.keys(server._registeredTools || {}).length;
-        const enabledTools = Object.values(server._registeredTools || {}).filter(t => t.enabled !== false).length;
-        return { content: [{ type: "text", text: JSON.stringify({ groups, enabled: enabledTools, total: totalTools }, null, 2) }] };
+        const enabledTools = Object.values(server._registeredTools || {}).filter(
+          (t) => t.enabled !== false
+        ).length;
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ groups, enabled: enabledTools, total: totalTools }, null, 2),
+            },
+          ],
+        };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
       }
@@ -1948,7 +4516,10 @@ function createCodebrainMCPServer(bridge) {
     "Scan workspace for security issues: hardcoded secrets (API keys, passwords, tokens), vulnerabilities (SQL/command injection, eval), and code smells. Returns structured findings with severity levels.",
     {
       path: z.string().optional().describe("Directory to scan (default: current workspace)"),
-      type: z.enum(["full", "secrets", "vulnerabilities"]).optional().describe("Scan type (default: full)"),
+      type: z
+        .enum(["full", "secrets", "vulnerabilities"])
+        .optional()
+        .describe("Scan type (default: full)"),
       force: z.boolean().optional().describe("Bypass 30-minute cooldown between scans"),
     },
     async (args) => {
@@ -1981,8 +4552,14 @@ function createCodebrainMCPServer(bridge) {
     "transcript_watcher_start",
     "Start watching CLI transcripts (Claude Code, Codex) for token usage tracking. Tails JSONL files in ~/.claude/projects/ and ~/.codex/sessions/. Idempotent — safe to call multiple times.",
     {
-      workspace: z.string().optional().describe("Workspace path to watch (default: current workspace)"),
-      configDir: z.string().optional().describe("CLAUDE_CONFIG_DIR override for multi-account setups"),
+      workspace: z
+        .string()
+        .optional()
+        .describe("Workspace path to watch (default: current workspace)"),
+      configDir: z
+        .string()
+        .optional()
+        .describe("CLAUDE_CONFIG_DIR override for multi-account setups"),
     },
     async (args) => {
       try {
@@ -2046,7 +4623,10 @@ function createCodebrainMCPServer(bridge) {
     "remote_bridge_start",
     "Start the Remote Bridge WSS server for thin-client (iPhone) control. Generates self-signed TLS cert on first run. Pairing code rotates every 5 min. Default port 8789.",
     {
-      port: z.number().optional().describe("Port to listen on (default: 8789, or CODEBRAIN_REMOTE_PORT env)"),
+      port: z
+        .number()
+        .optional()
+        .describe("Port to listen on (default: 8789, or CODEBRAIN_REMOTE_PORT env)"),
     },
     async (args) => {
       try {
@@ -2058,19 +4638,14 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
-  server.tool(
-    "remote_bridge_stop",
-    "Stop the Remote Bridge WSS server.",
-    {},
-    async () => {
-      try {
-        const result = await bridge.remoteBridgeStop();
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (err) {
-        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
-      }
+  server.tool("remote_bridge_stop", "Stop the Remote Bridge WSS server.", {}, async () => {
+    try {
+      const result = await bridge.remoteBridgeStop();
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
     }
-  );
+  });
 
   server.tool(
     "remote_bridge_status",
@@ -2120,7 +4695,9 @@ function createCodebrainMCPServer(bridge) {
     "remote_spawn_detect_clis",
     "Detect which agent CLIs (claude, codex, gemini) are available on a remote host via SSH. Validates host alias for safety. Uses BatchMode=yes for fast fail on password-only hosts.",
     {
-      host: z.string().describe("SSH host alias (from ~/.ssh/config). Only alphanumeric, dots, hyphens allowed."),
+      host: z
+        .string()
+        .describe("SSH host alias (from ~/.ssh/config). Only alphanumeric, dots, hyphens allowed."),
     },
     async (args) => {
       try {
@@ -2190,7 +4767,11 @@ function createCodebrainMCPServer(bridge) {
     "Classify all installed agents and skills by role (orchestrator/backend/frontend/tester/browser/general) with a short 'when/how to use' blurb. Uses LLM to annotate. Cached for 24h unless force=true.",
     {
       model: z.string().optional().describe("Override LLM model for the enrichment pass"),
-      force: z.boolean().optional().default(false).describe("Force re-enrichment even if cached (< 24h)"),
+      force: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Force re-enrichment even if cached (< 24h)"),
     },
     async (args) => {
       try {
@@ -2207,8 +4788,14 @@ function createCodebrainMCPServer(bridge) {
     "Propose 2-4 buildable deliverables (recipes) based on available agents, skills, and LLMs. Each recipe is an executable orchestration plan with ordered steps, favorite model, questions for scope, and delivery definition.",
     {
       model: z.string().optional().describe("Override LLM model for the proposal pass"),
-      agents: z.array(z.string()).optional().describe("Override agent list (default: detected from system)"),
-      skills: z.array(z.string()).optional().describe("Override skill list (default: installed skills)"),
+      agents: z
+        .array(z.string())
+        .optional()
+        .describe("Override agent list (default: detected from system)"),
+      skills: z
+        .array(z.string())
+        .optional()
+        .describe("Override skill list (default: installed skills)"),
       llms: z.array(z.string()).optional().describe("Override LLM list (default: from providers)"),
     },
     async (args) => {
@@ -2239,21 +4826,27 @@ function createCodebrainMCPServer(bridge) {
     "recipe_save",
     "Save a recipe (orchestration plan) for later use. The recipe can be recalled and executed by the orchestrator.",
     {
-      recipe: z.object({
-        name: z.string(),
-        deliverable: z.string().optional(),
-        favoriteModel: z.string().optional(),
-        questions: z.array(z.string()).optional(),
-        steps: z.array(z.object({
-          role: z.string(),
-          skill: z.string(),
-          agent: z.string(),
-          model: z.string().optional(),
-          produces: z.string().optional(),
-          parallel: z.boolean().optional(),
-        })).optional(),
-        delivery: z.string().optional(),
-      }).describe("The recipe object to save"),
+      recipe: z
+        .object({
+          name: z.string(),
+          deliverable: z.string().optional(),
+          favoriteModel: z.string().optional(),
+          questions: z.array(z.string()).optional(),
+          steps: z
+            .array(
+              z.object({
+                role: z.string(),
+                skill: z.string(),
+                agent: z.string(),
+                model: z.string().optional(),
+                produces: z.string().optional(),
+                parallel: z.boolean().optional(),
+              })
+            )
+            .optional(),
+          delivery: z.string().optional(),
+        })
+        .describe("The recipe object to save"),
     },
     async (args) => {
       try {
@@ -2318,7 +4911,9 @@ function createCodebrainMCPServer(bridge) {
     "cron_create",
     "Create a scheduled cron job that spawns a pane at recurring times. Uses standard 5-field cron expressions (minute hour day-of-month month day-of-week, e.g. '*/5 * * * *' for every 5min, '0 9 * * 1-5' for weekdays at 9am). Jobs auto-start their tick loop on creation.",
     {
-      name: z.string().describe("Human-readable job name (e.g. 'morning-standup', 'hourly-health-check')"),
+      name: z
+        .string()
+        .describe("Human-readable job name (e.g. 'morning-standup', 'hourly-health-check')"),
       schedule: z.string().describe("5-field cron expression (e.g. '0 9 * * 1-5', '*/30 * * * *')"),
       task_prompt: z.string().describe("The prompt/task that will be written to the spawned pane"),
       agent: z.string().optional().describe("Agent binary to use (default: openclaude)"),
@@ -2422,7 +5017,8 @@ function createCodebrainMCPServer(bridge) {
   const advancedRefs = new Set(Object.values(advancedToolGroups).flat());
   const groupForTool = (name) => {
     if (name.startsWith("pane_")) return "coordination";
-    if (name.startsWith("actor_") || name.startsWith("agent_") || name.startsWith("handoff_")) return "coordination";
+    if (name.startsWith("actor_") || name.startsWith("agent_") || name.startsWith("handoff_"))
+      return "coordination";
     // `ledger_record` acompanha o trabalho real, que é quando `coordination`
     // já foi ativado — o mesmo grupo de `agent_boot_context`, que cai aqui
     // pelo prefixo `agent_`. Assim um worker escreve o ledger com a ativação
@@ -2437,12 +5033,29 @@ function createCodebrainMCPServer(bridge) {
     if (name.startsWith("memory_")) return "memory_advanced";
     if (name.startsWith("pattern_")) return "patterns";
     if (name.startsWith("hooks_")) return "hooks";
-    if (name.startsWith("session_") || name.startsWith("checkpoint_") || name.startsWith("history_") || name.startsWith("transcript_")) return "session_advanced";
-    if (name.startsWith("recipe_") || name.startsWith("plan_") || name.startsWith("compose_") || name.startsWith("max_mode_")) return "workflows";
+    if (
+      name.startsWith("session_") ||
+      name.startsWith("checkpoint_") ||
+      name.startsWith("history_") ||
+      name.startsWith("transcript_")
+    )
+      return "session_advanced";
+    if (
+      name.startsWith("recipe_") ||
+      name.startsWith("plan_") ||
+      name.startsWith("compose_") ||
+      name.startsWith("max_mode_")
+    )
+      return "workflows";
     if (name.startsWith("remote_") || name.startsWith("cron_")) return "remote";
     if (name.startsWith("system_") || name.startsWith("security_")) return "system";
     if (name === "tool_groups") return "system";
-    if (name.startsWith("todo_") || name.startsWith("trajectory_") || name.startsWith("intelligence_")) return "advanced";
+    if (
+      name.startsWith("todo_") ||
+      name.startsWith("trajectory_") ||
+      name.startsWith("intelligence_")
+    )
+      return "advanced";
     return "advanced";
   };
 
@@ -2471,7 +5084,9 @@ function createCodebrainMCPServer(bridge) {
       ...advancedToolGroups.mission,
     ]);
   }
-  console.log(`[MCP] Core tools enabled: ${coreToolNames.size}; optional groups: ${[...registeredToolGroups.keys()].join(", ")}`);
+  console.log(
+    `[MCP] Core tools enabled: ${coreToolNames.size}; optional groups: ${[...registeredToolGroups.keys()].join(", ")}`
+  );
 
   return server;
 }
@@ -2590,10 +5205,23 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "browser_navigate",
     "Navigate the browser pane to a URL. Returns final URL and title after load.",
-    { url: z.string().describe("URL to navigate to"), pane_id: z.string().optional().describe("Browser pane ID (auto-detected if omitted)") },
+    {
+      url: z.string().describe("URL to navigate to"),
+      pane_id: z.string().optional().describe("Browser pane ID (auto-detected if omitted)"),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserNavigate(args.url, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserNavigate(args.url, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2602,8 +5230,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Open a NEW browser pane and navigate to a URL. Returns the new paneId.",
     { url: z.string().describe("URL to open") },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserOpen(args.url)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserOpen(args.url)) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2612,8 +5245,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Get the current active browser pane ID. Use this to recover from pane ID loss.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.getBrowserPaneId()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.getBrowserPaneId()) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2622,8 +5260,15 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Record/update the active browser pane ID. Call this after opening a browser to maintain persistence.",
     { pane_id: z.string().describe("The browser pane ID to record as active") },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.recordBrowserPane(args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.recordBrowserPane(args.pane_id)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2632,8 +5277,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "List all active browser panes and show which one is currently active.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.listBrowserPanes()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.listBrowserPanes()) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2642,8 +5292,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Clear the browser pane cache. Use if you need to reset the active pane state.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.clearBrowserPaneCache()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.clearBrowserPaneCache()) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2652,8 +5307,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Go back in browser history.",
     { pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserBack(args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserBack(args.pane_id)) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2662,18 +5322,38 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Go forward in browser history.",
     { pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserForward(args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserForward(args.pane_id)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_reload",
     "Reload the current page. Pass hard=true to bypass cache.",
-    { hard: z.boolean().optional().describe("Hard reload (ignore cache)"), pane_id: z.string().optional() },
+    {
+      hard: z.boolean().optional().describe("Hard reload (ignore cache)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserReload(args.hard, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserReload(args.hard, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2681,7 +5361,10 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "browser_get_html",
     "Get HTML content for scraping. Without a selector, returns only meaningful body content (strips <script>, <style>, <meta>, <link>, comments, icon SVGs). With a selector, returns that element's clean HTML. Response is auto-truncated at 50k chars.",
-    { selector: z.string().optional().describe("CSS selector (omit for clean body HTML)"), pane_id: z.string().optional() },
+    {
+      selector: z.string().optional().describe("CSS selector (omit for clean body HTML)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
       try {
         const result = await bridge.browserGetHtml(args.selector, args.pane_id);
@@ -2690,38 +5373,85 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
           result.html = truncateText(result.html);
         }
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );
 
   server.tool(
     "browser_get_text",
     "Get visible text content (no HTML tags) of the page or element.",
-    { selector: z.string().optional().describe("CSS selector (omit for body)"), pane_id: z.string().optional() },
+    {
+      selector: z.string().optional().describe("CSS selector (omit for body)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetText(args.selector, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserGetText(args.selector, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_get_accessibility_tree",
     "Get the accessibility tree (roles, labels, bounds) of the page. Best for AI understanding of page structure.",
-    { max_depth: z.number().optional().describe("Max tree depth (default 10)"), max_nodes: z.number().optional().describe("Max nodes to return (default 300)"), pane_id: z.string().optional() },
+    {
+      max_depth: z.number().optional().describe("Max tree depth (default 10)"),
+      max_nodes: z.number().optional().describe("Max nodes to return (default 300)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetA11yTree(args.max_depth, args.max_nodes, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserGetA11yTree(args.max_depth, args.max_nodes, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_find_by_text",
     "Find elements by their visible text content. Optionally filter by role (button, link, input, heading, etc).",
-    { text: z.string().describe("Text to search for"), role: z.string().optional().describe("ARIA role filter"), exact: z.boolean().optional().describe("Exact match"), pane_id: z.string().optional() },
+    {
+      text: z.string().describe("Text to search for"),
+      role: z.string().optional().describe("ARIA role filter"),
+      exact: z.boolean().optional().describe("Exact match"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFindByText(args.text, args.role, args.exact, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserFindByText(args.text, args.role, args.exact, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2730,8 +5460,18 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Get comprehensive info about an element: bounds, attributes, role, value, visibility, disabled state.",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetElement(args.selector, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserGetElement(args.selector, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2740,8 +5480,15 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Get the current URL and page title.",
     { pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetUrl(args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserGetUrl(args.pane_id)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2751,38 +5498,97 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Click an element matching the CSS selector. Dispatches full mouse event sequence.",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserClick(args.selector, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserClick(args.selector, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_fill",
     "Fill an input or textarea with a value. Dispatches focus, input, and change events.",
-    { selector: z.string().describe("CSS selector"), value: z.string().describe("Value to fill"), clear_first: z.boolean().optional().describe("Clear field before filling"), pane_id: z.string().optional() },
+    {
+      selector: z.string().describe("CSS selector"),
+      value: z.string().describe("Value to fill"),
+      clear_first: z.boolean().optional().describe("Clear field before filling"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFill(args.selector, args.value, args.clear_first, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserFill(args.selector, args.value, args.clear_first, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_select",
     "Select an option in a <select> element by value or visible text.",
-    { selector: z.string().describe("CSS selector for <select>"), value_or_text: z.string().describe("Option value or visible text"), pane_id: z.string().optional() },
+    {
+      selector: z.string().describe("CSS selector for <select>"),
+      value_or_text: z.string().describe("Option value or visible text"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserSelect(args.selector, args.value_or_text, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserSelect(args.selector, args.value_or_text, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_check",
     "Check or uncheck a checkbox/radio. Omit checked to toggle.",
-    { selector: z.string().describe("CSS selector"), checked: z.boolean().optional().describe("true=check, false=uncheck, omit=toggle"), pane_id: z.string().optional() },
+    {
+      selector: z.string().describe("CSS selector"),
+      checked: z.boolean().optional().describe("true=check, false=uncheck, omit=toggle"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserCheck(args.selector, args.checked, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserCheck(args.selector, args.checked, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2791,8 +5597,18 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Clear an input field (select all + delete).",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserClear(args.selector, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserClear(args.selector, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2801,8 +5617,18 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Focus an element without clicking it.",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFocus(args.selector, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserFocus(args.selector, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2811,8 +5637,18 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Hover over an element (triggers :hover CSS, tooltips, dropdowns).",
     { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserHover(args.selector, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserHover(args.selector, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2820,10 +5656,30 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "browser_click_at",
     "Click at exact screen coordinates. Useful when selector is unreliable.",
-    { x: z.number().describe("X coordinate"), y: z.number().describe("Y coordinate"), button: z.enum(["left", "right", "middle"]).optional().describe("Mouse button (default left)"), pane_id: z.string().optional() },
+    {
+      x: z.number().describe("X coordinate"),
+      y: z.number().describe("Y coordinate"),
+      button: z
+        .enum(["left", "right", "middle"])
+        .optional()
+        .describe("Mouse button (default left)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserClickAt(args.x, args.y, args.button, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserClickAt(args.x, args.y, args.button, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2832,28 +5688,81 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Hover at exact screen coordinates.",
     { x: z.number(), y: z.number(), pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserHoverAt(args.x, args.y, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserHoverAt(args.x, args.y, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_drag",
     "Drag from (x1,y1) to (x2,y2). Steps controls interpolation smoothness.",
-    { x1: z.number(), y1: z.number(), x2: z.number(), y2: z.number(), steps: z.number().optional().describe("Interpolation steps (default 10)"), pane_id: z.string().optional() },
+    {
+      x1: z.number(),
+      y1: z.number(),
+      x2: z.number(),
+      y2: z.number(),
+      steps: z.number().optional().describe("Interpolation steps (default 10)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserDrag(args.x1, args.y1, args.x2, args.y2, args.steps, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserDrag(
+                  args.x1,
+                  args.y1,
+                  args.x2,
+                  args.y2,
+                  args.steps,
+                  args.pane_id
+                )
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_scroll",
     "Scroll the page or a specific element.",
-    { selector: z.string().optional().describe("CSS selector (omit for page)"), direction: z.enum(["up", "down", "left", "right"]).describe("Scroll direction"), amount: z.number().describe("Pixels to scroll"), pane_id: z.string().optional() },
+    {
+      selector: z.string().optional().describe("CSS selector (omit for page)"),
+      direction: z.enum(["up", "down", "left", "right"]).describe("Scroll direction"),
+      amount: z.number().describe("Pixels to scroll"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserScroll(args.selector, args.direction, args.amount, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserScroll(args.selector, args.direction, args.amount, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2861,10 +5770,26 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "browser_type",
     "Type text character by character into the focused element.",
-    { text: z.string().describe("Text to type"), delay_ms: z.number().optional().describe("Delay between keystrokes in ms (0=instant)"), pane_id: z.string().optional() },
+    {
+      text: z.string().describe("Text to type"),
+      delay_ms: z.number().optional().describe("Delay between keystrokes in ms (0=instant)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserType(args.text, args.delay_ms, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserType(args.text, args.delay_ms, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2873,18 +5798,38 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Press a single key: Enter, Escape, Tab, Backspace, ArrowUp, ArrowDown, Delete, F5, etc.",
     { key: z.string().describe("Key name"), pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserKey(args.key, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserKey(args.key, args.pane_id)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_shortcut",
     "Keyboard shortcut: Ctrl+A, Ctrl+Z, Ctrl+Shift+I, Meta+R, Alt+F4, etc.",
-    { keys: z.string().describe("Shortcut combo, e.g. 'Ctrl+Shift+I'"), pane_id: z.string().optional() },
+    {
+      keys: z.string().describe("Shortcut combo, e.g. 'Ctrl+Shift+I'"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserShortcut(args.keys, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserShortcut(args.keys, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2892,40 +5837,107 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "browser_wait_for",
     "Wait for an element to appear and be visible in the DOM.",
-    { selector: z.string().describe("CSS selector"), timeout_ms: z.number().optional().describe("Timeout in ms (default 5000)"), pane_id: z.string().optional() },
+    {
+      selector: z.string().describe("CSS selector"),
+      timeout_ms: z.number().optional().describe("Timeout in ms (default 5000)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserWaitFor(args.selector, args.timeout_ms, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserWaitFor(args.selector, args.timeout_ms, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_wait_for_text",
     "Wait for text to appear on the page or within a specific element.",
-    { text: z.string().describe("Text to wait for"), selector: z.string().optional().describe("Scope selector (omit for whole page)"), timeout_ms: z.number().optional(), pane_id: z.string().optional() },
+    {
+      text: z.string().describe("Text to wait for"),
+      selector: z.string().optional().describe("Scope selector (omit for whole page)"),
+      timeout_ms: z.number().optional(),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserWaitForText(args.text, args.selector, args.timeout_ms, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserWaitForText(
+                  args.text,
+                  args.selector,
+                  args.timeout_ms,
+                  args.pane_id
+                )
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_wait_for_url",
     "Wait for the URL to match a pattern (string substring or regex).",
-    { pattern: z.string().describe("URL pattern (string or regex)"), timeout_ms: z.number().optional(), pane_id: z.string().optional() },
+    {
+      pattern: z.string().describe("URL pattern (string or regex)"),
+      timeout_ms: z.number().optional(),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserWaitForUrl(args.pattern, args.timeout_ms, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserWaitForUrl(args.pattern, args.timeout_ms, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_wait_for_load",
     "Wait for the page to finish loading (network idle).",
-    { timeout_ms: z.number().optional().describe("Timeout in ms (default 10000)"), pane_id: z.string().optional() },
+    {
+      timeout_ms: z.number().optional().describe("Timeout in ms (default 10000)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserWaitForLoad(args.timeout_ms, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserWaitForLoad(args.timeout_ms, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2933,14 +5945,23 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "browser_screenshot",
     "Capture a screenshot. Without full_page: captures the visible viewport. With full_page: resizes the webview to capture the ENTIRE scrollable page (up to 8192px height), not just the visible area. Returns file path + textual page description. Do NOT read the PNG — use the text description.",
-    { full_page: z.boolean().optional().describe("Capture the entire scrollable page (not just viewport)"), pane_id: z.string().optional() },
+    {
+      full_page: z
+        .boolean()
+        .optional()
+        .describe("Capture the entire scrollable page (not just viewport)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
       try {
         const screenshot = await bridge.browserScreenshot(args.full_page, args.pane_id);
         const summary = await bridge.browserPageSummary(args.pane_id);
-        return { content: [{ type: "text", text: JSON.stringify({ ...screenshot, page: summary }) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify({ ...screenshot, page: summary }) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );
 
@@ -2952,24 +5973,47 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
       try {
         const screenshot = await bridge.browserScreenshotElement(args.selector, args.pane_id);
         const elInfo = await bridge.browserGetElement(args.selector, args.pane_id);
-        return { content: [{ type: "text", text: JSON.stringify({ ...screenshot, element: elInfo }) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify({ ...screenshot, element: elInfo }) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );
 
   server.tool(
     "browser_annotate",
     "Draw boxes, arrows, or text labels on an existing screenshot. Saves _annotated.png.",
-    { path: z.string().describe("Path to screenshot file"), annotations: z.array(z.object({
-      type: z.enum(["box", "arrow", "text"]),
-      x: z.number(), y: z.number(),
-      w: z.number().optional(), h: z.number().optional(),
-      label: z.string().optional(), color: z.string().optional()
-    })).describe("Annotations to draw") },
+    {
+      path: z.string().describe("Path to screenshot file"),
+      annotations: z
+        .array(
+          z.object({
+            type: z.enum(["box", "arrow", "text"]),
+            x: z.number(),
+            y: z.number(),
+            w: z.number().optional(),
+            h: z.number().optional(),
+            label: z.string().optional(),
+            color: z.string().optional(),
+          })
+        )
+        .describe("Annotations to draw"),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserAnnotate(args.path, args.annotations)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserAnnotate(args.path, args.annotations)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -2977,71 +6021,154 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "browser_console_log",
     "Read ALL browser console entries: console.log/warn/error/info/debug, uncaught JS errors (window.onerror), and unhandled promise rejections. Each entry has timestamp, level, message, and source location. Use level='error' to find all bugs. Filter by level, time, and limit.",
-    { level: z.string().optional().describe("Console level filter"), since_ms: z.number().optional().describe("Only entries from last N ms"), limit: z.number().optional().describe("Max entries to return"), pane_id: z.string().optional() },
+    {
+      level: z.string().optional().describe("Console level filter"),
+      since_ms: z.number().optional().describe("Only entries from last N ms"),
+      limit: z.number().optional().describe("Max entries to return"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserConsoleLog(args.level, args.since_ms, args.limit, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserConsoleLog(args.level, args.since_ms, args.limit, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
-  server.tool(
-    "browser_clear_console",
-    "Clear the stored browser console log.",
-    {},
-    async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserClearConsole()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+  server.tool("browser_clear_console", "Clear the stored browser console log.", {}, async () => {
+    try {
+      return {
+        content: [{ type: "text", text: JSON.stringify(await bridge.browserClearConsole()) }],
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
     }
-  );
+  });
 
   server.tool(
     "browser_network_log",
     "Read captured network activity: fetch, XHR/AJAX, WebSocket (sent AND received messages with full data), resource loads. Filter by URL, method, status ('5xx','4xx'). Default limit: 50. WebSocket entries have type='ws_send' (outgoing) or type='ws_message' (incoming) with a 'data' field containing the message content.",
-    { url_filter: z.string().optional().describe("URL substring filter"), method: z.string().optional().describe("HTTP method (GET, POST, etc)"), status: z.string().optional().describe("Status code or range (e.g. '200', '5xx')"), since_ms: z.number().optional(), limit: z.number().optional().describe("Max entries (default 50)"), pane_id: z.string().optional() },
+    {
+      url_filter: z.string().optional().describe("URL substring filter"),
+      method: z.string().optional().describe("HTTP method (GET, POST, etc)"),
+      status: z.string().optional().describe("Status code or range (e.g. '200', '5xx')"),
+      since_ms: z.number().optional(),
+      limit: z.number().optional().describe("Max entries (default 50)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserNetworkLog(args.url_filter, args.method, args.status, args.since_ms, args.limit || 50, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserNetworkLog(
+                  args.url_filter,
+                  args.method,
+                  args.status,
+                  args.since_ms,
+                  args.limit || 50,
+                  args.pane_id
+                )
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_network_wait",
     "Wait for a specific network request or WebSocket message to happen. Matches against URL and WebSocket data content. Useful to confirm an API call or WS message was made after a UI action.",
-    { pattern: z.string().describe("URL substring to match"), method: z.string().optional().describe("HTTP method filter"), timeout_ms: z.number().optional().describe("Timeout in ms (default 10000)") },
+    {
+      pattern: z.string().describe("URL substring to match"),
+      method: z.string().optional().describe("HTTP method filter"),
+      timeout_ms: z.number().optional().describe("Timeout in ms (default 10000)"),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserNetworkWait(args.pattern, args.method, args.timeout_ms)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserNetworkWait(args.pattern, args.method, args.timeout_ms)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
-  server.tool(
-    "browser_clear_network",
-    "Clear the stored network request log.",
-    {},
-    async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserClearNetwork()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+  server.tool("browser_clear_network", "Clear the stored network request log.", {}, async () => {
+    try {
+      return {
+        content: [{ type: "text", text: JSON.stringify(await bridge.browserClearNetwork()) }],
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
     }
-  );
+  });
 
   // ── Request Log (SQLite-backed auto-intercept) ──────────────────────────
   server.tool(
     "browser_requests_log",
     "Query ALL captured HTTP requests from SQLite (auto-intercepted, always-on). Returns full request+response details: URL, method, status, headers, body, timing, site URL. Filter by url_filter, method, status, since_ms, site_url. Default limit: 100.",
-    { url_filter: z.string().optional().describe("URL substring filter"), method: z.string().optional().describe("HTTP method filter (GET, POST, etc)"), status: z.number().optional().describe("HTTP status code filter"), site_url: z.string().optional().describe("Site URL filter"), since_ms: z.number().optional().describe("Only requests after this timestamp (ms)"), limit: z.number().optional().describe("Max results (default 100)"), offset: z.number().optional().describe("Pagination offset") },
+    {
+      url_filter: z.string().optional().describe("URL substring filter"),
+      method: z.string().optional().describe("HTTP method filter (GET, POST, etc)"),
+      status: z.number().optional().describe("HTTP status code filter"),
+      site_url: z.string().optional().describe("Site URL filter"),
+      since_ms: z.number().optional().describe("Only requests after this timestamp (ms)"),
+      limit: z.number().optional().describe("Max results (default 100)"),
+      offset: z.number().optional().describe("Pagination offset"),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsLog(args)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsLog(args)) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_requests_search",
     "Search captured requests by text content (URL, request body, response body). Full-text search across all stored data.",
-    { query: z.string().describe("Search text"), url: z.string().optional().describe("URL filter"), limit: z.number().optional().describe("Max results (default 50)") },
+    {
+      query: z.string().describe("Search text"),
+      url: z.string().optional().describe("URL filter"),
+      limit: z.number().optional().describe("Max results (default 50)"),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsSearch(args)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserRequestsSearch(args)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3050,18 +6177,33 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Get statistics about all captured requests: total count, by method, by status, top sites, recent requests.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsStats()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsStats()) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_requests_export",
     "Export captured requests as JSON or CSV. Use for bulk analysis or sharing.",
-    { format: z.enum(["json", "csv"]).optional().describe("Export format (default: json)"), limit: z.number().optional().describe("Max requests to export (default 10000)") },
+    {
+      format: z.enum(["json", "csv"]).optional().describe("Export format (default: json)"),
+      limit: z.number().optional().describe("Max requests to export (default 10000)"),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsExport(args)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserRequestsExport(args)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3070,8 +6212,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Clear all captured requests from the SQLite log.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsClear()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserRequestsClear()) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3079,10 +6226,23 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "browser_eval",
     "Execute arbitrary JavaScript in the page context and return the result. Use for advanced interactions not covered by other tools.",
-    { javascript: z.string().describe("JavaScript code to execute"), pane_id: z.string().optional() },
+    {
+      javascript: z.string().describe("JavaScript code to execute"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserEval(args.javascript, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserEval(args.javascript, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3090,20 +6250,51 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   server.tool(
     "browser_click_text",
     "Find an element by its visible text and click it in a single fast call. Use instead of find_by_text + click.",
-    { text: z.string().describe("Text to find and click"), role: z.string().optional().describe("ARIA role filter (button, link, etc)"), pane_id: z.string().optional() },
+    {
+      text: z.string().describe("Text to find and click"),
+      role: z.string().optional().describe("ARIA role filter (button, link, etc)"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserClickText(args.text, args.role, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserClickText(args.text, args.role, args.pane_id)
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
   server.tool(
     "browser_fill_form",
     "Fill multiple form fields in a single fast call. Use instead of multiple fill() calls.",
-    { fields: z.array(z.object({ selector: z.string(), value: z.string() })).describe("Array of {selector, value} pairs"), pane_id: z.string().optional() },
+    {
+      fields: z
+        .array(z.object({ selector: z.string(), value: z.string() }))
+        .describe("Array of {selector, value} pairs"),
+      pane_id: z.string().optional(),
+    },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFillForm(args.fields, args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserFillForm(args.fields, args.pane_id)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3112,8 +6303,15 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Get URL, title, visible text, links, inputs, and buttons in a single fast call. Use instead of get_url + get_text + find_by_text.",
     { pane_id: z.string().optional() },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserPageSummary(args.pane_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserPageSummary(args.pane_id)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3128,8 +6326,11 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Detect if using native Chrome (CDP) or embedded webview. Returns current browser mode, port, and connection status.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserMode()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserMode()) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3138,11 +6339,23 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "browser_computer",
     "Perform mouse, keyboard, and screen actions on the native browser via CDP. Actions: left_click, right_click, double_click, triple_click, left_click_drag, type, key, screenshot, wait, scroll, scroll_to, hover, zoom. Requires Chrome with --remote-debugging-port.",
     {
-      action: z.enum([
-        "left_click", "right_click", "double_click", "triple_click",
-        "left_click_drag", "type", "key", "screenshot", "wait",
-        "scroll", "scroll_to", "hover", "zoom",
-      ]).describe("Action to perform"),
+      action: z
+        .enum([
+          "left_click",
+          "right_click",
+          "double_click",
+          "triple_click",
+          "left_click_drag",
+          "type",
+          "key",
+          "screenshot",
+          "wait",
+          "scroll",
+          "scroll_to",
+          "hover",
+          "zoom",
+        ])
+        .describe("Action to perform"),
       coordinate: z.array(z.number()).optional().describe("[x, y] screen coordinates"),
       text: z.string().optional().describe("Text to type or key to press"),
       start_coordinate: z.array(z.number()).optional().describe("Start position for drag"),
@@ -3151,8 +6364,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
       wait_ms: z.number().optional().describe("Milliseconds to wait"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserComputer(args)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserComputer(args)) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3161,12 +6379,26 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "browser_find",
     "Find elements on the page by natural language query. Returns matching elements with coordinates and center points. Requires Chrome CDP.",
     {
-      query: z.string().describe("Natural language query to find elements (e.g. 'Submit button', 'email input', 'navigation menu')"),
+      query: z
+        .string()
+        .describe(
+          "Natural language query to find elements (e.g. 'Submit button', 'email input', 'navigation menu')"
+        ),
       role: z.string().optional().describe("ARIA role filter (button, link, input, heading, etc.)"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFindNaturalLanguage(args.query, args.role)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserFindNaturalLanguage(args.query, args.role)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3176,8 +6408,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "List all open browser tabs in the native Chrome instance. Returns tab ID, title, URL, and active status. Requires Chrome CDP.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserTabsList()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserTabsList()) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3187,8 +6424,15 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Create a new browser tab in the native Chrome instance. Returns the new tab ID. Requires Chrome CDP.",
     { url: z.string().optional().describe("URL to open in the new tab (default: about:blank)") },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserTabsCreate(args.url)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserTabsCreate(args.url)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3198,8 +6442,15 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Close a browser tab in the native Chrome instance by tab ID. Requires Chrome CDP.",
     { tab_id: z.string().describe("Tab ID to close (from browser_tabs_list)") },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserTabsClose(args.tab_id)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserTabsClose(args.tab_id)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3208,14 +6459,29 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "browser_batch",
     "Execute multiple browser tool calls sequentially in one round trip. Reduces latency for multi-step operations. Requires Chrome CDP.",
     {
-      actions: z.array(z.object({
-        tool: z.string().describe("Tool name (e.g. 'navigate', 'click', 'fill', 'screenshot', 'computer', 'find')"),
-        input: z.object({}).passthrough().optional().describe("Tool arguments"),
-      })).describe("Array of tool actions to execute sequentially"),
+      actions: z
+        .array(
+          z.object({
+            tool: z
+              .string()
+              .describe(
+                "Tool name (e.g. 'navigate', 'click', 'fill', 'screenshot', 'computer', 'find')"
+              ),
+            input: z.object({}).passthrough().optional().describe("Tool arguments"),
+          })
+        )
+        .describe("Array of tool actions to execute sequentially"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserBatch(args.actions)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserBatch(args.actions)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3225,15 +6491,27 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Upload files to a file input element using base64-encoded content. Works with <input type='file'> elements. Requires Chrome CDP.",
     {
       selector: z.string().describe("CSS selector for the file input element"),
-      files: z.array(z.object({
-        name: z.string().describe("File name (e.g. 'document.pdf')"),
-        content: z.string().describe("Base64-encoded file content"),
-        mimeType: z.string().optional().describe("MIME type (e.g. 'application/pdf', 'image/png')"),
-      })).describe("Array of files to upload"),
+      files: z
+        .array(
+          z.object({
+            name: z.string().describe("File name (e.g. 'document.pdf')"),
+            content: z.string().describe("Base64-encoded file content"),
+            mimeType: z
+              .string()
+              .optional()
+              .describe("MIME type (e.g. 'application/pdf', 'image/png')"),
+          })
+        )
+        .describe("Array of files to upload"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserUploadFile(args)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserUploadFile(args)) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3247,8 +6525,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
       mime_type: z.string().optional().describe("MIME type (default: 'image/png')"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserUploadImage(args)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserUploadImage(args)) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3261,8 +6544,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
       height: z.number().describe("New height in pixels"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserResizeWindow(args)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserResizeWindow(args)) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3271,12 +6559,19 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "browser_gif_creator",
     "Manage GIF recording of browser actions. Actions: start_recording, stop_recording, export, clear. NOTE: Full GIF recording requires the Claude Chrome extension's offscreen document — this is a stub that returns status info.",
     {
-      action: z.enum(["start_recording", "stop_recording", "export", "clear"]).describe("GIF action to perform"),
+      action: z
+        .enum(["start_recording", "stop_recording", "export", "clear"])
+        .describe("GIF action to perform"),
       frame_delay_ms: z.number().optional().describe("Delay between frames in ms (default: 200)"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGifCreator(args)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserGifCreator(args)) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3286,8 +6581,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "List available browser shortcuts/bookmarks. NOTE: Full shortcuts require the Claude Chrome extension — this returns available navigation shortcuts.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserShortcutsList()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserShortcutsList()) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3299,8 +6599,15 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
       shortcut_id: z.string().describe("Shortcut ID to execute"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserShortcutsExecute(args)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserShortcutsExecute(args)) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3311,13 +6618,37 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "browser_intercept_requests",
     "Enable request interception via CDP Fetch domain. Pauses matching requests so they can be modified, blocked, or mocked. Requires Chrome CDP.",
     {
-      url_patterns: z.array(z.string()).optional().describe("URL patterns to intercept (wildcards). Default: ['*'] (all)"),
-      resource_types: z.array(z.string()).optional().describe("Resource types: Document, Stylesheet, Image, Media, Font, Script, XHR, Fetch, WebSocket, etc."),
+      url_patterns: z
+        .array(z.string())
+        .optional()
+        .describe("URL patterns to intercept (wildcards). Default: ['*'] (all)"),
+      resource_types: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Resource types: Document, Stylesheet, Image, Media, Font, Script, XHR, Fetch, WebSocket, etc."
+        ),
       handle_auth: z.boolean().optional().describe("Handle auth challenges (default: false)"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserInterceptRequests(args.url_patterns, args.resource_types, args.handle_auth)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserInterceptRequests(
+                  args.url_patterns,
+                  args.resource_types,
+                  args.handle_auth
+                )
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3338,9 +6669,22 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
         if (args.method) overrides.method = args.method;
         if (args.headers) overrides.headers = args.headers;
         if (args.post_data !== undefined) overrides.postData = args.post_data;
-        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserContinueRequest(args.request_id, Object.keys(overrides).length ? overrides : undefined)) }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserContinueRequest(
+                  args.request_id,
+                  Object.keys(overrides).length ? overrides : undefined
+                )
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );
 
@@ -3356,10 +6700,23 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     },
     async (args) => {
       try {
-        const response = { statusCode: args.status_code, headers: args.headers, body: args.body_base64 || args.body, isBase64: !!args.body_base64 };
-        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFulfillRequest(args.request_id, response)) }] };
+        const response = {
+          statusCode: args.status_code,
+          headers: args.headers,
+          body: args.body_base64 || args.body,
+          isBase64: !!args.body_base64,
+        };
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserFulfillRequest(args.request_id, response)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );
 
@@ -3368,11 +6725,39 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Block/fail an intercepted request. Use to block ads, trackers, or specific API calls. Requires Chrome CDP.",
     {
       request_id: z.string().describe("Paused request ID"),
-      reason: z.enum(["Failed","Aborted","TimedOut","AccessDenied","ConnectionClosed","ConnectionReset","ConnectionRefused","ConnectionAborted","ConnectionFailed","NameNotResolved","InternetDisconnected","AddressUnreachable","BlockedByClient","BlockedByResponse"]).optional().describe("Error reason"),
+      reason: z
+        .enum([
+          "Failed",
+          "Aborted",
+          "TimedOut",
+          "AccessDenied",
+          "ConnectionClosed",
+          "ConnectionReset",
+          "ConnectionRefused",
+          "ConnectionAborted",
+          "ConnectionFailed",
+          "NameNotResolved",
+          "InternetDisconnected",
+          "AddressUnreachable",
+          "BlockedByClient",
+          "BlockedByResponse",
+        ])
+        .optional()
+        .describe("Error reason"),
     },
     async (args) => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFailRequest(args.request_id, args.reason)) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserFailRequest(args.request_id, args.reason)),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3389,9 +6774,22 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
         const overrides = {};
         if (args.headers) overrides.headers = args.headers;
         if (args.body_base64) overrides.body = args.body_base64;
-        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserContinueResponse(args.request_id, Object.keys(overrides).length ? overrides : undefined)) }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                await bridge.browserContinueResponse(
+                  args.request_id,
+                  Object.keys(overrides).length ? overrides : undefined
+                )
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
     }
   );
 
@@ -3400,8 +6798,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Disable request interception. Let all requests flow normally. Requires Chrome CDP.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserStopIntercepting()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(await bridge.browserStopIntercepting()) }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3410,8 +6813,15 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "Get all paused (intercepted) requests. Returns request ID, URL, method, headers, body for each. Requires Chrome CDP.",
     {},
     async () => {
-      try { return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetPausedRequests()) }] }; }
-      catch (err) { return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true }; }
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserGetPausedRequests()) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
     }
   );
 
@@ -3438,12 +6848,22 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     "browser_form_input",
     "Set a value in a form element using an element reference from browser_get_accessibility_tree. Handles all input types: text, select (by value or text), checkbox (boolean), radio, date, range, number, textarea. More reliable than browser_fill for complex inputs. Requires Chrome CDP.",
     {
-      ref: z.string().describe("Element reference ID from browser_get_accessibility_tree (e.g. 'ref_5')"),
-      value: z.union([z.string(), z.boolean(), z.number()]).describe("Value to set. For checkbox/radio use boolean. For select use option text or value. For others use string."),
+      ref: z
+        .string()
+        .describe("Element reference ID from browser_get_accessibility_tree (e.g. 'ref_5')"),
+      value: z
+        .union([z.string(), z.boolean(), z.number()])
+        .describe(
+          "Value to set. For checkbox/radio use boolean. For select use option text or value. For others use string."
+        ),
     },
     async ({ ref, value }) => {
       try {
-        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserFormInput({ ref, value })) }] };
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.browserFormInput({ ref, value })) },
+          ],
+        };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
       }
@@ -3460,7 +6880,14 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
     },
     async ({ max_chars, pane_id }) => {
       try {
-        return { content: [{ type: "text", text: JSON.stringify(await bridge.browserGetArticleText(max_chars, pane_id)) }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await bridge.browserGetArticleText(max_chars, pane_id)),
+            },
+          ],
+        };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
       }
@@ -3472,22 +6899,357 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 // FETCH / SCRAPING TOOLS — HTTP requests with TLS fingerprinting
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function registerFetchTools(server, bridge) {
+function registerScrapingTools(server, bridge) {
+  const refs = [];
+  const tool = (...args) => {
+    const ref = server.tool(...args);
+    refs.push(ref);
+    return ref;
+  };
 
+  tool(
+    "scraping_session_start",
+    "Start an isolated Chrome session controlled by undetected-chromedriver. Returns session_id. Python needs undetected-chromedriver and selenium. Visible mode is the default so browser challenges can be completed in the real browser when required.",
+    {
+      headless: z.boolean().optional().default(false),
+      profile_path: z
+        .string()
+        .optional()
+        .describe(
+          "Dedicated Chrome user-data directory. Do not point at a profile currently open in Chrome."
+        ),
+      profile_directory: z
+        .string()
+        .optional()
+        .describe("Profile subdirectory such as 'Default' or 'Profile 2'."),
+      browser_binary: z.string().optional().describe("Absolute Chrome/Chromium executable path."),
+      version_main: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Chrome major version override; normally auto-detected."),
+      window_width: z.number().int().min(640).max(7680).optional().default(1920),
+      window_height: z.number().int().min(480).max(4320).optional().default(1080),
+      page_load_timeout_ms: z.number().int().min(5000).max(300000).optional().default(90000),
+      block_images: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Disable images/fonts to reduce bandwidth."),
+    },
+    async (args) => {
+      try {
+        const result = await bridge.scrapingSessionStart(args);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          isError: result?.ok === false,
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_session_stop",
+    "Close one UC browser session and terminate its Python worker.",
+    { session_id: z.string().uuid() },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.scrapingSessionStop(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_status",
+    "Inspect one UC page (URL, title, document readiness and challenge markers), or list active UC sessions when session_id is omitted.",
+    { session_id: z.string().uuid().optional() },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.scrapingStatus(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_navigate",
+    "Navigate a UC session to an HTTP(S) URL and return final URL, title, ready state and challenge diagnostics. challenge_wait_ms waits for a visible browser challenge to clear without using a fixed sleep.",
+    {
+      session_id: z.string().uuid(),
+      url: z.string().url(),
+      timeout_ms: z.number().int().min(5000).max(300000).optional().default(90000),
+      challenge_wait_ms: z.number().int().min(0).max(300000).optional().default(0),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.scrapingNavigate(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_wait",
+    "Wait until a CSS selector exists, text appears, and/or the detected browser challenge clears. All supplied conditions must match.",
+    {
+      session_id: z.string().uuid(),
+      selector: z.string().optional(),
+      text: z.string().optional(),
+      challenge_clear: z.boolean().optional().default(false),
+      timeout_ms: z.number().int().min(100).max(300000).optional().default(30000),
+      poll_ms: z.number().int().min(50).max(2000).optional().default(250),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.scrapingWait(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_evaluate",
+    "Execute JavaScript in the current UC page. With await_promise=true, script is an async function body, receives `args`, and should `return` a JSON-serializable value. With false, Selenium's regular execute_script semantics apply.",
+    {
+      session_id: z.string().uuid(),
+      script: z.string().min(1).max(100000),
+      args: z.array(z.any()).optional().default([]),
+      await_promise: z.boolean().optional().default(true),
+      timeout_ms: z.number().int().min(100).max(300000).optional().default(30000),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.scrapingEvaluate(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_extract",
+    "Extract structured DOM data in one browser round-trip. item_selector creates one row per matched item; each field reads text by default or an attribute/html/outerHTML.",
+    {
+      session_id: z.string().uuid(),
+      root_selector: z.string().optional(),
+      item_selector: z.string().optional(),
+      fields: z
+        .array(
+          z.object({
+            name: z.string().min(1),
+            selector: z.string().min(1),
+            attribute: z.string().optional().describe("Attribute name, or html/outerHTML."),
+            multiple: z.boolean().optional().default(false),
+            trim: z.boolean().optional().default(true),
+          })
+        )
+        .min(1)
+        .max(100),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.scrapingExtract(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_fetch_batch",
+    "Run concurrent window.fetch calls inside the UC page, reusing its cookies and browser context. Same-origin is enforced by default. Returns per-URL status, headers, bounded body, timing and challenge detection.",
+    {
+      session_id: z.string().uuid(),
+      urls: z.array(z.string()).min(1).max(100),
+      method: z.enum(["GET", "POST", "HEAD"]).optional().default("GET"),
+      headers: z.record(z.string()).optional(),
+      body: z.string().optional(),
+      concurrency: z.number().int().min(1).max(20).optional().default(8),
+      timeout_ms: z.number().int().min(500).max(120000).optional().default(30000),
+      retries: z.number().int().min(0).max(3).optional().default(1),
+      same_origin: z.boolean().optional().default(true),
+      max_chars_per_item: z.number().int().min(100).max(250000).optional().default(50000),
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(await bridge.scrapingFetchBatch(args), null, 2) },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_network_log",
+    "Read network requests captured from the same undetected-chromedriver Chrome session. Use this after navigation to inspect XHR, fetch and document requests without switching to the ChatGPT browser extension.",
+    {
+      session_id: z.string().uuid(),
+      url_pattern: z.string().optional().describe("Keep only URLs containing this text."),
+      method: z.string().optional().describe("Keep only this HTTP method."),
+      limit: z.number().int().min(1).max(1000).optional().default(100),
+    },
+    async (args) => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.scrapingNetworkLog(args), null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_clear_network",
+    "Clear captured network events for one UC session before the next navigation or action.",
+    { session_id: z.string().uuid() },
+    async (args) => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.scrapingClearNetwork(args)) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_intercept_start",
+    "Enable CDP Fetch interception on the Chrome process owned by a UC session. Matching requests pause until scraping_intercept_continue is called.",
+    {
+      session_id: z.string().uuid(),
+      urlPatterns: z.array(z.string()).min(1).max(50).optional().default(["*"]),
+      handleAuthRequests: z.boolean().optional().default(false),
+    },
+    async (args) => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.scrapingInterceptStart(args), null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_intercept_list",
+    "List requests currently paused by UC-session interception.",
+    { session_id: z.string().uuid() },
+    async (args) => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.scrapingInterceptList(args), null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_intercept_continue",
+    "Release one paused UC request, optionally changing URL, method, headers or body.",
+    {
+      session_id: z.string().uuid(),
+      request_id: z.string().min(1),
+      overrides: z.object({
+        url: z.string().optional(),
+        method: z.string().optional(),
+        headers: z.record(z.string()).optional(),
+        postData: z.string().optional(),
+      }).optional(),
+    },
+    async (args) => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.scrapingInterceptContinue(args), null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  tool(
+    "scraping_intercept_stop",
+    "Disable Fetch interception and clear paused requests for one UC session.",
+    { session_id: z.string().uuid() },
+    async (args) => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(await bridge.scrapingInterceptStop(args), null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  return refs;
+}
+
+function registerFetchTools(server, bridge) {
   server.tool(
     "browser_fetch",
     "Make an HTTP request with TLS fingerprinting (simulates Chrome/Firefox). Returns {status, headers, body, contentType, timing, cfBlocked}. Use this FIRST for scraping — it's faster and lighter than browser tools. If cfBlocked=true, fall back to browser_open + browser_wait_for.",
     {
       url: z.string().describe("URL to fetch"),
-      method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"]).default("GET").describe("HTTP method"),
-      headers: z.record(z.string()).optional().describe("Custom headers (merged with browser-realistic defaults). Set to null to remove a default header."),
-      body: z.union([z.string(), z.record(z.any())]).optional().describe("Request body (string or JSON object)"),
+      method: z
+        .enum(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"])
+        .default("GET")
+        .describe("HTTP method"),
+      headers: z
+        .record(z.string())
+        .optional()
+        .describe(
+          "Custom headers (merged with browser-realistic defaults). Set to null to remove a default header."
+        ),
+      body: z
+        .union([z.string(), z.record(z.any())])
+        .optional()
+        .describe("Request body (string or JSON object)"),
       timeout_ms: z.number().default(30000).describe("Request timeout in ms"),
-      tls_profile: z.enum(["chrome-131", "chrome-mobile", "firefox-133"]).default("chrome-131").describe("TLS fingerprint profile to simulate"),
+      tls_profile: z
+        .enum(["chrome-131", "chrome-mobile", "firefox-133"])
+        .default("chrome-131")
+        .describe("TLS fingerprint profile to simulate"),
     },
     async ({ url, method, headers, body, timeout_ms, tls_profile }) => {
       try {
-        const result = await bridge.browserFetch({ url, method, headers, body, timeout_ms, tls_profile });
+        const result = await bridge.browserFetch({
+          url,
+          method,
+          headers,
+          body,
+          timeout_ms,
+          tls_profile,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
@@ -3500,15 +7262,31 @@ function registerFetchTools(server, bridge) {
     "Fetch a URL and auto-parse JSON response. Shortcut for API calls. Returns parsed JSON object directly. If response is not JSON, returns warning.",
     {
       url: z.string().describe("URL to fetch"),
-      method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).default("GET").describe("HTTP method"),
+      method: z
+        .enum(["GET", "POST", "PUT", "DELETE", "PATCH"])
+        .default("GET")
+        .describe("HTTP method"),
       headers: z.record(z.string()).optional().describe("Custom headers"),
-      body: z.union([z.string(), z.record(z.any())]).optional().describe("Request body"),
+      body: z
+        .union([z.string(), z.record(z.any())])
+        .optional()
+        .describe("Request body"),
       timeout_ms: z.number().default(30000).describe("Request timeout in ms"),
-      tls_profile: z.enum(["chrome-131", "chrome-mobile", "firefox-133"]).default("chrome-131").describe("TLS fingerprint profile"),
+      tls_profile: z
+        .enum(["chrome-131", "chrome-mobile", "firefox-133"])
+        .default("chrome-131")
+        .describe("TLS fingerprint profile"),
     },
     async ({ url, method, headers, body, timeout_ms, tls_profile }) => {
       try {
-        const result = await bridge.browserFetchJson({ url, method, headers, body, timeout_ms, tls_profile });
+        const result = await bridge.browserFetchJson({
+          url,
+          method,
+          headers,
+          body,
+          timeout_ms,
+          tls_profile,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
@@ -3523,7 +7301,10 @@ function registerFetchTools(server, bridge) {
       url: z.string().describe("URL to fetch"),
       headers: z.record(z.string()).optional().describe("Custom headers"),
       timeout_ms: z.number().default(30000).describe("Request timeout in ms"),
-      tls_profile: z.enum(["chrome-131", "chrome-mobile", "firefox-133"]).default("chrome-131").describe("TLS fingerprint profile"),
+      tls_profile: z
+        .enum(["chrome-131", "chrome-mobile", "firefox-133"])
+        .default("chrome-131")
+        .describe("TLS fingerprint profile"),
     },
     async ({ url, headers, timeout_ms, tls_profile }) => {
       try {
@@ -3542,14 +7323,28 @@ function registerFetchTools(server, bridge) {
       urls: z.array(z.string()).min(1).max(10).describe("Array of URLs to fetch (max 10)"),
       method: z.enum(["GET", "POST"]).default("GET").describe("HTTP method for all requests"),
       headers: z.record(z.string()).optional().describe("Custom headers (applied to all requests)"),
-      body: z.union([z.string(), z.record(z.any())]).optional().describe("Request body (applied to all requests)"),
+      body: z
+        .union([z.string(), z.record(z.any())])
+        .optional()
+        .describe("Request body (applied to all requests)"),
       timeout_ms: z.number().default(30000).describe("Timeout per request in ms"),
-      tls_profile: z.enum(["chrome-131", "chrome-mobile", "firefox-133"]).default("chrome-131").describe("TLS fingerprint profile"),
+      tls_profile: z
+        .enum(["chrome-131", "chrome-mobile", "firefox-133"])
+        .default("chrome-131")
+        .describe("TLS fingerprint profile"),
       max_concurrent: z.number().default(5).describe("Max concurrent requests (default 5)"),
     },
     async ({ urls, method, headers, body, timeout_ms, tls_profile, max_concurrent }) => {
       try {
-        const result = await bridge.browserFetchBatch({ urls, method, headers, body, timeout_ms, tls_profile, max_concurrent });
+        const result = await bridge.browserFetchBatch({
+          urls,
+          method,
+          headers,
+          body,
+          timeout_ms,
+          tls_profile,
+          max_concurrent,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
@@ -3562,7 +7357,10 @@ function registerFetchTools(server, bridge) {
     "Manage HTTP cookies for fetch requests. Actions: list (get all cookies), set (add a cookie), clear (remove cookies). Cookies persist across fetch calls in the same session.",
     {
       action: z.enum(["list", "set", "clear"]).describe("Action: list, set, or clear cookies"),
-      domain: z.string().optional().describe("Domain to scope the action to (optional for list/clear, required for set)"),
+      domain: z
+        .string()
+        .optional()
+        .describe("Domain to scope the action to (optional for list/clear, required for set)"),
       name: z.string().optional().describe("Cookie name (required for set)"),
       value: z.string().optional().describe("Cookie value (for set)"),
     },
@@ -3577,4 +7375,9 @@ function registerFetchTools(server, bridge) {
   );
 }
 
-module.exports = { createCodebrainMCPServer, registerBrowserTools, registerFetchTools };
+module.exports = {
+  createCodebrainMCPServer,
+  registerBrowserTools,
+  registerFetchTools,
+  registerScrapingTools,
+};

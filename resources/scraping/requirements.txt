@@ -1,0 +1,2 @@
+undetected-chromedriver>=3.5,<4
+selenium>=4.20,<5

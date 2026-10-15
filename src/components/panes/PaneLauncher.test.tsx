@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
 import { useProvidersStore } from "../../stores/providers-store";
 import { useNavStore } from "../../stores/nav-store";
+import { usePanesStore } from "../../stores/panes-store";
 import { PaneLauncher } from "./PaneLauncher";
 
 const openRouter = {
@@ -29,6 +30,7 @@ describe("PaneLauncher search", () => {
   beforeEach(() => {
     useProvidersStore.setState({ providers: [openRouter, codex], load: async () => {} } as any);
     useNavStore.setState({ tabs: [{ workspacePath: "C:/repo" }], activeTabIndex: 0 } as any);
+    usePanesStore.setState({ panes: [], layouts: {}, activePaneId: null } as any);
     usePaneLauncherStore.setState({ open: true, request: null });
   });
   afterEach(cleanup);
@@ -65,5 +67,42 @@ describe("PaneLauncher search", () => {
     fireEvent.change(screen.getByLabelText("Buscar modelo"), { target: { value: "mistral" } });
 
     expect(screen.getByText(/Nenhum modelo para/)).toBeTruthy();
+  });
+
+  it("sends the preparation prompt as part of spawn instead of racing a delayed write", async () => {
+    const spawn = vi.fn(async () => ({
+      ok: true,
+      paneId: "pane-preparation",
+      promptSubmitted: true,
+    }));
+    const write = vi.fn();
+    Object.defineProperty(window, "codeBrainApp", {
+      configurable: true,
+      value: { pty: { spawn, write } },
+    });
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: { getItem: vi.fn(() => null) },
+    });
+    usePaneLauncherStore.setState({
+      open: true,
+      request: {
+        title: "Agente de preparação",
+        initialPrompt: "Prepare o repositório agora.",
+      },
+    });
+
+    render(<PaneLauncher />);
+    fireEvent.click(screen.getAllByText("Codex")[0]);
+    fireEvent.click(screen.getByText("gpt-5.6-terra"));
+
+    await waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
+    expect(spawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: "C:/repo",
+        initialPrompt: "Prepare o repositório agora.",
+      })
+    );
+    expect(write).not.toHaveBeenCalled();
   });
 });

@@ -55,6 +55,7 @@ export function PaneLauncher() {
     setSpawning(model);
     setError(null);
     const target = resolveSpawnTarget({ providerId: provider.id, model, providers, explicit: true });
+    const initialPrompt = request?.initialPrompt?.trim();
     try {
       const permissionMode = localStorage.getItem("codebrain.permissionMode") ?? "bypassPermissions";
       const result = await window.codeBrainApp.pty.spawn({
@@ -63,6 +64,7 @@ export function PaneLauncher() {
         providerId: target.providerId,
         model: target.model,
         permissionMode,
+        ...(initialPrompt ? { initialPrompt } : {}),
         ...(Object.keys(target.env).length ? { env: target.env } : {}),
       });
       if (!result?.ok || !result.paneId) throw new Error(result?.error ?? "spawn retornou erro");
@@ -76,13 +78,13 @@ export function PaneLauncher() {
         permissionMode,
         externallySpawned: true,
       });
-      const initialPrompt = request?.initialPrompt?.trim();
       close();
       if (initialPrompt) {
-        // A CLI needs a moment to draw its first prompt. A CR is intentional:
-        // preparation must begin without requiring the user to press Enter.
-        window.setTimeout(() => void window.codeBrainApp?.pty.write(result.paneId!, `${initialPrompt}\r`), 900);
-        notify("Agente de preparação iniciado", `${provider.label ?? provider.id} · ${target.model}`, "success");
+        if (result.promptSubmitted) {
+          notify("Agente de preparação iniciado", `${provider.label ?? provider.id} · ${target.model}`, "success");
+        } else {
+          notify("Terminal aberto, mas o prompt não foi enviado", result.promptError ?? "A CLI não ficou pronta a tempo.", "error");
+        }
       } else {
         notify("Pane aberto", `${provider.label ?? provider.id} · ${target.model}`, "success");
       }

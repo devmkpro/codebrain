@@ -21,6 +21,7 @@ export interface PtyConfig {
   permissionMode?: string;
   role?: string;
   sessionContext?: string;
+  initialPrompt?: string;
 }
 
 export interface PtyInfo {
@@ -378,8 +379,19 @@ export interface CodebrainApp {
     remove: (path: string) => Promise<{ ok: boolean; error?: string }>;
   };
   pty: {
-    spawn: (config: PtyConfig) => Promise<string>;
-    write: (paneId: string, data: string) => Promise<void>;
+    spawn: (config: PtyConfig) => Promise<{
+      ok: boolean;
+      paneId?: string;
+      agent?: string;
+      providerId?: string;
+      model?: string;
+      cwd?: string;
+      missionId?: string;
+      promptSubmitted?: boolean;
+      promptError?: string;
+      error?: string;
+    }>;
+    write: (paneId: string, data: string) => Promise<{ ok: boolean; error?: string }>;
     read: (paneId: string, lastN?: number) => Promise<string[]>;
     readRaw: (paneId: string, lastN?: number) => Promise<Uint8Array>;
     readRawText: (paneId: string) => Promise<string>;

@@ -27,6 +27,22 @@ Diretórios necessários (crie se não existirem):
 - `plans/` — planos JSON gerados
 - `scripts/` — scripts standalone gerados
 
+## Driver obrigatório
+
+Toda inspeção deste skill roda no Chrome criado pelo MCP de scraping:
+
+1. Ativar `enable_tool_group({ group: "scraping" })`.
+2. Abrir uma única sessão com `scraping_session_start({ headless: false })` e
+   guardar o `session_id` até o fim.
+3. Navegar com `scraping_navigate`; ler DOM com `scraping_evaluate` ou
+   `scraping_extract`; inspecionar chamadas com `scraping_network_log`.
+4. Para pausa de API, usar `scraping_intercept_start` →
+   `scraping_intercept_list` → `scraping_intercept_continue`.
+5. Fechar com `scraping_session_stop`.
+
+Não usar `browser_*`, `computer`, extensão do ChatGPT ou um segundo navegador.
+Eles observam outro processo e perdem os cookies, challenge e requests do UC.
+
 ---
 
 ## Fase 0 — Validação Rápida (gate de site válido)

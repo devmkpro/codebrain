@@ -1087,31 +1087,35 @@ function createNativeChromeHandlers(cdpClient) {
       await cdpClient.send("Fetch.enable", fetchOpts);
 
       // Listen for Fetch.requestPaused events
-      const pausedRequests = [];
-      cdpClient._fetchPaused = pausedRequests;
+      cdpClient._fetchPaused = [];
       cdpClient._fetchEnabled = true;
 
-      // Register handler for Fetch.requestPaused
-      const origHandler = cdpClient._onCdpEvent;
-      cdpClient._onCdpEvent = function (msg) {
-        if (msg.method === "Fetch.requestPaused") {
-          pausedRequests.push({
-            requestId: msg.params.requestId,
-            request: {
-              url: msg.params.request.url,
-              method: msg.params.request.method,
-              headers: msg.params.request.headers,
-              postData: msg.params.request.postData,
-            },
-            resourceType: msg.params.resourceType,
-            responseStatusCode: msg.params.responseStatusCode,
-            responseHeaders: msg.params.responseHeaders,
-            frameId: msg.params.frameId,
-            timestamp: Date.now(),
-          });
-        }
-        if (origHandler) origHandler.call(this, msg);
-      };
+      // Register one durable handler. stopIntercepting() replaces the array,
+      // so the hook must resolve it from the client instead of closing over an
+      // old array.
+      if (!cdpClient._fetchHookInstalled) {
+        const origHandler = cdpClient._onCdpEvent;
+        cdpClient._onCdpEvent = function (msg) {
+          if (msg.method === "Fetch.requestPaused") {
+            (cdpClient._fetchPaused ||= []).push({
+              requestId: msg.params.requestId,
+              request: {
+                url: msg.params.request.url,
+                method: msg.params.request.method,
+                headers: msg.params.request.headers,
+                postData: msg.params.request.postData,
+              },
+              resourceType: msg.params.resourceType,
+              responseStatusCode: msg.params.responseStatusCode,
+              responseHeaders: msg.params.responseHeaders,
+              frameId: msg.params.frameId,
+              timestamp: Date.now(),
+            });
+          }
+          if (origHandler) origHandler.call(this, msg);
+        };
+        cdpClient._fetchHookInstalled = true;
+      }
 
       return { ok: true, message: "Request interception enabled", patterns: urlPatterns || ["*"] };
     },

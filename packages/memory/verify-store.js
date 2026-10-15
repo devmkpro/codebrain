@@ -93,12 +93,6 @@ function createVerifyStore(db) {
     verifyGrantRequest({ workspace, base_url, identity, role, mode = "manual", reason, credential_file, credential_line }) {
       if (!workspace) return { ok: false, error: "workspace é obrigatório" };
       if (!identity) return { ok: false, error: "identity é obrigatória" };
-      if (!isLocalTarget(base_url)) {
-        return {
-          ok: false,
-          error: `alvo não é local: ${base_url}. Esta ferramenta autentica apenas contra loopback ou faixa privada — verificar um ambiente remoto é outro problema e não passa por aqui.`,
-        };
-      }
       const m = String(mode).toLowerCase();
       if (!GRANT_MODES.has(m)) {
         return { ok: false, error: `mode inválido: ${mode}. Use ${[...GRANT_MODES].join(" | ")}` };

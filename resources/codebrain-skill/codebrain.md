@@ -86,6 +86,27 @@ Read messages sent to your pane from other agents.
 
 ## Browser Automation
 
+### UC scraper — required route for protected sites and request inspection
+
+For product scraping, Cloudflare challenges, or network request inspection, do
+not use the ChatGPT/browser-extension computer tools and do not open a browser
+pane. Activate the `scraping` group and use the UC session owned by Codebrain:
+
+1. `enable_tool_group({ group: "scraping" })`
+2. `scraping_session_start({ headless: false })` — preserve the returned `session_id`.
+3. `scraping_navigate({ session_id, url })`, then `scraping_wait`,
+   `scraping_evaluate`, `scraping_extract`, or `scraping_fetch_batch`.
+4. Use `scraping_network_log({ session_id })` to inspect requests made by that
+   exact UC Chrome process.
+5. For an API request, call `scraping_intercept_start`, poll
+   `scraping_intercept_list`, and release each paused request with
+   `scraping_intercept_continue`. Always finish with `scraping_intercept_stop`.
+6. End the lifecycle with `scraping_session_stop({ session_id })`.
+
+UC is the preferred scraping route. The `browser_*` tools below remain for
+normal Codebrain browser panes and their own CDP session; they never attach to
+the ChatGPT Chrome extension.
+
 ### CRITICAL: Always call browser_guide() FIRST
 Before using ANY browser tool, call `mcp__codebrain__browser_guide()` to read best-practices and navigation rules.
 

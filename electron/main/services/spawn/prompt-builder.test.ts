@@ -37,6 +37,9 @@ describe("prompt builder token budget", () => {
       expect(prompt).not.toContain("mcp__codebrain__mcp__codebrain__");
       expect(prompt).toContain("Direct conversation needs no bootstrap");
       expect(prompt).toContain("OK|PART|FAIL|BLOCK");
+      expect(prompt).toContain("# MK MODE — Operational Core");
+      expect(prompt).toContain("User-visible replies begin with `[MK MODE]`");
+      expect(prompt).toContain("Use every capability actually granted by the runtime");
     }
   );
 });

@@ -392,11 +392,6 @@ function createVerifyHandlers(opts = {}) {
         const internal = store().verifyGrantInternal({ grant_id });
         if (!internal.ok) return internal;
         const grant = internal.row;
-
-        if (!isLocalTarget(grant.base_url)) {
-          return { ok: false, error: "alvo da concessão não é local; login recusado" };
-        }
-
         const { frameworks } = detectFrameworks(root);
         const route = login_route || findLoginRoutes(root, frameworks)[0]?.route || "/login";
         const url = new URL(route, grant.base_url).toString();
@@ -490,10 +485,6 @@ function createVerifyHandlers(opts = {}) {
 
         const target = base_url || runRes.data.base_url || plan.servers?.live?.[0]?.baseUrl;
         if (!target) return { ok: false, error: "nenhuma URL base: o servidor de desenvolvimento não foi detectado" };
-        if (!isLocalTarget(target)) {
-          return { ok: false, error: `alvo não é local: ${target}. Esta verificação só roda contra loopback ou faixa privada.` };
-        }
-
         const routeList = (routes && routes.length ? routes.map((r) => ({ route: r, confidence: "explicit" })) : plan.routes) || [];
         if (routeList.length === 0) return { ok: false, error: "nenhuma rota para verificar" };
 

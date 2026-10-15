@@ -17,6 +17,7 @@ const { createSkillHandlers } = require("./bridge/skill-handlers.js");
 const { createKanbanHandlers } = require("./bridge/kanban-handlers.js");
 const { createMissionHandlers } = require("./bridge/mission-handlers.js");
 const { createFetchHandlers } = require("./bridge/fetch-handlers.js");
+const { createScrapingHandlers } = require("./bridge/scraping-handlers.js");
 const { createLessonsLedgerHandlers } = require("./bridge/lessons-ledger-handlers.js");
 const { createVerifyHandlers } = require("./bridge/verify-handlers.js");
 
@@ -60,7 +61,15 @@ const { createRemoteSpawnHandlers } = require("./bridge/remote-spawn-handlers.js
 
 const MESSAGES_DIR = path.join(os.homedir(), ".codebrain", "messages");
 
-function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType, messageBus, workspacePath) {
+function sendAgentNotification(
+  ptyManager,
+  paneLabels,
+  fromId,
+  content,
+  msgType,
+  messageBus,
+  workspacePath
+) {
   if (!ptyManager) return;
   const panes = ptyManager.list();
   for (const p of panes) {
@@ -86,7 +95,9 @@ function sendAgentNotification(ptyManager, paneLabels, fromId, content, msgType,
     };
     // Send to in-memory bus
     if (messageBus) {
-      try { messageBus.send(p.paneId, { ...msg, priority: "normal" }); } catch {}
+      try {
+        messageBus.send(p.paneId, { ...msg, priority: "normal" });
+      } catch {}
     }
     // Also write to disk (file fallback)
     try {
@@ -142,7 +153,6 @@ function createMCPBridge(ptyManager, opts = {}) {
     spawnPaneFn: opts.spawnPaneFn,
   });
 
-
   // ── Code-level memory compliance enforcement on idle ─────────────────────
   // When a pane goes idle, check if it actually used memory tools during its
   // task. If not, inject a compliance warning. This is enforced in code —
@@ -177,8 +187,9 @@ function createMCPBridge(ptyManager, opts = {}) {
       let detectedMemoryUse = state.hasMemoryActivity === true;
       if (!detectedMemoryUse) {
         const outputText = Array.isArray(lastOutput) ? lastOutput.join("\n") : String(lastOutput);
-        detectedMemoryUse = /memory[_\s]?(write|read|search|list)/i.test(outputText)
-          || /pattern[_\s]?(write|list)/i.test(outputText);
+        detectedMemoryUse =
+          /memory[_\s]?(write|read|search|list)/i.test(outputText) ||
+          /pattern[_\s]?(write|list)/i.test(outputText);
       }
       if (!detectedMemoryUse) {
         // Keep the warning quiet to avoid flooding the terminal; the state is still tracked.
@@ -246,7 +257,9 @@ function createMCPBridge(ptyManager, opts = {}) {
         const store = opts.memoryStore;
         if (!store || !idle?.lastOutput) return;
         // Scan last output lines for repeated tool call patterns
-        const outputText = Array.isArray(idle.lastOutput) ? idle.lastOutput.join("\n") : String(idle.lastOutput);
+        const outputText = Array.isArray(idle.lastOutput)
+          ? idle.lastOutput.join("\n")
+          : String(idle.lastOutput);
         // Look for MCP tool call patterns (mcp__codebrain__xxx)
         const toolCalls = outputText.match(/mcp__codebrain__(\w+)/g);
         if (!toolCalls || toolCalls.length < 2) return;
@@ -274,11 +287,13 @@ function createMCPBridge(ptyManager, opts = {}) {
         ]);
         if (IDEMPOTENT_READ_TOOLS.has(lastTool)) return;
         const recentTools = toolCalls.slice(-3);
-        if (recentTools.length >= 3 && recentTools.every(t => t === lastTool)) {
+        if (recentTools.length >= 3 && recentTools.every((t) => t === lastTool)) {
           // Potential loop detected — check if this pattern persists
           const result = store.recordStep({ paneId, toolName: lastTool, toolInput: {} });
           if (result.isLooping) {
-            console.warn(`[bridge] LOOP DETECTED: pane ${paneId.slice(0,8)} repeated "${lastTool}" ${result.count}x`);
+            console.warn(
+              `[bridge] LOOP DETECTED: pane ${paneId.slice(0, 8)} repeated "${lastTool}" ${result.count}x`
+            );
             // Record the warning as an agent message so the recipient sees it on its
             // NEXT turn via pane_read_messages — do NOT write into the pty stdin, which
             // corrupts the user's input line and leaks the warning into the prompt.
@@ -299,12 +314,24 @@ function createMCPBridge(ptyManager, opts = {}) {
   // Clean up step history, pressure tracking, text loop buffers, and step signatures on pane exit
   if (opts.hooksManager) {
     opts.hooksManager.on("pane_exited", ({ paneId }) => {
-      try { opts.memoryStore?.clearStepHistory?.({ paneId }); } catch {}
-      try { opts.memoryStore?.clearPressureTracking?.({ paneId }); } catch {}
-      try { opts.memoryStore?.clearTextLoopBuffer?.({ paneId }); } catch {}
-      try { opts.memoryStore?.clearStepSignatures?.({ paneId }); } catch {}
-      try { opts.memoryStore?.clearGoal?.(paneId); } catch {}
-      try { opts.memoryStore?.clearCompactionState?.(paneId); } catch {}
+      try {
+        opts.memoryStore?.clearStepHistory?.({ paneId });
+      } catch {}
+      try {
+        opts.memoryStore?.clearPressureTracking?.({ paneId });
+      } catch {}
+      try {
+        opts.memoryStore?.clearTextLoopBuffer?.({ paneId });
+      } catch {}
+      try {
+        opts.memoryStore?.clearStepSignatures?.({ paneId });
+      } catch {}
+      try {
+        opts.memoryStore?.clearGoal?.(paneId);
+      } catch {}
+      try {
+        opts.memoryStore?.clearCompactionState?.(paneId);
+      } catch {}
     });
   }
 
@@ -320,11 +347,15 @@ function createMCPBridge(ptyManager, opts = {}) {
       // Skip orchestrator panes — false positive rate is too high for coordinating agents
       const role = roleMap.get(paneId) || "worker";
       if (role === "orchestrator") return;
-      const outputText = Array.isArray(idle.lastOutput) ? idle.lastOutput.join("\n") : String(idle.lastOutput);
+      const outputText = Array.isArray(idle.lastOutput)
+        ? idle.lastOutput.join("\n")
+        : String(idle.lastOutput);
       if (outputText.length < 80) return; // Skip very short outputs
       const result = store.recordTextOutput(paneId, outputText);
       if (result.isLooping && result.recoveryCount <= 2) {
-        console.warn(`[bridge] TEXT LOOP: pane ${paneId.slice(0,8)} recovery #${result.recoveryCount}`);
+        console.warn(
+          `[bridge] TEXT LOOP: pane ${paneId.slice(0, 8)} recovery #${result.recoveryCount}`
+        );
       }
     } catch {}
   });
@@ -340,13 +371,17 @@ function createMCPBridge(ptyManager, opts = {}) {
         if (!store?.recordStepSignature || !idle?.lastOutput) return;
         const role = roleMap.get(paneId) || "worker";
         if (role === "orchestrator") return;
-        const outputText = Array.isArray(idle.lastOutput) ? idle.lastOutput.join("\n") : String(idle.lastOutput);
+        const outputText = Array.isArray(idle.lastOutput)
+          ? idle.lastOutput.join("\n")
+          : String(idle.lastOutput);
         const toolCalls = outputText.match(/mcp__codebrain__(\w+)/g);
         if (!toolCalls || toolCalls.length < 2) return;
         const lastTool = toolCalls[toolCalls.length - 1];
         const result = store.recordStepSignature({ paneId, toolName: lastTool, toolInput: {} });
         if (result.isLooping) {
-          console.warn(`[bridge] ENHANCED LOOP: pane ${paneId.slice(0,8)} repeated "${lastTool}" ${result.count}x (key-order-independent)`);
+          console.warn(
+            `[bridge] ENHANCED LOOP: pane ${paneId.slice(0, 8)} repeated "${lastTool}" ${result.count}x (key-order-independent)`
+          );
         }
       } catch {}
     });
@@ -360,12 +395,17 @@ function createMCPBridge(ptyManager, opts = {}) {
       if (!store?.taskGateCheck) return;
       // Only check if there was meaningful activity (not empty idle pings)
       const lastLines = idle?.lastOutput?.slice(-5) || [];
-      const summary = lastLines.join(" ").replace(/\x1b\[[0-9;]*m/g, "").trim();
+      const summary = lastLines
+        .join(" ")
+        .replace(/\x1b\[[0-9;]*m/g, "")
+        .trim();
       if (!summary || summary.length < 20) return;
       const gate = store.taskGateCheck({ paneId, maxReEntries: 3 });
       if (!gate.shouldStop && gate.nudgeText) {
         // Inject nudge into pane terminal
-        try { ptyManager.write(paneId, `\n${gate.nudgeText}\n`, false); } catch {}
+        try {
+          ptyManager.write(paneId, `\n${gate.nudgeText}\n`, false);
+        } catch {}
       }
     } catch {}
   });
@@ -392,7 +432,9 @@ function createMCPBridge(ptyManager, opts = {}) {
     try {
       const result = opts.memoryStore.autoPrune();
       if (result.ok && result.pruned > 0) {
-        console.log(`[bridge] Memory auto-prune: removed ${result.pruned} stale entries (stale: ${result.details.stale}, orphans: ${result.details.orphans}, excess: ${result.details.excess})`);
+        console.log(
+          `[bridge] Memory auto-prune: removed ${result.pruned} stale entries (stale: ${result.details.stale}, orphans: ${result.details.orphans}, excess: ${result.details.excess})`
+        );
       }
     } catch {}
 
@@ -418,14 +460,17 @@ function createMCPBridge(ptyManager, opts = {}) {
     const workspace = opts.getCurrentWorkspacePath?.() || null;
 
     // Dream on startup delay (wait 5 min for some activity first)
-    setTimeout(() => {
-      try {
-        const result = opts.memoryStore.autoDream({ workspace });
-        if (result.ok && result.consolidated > 0) {
-          console.log(`[bridge] Auto-dream: consolidated ${result.consolidated} memory groups`);
-        }
-      } catch {}
-    }, 5 * 60 * 1000);
+    setTimeout(
+      () => {
+        try {
+          const result = opts.memoryStore.autoDream({ workspace });
+          if (result.ok && result.consolidated > 0) {
+            console.log(`[bridge] Auto-dream: consolidated ${result.consolidated} memory groups`);
+          }
+        } catch {}
+      },
+      5 * 60 * 1000
+    );
 
     // Periodic dream every 24h
     setInterval(() => {
@@ -439,17 +484,20 @@ function createMCPBridge(ptyManager, opts = {}) {
     }, DREAM_INTERVAL);
 
     // Periodic distill every 7 days
-    setTimeout(() => {
-      setInterval(() => {
-        try {
-          const ws = opts.getCurrentWorkspacePath?.() || null;
-          const result = opts.memoryStore.autoDistill({ workspace: ws });
-          if (result.ok && result.distilled > 0) {
-            console.log(`[bridge] Auto-distill: extracted ${result.distilled} workflow patterns`);
-          }
-        } catch {}
-      }, DISTILL_INTERVAL);
-    }, 60 * 60 * 1000); // First distill after 1 hour
+    setTimeout(
+      () => {
+        setInterval(() => {
+          try {
+            const ws = opts.getCurrentWorkspacePath?.() || null;
+            const result = opts.memoryStore.autoDistill({ workspace: ws });
+            if (result.ok && result.distilled > 0) {
+              console.log(`[bridge] Auto-distill: extracted ${result.distilled} workflow patterns`);
+            }
+          } catch {}
+        }, DISTILL_INTERVAL);
+      },
+      60 * 60 * 1000
+    ); // First distill after 1 hour
   }
 
   // ── Short-term → Long-term Pattern Promotion ────────────────────────────
@@ -461,7 +509,9 @@ function createMCPBridge(ptyManager, opts = {}) {
       try {
         const result = opts.memoryStore.promoteShortTermPatterns();
         if (result.ok && result.promoted > 0) {
-          console.log(`[bridge] Pattern promotion: ${result.promoted} short-term → long-term (${result.remaining} remaining)`);
+          console.log(
+            `[bridge] Pattern promotion: ${result.promoted} short-term → long-term (${result.remaining} remaining)`
+          );
         }
         // Also prune old short-term patterns
         opts.memoryStore.pruneShortTermPatterns();
@@ -527,7 +577,9 @@ function createMCPBridge(ptyManager, opts = {}) {
         // panes caused agents to react and loop. Agents discover peers via pane_list().
         // Update context files with new agent info
         if (workspace && opts.updateContextFiles) {
-          try { opts.updateContextFiles(workspace); } catch {}
+          try {
+            opts.updateContextFiles(workspace);
+          } catch {}
         }
       } catch {}
     });
@@ -540,12 +592,21 @@ function createMCPBridge(ptyManager, opts = {}) {
         const exitCode = Number(data?.exitCode ?? 0);
         store.updateAgentStatus({ paneId, status: "exited" });
         // Update actor registry on exit
-        try { store.actorUpdateStatus?.({ paneId, status: 'idle', lastOutcome: exitCode === 0 ? 'success' : 'error', lastError: exitCode === 0 ? undefined : `process exited with code ${exitCode}` }); } catch {}
+        try {
+          store.actorUpdateStatus?.({
+            paneId,
+            status: "idle",
+            lastOutcome: exitCode === 0 ? "success" : "error",
+            lastError: exitCode === 0 ? undefined : `process exited with code ${exitCode}`,
+          });
+        } catch {}
         // NOTE: Removed sendAgentNotification on pane_exited — broadcasting caused
         // other agents to react unnecessarily. The orchestrator detects exits via pane_list().
         // Update context files to remove exited agent
         if (workspace && opts.updateContextFiles) {
-          try { opts.updateContextFiles(workspace); } catch {}
+          try {
+            opts.updateContextFiles(workspace);
+          } catch {}
         }
       } catch {}
     });
@@ -555,7 +616,12 @@ function createMCPBridge(ptyManager, opts = {}) {
   const browserHandlers = createBrowserHandlers(opts);
   const todoHandlers = createTodoHandlers({ memoryStore: opts.memoryStore });
   const memoryHandlers = createMemoryHandlers({ ...opts, paneLabels });
-  const swarmHandlers = createSwarmHandlers(ptyManager, { ...opts, paneLabels, roleMap, agentScorer });
+  const swarmHandlers = createSwarmHandlers(ptyManager, {
+    ...opts,
+    paneLabels,
+    roleMap,
+    agentScorer,
+  });
   const fileHandlers = createFileHandlers({ ...opts, paneLabels, roleMap, ptyManager });
   const workerDispatch = createWorkerDispatch({ ...opts, paneLabels, roleMap, ptyManager });
   const hooksHandlers = createHooksHandlers({ ...opts, paneLabels, roleMap });
@@ -567,10 +633,14 @@ function createMCPBridge(ptyManager, opts = {}) {
   const kanbanHandlers = createKanbanHandlers({ ...opts });
   const missionHandlers = createMissionHandlers({ ...opts });
   const fetchHandlers = createFetchHandlers(opts);
+  const scrapingHandlers = createScrapingHandlers(opts);
 
   // Gap-closing handlers
   const autoMemoryHandlers = createAutoMemoryHandlers({ memoryStore: opts.memoryStore });
-  const securityHandlers = createSecurityHandlers({ memoryStore: opts.memoryStore, getCurrentWorkspacePath: opts.getCurrentWorkspacePath });
+  const securityHandlers = createSecurityHandlers({
+    memoryStore: opts.memoryStore,
+    getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
+  });
 
   // ── Transcript Watchers (Overclock port) ────────────────────────────────
   const transcriptWatcherHandlers = createTranscriptWatcherHandlers({
@@ -660,9 +730,11 @@ function createMCPBridge(ptyManager, opts = {}) {
     opts.memoryStore.actorStartStuckScanner(60000, (stuckActors) => {
       try {
         for (const actor of stuckActors) {
-          const label = actor.label || actor.agent || actor.pane_id?.slice(0, 8) || 'unknown';
+          const label = actor.label || actor.agent || actor.pane_id?.slice(0, 8) || "unknown";
           const stuckMin = Math.floor((actor.stuckDuration || 0) / 60000);
-          console.warn(`[bridge] STUCK DETECTED: "${label}" (${actor.pane_id}) — no activity for ${stuckMin}m`);
+          console.warn(
+            `[bridge] STUCK DETECTED: "${label}" (${actor.pane_id}) — no activity for ${stuckMin}m`
+          );
           // Fire hook for observability
           if (opts.hooksManager) {
             opts.hooksManager.fire("worker_alert", {
@@ -693,9 +765,8 @@ function createMCPBridge(ptyManager, opts = {}) {
       try {
         const store = opts.memoryStore;
         if (store) {
-          const contentPreview = typeof args.content === "string"
-            ? args.content.slice(0, 500)
-            : "(binary)";
+          const contentPreview =
+            typeof args.content === "string" ? args.content.slice(0, 500) : "(binary)";
           store.write({
             type: "working",
             key: `file-changed-${relPath}`,
@@ -707,7 +778,9 @@ function createMCPBridge(ptyManager, opts = {}) {
         }
       } catch {}
       // Fire hook event
-      try { opts.hooksManager?.fire?.("file_written", { path: relPath, size: result.size }); } catch {}
+      try {
+        opts.hooksManager?.fire?.("file_written", { path: relPath, size: result.size });
+      } catch {}
       // NOTE: Removed sendAgentNotification on file_write — broadcasting every file
       // change interrupted agents mid-task. File changes are tracked in shared memory
       // (key: file-changed-<path>) and agents read them via memory_search() proactively.
@@ -732,13 +805,19 @@ function createMCPBridge(ptyManager, opts = {}) {
       // by checking which pane was recently written to (within last 120s).
       const now = Date.now();
       for (const [pid, state] of paneMemoryState) {
-        if (state.lastWriteAt && (now - state.lastWriteAt) < 120000) {
+        if (state.lastWriteAt && now - state.lastWriteAt < 120000) {
           state.hasMemoryActivity = true;
           paneMemoryState.set(pid, state);
         }
       }
       // Fire hook event
-      try { opts.hooksManager?.fire?.("memory_written", { key: args.key, type: args.type, agent_id: args.agent_id }); } catch {}
+      try {
+        opts.hooksManager?.fire?.("memory_written", {
+          key: args.key,
+          type: args.type,
+          agent_id: args.agent_id,
+        });
+      } catch {}
       // NOTE: Removed sendAgentNotification on memory_write — broadcasting every
       // memory write caused constant interruptions. Agents read shared memory
       // proactively via memory_search() instead of being pushed notifications.
@@ -763,6 +842,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...kanbanHandlers,
     ...missionHandlers,
     ...fetchHandlers,
+    ...scrapingHandlers,
     ...agentHandlers,
     // ── MiMo-Code Feature Handlers (25 new features) ──────────────────────
     ...compactionHandlers,
@@ -807,8 +887,8 @@ function createMCPBridge(ptyManager, opts = {}) {
     getPaneWorkspacePath(paneId) {
       if (!ptyManager) return null;
       const panes = ptyManager.list();
-      const pane = panes.find(p => p.paneId === paneId);
-      return pane ? (pane.workspacePath || pane.cwd || null) : null;
+      const pane = panes.find((p) => p.paneId === paneId);
+      return pane ? pane.workspacePath || pane.cwd || null : null;
     },
   };
 }

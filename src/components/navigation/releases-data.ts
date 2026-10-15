@@ -14,6 +14,26 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.21.4",
+    "date": "outubro 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add UC scraping sessions with network capture and interception"
+      }
+    ]
+  },
+  {
+    "version": "1.21.3",
+    "date": "setembro 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "expose browser MCP tools to agents"
+      }
+    ]
+  },
+  {
     "version": "1.21.2",
     "date": "setembro 2026",
     "highlights": [

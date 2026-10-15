@@ -71,6 +71,7 @@ class CDPClient {
     this._reconnectAttempts = 0;
     this._maxReconnectAttempts = 5;
     this._reconnectTimer = null;
+    this._shouldReconnect = true;
     // Auto-request logger (SQLite)
     this._requestLogger = null;
     try {
@@ -232,7 +233,7 @@ class CDPClient {
       this.ws.on("close", () => {
         this.connected = false;
         this.log("[CDP] Connection closed");
-        this._attemptReconnect();
+        if (this._shouldReconnect) this._attemptReconnect();
       });
 
       this.ws.on("error", (err) => {
@@ -318,6 +319,9 @@ class CDPClient {
       }
     } else if (msg.method) {
       // CDP event — store for console/network tools
+      // Consumers such as Fetch interception install this hook to receive
+      // protocol events that are not part of the generic event buffer.
+      if (typeof this._onCdpEvent === "function") this._onCdpEvent(msg);
       this._handleEvent(msg);
     }
   }
@@ -477,6 +481,7 @@ class CDPClient {
    * Disconnect from Chrome.
    */
   async disconnect() {
+    this._shouldReconnect = false;
     if (this._reconnectTimer) {
       clearTimeout(this._reconnectTimer);
       this._reconnectTimer = null;

@@ -1,4 +1,4 @@
-﻿import { EventEmitter } from "node:events";
+import { EventEmitter } from "node:events";
 import { execSync } from "node:child_process";
 import * as nodefs from "node:fs";
 import * as nodeos from "node:os";
@@ -6,6 +6,7 @@ import * as nodepath from "node:path";
 import log from "electron-log/main.js";
 import { OutputBuffer } from "./output-buffer";
 import { IdleDetector } from "./idle-detector";
+import { waitForTerminalReady, type TerminalReadyOptions, type TerminalReadyResult } from "./services/terminal-prompt";
 
 const IS_WIN = process.platform === "win32";
 
@@ -729,6 +730,22 @@ export class PtyManager extends EventEmitter {
     const normalized = data.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     this.writeSilent(paneId, normalized, true);
     (state.pty as any).write("\r");
+  }
+
+  /** Wait for the CLI to finish booting, then submit exactly once. */
+  async submitWhenReady(
+    paneId: string,
+    data: string,
+    options: TerminalReadyOptions = {},
+  ): Promise<TerminalReadyResult> {
+    const ready = await waitForTerminalReady(
+      () => this.readRawText(paneId),
+      () => this.hasPane(paneId),
+      options,
+    );
+    if (!ready.ok) return ready;
+    this.submit(paneId, data);
+    return ready;
   }
 
   /**

@@ -1,4 +1,4 @@
-﻿import * as fs from "node:fs";
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import log from "electron-log/main.js";
@@ -84,6 +84,8 @@ export interface SpawnPaneConfig {
   taskId?: string;
   activityId?: string;
   missionId?: string;
+  /** Prompt submitted after the CLI has produced output and becomes quiet. */
+  initialPrompt?: string;
   /** Squad workers list — injected into orchestrator system prompt */
   squadCallable?: object[];
   /** High-level instructions for the orchestrator from Squad config */
@@ -93,7 +95,7 @@ export interface SpawnPaneConfig {
 export async function spawnPaneInternal(
   ctx: AppContext,
   config: SpawnPaneConfig,
-): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; missionId?: string; error?: string }> {
+): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; missionId?: string; promptSubmitted?: boolean; promptError?: string; error?: string }> {
   try {
     // Smart cwd resolution: explicit > most active pane workspace > global > home
     let cwd = config.cwd;
@@ -1068,6 +1070,24 @@ export async function spawnPaneInternal(
     // Fire hook: pane_spawned
     ctx.hooksManager.fire("pane_spawned", { agent, cwd, providerId, model, role: config.role }, paneId);
 
+    let promptSubmitted: boolean | undefined;
+    let promptError: string | undefined;
+    const initialPrompt = config.initialPrompt?.trim();
+    if (initialPrompt) {
+      const delivery = await ctx.ptyManager.submitWhenReady(paneId, initialPrompt, {
+        timeoutMs: 20_000,
+        quietMs: 800,
+        pollMs: 100,
+      });
+      promptSubmitted = delivery.ok;
+      promptError = delivery.error;
+      if (delivery.ok) {
+        log.info(`[spawnPaneInternal] Initial prompt submitted to ${paneId} after ${delivery.waitedMs}ms`);
+      } else {
+        log.warn(`[spawnPaneInternal] Initial prompt not submitted to ${paneId}: ${delivery.error}`);
+      }
+    }
+
     // Track provider health — success
     if (providerId) {
       const health = ctx.providerHealth.get(providerId) || { providerId, successCount: 0, errorCount: 0 };
@@ -1084,6 +1104,8 @@ export async function spawnPaneInternal(
       model,
       cwd,
       missionId: operationalMissionId,
+      promptSubmitted,
+      promptError,
     };
   } catch (err) {
     // Track provider health — failure

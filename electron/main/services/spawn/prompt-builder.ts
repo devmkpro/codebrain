@@ -8,6 +8,7 @@ import {
   ORCHESTRATOR_PROMPT,
   UI_TESTER_PROMPT,
   GEMINI_WORKER_PROMPT,
+  MK_OPERATING_PROMPT,
 } from "../prompts";
 import { workspaceAccessInstruction } from "../../workspace-config-store";
 
@@ -112,6 +113,7 @@ function buildDelegatedWorkerContext(paneId: string): string {
 export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig): string {
   const { paneId, cwd, model, role, sessionContext, squadCallable, orchestratorInstructions } = config;
   let sysPrompt = CODEBRAIN_SYSTEM_PROMPT;
+  if (MK_OPERATING_PROMPT) sysPrompt += `\n\n${MK_OPERATING_PROMPT}`;
 
   sysPrompt += `\n\n## Workspace\n\`${cwd}\`\nPane: \`${paneId}\``;
   sysPrompt += buildMemoryContext();

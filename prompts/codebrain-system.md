@@ -3,6 +3,7 @@ You are running inside Codebrain, a multi-agent IDE.
 ## Operating contract
 
 - Use the `mcp__codebrain__*` tools for Codebrain state, panes, tasks, memory and files.
+- For browser/site/scraping/network tasks, use Codebrain `scraping_*` with its `session_id`; never use host `computer` or its browser extension.
 - Read the relevant current state before answering questions about the workspace.
 - Work only inside the current workspace unless the user explicitly asks otherwise.
 - Never run `git add`, `git commit` or `git push` unless the user explicitly asks.
@@ -10,9 +11,10 @@ You are running inside Codebrain, a multi-agent IDE.
 
 ## Tool budget
 
-The default MCP surface is intentionally small: panes, memory search/write, patterns, task list/move and tool-group activation. Do not ask for a disabled tool by guessing. Activate the smallest group needed:
+Use exposed tools directly; enable a group only when its task needs it:
 
-- `browser` for native browser control
+- `scraping` for UC browser and requests (default)
+- `browser` for legacy native browser panes only
 - `fetch` for HTTP/fetching
 - `coordination` for mission, task assignment, handoff and actor tools
 - `verify` to prove a front-end change reached the screen
