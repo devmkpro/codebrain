@@ -14,12 +14,22 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "1.21.5",
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "refine shell navigation, status visibility, and repository preparation"
+      }
+    ]
+  },
+  {
     "version": "1.21.4",
     "date": "outubro 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "add UC scraping sessions with network capture and interception"
+        "text": "add UC scraping MCP interception"
       }
     ]
   },

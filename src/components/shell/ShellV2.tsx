@@ -17,7 +17,7 @@ import { RemotePlaybackPanel } from "../remote/RemotePlaybackPanel";
 import { SessionHistoryPanel } from "../session/SessionHistoryPanel";
 import { TasksSidebar } from "../tasks/TasksSidebar";
 import { WorkspaceView } from "../workspace/WorkspaceView";
-import { AgentRail } from "./AgentRail";
+import { NavRail } from "./NavRail";
 import { CommandBar } from "./CommandBar";
 import { StatusBar } from "./StatusBar";
 import { GlobalModalsHost } from "../ui/AppHeader";
@@ -87,7 +87,7 @@ export function ShellV2({ appVersion }: Props) {
         <CommandBar />
 
         <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
-          <AgentRail />
+          <NavRail />
 
           <main className="flex-1 min-h-0 min-w-0 relative overflow-hidden" style={{ zIndex: 0 }}>
             <div

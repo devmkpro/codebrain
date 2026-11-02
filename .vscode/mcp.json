@@ -2,9 +2,9 @@
   "servers": {
     "codebrain": {
       "type": "stdio",
-      "command": "D:\\Projetos\\codebrain\\node_modules\\electron\\dist\\electron.exe",
+      "command": "C:\\Users\\devmk\\AppData\\Local\\Programs\\codebrain\\Codebrain.exe",
       "args": [
-        "D:\\Projetos\\codebrain\\packages\\mcp\\stdio.js"
+        "C:\\Users\\devmk\\AppData\\Local\\Programs\\codebrain\\resources\\app.asar\\packages\\mcp\\stdio.js"
       ],
       "env": {
         "ELECTRON_RUN_AS_NODE": "1"

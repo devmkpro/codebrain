@@ -77,11 +77,18 @@ export function getRepositoryPreparationStatus(workspace: string): RepositoryPre
     if (!fs.statSync(root).isDirectory()) return { ok: false, initialized: false, workspace: root, stack: [], commands: [], skills: [], files: [], git: false, error: "Workspace inválido." };
     const details = detect(root);
     const files = PREPARATION_FILES.filter((file) => fs.existsSync(path.join(root, file)));
-    // The preparation agent writes human-readable context files. It may
-    // deliberately avoid the machine baseline, so the recommendation must
-    // recognise its completed work instead of appearing forever.
-    const initialized = fs.existsSync(path.join(root, ".codebrain", "baseline.json"))
-      || fs.existsSync(path.join(root, ".codebrain", "context.md"));
+    const hasContent = (file: string) => {
+      try { return fs.readFileSync(path.join(root, file), "utf8").trim().length > 0; } catch { return false; }
+    };
+    const baseline = readJson(path.join(root, ".codebrain", "baseline.json"));
+    const skillsDirectory = path.join(root, ".codebrain", "skills");
+    const hasSkills = fs.existsSync(skillsDirectory) && fs.statSync(skillsDirectory).isDirectory()
+      && fs.readdirSync(skillsDirectory, { withFileTypes: true }).some((entry) => entry.isDirectory() && hasContent(`.codebrain/skills/${entry.name}/SKILL.md`));
+    // The baseline is the final marker, but partial or empty deliverables do not
+    // constitute a completed preparation. Skill names are chosen by the agent.
+    const initialized = Boolean(baseline && Array.isArray(baseline.stack) && Array.isArray(baseline.commands))
+      && ["context.md", "repository-map.md", "workflow.md"].every((file) => hasContent(`.codebrain/${file}`))
+      && hasSkills;
     return { ok: true, initialized, workspace: root, ...details, files, git: Boolean(git(root, ["rev-parse", "--is-inside-work-tree"])) };
   } catch (error) {
     return { ok: false, initialized: false, workspace, stack: [], commands: [], skills: [], files: [], git: false, error: error instanceof Error ? error.message : String(error) };

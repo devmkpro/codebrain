@@ -185,6 +185,22 @@
   --cb-duration-normal:       180ms;
   --cb-ease:                  cubic-bezier(0.2, 0, 0.2, 1);
 
+  /* ── Glass / Vibrancy ─────────────────────────────────────────────────
+     Glassmorphism usado na nav rail e em painéis flutuantes. bg-glass é
+     uma superfície semi-transparente com blur — cria profundidade sem
+     precisar de sombra sólida. Nav-strip-width controla a tira de ícones. */
+  --cb-glass-bg:              rgb(11 11 16 / 0.82);
+  --cb-glass-bg-hover:        rgb(23 23 31 / 0.92);
+  --cb-glass-border:          rgb(255 255 255 / 0.06);
+  --cb-glass-blur:            12px;
+
+  --cb-nav-strip-width:       48px;
+  --cb-nav-panel-width:       196px;
+
+  /* Badge de notificação sobre ícones da nav. */
+  --cb-badge-bg:              var(--cb-accent);
+  --cb-badge-text:            var(--cb-fg-on-accent);
+
   /* ── Camadas ───────────────────────────────────────────────────────────
      Escala de z-index nomeada. Antes, os valores viviam espalhados pelos
      componentes (z-[9999], z-[10000], zIndex: 200) e brigavam entre si.     */

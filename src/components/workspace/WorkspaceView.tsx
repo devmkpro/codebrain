@@ -124,7 +124,7 @@ export function WorkspaceView({ workspacePath, view }) {
         <Grid workspacePath={workspacePath} />
       </div>
 
-      {view?.kind !== "map" && view?.kind !== "files" && <RepositoryPreparation workspacePath={workspacePath} />}
+      <RepositoryPreparation workspacePath={workspacePath} showRecommendation={view?.kind !== "map" && view?.kind !== "files"} />
 
       {floatingFiles.map(file => (
         <FloatingFileWindow

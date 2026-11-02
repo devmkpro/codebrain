@@ -1,6 +1,7 @@
 import React from "react";
 import { Bot, FileText, Sparkles, X } from "lucide-react";
 import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
+import { useNavStore } from "../../stores/nav-store";
 
 type Preparation = {
   ok: boolean;
@@ -17,13 +18,15 @@ type Preparation = {
   error?: string;
 };
 
-export function RepositoryPreparation({ workspacePath }: { workspacePath: string }) {
+export function RepositoryPreparation({ workspacePath, showRecommendation = true }: { workspacePath: string; showRecommendation?: boolean }) {
+  const active = useNavStore((state: any) => !state.onHome && state.tabs[state.activeTabIndex]?.workspacePath === workspacePath);
   const [status, setStatus] = React.useState<Preparation | null>(null);
   const [open, setOpen] = React.useState(false);
   const [dismissed, setDismissed] = React.useState(false);
 
   React.useEffect(() => {
     setStatus(null);
+    setOpen(false);
     setDismissed(false);
     const preparationStatus = window.codeBrainApp?.workspace?.preparationStatus;
     if (!preparationStatus) return;
@@ -34,7 +37,6 @@ export function RepositoryPreparation({ workspacePath }: { workspacePath: string
           if (cancelled) return;
           setStatus(result);
           if (result?.initialized) {
-            setOpen(false);
             setDismissed(true);
           }
         })
@@ -49,10 +51,14 @@ export function RepositoryPreparation({ workspacePath }: { workspacePath: string
   }, [workspacePath]);
 
   React.useEffect(() => {
-    const openPreparation = () => { setDismissed(false); setOpen(true); };
+    if (!active) {
+      setOpen(false);
+      return;
+    }
+    const openPreparation = () => { setOpen(true); };
     window.addEventListener("codebrain:prepare-repository", openPreparation);
     return () => window.removeEventListener("codebrain:prepare-repository", openPreparation);
-  }, []);
+  }, [active]);
 
   const startPreparationAgent = () => {
     if (!status) return;
@@ -67,11 +73,11 @@ export function RepositoryPreparation({ workspacePath }: { workspacePath: string
     setDismissed(true);
   };
 
-  if (!status?.ok) return null;
+  if (!active || !status?.ok) return null;
   const files = ["context.md", "repository-map.md", "workflow.md", "skills/project-conventions", "skills/test-and-verify", ...status.skills.map((skill) => `skills/${skill.id}`), "baseline.json"];
 
   return <>
-    {!status.initialized && !dismissed && <aside className="absolute top-3 right-3 z-[120] w-[min(360px,calc(100%-24px))] border border-cb-accent/40 bg-cb-bg-1 shadow-cb-pop rounded-cb-1 p-3">
+    {showRecommendation && !status.initialized && !dismissed && <aside className="absolute top-3 right-3 z-[120] w-[min(360px,calc(100%-24px))] border border-cb-accent/40 bg-cb-bg-1 shadow-cb-pop rounded-cb-1 p-3">
       <div className="flex gap-2"><div className="mt-0.5 h-7 w-7 shrink-0 flex items-center justify-center border border-cb-accent/40 bg-cb-accent-wash rounded-cb-1"><Sparkles size={14} className="text-cb-accent" /></div><div className="min-w-0 flex-1"><div className="text-xs font-semibold text-cb-fg-0">Preparar este repositório</div><p className="mt-1 text-2xs leading-relaxed text-cb-fg-2">Detecta a stack e gera contexto, verificações e Skills específicas para os agentes.</p></div><button type="button" onClick={() => setDismissed(true)} className="p-1 self-start text-cb-fg-3 hover:text-cb-fg-0" title="Agora não" aria-label="Fechar recomendação"><X size={13}/></button></div>
       <div className="mt-3 flex items-center justify-between gap-2"><span className="text-2xs text-cb-fg-3 truncate">{status.stack.join(" · ") || "stack não detectada"}</span><button type="button" onClick={() => setOpen(true)} className="h-cell px-3 shrink-0 border border-cb-accent bg-cb-accent text-cb-on-accent text-xs font-semibold rounded-cb-1">Preparar</button></div>
     </aside>}

@@ -172,6 +172,72 @@
   z-index: var(--cb-z-overlay);
 }
 
+/* ── Glass ───────────────────────────────────────────────────────────────
+   Superfície frosted-glass usada na nav rail. Aplica blur + borda tênue
+   + filtro de refração SVG (#cb-refract) para o efeito de vidro físico.   */
+.cb-glass {
+  background: var(--cb-glass-bg);
+  border-right: 1px solid var(--cb-glass-border);
+  backdrop-filter: blur(var(--cb-glass-blur));
+  -webkit-backdrop-filter: blur(var(--cb-glass-blur));
+  filter: url(#cb-refract);
+}
+
+/* ── Ícone de nav ────────────────────────────────────────────────────────
+   Botão quadrado da tira de ícones. Tamanho fixo, centrado, tooltip via
+   `title`. O accent rail esquerdo indica a seção ativa.                   */
+.cb-nav-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--cb-radius-1);
+  color: var(--cb-fg-3);
+  transition: color var(--cb-duration-fast) var(--cb-ease),
+              background var(--cb-duration-fast) var(--cb-ease);
+}
+.cb-nav-icon:hover {
+  background: var(--cb-bg-2);
+  color: var(--cb-fg-0);
+}
+.cb-nav-icon[data-active="true"] {
+  background: var(--cb-accent-wash);
+  color: var(--cb-accent);
+}
+.cb-nav-icon[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  background: var(--cb-accent);
+  border-radius: 0 var(--cb-radius-1) var(--cb-radius-1) 0;
+}
+
+/* ── Badge de nav ────────────────────────────────────────────────────────
+   Contagem pequena sobre ícone da nav. */
+.cb-nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding-inline: 3px;
+  border-radius: var(--cb-radius-full);
+  font-size: 9px;
+  font-weight: var(--cb-weight-bold);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cb-badge-bg);
+  color: var(--cb-badge-text);
+  pointer-events: none;
+}
+
 /* ── Superfície flutuante ────────────────────────────────────────────────
    Menus, popovers, palette. A única coisa que ganha sombra de verdade.     */
 .cb-float {
