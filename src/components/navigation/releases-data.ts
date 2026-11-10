@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "2.0.3",
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "normalize SSH control sequences across Node versions and validate window dragging on Linux CI"
+      }
+    ]
+  },
+  {
     "version": "2.0.2",
     "date": "novembro 2026",
     "highlights": [

@@ -1,5 +1,9 @@
 import { stripVTControlCharacters } from "node:util";
 
+// Node 20/22's built-in stripper can leave OSC title text behind. Remove
+// complete OSC sequences first, including BEL, ST and C1 terminators.
+const OSC_SEQUENCE = /(?:\x1b\]|\x9d)[\s\S]*?(?:\x07|\x1b\\|\x9c)/g;
+
 export class OutputBuffer {
   private rawChunks: string[] = [];
   private rawChunkChars = 0;
@@ -64,6 +68,6 @@ export class OutputBuffer {
   }
 
   private stripAnsi(text: string): string {
-    return stripVTControlCharacters(text);
+    return stripVTControlCharacters(text.replace(OSC_SEQUENCE, ""));
   }
 }

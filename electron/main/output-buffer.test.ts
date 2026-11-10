@@ -25,3 +25,9 @@ it("does not duplicate a partial line when it is completed and keeps the request
   buffer.clear();
   expect(buffer.readPlain()).toEqual([]);
 });
+
+it.each(["\x07", "\x1b\\", "\x9c"])("strips OSC terminated by %j consistently across Node versions", terminator => {
+  const buffer = new OutputBuffer();
+  buffer.push(`\x1b]0;Terminal title${terminator}deploy@example-host:~$ `);
+  expect(buffer.readPlain(1)).toEqual(["deploy@example-host:~$ "]);
+});
