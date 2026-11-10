@@ -16,6 +16,8 @@ function tableFile(table) {
 }
 
 function setup(overrides = {}, paneOverrides = {}) {
+  const metadata = new Map();
+  let taskNumber = 0;
   const paneHandlers = {
     spawnPane: vi.fn(async () => ({ ok: true, paneId: "p1", agent: "claude" })),
     writePane: vi.fn(async () => ({ ok: true })),
@@ -35,7 +37,14 @@ function setup(overrides = {}, paneOverrides = {}) {
     paneLabels: new Map(),
     harnessTablePath: path.join(os.tmpdir(), "cb-tabela-inexistente.json"),
     getCurrentWorkspacePath: () => "/ws",
-    memoryStore: { recordSpawnReceipt: vi.fn() },
+    memoryStore: {
+      recordSpawnReceipt: vi.fn(),
+      actorGet: ({ paneId }) => ({ ok: true, actor: { pane_id: paneId, workspace: "/ws", mission_id: "mission_fixture" } }),
+      actorGetMetadata: ({ paneId }) => ({ ok: true, metadata: metadata.get(paneId) || {} }),
+      actorSetMetadata: vi.fn(({ paneId, metadata: value }) => { metadata.set(paneId, { ...metadata.get(paneId), ...value }); return { ok: true }; }),
+      createKanbanTask: vi.fn(() => ({ ok: true, id: `task_${++taskNumber}` })),
+      listKanbanTasks: () => ({ ok: true, tasks: [] }),
+    },
     ...overrides,
   };
   return {
@@ -47,6 +56,32 @@ function setup(overrides = {}, paneOverrides = {}) {
 }
 
 describe("spawnTask", () => {
+  it("rejeita prompt placeholder junto do lote, atomicamente", async () => {
+    const { api, paneHandlers, opts } = setup();
+    expect(await api.spawnTask({ prompt: "PLACEHOLDER", panes: [{ prompt: "Real" }] })).toMatchObject({ ok: false });
+    expect(paneHandlers.spawnPane).not.toHaveBeenCalled();
+    expect(opts.memoryStore.createKanbanTask).not.toHaveBeenCalled();
+  });
+
+  it("limita lote Kiro de cinco a duas entregas concorrentes e mantém resultados individuais", async () => {
+    let next = 0;
+    let active = 0;
+    let peak = 0;
+    const { api, paneHandlers } = setup({}, { spawnPane: vi.fn(async () => ({ ok: true, paneId: `batch-${++next}` })) });
+    paneHandlers.writePane.mockImplementation(async () => {
+      active++; peak = Math.max(peak, active);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      active--;
+      return { ok: true };
+    });
+    const result = await api.spawnTask({ agent: "kiro", panes: Array.from({ length: 5 }, (_, index) => ({ prompt: `Task ${index}` })) });
+    expect(peak).toBe(2);
+    expect(result.ok).toBe(true);
+    expect(result.panes.map(pane => pane.index)).toEqual([0, 1, 2, 3, 4]);
+    expect(new Set(result.panes.map(pane => pane.taskId)).size).toBe(5);
+    expect(paneHandlers.spawnPane.mock.calls.every(([request]) => request.agent === "kiro")).toBe(true);
+  });
+
   it("herda missão operacional do parent e usa missão efetiva no recibo", async () => {
     const { api, paneHandlers, opts } = setup(
       { paneConfigs: new Map([["pai", { cwd: "/parent-ws", missionId: "mission_parent" }]]) },

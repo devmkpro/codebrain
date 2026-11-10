@@ -1,7 +1,7 @@
 {
   "name": "codebrain",
   "productName": "Codebrain",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Electron shell â€” React UI + IPC layer for Codebrain App",
   "homepage": "https://gitlab.com/maikeofc18/codebrain",
   "author": {
@@ -26,7 +26,7 @@
     "dist:win:nsis": "npm run build && electron-builder --win nsis --publish never",
     "dist:mac": "npm run prebuild:native && npm run bundle:stdio && npm run build && electron-builder --mac --publish never",
     "dist:linux": "npm run prebuild:native && npm run bundle:stdio && npm run build && electron-builder --linux --publish never",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.web.json --noEmit",
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -93,6 +93,7 @@
   },
   "build": {
     "appId": "sh.codebrain.app",
+    "afterPack": "./scripts/after-pack-schema.cjs",
     "productName": "Codebrain",
     "copyright": "Copyright Â© 2026 Codebrain",
     "publish": [

@@ -11,7 +11,7 @@ variables:
   ELECTRON_CACHE: "/tmp/.cache/electron"
   ELECTRON_BUILDER_CACHE: "/tmp/.cache/electron-builder"
 
-# Verify (master push)
+# Verify source and tagged distributions before building installers.
 verify:
   stage: verify
   tags:
@@ -21,9 +21,13 @@ verify:
     - rm -rf node_modules
     - npm ci --prefer-offline
   script:
+    - npm run typecheck:node
+    - npm run test:token-budget
+    - npm run test -- --maxWorkers=3
     - npm run build
   only:
     - master
+    - tags
 
 # Linux Build
 build_linux:

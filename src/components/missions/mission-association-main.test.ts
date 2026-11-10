@@ -6,7 +6,7 @@ import * as path from "node:path";
 
 const { send, handlers } = vi.hoisted(() => ({ send: vi.fn(), handlers: new Map<string, (...args: any[]) => any>() }));
 vi.mock("../../../electron/main/context", () => ({ safeSend: send }));
-vi.mock("../../../electron/main/pty-manager", () => ({ resolveCommand: () => ({ unavailable: false }) }));
+vi.mock("../../../electron/main/pty-manager", () => ({ resolveCommand: () => ({ unavailable: false, binary: process.platform === "win32" ? "C:\\Windows\\System32\\cmd.exe" : "/bin/sh", args: [] }) }));
 vi.mock("../../../electron/main/window", () => ({ createDetachedPaneWindow: vi.fn() }));
 vi.mock("electron", () => ({ ipcMain: { handle: (name: string, fn: (...args: any[]) => any) => handlers.set(name, fn) }, BrowserWindow: {} }));
 vi.mock("electron-log/main.js", () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -40,7 +40,7 @@ function context(saved: Record<string, unknown> = {}) {
     },
     ptyManager: {
       spawn: vi.fn(async ({ paneId }) => paneId),
-      submitWhenReady: vi.fn(async (_paneId: string, _prompt: string) => ({ ok: true, waitedMs: 0 })),
+      submitWhenReady: vi.fn(async (_paneId: string, _prompt: string) => ({ ok: true, waitedMs: 0, promptSubmitted: true, deliveryState: "submitted" })),
       list: vi.fn(() => []),
     },
     hooksManager: { runPreSpawnHooks: vi.fn(async () => {}), fire: vi.fn() },
@@ -50,6 +50,14 @@ function context(saved: Record<string, unknown> = {}) {
 beforeEach(() => { send.mockReset(); handlers.clear(); });
 
 describe("associação operacional de missões", () => {
+  it("cria uma missão para um brief explícito mesmo sem parent ou missão de UI", () => {
+    const ctx = context();
+    ctx.memoryStore.resolveActiveMission.mockReturnValue({ mission: null });
+    expect(resolvePaneMission(ctx, { agent: "kiro", spawnBrief: "Corrigir somente perfil" }, "D:/app"))
+      .toMatchObject({ operationalMissionId: "mission_1" });
+    expect(ctx.memoryStore.createMission).toHaveBeenCalledWith(expect.objectContaining({ workspace: "D:/app" }));
+  });
+
   it("cria associações distintas no mesmo workspace e reutiliza a mesma após reinício", () => {
     const ctx = context();
     const first = resolvePaneMission(ctx, { missionId: "ui-a", role: "orchestrator" }, "D:/app");
@@ -87,7 +95,7 @@ describe("associação operacional de missões", () => {
       expect(ctx.paneConfigs.get("pilot")).toMatchObject({ missionId: "mission_1", uiMissionId: "ui-a", allowedSkills: ["cb-pilot"], parentPaneId: undefined });
       expect(ctx.memoryStore.getActorRole({ paneId: "pilot" })).toMatchObject({ missionId: "mission_1", role: "orchestrator" });
       expect(send).toHaveBeenCalledWith(ctx, "pane:added", expect.objectContaining({ missionId: "ui-a", uiMissionId: "ui-a", operationalMissionId: "mission_1", workspacePath: "D:/app" }));
-      return { ok: true, waitedMs: 0 };
+      return { ok: true, waitedMs: 0, promptSubmitted: true, deliveryState: "submitted" };
     });
     const result = await spawnPaneInternal(ctx, { paneId: "pilot", agent: "shell", cwd: "D:/app", uiMissionId: "ui-a", role: "orchestrator", initialPrompt: "objetivo", allowedSkills: ["cb-pilot"] });
     expect(result).toMatchObject({ ok: true, missionId: "mission_1", uiMissionId: "ui-a", operationalMissionId: "mission_1", promptSubmitted: true });

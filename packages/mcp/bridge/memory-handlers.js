@@ -25,10 +25,10 @@ function createMemoryHandlers(opts) {
       return store.read({ id, key, workspace: ws });
     },
 
-    async memorySearch({ query, type, workspace, limit }) {
+    async memorySearch({ query, type, workspace, limit, tags, exclude_tags, include_auto }) {
       const store = getStore();
       const ws = workspace || opts.getCurrentWorkspacePath?.();
-      return store.search({ query, type, workspace: ws, limit });
+      return store.search({ query, type, workspace: ws, limit, tags, exclude_tags, include_auto });
     },
 
     async memoryList({ type, agent_id, workspace, limit, offset }) {

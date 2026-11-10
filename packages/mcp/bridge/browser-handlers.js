@@ -4,11 +4,11 @@
  * Browser control bridge handlers with CDP proxy pattern.
  *
  * AUTO-DETECTION: When Chrome is running with --remote-debugging-port,
- * all browser commands are routed via CDP (native Chrome). Otherwise,
- * falls back to the embedded Electron webview.
+ * browser commands are routed via CDP (native Chrome). Navigation never
+ * auto-launches a new browser or authentication flow when CDP is unavailable.
  */
 
-const { createNativeChromeHandlers } = require("./native-chrome-handlers.js");
+const { createNativeChromeHandlers, screenshotArtifact } = require("./native-chrome-handlers.js");
 
 function createBrowserHandlers(opts) {
   // Persistent storage for active browser pane (webview mode)
@@ -19,6 +19,7 @@ function createBrowserHandlers(opts) {
   let nativeHandlers = null;
   let cdpCheckPromise = null;
   let lastCdpCheckTime = 0;
+  let launchPort = null;
   const CDP_RECHECK_INTERVAL_MS = 5000; // re-check every 5s when in webview mode
 
   /**
@@ -28,7 +29,11 @@ function createBrowserHandlers(opts) {
   async function ensureBrowserMode() {
     // If already in CDP mode and connected, stay there
     const cdpClient = opts.cdpClient;
-    if (nativeMode === true && nativeHandlers && cdpClient?.isConnected()) return true;
+    if (cdpClient?.isConnected()) {
+      if (!nativeHandlers) nativeHandlers = createNativeChromeHandlers(cdpClient, opts);
+      nativeMode = true;
+      return true;
+    }
 
     // If in webview mode, re-check periodically in case Chrome was launched after startup
     const now = Date.now();
@@ -47,12 +52,20 @@ function createBrowserHandlers(opts) {
       }
 
       try {
+        // A launched/custom port is authoritative, not the detector's defaults.
+        const port = launchPort || cdpClient.activePort;
+        if (port) {
+          await cdpClient.connect(port);
+          nativeHandlers = createNativeChromeHandlers(cdpClient, opts);
+          nativeMode = true;
+          return true;
+        }
         const det = await cdpClient.detect();
         if (det.available) {
           if (!cdpClient.isConnected()) {
             await cdpClient.connect(det.port);
           }
-          nativeHandlers = createNativeChromeHandlers(cdpClient);
+          nativeHandlers = createNativeChromeHandlers(cdpClient, opts);
           nativeMode = true;
           lastCdpCheckTime = Date.now();
           console.log(
@@ -67,7 +80,7 @@ function createBrowserHandlers(opts) {
       nativeMode = false;
       lastCdpCheckTime = Date.now();
       if (nativeHandlers) {
-        console.log("[Browser] Chrome disconnected — falling back to webview");
+          console.log("[Browser] Chrome disconnected — explicit browser_launch may be required");
         nativeHandlers = null;
       }
       return false;
@@ -170,7 +183,9 @@ function createBrowserHandlers(opts) {
     return {
       ok: false,
       error: "Chrome CDP not available. Browser commands require native Chrome with --remote-debugging-port. Webview mode is disabled.",
-      hint: "Start Chrome with: chrome.exe --remote-debugging-port=9222"
+      hint: launchPort || opts.cdpClient?.activePort
+        ? `Reconnect Chrome on the active CDP port ${launchPort || opts.cdpClient.activePort}, or use browser_launch explicitly.`
+        : "Use browser_launch explicitly to select a Chrome CDP port."
     };
   }
 
@@ -356,24 +371,24 @@ function createBrowserHandlers(opts) {
     },
 
     // ── Screenshot ─────────────────────────────────────────────────────
-    async browserScreenshot(fullPage, paneId) {
+    async browserScreenshot(fullPage, paneId, options = {}) {
       const isCdp = await ensureBrowserMode();
       if (isCdp && nativeHandlers) {
-        return nativeHandlers.screenshot(fullPage);
+        return nativeHandlers.screenshot(fullPage, options);
       }
       // Webview mode: use dedicated screenshot function
       if (!opts.saveScreenshot)
         throw new Error("screenshot not available");
-      return opts.saveScreenshot(paneId, fullPage);
+      return screenshotArtifact(await opts.saveScreenshot(paneId, fullPage, options), options, opts);
     },
-    async browserScreenshotElement(selector, paneId) {
+    async browserScreenshotElement(selector, paneId, options = {}) {
       const isCdp = await ensureBrowserMode();
       if (isCdp && nativeHandlers) {
-        return nativeHandlers.screenshotElement(selector);
+        return nativeHandlers.screenshotElement(selector, options);
       }
       if (!opts.saveScreenshotElement)
         throw new Error("screenshot not available");
-      return opts.saveScreenshotElement(selector, paneId);
+      return screenshotArtifact(await opts.saveScreenshotElement(selector, paneId, options), options, opts);
     },
     async browserAnnotate(path, annotations) {
       return { ok: true, path, note: "annotation not yet implemented" };
@@ -401,7 +416,7 @@ function createBrowserHandlers(opts) {
       if (isCdp && nativeHandlers) {
         return {
           ok: true,
-          entries: await nativeHandlers.readConsole({ level, limit }),
+          entries: await nativeHandlers.readConsole({ level, limit, since_ms: sinceMs }),
         };
       }
       if (!opts.getConsoleLog)
@@ -425,9 +440,12 @@ function createBrowserHandlers(opts) {
       if (isCdp && nativeHandlers) {
         return {
           ok: true,
+          scope: "current-tab",
           entries: await nativeHandlers.readNetwork({
             method,
             url_pattern: urlFilter,
+            status,
+            since_ms: sinceMs,
             limit,
           }),
         };
@@ -453,11 +471,12 @@ function createBrowserHandlers(opts) {
         const timeout = timeoutMs || 10000;
         const start = Date.now();
         return new Promise((resolve) => {
-          const check = () => {
-            const reqs = nativeHandlers.readNetwork({
+          const check = async () => {
+            let reqs;
+            try { reqs = await nativeHandlers.readNetwork({
               method,
               url_pattern: pattern,
-            });
+            }); } catch (error) { resolve({ ok: false, error: error.message }); return; }
             if (reqs && reqs.length > 0) {
               resolve({ ok: true, entry: reqs[reqs.length - 1], timedOut: false });
               return;
@@ -597,7 +616,7 @@ function createBrowserHandlers(opts) {
             "browser_tabs_list requires native Chrome (start Chrome with --remote-debugging-port=9222)",
         };
       }
-      return { ok: true, tabs: await nativeHandlers.tabsContext() };
+      return nativeHandlers.tabsContext();
     },
 
     async browserTabsCreate(url) {
@@ -714,6 +733,7 @@ function createBrowserHandlers(opts) {
       // and returns 404 on CDP endpoints (false negative).
       const result = await cdpClient.launch({ port: port || 9223 });
       if (!result.ok) return result;
+      launchPort = result.port || port || cdpClient.activePort || 9223;
 
       // Reset browser mode detection so next call re-checks CDP
       nativeMode = null;
@@ -783,46 +803,43 @@ function createBrowserHandlers(opts) {
      * Returns requests with full details: URL, method, status, headers, body, timing.
      */
     async browserRequestsLog(args) {
-      const cdpClient = opts.cdpClient;
-      if (!cdpClient?._requestLogger) {
-        return { ok: false, error: "Request logger not available. Ensure better-sqlite3 is installed." };
-      }
-      return cdpClient._requestLogger.query(args || {});
+      if (!(await ensureBrowserMode()) || !nativeHandlers) return { ok: false, error: "Current-tab request capture unavailable; use browser_launch explicitly." };
+      args = args || {};
+      const all = await nativeHandlers.readNetwork({ ...args, limit: 1000 });
+      const offset = Math.max(0, Number(args.offset) || 0);
+      const limit = Math.max(1, Math.min(1000, Number(args.limit) || 100));
+      return { ok: true, scope: "current-tab", requests: all.reverse().slice(offset, offset + limit), total: all.length, offset, limit, note: "Live active-tab metadata only; historical bodies/headers are not returned without target-scoped storage." };
     },
 
     /**
      * browser_requests_search — Search requests by URL, body content, etc.
      */
     async browserRequestsSearch(args) {
-      const cdpClient = opts.cdpClient;
-      if (!cdpClient?._requestLogger) {
-        return { ok: false, error: "Request logger not available." };
-      }
-      return cdpClient._requestLogger.query({ search: args.query, limit: args.limit, url_filter: args.url });
+      return this.browserRequestsLog({ search: args.query, limit: args.limit, url_filter: args.url });
     },
 
     /**
      * browser_requests_stats — Get statistics about captured requests.
      */
     async browserRequestsStats() {
-      const cdpClient = opts.cdpClient;
-      if (!cdpClient?._requestLogger) {
-        return { ok: false, error: "Request logger not available." };
-      }
-      return cdpClient._requestLogger.stats();
+      const result = await this.browserRequestsLog({ limit: 1000 });
+      if (!result.ok) return result;
+      const counts = (key) => Object.entries(result.requests.reduce((acc, r) => { const value = r[key] ?? "pending"; acc[value] = (acc[value] || 0) + 1; return acc; }, {})).map(([value, count]) => ({ [key]: value, count }));
+      return { ok: true, scope: result.scope, total: result.total, byMethod: counts("method"), byStatus: counts("status"), recent: result.requests.slice(0, 5) };
     },
 
     /**
      * browser_requests_export — Export captured requests as JSON or CSV.
      */
     async browserRequestsExport(args) {
-      const cdpClient = opts.cdpClient;
-      if (!cdpClient?._requestLogger) {
-        return { ok: false, error: "Request logger not available." };
+      const result = await this.browserRequestsLog({ ...args, limit: args?.limit || 1000 });
+      if (!result.ok) return result;
+      if (args?.format === "csv") {
+        const keys = ["timestamp", "method", "status", "url", "type", "error"];
+        const cell = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+        return { ok: true, scope: result.scope, count: result.requests.length, csv: [keys.join(","), ...result.requests.map((r) => keys.map((key) => cell(r[key])).join(","))].join("\n") };
       }
-      const format = (args && args.format) || "json";
-      if (format === "csv") return cdpClient._requestLogger.exportCsv(args);
-      return cdpClient._requestLogger.exportJson(args);
+      return { ok: true, scope: result.scope, count: result.requests.length, json: JSON.stringify(result.requests) };
     },
 
     /**

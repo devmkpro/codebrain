@@ -900,110 +900,120 @@ function createMemoryStore(dbPath) {
 
     /**
      * Search memories by keyword across content, key, and tags.
-     * Uses FTS5 with BM25 ranking when available, falls back to LIKE-based search.
-     * Relative floor filtering: drops results below 15% of top BM25 score.
+     * Exact key first, then whole-term AND search (FTS5/BM25 or SQLite token fallback).
+     * Relative BM25 floor never removes an exact-key match. Tags are exact/all;
+     * exclude_tags removes any matching tag. Automatic records are opt-in except
+     * legacy explicit file-changed queries when include_auto is omitted.
      * When scope is NOT specified, searches across all scopes.
-     * @param {{ query: string, type?: string, workspace?: string, limit?: number, scope?: 'project'|'local'|'user' }} opts
+     * @param {{ query: string, type?: string, workspace?: string, limit?: number, scope?: 'project'|'local'|'user', tags?: string[], exclude_tags?: string[], include_auto?: boolean }} opts Limit is clamped to 1..100 (default 20).
      */
-    search({ query, type, workspace, limit = 20, scope }) {
-      if (!query) return { ok: false, error: "query is required" };
+    search({ query, type, workspace, limit = 20, scope, tags = [], exclude_tags = [], include_auto } = {}) {
+      if (typeof query !== "string" || !query.trim()) return { ok: false, error: "query is required" };
+      query = query.trim();
+      if (![tags, exclude_tags].every(list => Array.isArray(list) && list.length <= 64 && list.every(tag => typeof tag === "string" && tag.trim()))) {
+        return { ok: false, error: "tags and exclude_tags must be arrays of non-empty strings (maximum 64)" };
+      }
+      if (include_auto !== undefined && typeof include_auto !== "boolean") {
+        return { ok: false, error: "include_auto must be a boolean" };
+      }
+      limit = typeof limit === "number" && Number.isFinite(limit) ? Math.floor(limit) : 20;
+      limit = Math.max(1, Math.min(limit, 100));
+      const fetchLimit = Math.min(limit * 3, 300);
+      const tokens = [...new Set(query.match(/[\p{L}\p{N}]+/gu) ?? [])];
+      if (tokens.length > 64) return { ok: false, error: "query must contain at most 64 terms" };
 
-      let results;
+      // Do not change list/read/digest or exclude all working/episodic entries.
+      // Explicit file-change lookup is also used by the background security scan.
+      // Omitted include_auto keeps that legacy path; explicit false always wins.
+      const includeAuto = include_auto === true ||
+        (include_auto === undefined && /^file-changed(?:$|[-/\\])/i.test(query));
+      const conditions = [];
+      const params = [];
+      if (type) { conditions.push("m.type = ?"); params.push(type); }
+      if (workspace) { conditions.push("m.workspace = ?"); params.push(workspace); }
+      if (scope) { conditions.push("m.scope = ?"); params.push(scope); }
+      const tagJson = "CASE WHEN json_valid(m.tags) THEN m.tags ELSE '[]' END";
+      for (const tag of new Set(tags.map(tag => tag.trim()))) {
+        conditions.push(`EXISTS (SELECT 1 FROM json_each(${tagJson}) t WHERE t.value = ?)`);
+        params.push(tag);
+      }
+      for (const tag of new Set(exclude_tags.map(tag => tag.trim()))) {
+        conditions.push(`NOT EXISTS (SELECT 1 FROM json_each(${tagJson}) t WHERE t.value = ?)`);
+        params.push(tag);
+      }
+      if (!includeAuto) {
+        conditions.push(`NOT EXISTS (SELECT 1 FROM json_each(${tagJson}) t
+          WHERE lower(t.value) IN ('auto', 'hook', 'file-change'))`);
+        conditions.push("NOT (m.type = 'working' AND (m.key LIKE 'file-changed-%' OR m.key LIKE 'hook-%'))");
+      }
+      const filters = conditions.length ? " AND " + conditions.join(" AND ") : "";
+      const decode = row => {
+        let parsed;
+        try { parsed = JSON.parse(row.tags || "[]"); } catch { parsed = []; }
+        return { ...row, tags: Array.isArray(parsed) ? parsed : [] };
+      };
 
-      if (fts5Available) {
-        // ── FTS5 + BM25 ranking (MiMo-inspired) ──────────────────────────
-        const ftsQuery = buildFtsQuery(query);
-        if (!ftsQuery) return { ok: true, memories: [], count: 0 };
+      // Query exact keys independently: BM25's floor/over-fetch or graph rank
+      // must never bury an exact identifier, including punctuation-only keys.
+      const exact = db.prepare(`
+        SELECT m.* FROM memories m WHERE m.key = ? ${filters}
+        ORDER BY m.updated_at DESC, m.rowid DESC LIMIT ?
+      `).all(query, ...params, limit).map(decode);
+      let results = tokens.length ? null : [];
 
-        const FLOOR_RATIO = 0.15; // Relative floor: keep results within 15% of top score
-        const fetchLimit = Math.min(limit * 3, 60); // Over-fetch 3x for floor filtering
-
+      if (fts5Available && tokens.length) {
+        // Literal Unicode terms, all required. FTS syntax from user input is data.
+        const ftsQuery = tokens.map(token => '"' + token + '"').join(" AND ");
         try {
-          // Build dynamic WHERE clause for optional filters
-          const conditions = [];
-          const params = [ftsQuery];
-          if (type) { conditions.push("m.type = ?"); params.push(type); }
-          if (workspace) { conditions.push("m.workspace = ?"); params.push(workspace); }
-          if (scope) { conditions.push("m.scope = ?"); params.push(scope); }
-          const whereClause = conditions.length > 0 ? "AND " + conditions.join(" AND ") : "";
-
-          params.push(fetchLimit);
           const rows = db.prepare(`
             SELECT m.*, snippet(memory_fts, 1, '<<', '>>', '...', 32) AS _snippet,
                    bm25(memory_fts) AS _bm25_score
-            FROM memory_fts
-            JOIN memories m ON m.rowid = memory_fts.rowid
-            WHERE memory_fts MATCH ?
-            ${whereClause}
-            ORDER BY bm25(memory_fts)
-            LIMIT ?
-          `).all(...params);
-
-          if (rows.length > 0) {
-            // BM25: lower = better. Negate so higher = better for caller.
-            const mapped = rows.map(r => ({
-              ...r,
-              tags: JSON.parse(r.tags || "[]"),
-              _score: -r._bm25_score,
-              _snippet: r._snippet,
-            }));
-
-            // Relative floor: keep only results within 15% of top score
-            const topScore = mapped[0]._score;
-            const cutoff = topScore * FLOOR_RATIO;
-            results = mapped
-              .filter((r, i) => i === 0 || r._score >= cutoff)
-              .slice(0, limit);
-          } else {
-            results = [];
-          }
-        } catch (e) {
-          // FTS5 query failed (e.g., syntax error in query) — fall back to LIKE
-          console.warn("[memory] FTS5 search failed, falling back to LIKE:", e.message);
-          results = null; // Signal to use LIKE fallback
+            FROM memory_fts JOIN memories m ON m.rowid = memory_fts.rowid
+            WHERE memory_fts MATCH ? ${filters}
+            ORDER BY bm25(memory_fts), m.updated_at DESC, m.rowid DESC LIMIT ?
+          `).all(ftsQuery, ...params, fetchLimit);
+          const mapped = rows.map(row => ({ ...decode(row), _score: -row._bm25_score }));
+          const cutoff = (mapped[0]?._score ?? 0) * 0.15;
+          results = mapped.filter((row, index) => index === 0 || row._score >= cutoff);
+        } catch (error) {
+          console.warn("[memory] FTS5 search failed, falling back to token search:", error.message);
         }
       }
 
-      // ── LIKE-based fallback (original behavior) ──────────────────────────
       if (!results) {
-        const likeQuery = `%${query}%`;
-        const rows = stmts.searchKeyword.all({
-          query: likeQuery,
-          type: type || null,
-          workspace: workspace || null,
-          limit,
-          scope: scope || null,
+        // SQLite fallback has the same whole-term AND semantics as FTS, not
+        // LIKE '%ui%' (which matches 'build'). Apply filters before LIMIT.
+        const normalize = text => String(text ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+        const wanted = tokens.map(normalize);
+        db.function("cb_memory_search_all_terms", { deterministic: true }, (key, content, rowTags) => {
+          const words = new Set(normalize([key, content, rowTags].join(" ")).match(/[\p{L}\p{N}]+/gu) ?? []);
+          return wanted.every(token => words.has(token)) ? 1 : 0;
         });
-        results = rows.map((r) => ({ ...r, tags: JSON.parse(r.tags || "[]") }));
+        results = db.prepare(`
+          SELECT m.* FROM memories m
+          WHERE cb_memory_search_all_terms(m.key, m.content, m.tags) = 1 ${filters}
+          ORDER BY m.updated_at DESC, m.rowid DESC LIMIT ?
+        `).all(...params, fetchLimit).map(decode);
 
-        // Graph-aware ranking: combinedScore = 0.7 * textScore + 0.3 * pageRank
+        // Retain the existing graph tie-breaker, but only among matching rows.
         if (knowledgeGraph && results.length > 1) {
           try {
             const ranks = knowledgeGraph.pageRank();
-            if (ranks && ranks.size > 0) {
-              let maxRank = 0;
-              for (const [, score] of ranks) {
-                if (score > maxRank) maxRank = score;
-              }
-              if (maxRank > 0) {
-                results = results.map((r, i) => {
-                  const textScore = 1 - (i / results.length);
-                  const pageRank = (ranks.get(r.id) || 0) / maxRank;
-                  const combinedScore = 0.7 * textScore + 0.3 * pageRank;
-                  return { ...r, _combinedScore: Math.round(combinedScore * 1000) / 1000 };
-                });
-                results.sort((a, b) => (b._combinedScore || 0) - (a._combinedScore || 0));
-              }
+            let maxRank = 0;
+            for (const score of ranks?.values() ?? []) maxRank = Math.max(maxRank, score);
+            if (maxRank > 0) {
+              results = results.map((row, index) => ({
+                ...row, _combinedScore: Math.round((0.7 * (1 - index / results.length) +
+                  0.3 * ((ranks.get(row.id) || 0) / maxRank)) * 1000) / 1000,
+              })).sort((a, b) => b._combinedScore - a._combinedScore);
             }
           } catch {}
         }
       }
-
-      return {
-        ok: true,
-        memories: results,
-        count: results.length,
-      };
+      const byId = new Map(results.map(row => [row.id, row]));
+      const exactIds = new Set(exact.map(row => row.id));
+      results = [...exact.map(row => byId.get(row.id) ?? row), ...results.filter(row => !exactIds.has(row.id))].slice(0, limit);
+      return { ok: true, memories: results, count: results.length };
     },
 
     /**
@@ -1887,7 +1897,23 @@ function createMemoryStore(dbPath) {
       const params = [];
       if (column) { query += " AND column_name = ?"; params.push(column); }
       if (assigned_to) { query += " AND assigned_to = ?"; params.push(assigned_to); }
-      if (workspace) { query += " AND workspace = ?"; params.push(workspace); }
+      if (workspace) {
+        // Windows workspace spellings share identity across drive/UNC slash
+        // and ASCII case variants. POSIX paths remain byte-for-byte exact.
+        // Keep filtering in SQL before ORDER/LIMIT; never fetch global tasks
+        // and filter them in JavaScript (which can also truncate valid rows).
+        const windowsPath = /^[a-z]:[\\/]/i.test(workspace) || /^(?:\\\\|\/\/)[^\\/]+[\\/][^\\/]+/.test(workspace);
+        if (windowsPath) {
+          query += ` AND (
+            (substr(workspace, 2, 1) = ':' AND substr(workspace, 3, 1) IN ('/', char(92)))
+            OR substr(workspace, 1, 2) IN ('//', char(92) || char(92))
+          ) AND lower(rtrim(replace(workspace, char(92), '/'), '/')) = lower(?)`;
+          params.push(workspace.replace(/\\/g, "/").replace(/\/+$/, ""));
+        } else {
+          query += " AND workspace = ?";
+          params.push(workspace);
+        }
+      }
       if (mission_id) { query += " AND mission_id = ?"; params.push(mission_id); }
       query += " ORDER BY updated_at DESC LIMIT ?";
       params.push(limit);

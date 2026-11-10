@@ -24,11 +24,26 @@ describe("scraping session contract", () => {
       })
     ).toMatchObject({
       headless: true,
-      window_width: 640,
+      window_width: 320,
       window_height: 4320,
       page_load_timeout_ms: 5000,
       version_main: 131,
     });
+  });
+
+  it("accepts 320/390 CSS viewport widths and applies the requested headless viewport through CDP", async () => {
+    expect(normalizeStartArgs({ window_width: 390, window_height: 320 })).toMatchObject({ window_width: 390, window_height: 320 });
+    const resizeWindow = vi.fn(async ({ width, height }) => ({ ok: true, width, height }));
+    const manager = { start: vi.fn(async () => ({ ok: true, session_id: "fixture" })), getCdpSession: () => ({ intercept: { resizeWindow } }) };
+    const result = await createScrapingHandlers({ scrapingSessionManager: manager }).scrapingSessionStart({ headless: true, window_width: 1440, window_height: 900 });
+    expect(resizeWindow).toHaveBeenCalledWith({ width: 1440, height: 900 });
+    expect(result).toMatchObject({ viewport_applied: true, viewport: { width: 1440, height: 900 } });
+  });
+
+  it("does not claim a headless viewport was applied when CDP sizing is unavailable", async () => {
+    const manager = { start: vi.fn(async () => ({ ok: true, session_id: "fixture" })), getCdpSession: () => { throw new Error("CDP unavailable"); } };
+    const result = await createScrapingHandlers({ scrapingSessionManager: manager }).scrapingSessionStart({ window_width: 390, window_height: 844 });
+    expect(result).toMatchObject({ ok: true, viewport_applied: false, viewport_error: "CDP unavailable" });
   });
 
   it("resolves the packaged worker from the repository", () => {

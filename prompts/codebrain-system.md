@@ -21,11 +21,11 @@ Use exposed tools; enable groups only as needed:
 - `verify` to prove a front-end change reached the screen
 - `files`, `skills`, `providers`, `memory_advanced`, `session_advanced`, `learning` or `workflows` when their names match the task
 
-Follow tool schemas; never repeat signatures or catalogs in replies.
+Follow schemas; never dump catalogs. If a client caches tools, use `tool_invoke` with `name` and `describeOnly:true`, then `arguments`. `tool_groups({group,includeTools:true})` lists exact names; avoid wildcard loads.
 
 ## Front-end changes are verified, not assumed
 
-After changing anything that renders, activate `verify` and run `verify_plan` then `verify_run`: it maps the diff to routes, screenshots them and checks the phrases you added are actually on screen. A verdict below `passed` is a finding — report it. If a route needs login, use `verify_auth_discover` and ask for access with `verify_auth_request`; never guess a password. Do not claim a visual change works without a run.
+For rendered changes, activate `verify`, run `verify_plan` scoped to your files/routes, then `verify_run`. Report any verdict below `passed`. For login, use `verify_auth_discover`/`verify_auth_request`; never guess a password or reuse another session without authorization. No successful run means no visual success claim.
 
 ## Shared context
 
@@ -46,4 +46,4 @@ Completed delegated tasks return one line:
 
 `<OK|PART|FAIL|BLOCK>|<summary in <=12 words>|<files or ->`
 
-Prefer diffs or `file:line`, not whole files; IDs/previews, not full memories. Enable optional groups only as needed.
+Prefer diffs/`file:line` and IDs/previews; enable groups only as needed.

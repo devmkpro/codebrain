@@ -26,6 +26,15 @@ function truncateText(text, maxChars = 50_000) {
   );
 }
 
+// Binary screenshots are opt-in image blocks, never escaped base64 inside a
+// giant JSON text field. The default stays a compact artifact receipt.
+function screenshotResponse(shot, detail = {}) {
+  const { data, ...artifact } = shot || {};
+  const content = [{ type: "text", text: JSON.stringify({ ...artifact, ...detail }) }];
+  if (data) content.push({ type: "image", data, mimeType: artifact.mimeType || `image/${artifact.format || "png"}` });
+  return { content, isError: artifact.ok === false };
+}
+
 /**
  * Strip heavy fields from pane metadata returned by ptyManager.list().
  * Keeps only what the orchestrator needs to manage workers.
@@ -435,17 +444,18 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__pane_write ─────────────────────────────────────────────
   server.tool(
     "pane_write",
-    "Write text or a prompt to an existing pane (simulates keyboard input into that terminal).",
+    "Write to an existing pane. Missing panes and shell collision guards return errors, never fake ok. Supply fromPaneId for logical ownership checks; it is a coordination hint, not authenticated identity. For validation commands prefer system/shell_run, not shared/dev-server stdin.",
     {
       paneId: z.string().describe("The target pane ID."),
       text: z.string().describe("Text to send to the pane's stdin."),
       submit: z.boolean().optional().describe("If true, append a newline to submit as a command."),
+      fromPaneId: z.string().optional().describe("Calling pane ID for shell ownership/collision checks, not an authentication credential."),
     },
     async (args) => {
       try {
         const shouldSubmit = args.submit !== false; // default true
-        await bridge.writePane(args.paneId, args.text, shouldSubmit);
-        return { content: [{ type: "text", text: "ok" }] };
+        const result = await bridge.writePane(args.paneId, args.text, shouldSubmit, { fromPaneId: args.fromPaneId });
+        return { content: [{ type: "text", text: JSON.stringify(result || { ok: true }) }], isError: result?.ok === false };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -920,12 +930,13 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__pane_send_message ──────────────────────────────────────
   server.tool(
     "pane_send_message",
-    "Send a message to another agent pane and submit it as a new turn. Use type='task' for work assignments; type='update', 'question' and 'result' also wake the recipient so it can respond. NEVER use for task completion reporting — use handoff_submit instead.",
+    "Persist a complete message (up to 16000 characters) and submit to an AGENT, never a shell/dev server. Updates/questions/results are not silently shortened. The receipt distinguishes stored from submitted-to-stdin; neither proves model receipt. If stored:true, inspect the message before retrying to avoid duplication. For completion use handoff_submit.",
     {
-      from: z.string().describe("Your pane ID (sender)."),
-      to: z.string().describe("Target pane ID (recipient)."),
+      from: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).describe("Your pane ID (sender)."),
+      to: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).describe("Target pane ID (recipient)."),
       content: z
         .string()
+        .min(1).max(16000)
         .describe("Message content — be specific and include all context the recipient needs."),
       type: z
         .enum(["task", "update", "question", "result"])
@@ -1015,19 +1026,17 @@ function createCodebrainMCPServer(bridge) {
         // Every explicit agent-to-agent message is a new turn. Writing a
         // banner without Enter leaves it stranded in the recipient's prompt,
         // which looks delivered but is never seen by the CLI agent.
+        let delivery = { ok: false, error: "Recipient runtime unavailable" };
         try {
           const shortFrom = args.from.slice(0, 8);
           const typeLabel = msgType.toUpperCase();
-          const preview =
-            args.content.length > 200 ? args.content.slice(0, 200) + "..." : args.content;
-
           if (msgType === "task" && typeof bridge.writePane === "function") {
             // "task" messages wake the recipient — full pane_write with submit
             const wakeMsg = `[MESSAGE from ${shortFrom} | TASK] ${args.content}`;
-            await bridge.writePane(args.to, wakeMsg, true);
+            delivery = await bridge.writePane(args.to, wakeMsg, true, { fromPaneId: args.from }) || { ok: true };
           } else if (typeof bridge.messagePane === "function") {
-            const wakeMsg = `[MESSAGE from ${shortFrom} | ${typeLabel}] ${preview}`;
-            await bridge.messagePane(args.to, wakeMsg, true);
+            const wakeMsg = `[MESSAGE from ${shortFrom} | ${typeLabel}] ${args.content}`;
+            delivery = await bridge.messagePane(args.to, wakeMsg, true) || { ok: true };
           }
           bridge.hooksManager?.fire?.(
             "message_received",
@@ -1039,7 +1048,7 @@ function createCodebrainMCPServer(bridge) {
             },
             args.to
           );
-        } catch {}
+        } catch { delivery = { ok: false, error: "Não foi possível confirmar entrega ao stdin; a mensagem foi armazenada." }; }
 
         // ── Desktop notification for incoming message ─────────────────────
         try {
@@ -1059,7 +1068,8 @@ function createCodebrainMCPServer(bridge) {
           }
         } catch {}
 
-        return { content: [{ type: "text", text: JSON.stringify({ ok: true, messageId: id }) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ ok: delivery.ok === true, stored: true, messageId: id,
+          submitted: delivery.ok === true, ...(delivery.ok === false ? { deliveryError: delivery.error } : {}) }) }], isError: delivery.ok === false };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -1071,7 +1081,7 @@ function createCodebrainMCPServer(bridge) {
     "pane_read_messages",
     "Read messages sent to your pane from other agents. Check this before starting work and periodically during execution to catch updates from the orchestrator or other workers.",
     {
-      paneId: z.string().describe("Your pane ID — reads messages from your inbox."),
+      paneId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).describe("Your pane ID — reads messages from your inbox."),
       unreadOnly: z
         .boolean()
         .optional()
@@ -1197,7 +1207,7 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__memory_search ──────────────────────────────────────────
   server.tool(
     "memory_search",
-    "Search shared memories by keyword. Searches across content, keys, and tags. Use this to find context saved by other agents.",
+    "Search shared memories, prioritizing an exact key. Automatic hooks/file-change noise is excluded by default; include_auto or explicit tag filters can include it. Defaults to the current workspace.",
     {
       query: z.string().describe("Search keyword or phrase."),
       type: z
@@ -1206,6 +1216,9 @@ function createCodebrainMCPServer(bridge) {
         .describe("Filter by memory type."),
       workspace: z.string().optional().describe("Filter by workspace."),
       limit: z.number().optional().describe("Max results (default 20)."),
+      tags: z.array(z.string()).optional().describe("Require matching tags."),
+      exclude_tags: z.array(z.string()).optional().describe("Exclude memories bearing these tags."),
+      include_auto: z.boolean().optional().describe("Include automatic hook/file-change memories. Default false for normal searches."),
     },
     async (args) => {
       try {
@@ -1669,15 +1682,19 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__file_read ──────────────────────────────────────────────
   server.tool(
     "file_read",
-    "Read a file or list directory contents from the workspace. Returns file content (max 100KB) or directory listing.",
+    "Read bounded text pages or a directory listing. Relative paths resolve from the workspace; external paths still obey workspace access policy. UTF-8/BOM metadata, totalLines and nextLine/nextColumn let you resume without splitting files in a shell. Response ceiling is 20 KB serialized JSON, not a 100 KB output promise.",
     {
       path: z.string().describe("Relative or absolute path within the workspace."),
       encoding: z.string().optional().describe("File encoding (default: utf-8)."),
+      startLine: z.number().int().min(1).optional().describe("First line, 1-based."),
+      endLine: z.number().int().min(1).optional().describe("Last requested line, inclusive."),
+      startColumn: z.number().int().min(1).optional().describe("1-based Unicode column for continuing a split long line with nextColumn."),
+      maxChars: z.number().int().min(1024).max(20000).optional().describe("Serialized response budget, default 16000; includes escaped JSON overhead."),
     },
     async (args) => {
       try {
         const result = await bridge.fileRead(args);
-        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+        return { content: [{ type: "text", text: JSON.stringify(result) }], isError: result.ok === false };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -1687,19 +1704,24 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__file_budgeted_read ─────────────────────────────────────
   server.tool(
     "file_budgeted_read",
-    "Read a file within a token budget. Prioritizes structure (headers, function signatures) over body content. Returns headers-first when file exceeds budget. Use for large files to avoid context overflow.",
+    "Read within token and serialized-response budgets. Defaults to structure for oversized files; pass startLine/endLine for contiguous resumable pages. maxChars has a hard 20 KB JSON ceiling even with a larger budgetTokens.",
     {
       path: z.string().describe("Relative or absolute path within the workspace."),
       budgetTokens: z
         .number()
+        .int().min(1).max(100000)
         .optional()
         .describe("Token budget for the read (default: 4000). ~4 chars per token."),
       encoding: z.string().optional().describe("File encoding (default: utf-8)."),
+      startLine: z.number().int().min(1).optional(),
+      endLine: z.number().int().min(1).optional(),
+      startColumn: z.number().int().min(1).optional(),
+      maxChars: z.number().int().min(1024).max(20000).optional(),
     },
     async (args) => {
       try {
         const result = await bridge.fileBudgetedRead(args);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], isError: result.ok === false };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -1709,10 +1731,11 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__file_write ─────────────────────────────────────────────
   server.tool(
     "file_write",
-    "Write content to a file in the workspace. Creates parent directories if needed.",
+    "Write text under the shared workspace access policy. Relative paths use the workspace root. append:true uses append mode without read/rewrite; replacement writes are staged and checked for concurrent changes. Creates parent directories by default.",
     {
       path: z.string().describe("Relative or absolute path within the workspace."),
       content: z.string().describe("Content to write."),
+      append: z.boolean().optional().describe("Append without replacing existing content, preserving detected BOM/encoding. Default false."),
       encoding: z.string().optional().describe("File encoding (default: utf-8)."),
       createDirs: z
         .boolean()
@@ -1722,7 +1745,7 @@ function createCodebrainMCPServer(bridge) {
     async (args) => {
       try {
         const result = await bridge.fileWrite({ ...args, createDirs: args.createDirs !== false });
-        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+        return { content: [{ type: "text", text: JSON.stringify(result) }], isError: result.ok === false };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -1732,7 +1755,7 @@ function createCodebrainMCPServer(bridge) {
   // ── mcp__codebrain__file_search ────────────────────────────────────────────
   server.tool(
     "file_search",
-    "Search for files by name pattern or content. Supports glob patterns (*.ts, **/*.tsx). Skips node_modules and .git.",
+    "Search a directory OR one explicit file. Literal content matches include path, line, Unicode column and a bounded snippet. Missing base paths are errors, not empty matches. Generated folders and basic .gitignore rules are excluded by default; results report scanned/skipped counts and limitations.",
     {
       pattern: z
         .string()
@@ -1742,13 +1765,15 @@ function createCodebrainMCPServer(bridge) {
       path: z
         .string()
         .optional()
-        .describe("Base directory for search. Defaults to workspace root."),
+        .describe("Base directory or single file. Defaults to workspace root."),
       limit: z.number().optional().describe("Max results (default 20)."),
+      caseSensitive: z.boolean().optional().describe("Literal content matching is case-sensitive by default."),
+      includeIgnored: z.boolean().optional().describe("Include generated/basic-gitignored paths. .git and node_modules remain excluded."),
     },
     async (args) => {
       try {
         const result = await bridge.fileSearch(args);
-        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+        return { content: [{ type: "text", text: JSON.stringify(result) }], isError: result.ok === false };
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -1761,8 +1786,27 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__system_info ────────────────────────────────────────────
   server.tool(
+    "shell_run",
+    "Run one command in a dedicated process, never a shared pane. Requires write_external policy AND fresh user approval in the desktop app; unavailable runtimes fail closed. Returns stdout/stderr, real exitCode, timeout/cancellation/truncation flags. Not an OS sandbox. Windows defaults to PowerShell without profile; no provider/vault environment is injected. Silence/idle is not command completion.",
+    {
+      command: z.string().min(1).max(16000),
+      cwd: z.string().optional().describe("Existing directory inside the current workspace. Defaults to its root; links escaping it are refused."),
+      shell: z.enum(["cmd", "powershell", "sh"]).optional(),
+      timeoutMs: z.number().int().min(1).max(120000).optional(),
+      maxOutputChars: z.number().int().min(1).max(12000).optional(),
+    },
+    async (args, context) => {
+      try {
+        const result = await bridge.shellRun(args, { signal: context?.signal });
+        return { content: [{ type: "text", text: JSON.stringify(result) }], isError: result.ok === false };
+      } catch {
+        return { content: [{ type: "text", text: "Command execution unavailable or denied." }], isError: true };
+      }
+    },
+  );
+  server.tool(
     "system_info",
-    "Get system information: OS, CPU, memory, Node version, workspace path.",
+    "Get system information: current time/timezone, OS, CPU, memory, Node version, workspace, default shell and installed CLIs. Installation does not prove login.",
     {},
     async () => {
       try {
@@ -2966,19 +3010,19 @@ function createCodebrainMCPServer(bridge) {
     ),
     server.tool(
       "task_list",
-      "List kanban tasks with optional filters. Use mission_id to scope to a mission.",
+      "List kanban tasks scoped to an identified pane/workspace or explicit mission. Pass assigned_to or callerPaneId for your pane; no unknown-caller global fallback. Explicit workspace/mission filters remain available. scopeRequired means supply a scope, not that the whole system has no tasks.",
       {
         column: z.string().optional(),
         assigned_to: z.string().optional(),
+        callerPaneId: z.string().optional().describe("Logical caller pane for workspace resolution; not authentication."),
         workspace: z.string().optional(),
         limit: z.number().optional(),
         mission_id: z.string().optional().describe("Filter by mission ID"),
       },
       async (args) => {
         try {
-          return {
-            content: [{ type: "text", text: JSON.stringify(await bridge.taskList(args), null, 2) }],
-          };
+          const result = await bridge.taskList(args, { callerPaneId: args.callerPaneId });
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], isError: result.ok === false };
         } catch (err) {
           return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
         }
@@ -3448,23 +3492,28 @@ function createCodebrainMCPServer(bridge) {
   // ── Multi-Edit (essential — convenience) ──────────────────────────────────
   server.tool(
     "file_multi_edit",
-    "Batch multiple edit operations on a single file in one call. Each edit specifies oldString/newString.",
+    "Preflight exact-text edits before writing any file; invalid/ambiguous matches apply nothing. Atomic publication is per file, not a filesystem-wide transaction. Supports relative workspace paths, dryRun, bounded diff and matchedLines. A publication rollback conflict is reported explicitly; inspect partial/applied fields before retrying.",
     {
-      path: z.string().describe("Absolute file path"),
+      path: z.string().optional().describe("Relative or absolute path; use with edits, or use files instead."),
       edits: z.array(
         z.object({
           oldString: z.string(),
           newString: z.string().optional(),
           replaceAll: z.boolean().optional(),
         })
-      ),
+      ).optional(),
+      files: z.array(z.object({ path: z.string(), edits: z.array(z.object({ oldString: z.string().min(1), newString: z.string().optional(), replaceAll: z.boolean().optional() })).min(1) })).min(1).max(20).optional(),
+      dryRun: z.boolean().optional().describe("Validate and preview without publishing any changes."),
+      returnDiff: z.boolean().optional().describe("Return a bounded textual change preview and line counts."),
     },
     async (args) => {
       try {
+        const result = await bridge.fileMultiEdit(args);
         return {
           content: [
-            { type: "text", text: JSON.stringify(await bridge.fileMultiEdit(args), null, 2) },
+            { type: "text", text: JSON.stringify(result, null, 2) },
           ],
+          isError: result.ok === false,
         };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
@@ -4230,6 +4279,9 @@ function createCodebrainMCPServer(bridge) {
           .optional()
           .describe("What the feature is about — used later to pick a login role that fits"),
         session_id: z.string().optional(),
+        files: z.array(z.string()).optional().describe("Only files owned by this worker, relative to the workspace. Other workers' diffs/markers are excluded."),
+        routes: z.array(z.string()).optional().describe("Explicit SPA routes when file-to-route inference is not possible."),
+        route: z.string().optional().describe("Single explicit route, alternative to routes."),
       },
       async (args) => {
         try {
@@ -4253,6 +4305,8 @@ function createCodebrainMCPServer(bridge) {
         full_page: z.boolean().optional(),
         pane_id: z.string().optional(),
         settle_ms: z.number().optional(),
+        allow_uc_fallback: z.boolean().optional().describe("Explicitly permit using an existing selected UC session when Chrome CDP is unavailable. Does not start sessions or authorize login."),
+        scraping_session_id: z.string().uuid().optional().describe("Existing authorized UC session for the opt-in fallback."),
       },
       async (args) => {
         try {
@@ -4450,6 +4504,40 @@ function createCodebrainMCPServer(bridge) {
 
   // ── Meta-tools: enable_tool_group + tool_groups (always enabled) ────────
   const activatedGroups = new Set(["browser", "scraping"]);
+  const namesForRefs = refs => Object.entries(server._registeredTools || {})
+    .filter(([, ref]) => refs.includes(ref)).map(([name]) => name);
+  const groupTools = group => {
+    if (group === "browser") return Object.keys(server._registeredTools).filter(name => name.startsWith("browser_") && !name.startsWith("browser_fetch"));
+    if (group === "fetch") return Object.keys(server._registeredTools).filter(name => name.startsWith("browser_fetch"));
+    return namesForRefs([...(advancedToolGroups[group] || []), ...(registeredToolGroups.get(group) || [])]);
+  };
+  const discoveryHint = "Use exact names after refreshing tools/list. If the client caches its catalog, call tool_invoke({name, describeOnly:true}), then tool_invoke({name, arguments}). No wildcard load is needed.";
+
+  server.tool(
+    "tool_invoke",
+    "Describe or invoke ONE exact Codebrain tool, even when the host cached its initial tool catalog. describeOnly returns its schema without executing. Invocation uses the original SDK validation and handler, including normal workspace/access checks. Never use wildcard names.",
+    {
+      name: z.string().min(1).max(120),
+      arguments: z.record(z.string(), z.unknown()).optional(),
+      describeOnly: z.boolean().optional(),
+    },
+    async (args, extra) => {
+      const name = args.name.replace(/^(?:codebrain::|mcp__codebrain__)/, "");
+      if (name === "tool_invoke" || !Object.hasOwn(server._registeredTools, name)) {
+        return { isError: true, content: [{ type: "text", text: "Unknown or recursive tool. Use tool_groups({group, includeTools:true}) for exact names; no wildcards." }] };
+      }
+      const ref = server._registeredTools[name];
+      if (args.describeOnly) {
+        const { toJsonSchemaCompat } = require("@modelcontextprotocol/sdk/server/zod-json-schema-compat.js");
+        return { content: [{ type: "text", text: JSON.stringify({ name, description: ref.description, enabled: ref.enabled, inputSchema: ref.inputSchema ? toJsonSchemaCompat(ref.inputSchema, { strictUnions: true, pipeStrategy: "input" }) : { type: "object", properties: {} } }) }] };
+      }
+      // Reuse the SDK request path instead of invoking ref.handler directly:
+      // preserve schema/default/output validation and cancellation context.
+      ref.enable();
+      const handler = server.server._requestHandlers.get("tools/call");
+      return handler({ method: "tools/call", params: { name, arguments: args.arguments || {} } }, extra);
+    },
+  );
 
   server.tool(
     "enable_tool_group",
@@ -4468,6 +4556,8 @@ function createCodebrainMCPServer(bridge) {
                 text: JSON.stringify({
                   ok: true,
                   group,
+                  tools: groupTools(group),
+                  next: discoveryHint,
                   message: `${group} tools already active.`,
                 }),
               },
@@ -4503,6 +4593,8 @@ function createCodebrainMCPServer(bridge) {
                   ok: true,
                   group,
                   tools_enabled: 5,
+                  tools: groupTools(group),
+                  next: discoveryHint,
                   message: "Fetch tools activated. You can now use browser_fetch* tools.",
                 }),
               },
@@ -4552,6 +4644,8 @@ function createCodebrainMCPServer(bridge) {
                 ok: true,
                 group,
                 tools_enabled: refs.length,
+                tools: groupTools(group),
+                next: discoveryHint,
                 message: `${group} tools activated (${refs.length} tools now available).`,
               }),
             },
@@ -4569,8 +4663,8 @@ function createCodebrainMCPServer(bridge) {
   server.tool(
     "tool_groups",
     "List all available MCP tool groups with their status (enabled/disabled) and tool count. Use enable_tool_group to activate disabled groups.",
-    {},
-    async () => {
+    { group: z.string().optional(), includeTools: z.boolean().optional() },
+    async ({ group, includeTools } = {}) => {
       try {
         const groups = Object.entries(advancedToolGroups).map(([name, refs]) => ({
           name,
@@ -4597,11 +4691,21 @@ function createCodebrainMCPServer(bridge) {
         const enabledTools = Object.values(server._registeredTools || {}).filter(
           (t) => t.enabled !== false
         ).length;
+        const selected = group ? groups.filter(item => item.name === group) : groups;
+        if (group && !selected.length) return { isError: true, content: [{ type: "text", text: `Unknown group: ${group}` }] };
+        for (const item of selected) {
+          const names = groupTools(item.name);
+          item.toolCount = names.length || item.toolCount;
+          item.enabledCount = names.filter(name => server._registeredTools[name]?.enabled).length;
+          item.enabled = names.length > 0 && item.enabledCount === names.length;
+          item.partiallyEnabled = item.enabledCount > 0 && !item.enabled;
+          if (includeTools || group) item.tools = names;
+        }
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ groups, enabled: enabledTools, total: totalTools }, null, 2),
+              text: JSON.stringify({ groups: selected, enabled: enabledTools, total: totalTools, next: discoveryHint }),
             },
           ],
         };
@@ -5187,6 +5291,7 @@ function createCodebrainMCPServer(bridge) {
     "task_move",
     "enable_tool_group",
     "tool_groups",
+    "tool_invoke",
     // Uma única promoção ao core, e por um motivo que nenhum grupo resolve:
     // a correção do usuário chega SEM AVISO, no meio de uma conversa que
     // talvez não tenha ativado grupo nenhum. Se `lesson_add` exigisse
@@ -5232,6 +5337,7 @@ function createCodebrainMCPServer(bridge) {
       return "workflows";
     if (name.startsWith("remote_") || name.startsWith("cron_")) return "remote";
     if (name.startsWith("system_") || name.startsWith("security_")) return "system";
+    if (name === "shell_run") return "system";
     if (name === "tool_groups") return "system";
     if (
       name.startsWith("todo_") ||
@@ -5363,19 +5469,20 @@ RIGHT approach:
 3. browser_wait_for_text("expected text") — before assertions
 4. Then read/verify the page
 
-## Rule 6: One browser pane per app session
+## Rule 6: Reuse only the browser assigned to your flow
 
 - If you need to test a different app or a completely different flow, navigate the existing pane
 - Never open a new pane just because you're starting a new test case
-- Reuse the same pane: navigate to home, then follow the new flow
+- Reuse your assigned pane: navigate to home, then follow the new flow
+- Do not take over another agent's tab/profile or copy its authenticated session without authorization
 
-## Rule 7: NEVER read screenshot PNG files
+## Rule 7: Screenshots are artifacts, not giant text payloads
 
-browser_screenshot() ALREADY returns a textual description of the page (URL, title, text, links, inputs, buttons) in the 'page' field of the response.
+browser_screenshot() returns a saved image path and a compact page description by default. It does not put base64 into the JSON text.
 
-NEVER use Read/browser_read to open the PNG file. The text description has everything you need. Reading the PNG will cause API errors with some providers (Gemini, MIMO) that don't support image_url content parts.
+For visual review, inspect that artifact with an image-capable tool or request inline:true for an MCP image block ONLY when this harness/model supports images. Never read PNG binary through a text reader.
 
-If you need more detail, use browser_get_accessibility_tree() or browser_get_text() instead.
+If vision is unavailable, DOM/text/geometry checks remain useful, but explicitly report that appearance was NOT visually verified. A page summary does not prove contrast, clipping, overlap or visual quality.
 
 ## Quick Reference — Correct Flow
 
@@ -6136,21 +6243,21 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
   // ── Screenshots ─────────────────────────────────────────────────────────
   server.tool(
     "browser_screenshot",
-    "Capture a screenshot. Without full_page: captures the visible viewport. With full_page: resizes the webview to capture the ENTIRE scrollable page (up to 8192px height), not just the visible area. Returns file path + textual page description. Do NOT read the PNG — use the text description.",
+    "Capture viewport or full-page screenshot. Default returns a compact saved artifact path and page summary, not base64 JSON. Use inline:true for an MCP image block when the harness supports vision. Inspect the image for visual validation: DOM text alone does not prove layout or appearance.",
     {
       full_page: z
         .boolean()
         .optional()
         .describe("Capture the entire scrollable page (not just viewport)"),
       pane_id: z.string().optional(),
+      inline: z.boolean().optional().describe("Opt-in image content, not inline base64 JSON. Default false."),
+      format: z.enum(["png", "jpeg", "webp"]).optional(),
     },
     async (args) => {
       try {
-        const screenshot = await bridge.browserScreenshot(args.full_page, args.pane_id);
+        const screenshot = await bridge.browserScreenshot(args.full_page, args.pane_id, { inline: args.inline, format: args.format });
         const summary = await bridge.browserPageSummary(args.pane_id);
-        return {
-          content: [{ type: "text", text: JSON.stringify({ ...screenshot, page: summary }) }],
-        };
+        return screenshotResponse(screenshot, { page: summary });
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -6159,15 +6266,13 @@ NEVER guess. ALWAYS read first. Use ONE pane.`;
 
   server.tool(
     "browser_screenshot_element",
-    "Capture a screenshot of a specific element. Saves to .codebrain/screenshots/. Also returns the element's text content — do NOT read the PNG file.",
-    { selector: z.string().describe("CSS selector"), pane_id: z.string().optional() },
+    "Capture an element to a saved artifact. Default is compact metadata plus element text; inline:true returns an MCP image block for vision-capable harnesses.",
+    { selector: z.string().describe("CSS selector"), pane_id: z.string().optional(), inline: z.boolean().optional(), format: z.enum(["png", "jpeg", "webp"]).optional() },
     async (args) => {
       try {
-        const screenshot = await bridge.browserScreenshotElement(args.selector, args.pane_id);
+        const screenshot = await bridge.browserScreenshotElement(args.selector, args.pane_id, { inline: args.inline, format: args.format });
         const elInfo = await bridge.browserGetElement(args.selector, args.pane_id);
-        return {
-          content: [{ type: "text", text: JSON.stringify({ ...screenshot, element: elInfo }) }],
-        };
+        return screenshotResponse(screenshot, { element: elInfo });
       } catch (err) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
@@ -7121,8 +7226,8 @@ function registerScrapingTools(server, bridge) {
         .positive()
         .optional()
         .describe("Chrome major version override; normally auto-detected."),
-      window_width: z.number().int().min(640).max(7680).optional().default(1920),
-      window_height: z.number().int().min(480).max(4320).optional().default(1080),
+      window_width: z.number().int().min(320).max(7680).optional().default(1920),
+      window_height: z.number().int().min(320).max(4320).optional().default(1080),
       page_load_timeout_ms: z.number().int().min(5000).max(300000).optional().default(90000),
       block_images: z
         .boolean()
@@ -7244,6 +7349,22 @@ function registerScrapingTools(server, bridge) {
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
       }
     }
+  );
+
+  tool(
+    "scraping_screenshot",
+    "Capture a viewport, full page or selected element in an existing UC session. Returns a compact image artifact; inline:true opts into an MCP image block. Does not start a browser, authenticate, copy cookies or change profiles.",
+    {
+      session_id: z.string().uuid(),
+      full_page: z.boolean().optional(),
+      selector: z.string().optional(),
+      inline: z.boolean().optional(),
+      format: z.enum(["png", "jpeg", "webp"]).optional(),
+    },
+    async (args) => {
+      try { return screenshotResponse(await bridge.scrapingScreenshot(args)); }
+      catch (error) { return { isError: true, content: [{ type: "text", text: `Screenshot failed: ${error.message}` }] }; }
+    },
   );
 
   tool(

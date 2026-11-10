@@ -252,6 +252,7 @@ async function startMCPServer(ptyManager, opts = {}) {
           streamableHttpUrl: `http://127.0.0.1:${actualPort}/mcp`,
           activeSessions: () => Object.keys(transports).length,
           close: () => {
+            const commandDrain = opts.disposeCommands?.();
             clearInterval(cleanupTimer);
             // Close all tracked transports
             const allSids = Object.keys(transports);
@@ -260,6 +261,7 @@ async function startMCPServer(ptyManager, opts = {}) {
             }
             allSids.forEach(removeSession);
             server.close();
+            return commandDrain;
           },
         };
         console.log(`[MCP] CodeBrain MCP server listening on http://127.0.0.1:${actualPort}`);

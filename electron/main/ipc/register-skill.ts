@@ -60,7 +60,7 @@ function readEntrypoint(skillDir: string, entrypoint: string): string | null {
 }
 
 const FETCH_HEADERS = {
-  "User-Agent": "Codebrain/2.0.0",
+  "User-Agent": `Codebrain/${app.getVersion()}`,
   "Accept": "application/json",
 };
 

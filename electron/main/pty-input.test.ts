@@ -51,6 +51,28 @@ describe("ordered PTY input", () => {
     expect(write).toHaveBeenCalledTimes(2);
   });
 
+  it("acknowledges Enter only after its native write, and rejects a canceled receipt", async () => {
+    vi.useFakeTimers();
+    const write = vi.fn();
+    const queue = new PtyInputQueue(write);
+    queue.enqueue("paste", 150);
+    const acknowledged = vi.fn();
+    const receipt = queue.enqueueAndWait("\r").then(acknowledged);
+    await vi.advanceTimersByTimeAsync(149);
+    expect(acknowledged).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await receipt;
+    expect(acknowledged).toHaveBeenCalledOnce();
+    expect(write.mock.calls.map(([text]) => text).join("")).toBe("paste\r");
+
+    queue.enqueue("next paste", 150);
+    const canceled = queue.enqueueAndWait("\r").catch((error) => error);
+    queue.cancel();
+    expect(await canceled).toBeInstanceOf(Error);
+    await vi.runAllTimersAsync();
+    expect(write.mock.calls.map(([text]) => text).join("")).toBe("paste\rnext paste");
+  });
+
   it("provides an offline TUI fixture that accepts bracketed multiline messages only on Enter", () => {
     const output = execFileSync(process.execPath, [path.resolve("electron/main/__fixtures__/tui-transport.cjs")], {
       input: "\x1b[200~[MESSAGE] first\nsecond\x1b[201~\r\x1b[200~next\x1b[201~\r", encoding: "utf-8", timeout: 5000,

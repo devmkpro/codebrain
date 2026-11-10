@@ -27,4 +27,22 @@ describe("shared terminal activity projection", () => {
   it("does not keep an old progress percentage active after reaching 100 percent", () => {
     expect(readTerminalActivity("Downloading model 45%\r\nDownloading model 100%\r\n› Ask Codex to do anything").active).toBe(null);
   });
+
+  it.each([
+    "> Kiro is working · Type to queue",
+    "> Kiro is working · 1m 35s · Type to steer · ctrl+s to queue",
+    "> Kiro is working · Type to queue · ctrl+s to steer",
+  ])("recognizes the installed Kiro RZ() working placeholder without a spinner: %s", (text) => {
+    expect(readTerminalActivity(`\x1b[36m${text}\x1b[0m\r\n/copy to clipboard`).active).toBe("thinking");
+  });
+
+  it("keeps initialization active and ends Kiro activity only after a real idle input returns", () => {
+    expect(readTerminalActivity("> Initializing · type to queue a message\r\n/copy to clipboard").active).toBe("running");
+    const busy = "> Kiro is working · Type to queue\r\n/copy to clipboard";
+    const idle = "> ask a question or describe a task ↵\r\n/copy to clipboard";
+    expect(readTerminalActivity(`${busy}\x1b[H\x1b[2J${idle}`).active).toBe(null);
+    expect(readTerminalActivity(`${busy}\r\n${idle}`).active).toBe(null);
+    expect(readTerminalActivity(`${idle}\r\n> Kiro is working · Type to steer · ctrl+s to queue`).active).toBe("thinking");
+    expect(readTerminalActivity(`Quoted text says Kiro is working, not a TUI input.\r\n${idle}`).active).toBe(null);
+  });
 });

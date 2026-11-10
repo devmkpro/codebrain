@@ -15,6 +15,8 @@ import { accountEnv, getAccount } from "./accounts";
 import { installedSkillNames } from "./catalog";
 import { attachCodebrainContext, prepareCodebrainAdapter, writeSharedCodebrainGuide, type CodebrainAdapterResult } from "./spawn/codebrain-adapter";
 import { externalMcpOverrides, mergeMcpFile, readExternalMcpServers } from "./external-mcp";
+import { briefSummary, createSpawnBrief, shellMetadata, type SpawnBrief, type ShellMetadata } from "./spawn/spawn-metadata";
+import { ensureClaudeWorkspaceSettings } from "./claude-metadata";
 
 const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
@@ -23,54 +25,7 @@ const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
  * so Claude Code's statusline shows version, MCP tool count, providers, etc.
  */
 export function ensureClaudeSettings(cwd: string): void {
-  try {
-    // Resolve codebrain root: same directory as this project's package.json
-    // In dev mode, app.getAppPath() returns the project root
-    const { app } = require("electron");
-    const codebrainRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
-
-    let version = "unknown";
-    let totalTools = 0;
-    try {
-      const pkg = JSON.parse(fs.readFileSync(path.join(codebrainRoot, "package.json"), "utf-8"));
-      version = pkg.version ?? "unknown";
-    } catch {}
-    try {
-      const indexJs = path.join(codebrainRoot, "packages", "mcp", "index.js");
-      const src = fs.readFileSync(indexJs, "utf-8");
-      totalTools = (src.match(/server\.tool\(/g) || []).length;
-    } catch {}
-
-    const settingsDir = path.join(cwd, ".claude");
-    const settingsPath = path.join(settingsDir, "settings.json");
-
-    let existing: Record<string, any> = {};
-    try {
-      existing = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-    } catch {}
-
-    // Merge codebrain metadata (don't overwrite other settings)
-    const merged = {
-      ...existing,
-      env: { ...(existing.env ?? {}), CODEBRAIN_VERSION: version },
-      codebrain: {
-        version,
-        mcp: { totalTools },
-      },
-    };
-
-    // Only write if content actually changed
-    const newContent = JSON.stringify(merged, null, 2);
-    let currentContent = "";
-    try { currentContent = fs.readFileSync(settingsPath, "utf-8"); } catch {}
-    if (currentContent === newContent) return;
-
-    fs.mkdirSync(settingsDir, { recursive: true });
-    fs.writeFileSync(settingsPath, newContent, "utf-8");
-    log.info(`[ensureClaudeSettings] Synced .claude/settings.json to ${cwd} (v${version}, ${totalTools} tools)`);
-  } catch (err) {
-    log.warn("[ensureClaudeSettings] Failed to sync settings:", err);
-  }
+  ensureClaudeWorkspaceSettings(cwd);
 }
 
 export interface SpawnPaneConfig {
@@ -93,8 +48,10 @@ export interface SpawnPaneConfig {
   uiMissionId?: string;
   operationalMissionId?: string;
   workspacePath?: string;
-  /** Prompt submitted after the CLI has produced output and becomes quiet. */
+  /** Prompt delivered after bounded readiness observation; distinct from system context. */
   initialPrompt?: string;
+  /** Retain the original task without sending (harness installs its contract first). */
+  spawnBrief?: string;
   /** Squad workers list — injected into orchestrator system prompt */
   squadCallable?: object[];
   /** High-level instructions for the orchestrator from Squad config */
@@ -157,11 +114,12 @@ export function resolvePaneMission(ctx: AppContext, config: SpawnPaneConfig, wor
   const previous = key ? ctx.missionAssociations?.get(key) ?? saved[key] : undefined;
   if (previous && operationalMissionId && previous !== operationalMissionId) throw new Error("A missão da interface já está associada a outra missão operacional.");
   operationalMissionId ??= previous;
-  const needsMission = Boolean(uiMissionId || operationalMissionId || config.parentPaneId || config.taskId || config.activityId || config.role === "orchestrator" || config.squadCallable?.length || config.orchestratorInstructions?.trim());
+  const hasExplicitBrief = Boolean(config.spawnBrief?.trim() || config.initialPrompt?.trim());
+  const needsMission = Boolean(hasExplicitBrief || uiMissionId || operationalMissionId || config.parentPaneId || config.taskId || config.activityId || config.role === "orchestrator" || config.squadCallable?.length || config.orchestratorInstructions?.trim());
   if (!needsMission) return {};
   // Preserve o fluxo legado de squads sem ID da UI. Missões nomeadas e helpers
   // não podem pegar a missão ativa de outro trabalho no mesmo workspace.
-  if (!operationalMissionId && !uiMissionId && !config.parentPaneId) {
+  if (!operationalMissionId && !uiMissionId && !config.parentPaneId && !hasExplicitBrief) {
     operationalMissionId = store?.resolveActiveMission?.({ workspace })?.mission?.id;
   }
   if (!operationalMissionId) {
@@ -182,11 +140,23 @@ export function resolvePaneMission(ctx: AppContext, config: SpawnPaneConfig, wor
   return { uiMissionId, operationalMissionId };
 }
 
-/** Identidade comum aos eventos e à reconciliação; mission_id mantém o contrato legado operacional. */
+interface PaneSpawnMetadata {
+  spawnBrief?: SpawnBrief;
+  shell?: ShellMetadata;
+}
+
+/** Explicit read-back for config/mission_context, never embedded into pane_list. */
+export function paneSpawnBrief(ctx: AppContext, paneId: string): SpawnBrief | undefined {
+  const brief = (ctx.paneConfigs.get(paneId) as PaneSpawnMetadata | undefined)?.spawnBrief;
+  return brief ? { ...brief, delivery: { ...brief.delivery } } : undefined;
+}
+
+/** Identidade leve para eventos/reconciliação; mission_id mantém o contrato legado operacional. */
 export function paneMissionMetadata(ctx: AppContext, paneId: string): {
   missionId?: string; uiMissionId?: string; operationalMissionId?: string; mission_id?: string; workspacePath?: string; role?: string;
-} {
-  const config = ctx.paneConfigs.get(paneId);
+  shell?: ShellMetadata;
+} & ReturnType<typeof briefSummary> {
+  const config = ctx.paneConfigs.get(paneId) as (NonNullable<ReturnType<AppContext["paneConfigs"]["get"]>> & PaneSpawnMetadata) | undefined;
   let role: any;
   let actor: any;
   try { role = ctx.memoryStore?.getActorRole?.({ paneId }); } catch {}
@@ -197,13 +167,14 @@ export function paneMissionMetadata(ctx: AppContext, paneId: string): {
   const workspacePath = config?.workspacePath ?? actor?.workspace ?? config?.cwd ?? actor?.cwd;
   const uiMissionId = (config?.missionId === operationalMissionId ? config?.uiMissionId : undefined) ??
     (workspacePath ? uiMissionForOperational(ctx, workspacePath, operationalMissionId) : undefined);
-  return { missionId: uiMissionId ?? operationalMissionId, uiMissionId, operationalMissionId, mission_id: operationalMissionId, workspacePath, role: role?.role ?? config?.role ?? actor?.role };
+  return { missionId: uiMissionId ?? operationalMissionId, uiMissionId, operationalMissionId, mission_id: operationalMissionId, workspacePath, role: role?.role ?? config?.role ?? actor?.role,
+    ...briefSummary(config?.spawnBrief), ...(config?.shell ? { shell: config.shell } : {}) };
 }
 
 export async function spawnPaneInternal(
   ctx: AppContext,
   config: SpawnPaneConfig,
-): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; workspacePath?: string; missionId?: string; uiMissionId?: string; operationalMissionId?: string; codebrainContext?: string; codebrainCatalogPath?: string; adapterWarnings?: string[]; promptSubmitted?: boolean; promptError?: string; error?: string }> {
+): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; workspacePath?: string; missionId?: string; uiMissionId?: string; operationalMissionId?: string; codebrainContext?: string; codebrainCatalogPath?: string; adapterWarnings?: string[]; hasInitialPrompt?: boolean; initialPromptId?: string; promptDeliveryState?: SpawnBrief["delivery"]["state"]; shell?: ShellMetadata; promptSubmitted?: boolean; promptError?: string; error?: string }> {
   try {
     if (config.agent !== "shell") await ctx.cliDetector?.getAllAsync?.();
     const parent = config.parentPaneId ? ctx.paneConfigs.get(config.parentPaneId) : undefined;
@@ -283,6 +254,8 @@ export async function spawnPaneInternal(
 
     const { nanoid } = await import("nanoid");
     const paneId = config.paneId ?? nanoid();
+    // Keep only the explicit user task, never the adapter/system payload or env.
+    const spawnBrief = createSpawnBrief(paneId, config.spawnBrief ?? config.initialPrompt);
     // O shell não é harness. Demais CLIs recebem somente o conteúdo selecionado
     // do host Codebrain, sem copiar configurações de conta ou inventar flags.
     let adapter: CodebrainAdapterResult | undefined;
@@ -1117,6 +1090,7 @@ export async function spawnPaneInternal(
     // Ensure .claude/settings.json exists in target cwd for Claude Code statusline
     if (cwd && (agent === "claude" || agent === "openclaude")) ensureClaudeSettings(cwd);
 
+    const shell = shellMetadata(agent, cmdCheck.binary);
     const spawnedPaneId = await ctx.ptyManager.spawn({
       paneId,
       agent: agent as any,
@@ -1129,9 +1103,10 @@ export async function spawnPaneInternal(
       permissionMode: config.permissionMode,
       claudeSessionId: config.claudeSessionId,
       role: config.role,
+      spawnBrief,
     }, cmdCheck);
 
-    ctx.paneConfigs.set(paneId, {
+    const storedConfig = {
       agent,
       cwd,
       args,
@@ -1153,7 +1128,10 @@ export async function spawnPaneInternal(
       ...(config.agentName ? { agentName: config.agentName } : {}),
       ...(adapter ? { codebrainContext: adapter.codebrainContext, codebrainCatalogPath: adapter.codebrainCatalogPath } : {}),
       parentPaneId: config.parentPaneId,
-    });
+      spawnBrief,
+      shell,
+    };
+    ctx.paneConfigs.set(paneId, storedConfig);
     ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
 
     // Register in actor_registry with its role so RoleBadge (pane:getRole) shows
@@ -1189,27 +1167,38 @@ export async function spawnPaneInternal(
       workspacePath,
       parentPaneId: config.parentPaneId,
       role: config.role,
+      ...briefSummary(spawnBrief),
+      ...(shell ? { shell } : {}),
     });
 
     // Fire hook: pane_spawned
     ctx.hooksManager.fire("pane_spawned", { agent, cwd, providerId, model, role: config.role }, paneId);
 
-    let promptSubmitted: boolean | undefined;
+    let promptSubmitted: boolean | undefined = spawnBrief ? false : undefined;
     let promptError: string | undefined;
     const taskPrompt = config.initialPrompt?.trim();
     const initialPrompt = taskPrompt && adapter ? `${adapter.codebrainContext}\n\n${taskPrompt}` : taskPrompt;
     if (initialPrompt) {
-      const delivery = await ctx.ptyManager.submitWhenReady(paneId, initialPrompt, {
-        timeoutMs: 20_000,
-        quietMs: 800,
-        pollMs: 100,
-      });
-      promptSubmitted = delivery.ok;
-      promptError = delivery.error;
-      if (delivery.ok) {
-        log.info(`[spawnPaneInternal] Initial prompt submitted to ${paneId} after ${delivery.waitedMs}ms`);
-      } else {
-        log.warn(`[spawnPaneInternal] Initial prompt not submitted to ${paneId}: ${delivery.error}`);
+      try {
+        const delivery = await ctx.ptyManager.submitWhenReady(paneId, initialPrompt, {
+          timeoutMs: 20_000,
+          quietMs: 800,
+          pollMs: 100,
+        });
+        promptSubmitted = delivery.ok && delivery.promptSubmitted === true;
+        promptError = promptSubmitted ? undefined : delivery.error ?? "O envio de Enter ao terminal não foi confirmado.";
+        if (spawnBrief) spawnBrief.delivery = { state: promptSubmitted ? "submitted" : delivery.deliveryState ?? "not_submitted", promptSubmitted, ...(promptError ? { error: promptError } : {}) };
+        if (promptSubmitted) {
+          log.info(`[spawnPaneInternal] Initial prompt submitted to ${paneId} after ${delivery.waitedMs}ms`);
+        } else {
+          log.warn(`[spawnPaneInternal] Initial prompt not submitted to ${paneId}: ${promptError}`);
+        }
+      } catch {
+        // The pane did open. Keep its ID and brief; don't invite a duplicate spawn.
+        promptSubmitted = false;
+        promptError = "Não foi possível confirmar o envio do prompt. Releia o pane antes de reenviar.";
+        if (spawnBrief) spawnBrief.delivery = { state: "uncertain", promptSubmitted: false, error: promptError };
+        log.warn(`[spawnPaneInternal] Initial prompt delivery uncertain for ${paneId}`);
       }
     }
 
@@ -1233,6 +1222,8 @@ export async function spawnPaneInternal(
       uiMissionId,
       operationalMissionId,
       ...(adapter ? { codebrainContext: adapter.codebrainContext, codebrainCatalogPath: adapter.codebrainCatalogPath, adapterWarnings: adapter.warnings } : {}),
+      ...briefSummary(spawnBrief),
+      ...(shell ? { shell } : {}),
       promptSubmitted,
       promptError,
     };

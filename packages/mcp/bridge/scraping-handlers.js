@@ -9,7 +9,7 @@ const readline = require("node:readline");
 const { spawn } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
 const { CDPClient } = require("./cdp-client.js");
-const { createNativeChromeHandlers } = require("./native-chrome-handlers.js");
+const { createNativeChromeHandlers, screenshotArtifact } = require("./native-chrome-handlers.js");
 
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
 const MAX_RESPONSE_CHARS = 2_000_000;
@@ -60,8 +60,8 @@ function normalizeStartArgs(args = {}) {
     profile_directory: args.profile_directory || null,
     browser_binary: args.browser_binary || null,
     version_main: Number.isInteger(args.version_main) ? args.version_main : null,
-    window_width: Math.max(640, Math.min(7680, Number(args.window_width) || 1920)),
-    window_height: Math.max(480, Math.min(4320, Number(args.window_height) || 1080)),
+    window_width: Math.max(320, Math.min(7680, Math.trunc(Number(args.window_width)) || 1920)),
+    window_height: Math.max(320, Math.min(4320, Math.trunc(Number(args.window_height)) || 1080)),
     page_load_timeout_ms: Math.max(
       5_000,
       Math.min(300_000, Number(args.page_load_timeout_ms) || 90_000)
@@ -78,11 +78,11 @@ function parseDebuggerAddress(address) {
   return port;
 }
 
-async function attachCdp(debuggerAddress) {
+async function attachCdp(debuggerAddress, context = {}) {
   const port = parseDebuggerAddress(debuggerAddress);
   const cdp = new CDPClient({ log: () => {} });
   await cdp.connect(port);
-  return { cdp, intercept: createNativeChromeHandlers(cdp) };
+  return { cdp, intercept: createNativeChromeHandlers(cdp, context) };
 }
 
 class UcWorkerProcess {
@@ -246,7 +246,7 @@ class ScrapingSessionManager {
         let intercept = null;
         let cdpError = null;
         try {
-          ({ cdp, intercept } = await attachCdp(result.debugger_address));
+          ({ cdp, intercept } = await attachCdp(result.debugger_address, this.opts));
         } catch (error) {
           cdpError = error.message;
         }
@@ -335,11 +335,21 @@ class ScrapingSessionManager {
 }
 
 function createScrapingHandlers(opts = {}) {
-  const manager = opts.scrapingSessionManager || new ScrapingSessionManager(opts.scraping || {});
+  const manager = opts.scrapingSessionManager || new ScrapingSessionManager({ ...opts.scraping, getCurrentWorkspacePath: opts.getCurrentWorkspacePath });
 
   return {
     async scrapingSessionStart(args) {
-      return manager.start(args);
+      const normalized = normalizeStartArgs(args);
+      const result = await manager.start(normalized);
+      if (!result?.ok || !result.session_id) return result;
+      const requested_viewport = { width: normalized.window_width, height: normalized.window_height };
+      try {
+        const { intercept } = manager.getCdpSession(result.session_id);
+        const viewport = await intercept.resizeWindow(requested_viewport);
+        return { ...result, requested_viewport, viewport, viewport_applied: viewport.ok === true };
+      } catch (error) {
+        return { ...result, requested_viewport, viewport_applied: false, viewport_error: error.message };
+      }
     },
     async scrapingSessionStop({ session_id }) {
       return manager.stop(session_id);
@@ -359,6 +369,30 @@ function createScrapingHandlers(opts = {}) {
     async scrapingEvaluate(args) {
       const { session_id, ...payload } = args;
       return manager.call(session_id, "evaluate", payload, (payload.timeout_ms || 30_000) + 10_000);
+    },
+    async scrapingCapabilities({ session_id }) {
+      try {
+        const session = manager.getSession(session_id); // Existing session only.
+        if (session.worker?.closed) throw new Error("UC session is no longer running");
+        let screenshot = false;
+        try {
+          const attached = manager.getCdpSession(session_id);
+          screenshot = attached.cdp?.isConnected?.() === true && typeof attached.intercept?.screenshot === "function";
+        } catch {}
+        return { ok: true, session_id, capabilities: { navigate: true, evaluate: true, screenshot } };
+      } catch (error) {
+        return { ok: false, code: "capability_unavailable", error: error.message };
+      }
+    },
+    async scrapingScreenshot({ session_id, full_page = false, selector, inline = false, return_base64 = false, format = "png" }) {
+      let session;
+      try { session = manager.getCdpSession(session_id); }
+      catch (error) { return { ok: false, code: "capability_unavailable", error: error.message }; }
+      const capture = selector ? session.intercept?.screenshotElement : session.intercept?.screenshot;
+      if (typeof capture !== "function") return { ok: false, code: "capability_unavailable", error: "UC screenshot requires an attached CDP screenshot capability" };
+      const options = { inline, return_base64, format };
+      const shot = await capture.call(session.intercept, selector || full_page, options);
+      return { ...screenshotArtifact(shot, options, opts), session_id };
     },
     async scrapingExtract(args) {
       const { session_id, ...payload } = args;

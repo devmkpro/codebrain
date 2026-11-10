@@ -11,7 +11,7 @@ function setup(agent, role = "worker", withMemory = true) {
     writeSilent: vi.fn(), write: vi.fn(),
   });
   const paneMemoryState = withMemory ? new Map() : undefined;
-  const opts = { paneConfigs: new Map([["p", { agent }]]), roleMap: new Map([["p", role]]), paneMemoryState };
+  const opts = { paneConfigs: new Map([["p", { agent, parentPaneId: "owner", shellBusy: false }]]), roleMap: new Map([["p", role]]), paneMemoryState, getCallerPaneId: () => "owner" };
   return { pty, opts, api: createPaneHandlers(pty, opts) };
 }
 

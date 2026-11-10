@@ -67,7 +67,7 @@ function buildOrchestratorContext(paneId: string, ctx: AppContext, squadCallable
 }
 
 function buildDelegatedWorkerContext(paneId: string): string {
-  return `\n\n## Delegated tasks\nDirect conversation needs no bootstrap. When a delegated task arrives, activate \`coordination\`, then call \`mission_context({ paneId: "${paneId}" })\` and \`task_list\`; claim the assigned task before editing. Complete with \`handoff_submit\`.`;
+  return `\n\n## Delegated tasks\nDirect conversation needs no bootstrap. For a delegated task, activate \`coordination\`, call \`mission_context({ paneId: "${paneId}" })\` and \`task_list({ assigned_to: "${paneId}" })\`; claim the assigned task before editing. Complete with \`handoff_submit\`.`;
 }
 
 /** Builds the smallest useful system prompt for a pane and writes it to disk. */

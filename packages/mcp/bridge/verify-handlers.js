@@ -50,7 +50,7 @@ const { isLocalTarget } = require("../../memory/verify-store.js");
 
 function git(root, args) {
   return execFileSync("git", args, {
-    cwd: root, encoding: "utf-8", timeout: 20000, windowsHide: true,
+    cwd: root, encoding: "utf-8", timeout: 20000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -88,11 +88,13 @@ function changedFiles(root, base) {
  * descartado — nome de classe CSS, identificador, caminho de import, chave de
  * objeto. O que sobra é frase.
  */
-function extractMarkers(root, base, limit = 12) {
+function extractMarkers(root, base, limit = 12, files) {
   const args = base
     ? ["diff", "-U0", `${base}...HEAD`]
     : ["diff", "-U0", "HEAD"];
   let diff;
+  if (files) args.push("--", ...files.map((file) => `:(literal)${file}`));
+  if (files?.length === 0) return [];
   try { diff = git(root, args); } catch { return []; }
 
   const markers = [];
@@ -153,6 +155,29 @@ function slugForRoute(route) {
   return slug || "root";
 }
 
+function explicitFiles(root, files) {
+  if (!Array.isArray(files) || files.length > 300) throw new Error("files deve ser uma lista de até 300 caminhos do workspace");
+  return [...new Set(files.map((file) => {
+    if (typeof file !== "string" || !file || file.includes("\0")) throw new Error("caminho de arquivo inválido");
+    const absolute = path.resolve(root, file);
+    const relative = path.relative(root, absolute);
+    if (relative.startsWith(".." + path.sep) || relative === ".." || path.isAbsolute(relative)) throw new Error("files deve permanecer no workspace");
+    if (fs.existsSync(absolute)) {
+      const realRelative = path.relative(fs.realpathSync(root), fs.realpathSync(absolute));
+      if (realRelative === ".." || realRelative.startsWith(".." + path.sep) || path.isAbsolute(realRelative)) throw new Error("files não pode seguir links fora do workspace");
+    }
+    return relative.replace(/\\/g, "/");
+  }))];
+}
+
+function explicitRoutes(routes) {
+  if (!Array.isArray(routes) || routes.length > 50) throw new Error("routes deve ser uma lista de até 50 rotas locais");
+  return [...new Set(routes.map((route) => {
+    if (typeof route !== "string" || !route.startsWith("/") || /[\r\n\0]/.test(route) || new URL(route, "http://verify.invalid").origin !== "http://verify.invalid") throw new Error("routes deve conter caminhos locais, não URLs externas");
+    return route;
+  }))].map((route) => ({ route, confidence: "explicit", evidence: "rota informada para o escopo desta verificação" }));
+}
+
 function createVerifyHandlers(opts = {}) {
   const browser = () => {
     if (!opts.browserHandlers) throw new Error("handlers de browser indisponíveis no bridge");
@@ -165,16 +190,17 @@ function createVerifyHandlers(opts = {}) {
   const ws = () => opts.getCurrentWorkspacePath?.() || process.cwd();
 
   /** Grava um print no diretório da execução, qualquer que seja o modo. */
-  async function captureScreenshot(dir, label, fullPage, paneId) {
+  async function captureScreenshot(dir, label, fullPage, paneId, driver = browser()) {
     const target = path.join(dir, `${label}.png`);
-    const shot = await browser().browserScreenshot(fullPage, paneId);
+    const shot = await driver.browserScreenshot(fullPage, paneId);
+    if (shot?.ok === false) return { ok: false, error: shot.error || "screenshot indisponível" };
     if (shot?.data) {
       fs.writeFileSync(target, Buffer.from(shot.data, "base64"));
       return { ok: true, path: target, mode: "cdp" };
     }
     if (shot?.path && fs.existsSync(shot.path)) {
       fs.copyFileSync(shot.path, target);
-      return { ok: true, path: target, mode: "webview", original: shot.path };
+      return { ok: true, path: target, mode: driver.mode || shot.mode || "artifact", original: shot.path };
     }
     return { ok: false, error: shot?.error || "screenshot não produziu imagem" };
   }
@@ -184,21 +210,25 @@ function createVerifyHandlers(opts = {}) {
      * Monta o plano de verificação: o que mudou, onde olhar, o que procurar.
      * Não abre navegador — é a etapa de leitura.
      */
-    async verifyPlan({ base, extra_ports, feature_context, session_id } = {}) {
+    async verifyPlan({ base, extra_ports, feature_context, session_id, files: workerFiles, routes, route } = {}) {
       const root = ws();
       try {
-        try { git(root, ["rev-parse", "--is-inside-work-tree"]); }
-        catch { return { ok: false, error: `não é um repositório git: ${root}` }; }
-
-        const files = changedFiles(root, base);
-        if (files.length === 0) {
+        if (workerFiles === undefined) {
+          try { git(root, ["rev-parse", "--is-inside-work-tree"]); }
+          catch { return { ok: false, error: `não é um repositório git: ${root}` }; }
+        }
+        const files = workerFiles === undefined ? changedFiles(root, base) : explicitFiles(root, workerFiles);
+        const selectedRoutes = routes === undefined && route === undefined ? null : explicitRoutes(routes ?? [route]);
+        if (files.length === 0 && !selectedRoutes?.length) {
           return { ok: true, verdict: "nothing-to-verify", message: "nenhuma alteração encontrada na árvore de trabalho", files: [] };
         }
 
         const { frameworks, evidence: fwEvidence } = detectFrameworks(root);
         const mapped = mapRoutes({ root, files, frameworks });
+        // A router-unknown SPA must not be "verified" by opening its public home.
+        mapped.routes = selectedRoutes ?? mapped.routes.filter((entry) => entry.confidence !== "fallback");
 
-        if (!mapped.anyFrontend) {
+        if (!mapped.anyFrontend && !selectedRoutes?.length) {
           return {
             ok: true,
             verdict: "nothing-to-verify",
@@ -209,7 +239,7 @@ function createVerifyHandlers(opts = {}) {
         }
 
         const servers = await detectServers(root, frameworks, extra_ports || []);
-        const markers = extractMarkers(root, base);
+        const markers = extractMarkers(root, base, 12, files);
         const loginRoutes = findLoginRoutes(root, frameworks);
 
         const plan = {
@@ -235,10 +265,12 @@ function createVerifyHandlers(opts = {}) {
 
         return {
           ok: true,
-          verdict: servers.live.length > 0 ? "ready" : "no-server",
+          verdict: mapped.routes.length === 0 ? "route-required" : servers.live.length > 0 ? "ready" : "no-server",
           run_id: created.run_id,
           ...plan,
-          next: servers.live.length === 0
+          next: mapped.routes.length === 0
+            ? "nenhuma rota pôde ser confirmada; informe routes explicitamente. A rota '/' não será presumida."
+            : servers.live.length === 0
             ? "nenhum servidor vivo nas portas candidatas — suba o servidor de desenvolvimento e rode verify_plan de novo"
             : markers.length === 0
               ? "sem marcador de texto extraível do diff: o veredito será inconclusive; confirme visualmente o print"
@@ -476,7 +508,7 @@ function createVerifyHandlers(opts = {}) {
      * Abre cada rota do plano, tira print, lê o texto e o console, e conclui
      * se os marcadores da alteração APARECEM na página.
      */
-    async verifyRun({ run_id, routes, base_url, full_page = true, pane_id, settle_ms = 1200 }) {
+    async verifyRun({ run_id, routes, base_url, full_page = true, pane_id, settle_ms = 1200, allow_uc_fallback = false, scraping_session_id }) {
       const root = ws();
       try {
         const runRes = store().verifyRunGet({ run_id });
@@ -485,8 +517,9 @@ function createVerifyHandlers(opts = {}) {
 
         const target = base_url || runRes.data.base_url || plan.servers?.live?.[0]?.baseUrl;
         if (!target) return { ok: false, error: "nenhuma URL base: o servidor de desenvolvimento não foi detectado" };
-        const routeList = (routes && routes.length ? routes.map((r) => ({ route: r, confidence: "explicit" })) : plan.routes) || [];
+        const routeList = routes === undefined ? (plan.routes || []).filter((entry) => entry.confidence !== "fallback") : explicitRoutes(routes);
         if (routeList.length === 0) return { ok: false, error: "nenhuma rota para verificar" };
+        explicitRoutes(routeList.map((entry) => entry.route)); // Also validate stored plans.
 
         const markers = plan.markers || [];
         const dir = evidenceDir(root, run_id);
@@ -495,27 +528,69 @@ function createVerifyHandlers(opts = {}) {
         for (const entry of routeList) {
           const url = new URL(entry.route, target).toString();
           const result = { route: entry.route, url, confidence: entry.confidence };
+          const navigationStartedAt = Date.now();
+          result.console_window_start_ms = navigationStartedAt;
 
-          const nav = await browser().browserNavigate(url, pane_id);
+          let driver = browser();
+          let nav;
+          try { nav = await driver.browserNavigate(url, pane_id); }
+          catch (error) { nav = { ok: false, error: error.message }; }
+          if (nav?.ok === false && /CDP.*(?:not available|unavailable)|Chrome.*disconnected/i.test(nav.error || "") && allow_uc_fallback === true && scraping_session_id && opts.scrapingHandlers) {
+            const uc = opts.scrapingHandlers;
+            const capability = await uc.scrapingCapabilities?.({ session_id: scraping_session_id }).catch(() => null);
+            if (capability?.ok && ["navigate", "evaluate", "screenshot"].every((key) => capability.capabilities?.[key] === true) && ["scrapingNavigate", "scrapingEvaluate", "scrapingScreenshot"].every((key) => typeof uc[key] === "function")) {
+              // Existing explicitly selected session only. No new profile, grants,
+              // cookies, login, challenge bypass or session start is attempted.
+              driver = {
+                mode: "uc",
+                browserNavigate: (url) => uc.scrapingNavigate({ session_id: scraping_session_id, url }),
+                browserWaitForLoad: async () => ({}),
+                browserGetUrl: async () => typeof uc.scrapingStatus === "function"
+                  ? uc.scrapingStatus({ session_id: scraping_session_id }) : { url: nav?.url },
+                browserScreenshot: (full_page) => uc.scrapingScreenshot({ session_id: scraping_session_id, full_page, inline: false, format: "png" }),
+                browserGetText: async () => {
+                  const result = await uc.scrapingEvaluate({ session_id: scraping_session_id, script: "return document.body.innerText;", await_promise: true });
+                  return result?.ok === false ? result : { text: result?.value ?? "" };
+                },
+              };
+              try { nav = await driver.browserNavigate(url); }
+              catch (error) { nav = { ok: false, error: error.message }; }
+            } else result.fallback_unavailable = "sessão UC sem capacidades confirmadas de navegação, avaliação e screenshot";
+          }
+          result.driver = driver.mode || "browser";
           if (nav && nav.ok === false) {
             result.verdict = "unreachable";
             result.error = nav.error;
             results.push(result);
             continue;
           }
-          await browser().browserWaitForLoad(15000, pane_id).catch(() => {});
+          await driver.browserWaitForLoad(15000, pane_id).catch(() => {});
           if (settle_ms > 0) await new Promise((r) => setTimeout(r, Math.min(settle_ms, 5000)));
+          const finalLocation = await driver.browserGetUrl?.(pane_id).catch(() => null);
+          const finalUrl = finalLocation?.url || finalLocation?.result?.url || nav?.url || null;
+          result.final_url = finalUrl;
+          let authRedirect = false;
+          try {
+            const requested = new URL(url);
+            const final = new URL(finalUrl);
+            const declaredLogin = (plan.login_routes || []).some((entry) => (typeof entry === "string" ? entry : entry.route) === final.pathname);
+            const loginPath = /(?:^|\/)(?:auth|login|log-in|signin|sign-in|sign_in|entrar)(?:\/|$)/i.test(final.pathname);
+            authRedirect = final.href !== requested.href && (declaredLogin || loginPath);
+          } catch { /* Missing final URL is not evidence of authentication. */ }
 
-          const shot = await captureScreenshot(dir, slugForRoute(entry.route), full_page, pane_id);
+          let shot;
+          try { shot = await captureScreenshot(dir, slugForRoute(entry.route), full_page, pane_id, driver); }
+          catch (error) { shot = { ok: false, error: error.message }; }
           result.screenshot = shot.ok ? shot.path : null;
           if (!shot.ok) result.screenshot_error = shot.error;
 
-          const textRes = await browser().browserGetText(null, pane_id).catch(() => null);
+          const textRes = await driver.browserGetText(null, pane_id).catch(() => null);
           const pageText = String(textRes?.text ?? textRes?.result?.text ?? "");
 
-          const consoleRes = await browser().browserConsoleLog("error", null, 20, pane_id).catch(() => null);
+          const consoleRes = await driver.browserConsoleLog?.("error", navigationStartedAt, 20, pane_id).catch(() => null);
           const consoleErrors = (consoleRes?.entries || []).slice(0, 10);
-          result.console_errors = consoleErrors.length;
+          result.console_errors = consoleRes ? consoleErrors.length : null;
+          if (!consoleRes) result.console_note = "captura de console indisponível neste driver; ausência de erros não confirmada";
           if (consoleErrors.length) result.console_sample = consoleErrors.slice(0, 3);
 
           // Tela de login no meio do caminho é informação, não falha: diz ao
@@ -528,9 +603,12 @@ function createVerifyHandlers(opts = {}) {
           result.markers_found = found.length;
           result.markers_missing = markers.filter((m) => !found.includes(m)).slice(0, 8);
 
-          if (looksLikeLogin) {
+          if (looksLikeLogin || authRedirect) {
             result.verdict = "auth-required";
-            result.note = "a página pedida caiu numa tela de login; autentique com verify_login e rode de novo";
+            result.note = "a página pedida caiu numa tela de login; login exige concessão aprovada. Nenhuma autenticação ou bypass foi tentado";
+          } else if (!shot.ok || textRes?.ok === false || !textRes) {
+            result.verdict = "inconclusive";
+            result.note = "não foi possível obter evidência completa de screenshot e texto; não declarar verificado";
           } else if (markers.length === 0) {
             result.verdict = "inconclusive";
             result.note = "nenhum marcador de texto foi extraído do diff — o print precisa de olho humano ou de um marcador explícito";

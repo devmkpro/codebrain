@@ -22,6 +22,7 @@ let manager: PtyManager;
 beforeEach(async () => {
   vi.useFakeTimers();
   vi.clearAllMocks();
+  native.write.mockReset();
   // Avoid installing process signal handlers or touching existing temp scripts.
   manager = Object.create(PtyManager.prototype);
   Object.assign(manager, {
@@ -114,5 +115,90 @@ describe("PTY transport preserves TUI state", () => {
     manager.resize("receiver", 80, 20);
     expect(native.resize).toHaveBeenCalledTimes(1);
     expect(native.resize).toHaveBeenCalledWith(80, 20);
+  });
+
+  it("does not acknowledge a prompt if the terminal exits before the delayed Enter", async () => {
+    native.output("ready >");
+    const pending = manager.submitWhenReady("receiver", "task", { timeoutMs: 1000, quietMs: 50, pollMs: 10 });
+    await vi.advanceTimersByTimeAsync(60);
+    expect(native.write).toHaveBeenCalledTimes(1);
+    native.exit({ exitCode: 0 });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({ ok: false, promptSubmitted: false });
+    expect(native.write.mock.calls.map(([text]) => text).join("")).not.toContain("\r");
+  });
+
+  it("coalesces duplicate delivery calls and acknowledges only after the native Enter write", async () => {
+    native.output("ready >");
+    const options = { timeoutMs: 1000, quietMs: 50, pollMs: 10 };
+    const first = manager.submitWhenReady("receiver", "same task", options);
+    const second = manager.submitWhenReady("receiver", "same task", options);
+    await vi.runAllTimersAsync();
+    expect(await first).toMatchObject({ ok: true, promptSubmitted: true });
+    expect(await second).toMatchObject({ ok: true, promptSubmitted: true });
+    await manager.submitWhenReady("receiver", "same task", options);
+    expect(native.write.mock.calls.map(([text]) => text).join("")).toBe("\x1b[200~same task\x1b[201~\r");
+  });
+
+  it("retains task-only brief separately and reports the real shell without changing its command", async () => {
+    manager.kill("receiver");
+    const spawnBrief = { id: "brief_receiver", prompt: "Inspect offline fixture", truncated: false, delivery: { state: "pending", promptSubmitted: false } };
+    await manager.spawn({ paneId: "receiver", agent: "shell", cwd: process.cwd(), spawnBrief } as any, { binary: "C:\\Windows\\System32\\cmd.exe", args: ["/q"] });
+    const pane = manager.list()[0] as any;
+    expect(pane).toMatchObject({ hasInitialPrompt: true, initialPromptId: "brief_receiver", promptSubmitted: false, shell: { kind: "cmd", commandSyntax: "cmd" } });
+    expect(pane).not.toHaveProperty("spawnBrief");
+    expect(pane).not.toHaveProperty("initialPrompt");
+    expect((manager as any).getSpawnBrief("receiver")).toMatchObject({ prompt: "Inspect offline fixture" });
+    expect(native.command.args).toEqual(["/q"]);
+    native.output("ready >");
+    const pending = manager.submitWhenReady("receiver", "generated context + original task", { quietMs: 50, pollMs: 10 });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({ ok: true, promptSubmitted: true });
+    expect(spawnBrief.delivery).toMatchObject({ state: "submitted", promptSubmitted: true });
+    expect(manager.getSpawnBrief("receiver")!.prompt).toBe("Inspect offline fixture");
+    const copy = manager.getSpawnBrief("receiver")!;
+    copy.delivery.promptSubmitted = false;
+    expect(manager.getSpawnBrief("receiver")!.delivery.promptSubmitted).toBe(true);
+  });
+
+  it("reproduces five offline boot profiles with three later than 20 seconds, writing each task once", async () => {
+    // Synthetic readiness timings from the reported failure mode, not live Kiro inference.
+    for (const readyAfter of [200, 500, 20_500, 31_000, 45_000]) {
+      manager.kill("receiver");
+      native.write.mockClear();
+      await manager.spawn({ paneId: "receiver", agent: "kiro", cwd: process.cwd() }, { binary: "offline-kiro-fixture", args: [] });
+      native.output("Welcome to Kiro CLI\r\nLoading tools...");
+      setTimeout(() => native.output("\x1b[2J\x1b[H[fixture-agent] > "), readyAfter);
+      const pending = manager.submitWhenReady("receiver", `task ${readyAfter}`, { quietMs: 100, pollMs: 100 });
+      await vi.runAllTimersAsync();
+      expect(await pending).toMatchObject({ ok: true, promptSubmitted: true, attempts: readyAfter > 20_000 ? Math.floor(readyAfter / 20_000) + 1 : 1 });
+      expect(native.write.mock.calls.map(([text]) => text).join("")).toBe(`\x1b[200~task ${readyAfter}\x1b[201~\r`);
+    }
+  });
+
+  it("does not retry a partial native write or misreport it as submitted", async () => {
+    native.output("ready >");
+    native.write.mockImplementationOnce(() => {}).mockImplementation(() => { throw new Error("closed pipe"); });
+    const pending = manager.submitWhenReady("receiver", "task", { timeoutMs: 1000, quietMs: 50 });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({ ok: false, promptSubmitted: false, deliveryState: "uncertain" });
+    const calls = native.write.mock.calls.length;
+    expect(await manager.submitWhenReady("receiver", "task")).toMatchObject({ ok: false, promptSubmitted: false });
+    expect(native.write).toHaveBeenCalledTimes(calls);
+  });
+
+  it("times out without any paste, then permits explicit observation again if nothing was written", async () => {
+    manager.kill("receiver");
+    await manager.spawn({ paneId: "receiver", agent: "kiro", cwd: process.cwd() }, { binary: "offline-kiro-fixture", args: [] });
+    native.output("Loading tools...");
+    const first = manager.submitWhenReady("receiver", "task", { timeoutMs: 100, maxAttempts: 1, quietMs: 50 });
+    await vi.runAllTimersAsync();
+    expect(await first).toMatchObject({ ok: false, promptSubmitted: false, deliveryState: "not_submitted" });
+    expect(native.write).not.toHaveBeenCalled();
+    native.output("\x1b[2J\x1b[H> ");
+    const next = manager.submitWhenReady("receiver", "task", { timeoutMs: 1000, quietMs: 50 });
+    await vi.runAllTimersAsync();
+    expect(await next).toMatchObject({ ok: true, promptSubmitted: true });
+    expect(native.write.mock.calls.map(([text]) => text).join("")).toBe("\x1b[200~task\x1b[201~\r");
   });
 });

@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import * as nodefs from "node:fs";
 import * as nodeos from "node:os";
@@ -10,6 +11,7 @@ import { PtyInputQueue } from "./pty-input";
 import { buildPtyEnvironment } from "./pty-environment";
 import { waitForTerminalReady, type TerminalReadyOptions, type TerminalReadyResult } from "./services/terminal-prompt";
 import { getHarness, harnessAgentDefaults, harnessSearchPaths } from "./services/spawn/cli-registry";
+import { briefSummary, shellMetadata, type SpawnBrief, type ShellMetadata } from "./services/spawn/spawn-metadata";
 
 const IS_WIN = process.platform === "win32";
 
@@ -36,6 +38,8 @@ export interface SpawnConfig {
   role?: string;
   taskId?: string;
   activityId?: string;
+  /** Internal, sanitized task metadata. Not the generated submission payload. */
+  spawnBrief?: SpawnBrief;
 }
 
 export interface PaneInfo {
@@ -48,6 +52,11 @@ export interface PaneInfo {
   claudeSessionId?: string;
   providerId?: string;
   model?: string;
+  hasInitialPrompt?: boolean;
+  initialPromptId?: string;
+  promptSubmitted?: boolean;
+  promptDeliveryState?: SpawnBrief["delivery"]["state"];
+  shell?: ShellMetadata;
 }
 
 function defaultShell(): string {
@@ -550,6 +559,8 @@ interface PaneState {
   config: SpawnConfig;
   paneId: string;
   exitedAt?: number;
+  shell?: ShellMetadata;
+  initialDelivery?: { fingerprint: string; pending?: Promise<TerminalReadyResult>; attempted: boolean; result?: TerminalReadyResult };
 }
 
 export class PtyManager extends EventEmitter {
@@ -631,7 +642,7 @@ export class PtyManager extends EventEmitter {
       (text) => ptyProcess.write(text),
       (error) => log.warn(`[pty:write] pane=${paneId}: ${String(error)}`),
     ));
-    this.panes.set(paneId, { pty: ptyProcess, buffer, config: { ...config, cols, rows }, paneId });
+    this.panes.set(paneId, { pty: ptyProcess, buffer, config: { ...config, cols, rows }, paneId, shell: shellMetadata(config.agent, binary) });
     return paneId;
   }
 
@@ -650,20 +661,57 @@ export class PtyManager extends EventEmitter {
     input.enqueue("\r");
   }
 
-  /** Wait for the CLI to finish booting, then submit exactly once. */
+  /** Wait/retry observation only. A native paste/Enter is never retried automatically. */
   async submitWhenReady(
     paneId: string,
     data: string,
     options: TerminalReadyOptions = {},
   ): Promise<TerminalReadyResult> {
-    const ready = await waitForTerminalReady(
-      () => this.readRawText(paneId),
-      () => this.hasPane(paneId),
-      options,
-    );
-    if (!ready.ok) return ready;
-    this.submit(paneId, data);
-    return ready;
+    const state = this.panes.get(paneId);
+    if (!state) return { ok: false, promptSubmitted: false, deliveryState: "not_submitted", waitedMs: 0, error: "O terminal encerrou antes de aceitar o prompt." };
+    const fingerprint = createHash("sha256").update(data).digest("hex");
+    const previous = state.initialDelivery;
+    if (previous?.fingerprint === fingerprint && previous.pending) return previous.pending;
+    if (previous?.attempted) {
+      if (previous.fingerprint === fingerprint && previous.result) return previous.result;
+      return { ok: false, promptSubmitted: false, deliveryState: "uncertain", waitedMs: 0, error: "Já houve uma tentativa de envio neste pane; releia o terminal antes de reenviar." };
+    }
+    if (previous?.pending) return { ok: false, promptSubmitted: false, deliveryState: "not_submitted", waitedMs: 0, error: "Outro prompt já está aguardando prontidão neste pane." };
+    const delivery: NonNullable<PaneState["initialDelivery"]> = { fingerprint, attempted: false };
+    state.initialDelivery = delivery;
+    const startedAt = Date.now();
+    const brief = state.config.spawnBrief;
+    if (brief) brief.delivery = { state: "pending", promptSubmitted: false };
+    delivery.pending = (async () => {
+      let result: TerminalReadyResult;
+      const ready = await waitForTerminalReady(
+        () => state.buffer.readRawText(),
+        () => this.panes.get(paneId) === state,
+        { ...options, agent: state.config.agent },
+      );
+      if (!ready.ok) result = { ...ready, promptSubmitted: false, deliveryState: "not_submitted" };
+      else {
+        try {
+          const input = this.inputs.get(paneId);
+          if (this.panes.get(paneId) !== state || !input) throw new Error("Terminal input closed.");
+          delivery.attempted = true;
+          const normalized = data.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+          input.enqueue(`\x1b[200~${normalized}\x1b[201~`, 150);
+          await input.enqueueAndWait("\r");
+          result = { ...ready, waitedMs: Date.now() - startedAt, promptSubmitted: true, deliveryState: "submitted" };
+        } catch {
+          // Native write may have partly succeeded: never blind-retry this payload.
+          result = { ...ready, ok: false, waitedMs: Date.now() - startedAt, promptSubmitted: false,
+            deliveryState: delivery.attempted ? "uncertain" : "not_submitted",
+            error: "Não foi possível confirmar o envio de Enter ao terminal. Releia o pane antes de reenviar." };
+        }
+      }
+      if (brief) brief.delivery = { state: result.deliveryState!, promptSubmitted: result.promptSubmitted === true, ...(result.error ? { error: result.error } : {}) };
+      delivery.result = result;
+      delivery.pending = undefined;
+      return result;
+    })();
+    return delivery.pending;
   }
 
   /**
@@ -748,7 +796,15 @@ export class PtyManager extends EventEmitter {
       claudeSessionId: s.config.claudeSessionId,
       providerId: s.config.providerId,
       model: s.config.model,
+      ...briefSummary(s.config.spawnBrief),
+      ...(s.shell ? { shell: s.shell } : {}),
     }));
+  }
+
+  /** Explicit bounded read-back; never included in list(). */
+  getSpawnBrief(paneId: string): SpawnBrief | undefined {
+    const brief = this.panes.get(paneId)?.config.spawnBrief;
+    return brief ? { ...brief, delivery: { ...brief.delivery } } : undefined;
   }
 
   /**

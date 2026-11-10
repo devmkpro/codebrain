@@ -7,6 +7,7 @@ import { getAgentInstructions, listAgents, resolveSkillWhitelist, scanCatalog } 
 import { deciderCredentials, mediaCredentials, type HarnessProvider } from "./harness-providers";
 import { getEnhancedProviders } from "./providers";
 import { getCliDecider } from "./cli-decider";
+import { commandRuntime, disposeCommands } from "./command-runtime";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
 import { refreshAllWorkspaces, writeContextFiles } from "./workspace";
 import { PROVIDER_REGISTRY } from "./constants";
@@ -27,9 +28,13 @@ export function writeMcpConfig(ctx: AppContext, info: McpServerInfo): void {
 function buildMcpBridge(ctx: AppContext) {
   // Create CDP client for native Chrome browser control
   const cdpClient = new CDPClient({ log: console.log, debug: false });
+  const commands = commandRuntime(ctx);
 
   return {
     cdpClient,
+    runCommand: commands.runCommand,
+    approveCommand: commands.approveCommand,
+    disposeCommands: () => disposeCommands(ctx),
     accessHostList: () => accessVaultResult(() => getAccessVault(ctx).list({ source: "agent" })),
     accessHostSave: (input: AccessHostInput) => accessVaultResult(async () => ({ host: await getAccessVault(ctx).upsertHost(input, { source: "agent" }) })),
     accessSshOpen: (input: { hostId: string }) => accessVaultResult(() => getAccessVault(ctx).openSsh(input.hostId, { source: "agent" })),

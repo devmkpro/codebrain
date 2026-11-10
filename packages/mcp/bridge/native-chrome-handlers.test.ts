@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { createNativeChromeHandlers } from "./native-chrome-handlers.js";

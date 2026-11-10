@@ -1,197 +1,18 @@
 "use strict";
 
-const fs = require("node:fs");
-const path = require("node:path");
 const os = require("node:os");
+const { createFileOps } = require("./file-ops.js");
 
-/**
- * File and system bridge handlers for MCP tools.
- * Provides structured file access and system diagnostics.
- * Enforces workspace access mode sandbox (read_external / write_external).
- */
-function createFileHandlers(opts) {
-  function getWorkspace() {
-    return opts.getCurrentWorkspacePath?.() || process.cwd();
-  }
-
-  function isWithinWorkspace(filePath, ws) {
-    const resolved = path.resolve(filePath);
-    return resolved === ws || resolved.startsWith(ws + path.sep);
-  }
-
-  function resolveSafe(filePath) {
-    const ws = getWorkspace();
-    const resolved = path.resolve(ws, filePath);
-    // Prevent path traversal outside workspace AND outside home
-    if (!isWithinWorkspace(resolved, ws) && !resolved.startsWith(os.homedir())) {
-      throw new Error("Path traversal not allowed: " + filePath);
-    }
-    return resolved;
-  }
-
-  /**
-   * Enforce workspace access mode for operations outside the workspace root.
-   * @param {string} fullPath - resolved absolute path
-   * @param {"read"|"write"} kind - operation type
-   * @throws {Error} if access is denied by workspace policy
-   */
-  function enforceAccessMode(fullPath, kind) {
-    const ws = getWorkspace();
-    // Always allow operations inside the workspace
-    if (isWithinWorkspace(fullPath, ws)) return;
-
-    // Outside workspace — check access mode
-    const store = opts.workspaceConfigStore;
-    if (!store) return; // No store available (CLI/stdio mode) — allow
-
-    const mode = store.getAccessMode(ws);
-    // Both modes allow reading outside; only write_external allows writing outside
-    if (kind === "read") return; // read_external and write_external both allow reads
-
-    // kind === "write" — only write_external allows
-    if (mode !== "write_external") {
-      throw new Error(
-        "workspace access denied: write_external required to edit files outside the workspace. " +
-        `File: ${fullPath}. Current mode: ${mode}. ` +
-        "Ask the user to change workspace access mode in settings."
-      );
-    }
-  }
-
+/** File operations share one access policy, encoding layer and bounded output. */
+function createFileHandlers(opts = {}) {
+  const ops = createFileOps(opts);
   return {
-    /**
-     * Read a file from the workspace.
-     */
-    async fileRead({ path: filePath, encoding }) {
-      try {
-        const fullPath = resolveSafe(filePath);
-        enforceAccessMode(fullPath, "read");
-        if (!fs.existsSync(fullPath)) return { ok: false, error: "file not found" };
-        const stat = fs.statSync(fullPath);
-        if (stat.isDirectory()) {
-          const entries = fs.readdirSync(fullPath, { withFileTypes: true });
-          return {
-            ok: true,
-            directory: true,
-            entries: entries.map((e) => ({
-              name: e.name,
-              type: e.isDirectory() ? "directory" : "file",
-            })),
-          };
-        }
-        // Limit to 100KB to avoid huge reads
-        if (stat.size > 100 * 1024) {
-          const fd = fs.openSync(fullPath, "r");
-          const buf = Buffer.alloc(100 * 1024);
-          fs.readSync(fd, buf, 0, 100 * 1024, 0);
-          fs.closeSync(fd);
-          return {
-            ok: true,
-            content: buf.toString(encoding || "utf-8"),
-            truncated: true,
-            totalSize: stat.size,
-          };
-        }
-        const content = fs.readFileSync(fullPath, encoding || "utf-8");
-        return { ok: true, content, size: stat.size };
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : String(err) };
-      }
-    },
+    fileRead: ops.read,
+    fileWrite: ops.write,
+    fileSearch: ops.search,
+    fileBudgetedRead: ops.budgetedRead,
 
-    /**
-     * Write a file to the workspace.
-     */
-    async fileWrite({ path: filePath, content, encoding, createDirs }) {
-      try {
-        const fullPath = resolveSafe(filePath);
-        enforceAccessMode(fullPath, "write");
-        if (createDirs) {
-          const dir = path.dirname(fullPath);
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(fullPath, content, encoding || "utf-8");
-        return { ok: true, path: fullPath, size: Buffer.byteLength(content, encoding || "utf-8") };
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : String(err) };
-      }
-    },
-
-    /**
-     * Search for files by glob pattern or content.
-     */
-    async fileSearch({ pattern, content, path: searchPath, limit }) {
-      try {
-        const basePath = searchPath ? resolveSafe(searchPath) : getWorkspace();
-        enforceAccessMode(basePath, "read");
-        const maxResults = limit || 20;
-        const results = [];
-
-        function walkDir(dir, depth) {
-          if (depth > 5 || results.length >= maxResults) return;
-          let entries;
-          try {
-            entries = fs.readdirSync(dir, { withFileTypes: true });
-          } catch {
-            return;
-          }
-          for (const entry of entries) {
-            if (results.length >= maxResults) break;
-            if (entry.name.startsWith(".") || entry.name === "node_modules" || entry.name === ".git") continue;
-
-            const fullPath = path.join(dir, entry.name);
-            const relPath = path.relative(basePath, fullPath);
-
-            if (entry.isDirectory()) {
-              walkDir(fullPath, depth + 1);
-            } else {
-              // Pattern matching (simple glob: * and **)
-              let matchesPattern = true;
-              if (pattern) {
-                const regexStr = pattern
-                  .replace(/\./g, "\\.")
-                  .replace(/\*\*/g, "___DOUBLESTAR___")
-                  .replace(/\*/g, "[^/]*")
-                  .replace(/___DOUBLESTAR___/g, ".*")
-                  .replace(/\?/g, ".");
-                matchesPattern = new RegExp(`^${regexStr}$`, "i").test(relPath) ||
-                                 new RegExp(`^${regexStr}$`, "i").test(entry.name);
-              }
-
-              // Content matching
-              let matchesContent = true;
-              if (content && matchesPattern) {
-                try {
-                  const stat = fs.statSync(fullPath);
-                  if (stat.size > 500 * 1024) { matchesContent = false; }
-                  else {
-                    const fileContent = fs.readFileSync(fullPath, "utf-8");
-                    matchesContent = fileContent.includes(content);
-                  }
-                } catch {
-                  matchesContent = false;
-                }
-              }
-
-              if (matchesPattern && matchesContent) {
-                results.push({ path: relPath, fullPath, name: entry.name });
-              }
-            }
-          }
-        }
-
-        walkDir(basePath, 0);
-        return { ok: true, results, count: results.length };
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : String(err) };
-      }
-    },
-
-    /**
-     * Get system information.
-     */
     async systemInfo() {
-      const os = require("node:os");
       return {
         ok: true,
         platform: os.platform(),
@@ -203,20 +24,21 @@ function createFileHandlers(opts) {
         freeMemory: os.freemem(),
         uptime: os.uptime(),
         nodeVersion: process.version,
-        workspace: getWorkspace(),
+        workspace: ops.workspace(),
         homeDir: os.homedir(),
+        currentTime: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        shell: process.platform === "win32" ? (process.env.COMSPEC || "cmd.exe") : (process.env.SHELL || "/bin/bash"),
+        availableClis: [...(opts.getAvailableClis?.() || [])].map(id => ({
+          id, installed: true, authentication: "not_verified",
+        })),
       };
     },
 
-    /**
-     * Get diagnostics: pane health, MCP status, provider status.
-     */
     async systemDiagnostics() {
-      const os = require("node:os");
       const panes = opts.ptyManager?.list?.() || [];
       const roleMap = opts.roleMap || new Map();
       const paneLabels = opts.paneLabels || new Map();
-
       return {
         ok: true,
         system: {
@@ -228,127 +50,20 @@ function createFileHandlers(opts) {
         },
         panes: {
           total: panes.length,
-          byStatus: panes.reduce((acc, p) => {
-            acc[p.status || "unknown"] = (acc[p.status || "unknown"] || 0) + 1;
+          byStatus: panes.reduce((acc, pane) => {
+            acc[pane.status || "unknown"] = (acc[pane.status || "unknown"] || 0) + 1;
             return acc;
           }, {}),
-          details: panes.map((p) => ({
-            paneId: p.paneId,
-            agent: p.agent,
-            role: roleMap.get(p.paneId) || "worker",
-            label: paneLabels.get(p.paneId) || p.agent,
-            status: p.status || "unknown",
+          details: panes.map(pane => ({
+            paneId: pane.paneId,
+            agent: pane.agent,
+            role: roleMap.get(pane.paneId) || "worker",
+            label: paneLabels.get(pane.paneId) || pane.agent,
+            status: pane.status || "unknown",
           })),
         },
-        mcp: {
-          memoryStoreReady: !!opts.memoryStore,
-        },
+        mcp: { memoryStoreReady: !!opts.memoryStore },
       };
-    },
-
-    /**
-     * Read a file within a token budget (MiMo-inspired budgeted read).
-     * Prioritizes structure (headers, function signatures) over full body content.
-     * Useful for reading large files without consuming the entire context window.
-     *
-     * @param {{ path: string, budgetTokens?: number, encoding?: string }} opts
-     * @returns {{ ok: boolean, content?: string, truncated?: boolean, sections?: number, budgetUsed?: number }}
-     */
-    async fileBudgetedRead({ path: filePath, budgetTokens = 4000, encoding }) {
-      try {
-        const fullPath = resolveSafe(filePath);
-        enforceAccessMode(fullPath, "read");
-        if (!fs.existsSync(fullPath)) return { ok: false, error: "file not found" };
-        const stat = fs.statSync(fullPath);
-        if (stat.isDirectory()) return { ok: false, error: "is a directory, use fileRead" };
-
-        const fullText = fs.readFileSync(fullPath, encoding || "utf-8");
-        const totalChars = fullText.length;
-
-        // Rough token estimate: ~4 chars per token (conservative for code)
-        const estimateTokens = (text) => Math.ceil(text.length / 4);
-
-        // If file fits within budget, return as-is
-        if (estimateTokens(fullText) <= budgetTokens) {
-          return { ok: true, content: fullText, truncated: false, size: stat.size, budgetUsed: estimateTokens(fullText) };
-        }
-
-        // Parse into sections by markdown/code headers
-        const lines = fullText.split("\n");
-        const sections = [];
-        let currentSection = { header: "", headerLine: 0, lines: [], isHeader: false };
-
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          // Detect headers: # markdown, // === section, function/class/const declarations
-          const isHeader = /^(#{1,6}\s|\/\/\s*={3,}|(?:export\s+)?(?:async\s+)?function\s+\w|(?:export\s+)?class\s+\w|(?:export\s+)?(?:const|let|var)\s+\w+\s*=)/.test(line);
-
-          if (isHeader && currentSection.lines.length > 0) {
-            sections.push(currentSection);
-            currentSection = { header: line, headerLine: i, lines: [line], isHeader: true };
-          } else {
-            currentSection.lines.push(line);
-          }
-        }
-        if (currentSection.lines.length > 0) sections.push(currentSection);
-
-        // Always include headers (structure skeleton)
-        const headerLines = sections.map(s => s.header || s.lines[0]).filter(Boolean);
-        const headerTokens = estimateTokens(headerLines.join("\n"));
-
-        if (headerTokens >= budgetTokens) {
-          // Even headers exceed budget — return skeleton only
-          const skeleton = headerLines.join("\n").slice(0, budgetTokens * 4);
-          return {
-            ok: true,
-            content: skeleton + "\n// ... (truncated — headers only, file too large for budget)",
-            truncated: true,
-            sections: sections.length,
-            budgetUsed: estimateTokens(skeleton),
-            totalSize: stat.size,
-          };
-        }
-
-        // Fill sections within remaining budget
-        const remaining = budgetTokens - headerTokens;
-        const out = [];
-        let used = headerTokens;
-
-        for (const section of sections) {
-          // Always include header line
-          out.push(section.header || section.lines[0]);
-          const sectionBody = section.lines.slice(section.isHeader ? 1 : 0).join("\n");
-          const sectionTokens = estimateTokens(sectionBody);
-
-          if (used + sectionTokens <= budgetTokens) {
-            // Entire section fits
-            if (section.lines.length > 1) {
-              out.push(sectionBody);
-              used += sectionTokens;
-            }
-          } else {
-            // Partial — include what fits
-            const charBudget = (budgetTokens - used) * 4;
-            if (charBudget > 80) {
-              out.push(sectionBody.slice(0, charBudget) + "\n// ... (section truncated)");
-            }
-            used = budgetTokens;
-            break;
-          }
-        }
-
-        return {
-          ok: true,
-          content: out.join("\n"),
-          truncated: true,
-          sections: sections.length,
-          budgetUsed: used,
-          totalSize: stat.size,
-          totalTokensEstimate: estimateTokens(fullText),
-        };
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : String(err) };
-      }
     },
   };
 }

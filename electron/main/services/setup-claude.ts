@@ -14,6 +14,8 @@ import * as os from "node:os";
 import { app } from "electron";
 import log from "electron-log/main.js";
 import { buildStdioServerConfig, isStdioConfigCurrent, resolveStdioEntry } from "./mcp-runtime";
+import { readCodebrainMetadata } from "./claude-metadata";
+export { readCodebrainMetadata, ensureClaudeWorkspaceSettings } from "./claude-metadata";
 
 function copyDirRecursive(src: string, dest: string): void {
   fs.mkdirSync(dest, { recursive: true });
@@ -40,36 +42,6 @@ function getStdioPath(): string {
 }
 
 /**
- * Resolve the Codebrain project root — where package.json and packages/mcp/index.js live.
- * Works in both dev mode (app.getAppPath()) and packaged mode (process.resourcesPath).
- */
-function getCodebrainRoot(): string {
-  if (app.isPackaged) return process.resourcesPath;
-  return app.getAppPath();
-}
-
-/**
- * Get the real version from package.json (never "unknown").
- */
-function getRealVersion(): string | null {
-  try {
-    const pkgPath = path.join(getCodebrainRoot(), "package.json");
-    return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version ?? null;
-  } catch { return null; }
-}
-
-/**
- * Get the real MCP tool count by counting `server.tool(` in packages/mcp/index.js (never 0).
- */
-function getRealTotalTools(): number {
-  try {
-    const indexJs = path.join(getCodebrainRoot(), "packages", "mcp", "index.js");
-    const src = fs.readFileSync(indexJs, "utf-8");
-    return (src.match(/server\.tool\(/g) || []).length;
-  } catch { return 0; }
-}
-
-/**
  * Sync version + totalTools in ~/.claude/settings.json from real project values.
  * Called on every startup and on provider change. Safe to call repeatedly.
  *
@@ -85,8 +57,7 @@ export function syncClaudeSettingsVersion(): void {
     if (!fs.existsSync(settingsDest)) return;
 
     const userSettings: Record<string, any> = JSON.parse(fs.readFileSync(settingsDest, "utf-8"));
-    const pkgVersion = getRealVersion();
-    const totalTools = getRealTotalTools();
+    const { version: pkgVersion, totalTools } = readCodebrainMetadata();
 
     if (!pkgVersion && totalTools === 0) return;
 
@@ -263,17 +234,16 @@ export function setupClaudeIntegration(): void {
       // placeholder values ("unknown"/0) that are committed to the repo. Always
       // compute from package.json and index.js at runtime.
       {
-        const pkgVersion = getRealVersion();
-        const totalTools = getRealTotalTools();
+        const { version: pkgVersion, totalTools } = readCodebrainMetadata();
 
-        if (!userSettings.codebrain) {
+        if (!userSettings.codebrain && (pkgVersion || totalTools > 0)) {
           // Create fresh codebrain section with REAL values (not bundled placeholders)
           userSettings.codebrain = {
-            version: pkgVersion || "unknown",
-            mcp: { totalTools: totalTools || 0 },
+            ...(pkgVersion ? { version: pkgVersion } : {}),
+            ...(totalTools > 0 ? { mcp: { totalTools } } : {}),
           };
           changed = true;
-        } else {
+        } else if (userSettings.codebrain) {
           // Update existing — only overwrite if current value is a placeholder
           const cb = userSettings.codebrain as any;
           if (pkgVersion && (cb.version === "unknown" || !cb.version || cb.version !== pkgVersion)) {
@@ -290,7 +260,7 @@ export function setupClaudeIntegration(): void {
 
       // Always sync CODEBRAIN_VERSION env var from package.json (never "unknown")
       {
-        const pkgVersion = getRealVersion();
+        const { version: pkgVersion } = readCodebrainMetadata();
         if (pkgVersion) {
           if (!userSettings.env) userSettings.env = {};
           if ((userSettings.env as any).CODEBRAIN_VERSION !== pkgVersion) {

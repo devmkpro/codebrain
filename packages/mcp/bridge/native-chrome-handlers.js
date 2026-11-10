@@ -9,7 +9,31 @@
  * Portado e adaptado do mcp-browser-bridge/src/tools.js.
  */
 
-function createNativeChromeHandlers(cdpClient) {
+const fs = require("node:fs");
+const path = require("node:path");
+const { randomUUID } = require("node:crypto");
+
+function screenshotArtifact(shot, options = {}, context = {}) {
+  if (shot?.ok === false) return shot;
+  const format = options.format || shot?.format || "png";
+  if (!["png", "jpeg", "webp"].includes(format)) throw new Error("Screenshot format must be png, jpeg or webp");
+  const { data, ...compact } = shot || {};
+  let file = compact.path;
+  if (!file && data) {
+    const root = context.getCurrentWorkspacePath?.() || process.cwd();
+    const dir = path.join(root, ".codebrain", "screenshots");
+    fs.mkdirSync(dir, { recursive: true });
+    file = path.join(dir, `capture-${randomUUID()}.${format}`);
+    fs.writeFileSync(file, Buffer.from(data, "base64"), { flag: "wx" });
+  }
+  if (!file || !fs.existsSync(file)) throw new Error("Screenshot did not produce an artifact");
+  return {
+    ...compact, ok: true, path: file, format, mimeType: `image/${format}`, bytes: fs.statSync(file).size,
+    ...(options.inline === true || options.return_base64 === true ? { data: data || fs.readFileSync(file).toString("base64") } : {}),
+  };
+}
+
+function createNativeChromeHandlers(cdpClient, context = {}) {
   if (!cdpClient) throw new Error("CDPClient required");
 
   /**
@@ -20,11 +44,12 @@ function createNativeChromeHandlers(cdpClient) {
     const result = await cdpClient.send("Runtime.evaluate", {
       expression,
       returnByValue,
+      awaitPromise: true,
     });
     if (result.exceptionDetails) {
       throw new Error(
-        result.exceptionDetails.text ||
-          result.exceptionDetails.exception?.description ||
+        result.exceptionDetails.exception?.description ||
+          result.exceptionDetails.text ||
           "JS eval error"
       );
     }
@@ -725,8 +750,10 @@ function createNativeChromeHandlers(cdpClient) {
 
     // ─── Screenshot ────────────────────────────────────────────────────
 
-    async screenshot(fullPage) {
-      const opts = { format: "png" };
+    async screenshot(fullPage, options = {}) {
+      const format = options.format || "png";
+      if (!["png", "jpeg", "webp"].includes(format)) throw new Error("Screenshot format must be png, jpeg or webp");
+      const opts = { format };
       if (fullPage) {
         // Get full page dimensions
         const dims = await evalJSON(`(() => ({
@@ -736,34 +763,28 @@ function createNativeChromeHandlers(cdpClient) {
         // Cap at 8192px
         const width = Math.min(dims.width || 1280, 8192);
         const height = Math.min(dims.height || 720, 8192);
-        // Set viewport to full page
-        await cdpClient.send("Emulation.setDeviceMetricsOverride", {
-          width,
-          height,
-          deviceScaleFactor: 1,
-          mobile: false,
+        // Capture beyond the viewport without reflowing the page or clearing a
+        // mobile/headless viewport override installed for this target.
+        const result = await cdpClient.send("Page.captureScreenshot", {
+          ...opts, captureBeyondViewport: true,
+          clip: { x: 0, y: 0, width, height, scale: 1 },
         });
-        const result = await cdpClient.send("Page.captureScreenshot", opts);
-        // Reset viewport
-        await cdpClient.send("Emulation.clearDeviceMetricsOverride");
-        return {
+        return screenshotArtifact({
           ok: true,
           data: result.data,
-          format: "png",
+          format,
           width,
           height,
           mode: "full-page",
-          note: "Base64 encoded PNG screenshot",
-        };
+        }, options, context);
       }
       const result = await cdpClient.send("Page.captureScreenshot", opts);
-      return {
+      return screenshotArtifact({
         ok: true,
         data: result.data,
-        format: "png",
+        format,
         mode: "viewport",
-        note: "Base64 encoded PNG screenshot",
-      };
+      }, options, context);
     },
 
     // ─── Eval ──────────────────────────────────────────────────────────
@@ -795,11 +816,56 @@ function createNativeChromeHandlers(cdpClient) {
     // ─── Console / Network ─────────────────────────────────────────────
 
     async readConsole(opts) {
-      return cdpClient.getConsoleMessages(opts || {});
+      opts = opts || {};
+      let entries;
+      if (typeof cdpClient.getEvents === "function") {
+        entries = cdpClient.getEvents().filter((event) => ["Runtime.consoleAPICalled", "Runtime.exceptionThrown"].includes(event.method)).map((event) => {
+          const p = event.params || {};
+          return {
+            type: event.method === "Runtime.exceptionThrown" ? "error" : p.type,
+            text: event.method === "Runtime.exceptionThrown"
+              ? p.exceptionDetails?.exception?.description || p.exceptionDetails?.text || "JavaScript exception"
+              : (p.args || []).map((arg) => arg.value ?? arg.description ?? "").join(" "),
+            timestamp: event.timestamp ?? p.timestamp,
+          };
+        });
+      } else entries = cdpClient.getConsoleMessages({ level: opts.level });
+      if (opts.level) entries = entries.filter((entry) => entry.type === opts.level);
+      if (opts.since_ms != null) entries = entries.filter((entry) => Number(entry.timestamp) >= Number(opts.since_ms));
+      return entries.slice(-Math.max(1, Math.min(1000, Number(opts.limit) || 100)));
     },
 
     async readNetwork(opts) {
-      return cdpClient.getNetworkRequests(opts || {});
+      opts = opts || {};
+      // The persistent logger has no target/session key. Never query its global
+      // history to answer a current-tab request (even a URL filter can leak sites).
+      const { frameTree } = await cdpClient.send("Page.getFrameTree");
+      if (!frameTree?.frame?.id) throw new Error("Current-tab network scope unavailable");
+      const frames = new Set();
+      const walk = (tree) => { frames.add(tree.frame.id); for (const child of tree.childFrames || []) walk(child); };
+      walk(frameTree);
+      const origin = (url) => { try { return new URL(url).origin; } catch { return null; } };
+      const site = origin(frameTree.frame.url);
+      if (!site || site === "null") return [];
+      const requests = new Map();
+      for (const event of cdpClient.getEvents?.() || []) {
+        const p = event.params || {};
+        if (event.method === "Network.requestWillBeSent") {
+          if (!frames.has(p.frameId) || origin(p.documentURL || p.request?.url) !== site) continue;
+          requests.set(p.requestId, { id: p.requestId, method: p.request.method, url: p.request.url, type: p.type, timestamp: event.timestamp, status: null });
+        } else if (event.method === "Network.responseReceived" && requests.has(p.requestId)) {
+          Object.assign(requests.get(p.requestId), { status: p.response.status, status_text: p.response.statusText, mime_type: p.response.mimeType });
+        } else if (event.method === "Network.loadingFailed" && requests.has(p.requestId)) {
+          requests.get(p.requestId).error = p.errorText;
+        }
+      }
+      let entries = [...requests.values()];
+      if (opts.method) entries = entries.filter((r) => r.method.toUpperCase() === opts.method.toUpperCase());
+      if (opts.url_pattern || opts.url_filter) entries = entries.filter((r) => r.url.includes(opts.url_pattern || opts.url_filter));
+      if (opts.status !== undefined && opts.status !== null) entries = entries.filter((r) => r.status === Number(opts.status));
+      if (opts.since_ms != null) entries = entries.filter((r) => r.timestamp >= Number(opts.since_ms));
+      if (opts.search) entries = entries.filter((r) => `${r.url} ${r.method} ${r.status}`.toLowerCase().includes(String(opts.search).toLowerCase()));
+      return entries.slice(-Math.max(1, Math.min(1000, Number(opts.limit) || 100)));
     },
 
     // ═══════════════════════════════════════════════════════════════════
@@ -866,8 +932,7 @@ function createNativeChromeHandlers(cdpClient) {
           return { success: true, action: "key", key: text };
         }
         case "screenshot": {
-          const result = await cdpClient.send("Page.captureScreenshot", { format: "png" });
-          return { data: result.data, format: "png" };
+          return this.screenshot(false, args);
         }
         case "wait": {
           await new Promise((r) => setTimeout(r, wait_ms || 1000));
@@ -962,7 +1027,8 @@ function createNativeChromeHandlers(cdpClient) {
      * tabsContext — List all open Chrome tabs.
      */
     async tabsContext() {
-      const port = cdpClient.activePort || 9222;
+      const port = cdpClient.activePort;
+      if (!port) throw new Error("No active CDP port; use browser_launch first");
       const targets = await cdpClient.discoverTargets(port);
       const tabs = (targets || [])
         .filter((t) => t.type === "page")
@@ -970,7 +1036,7 @@ function createNativeChromeHandlers(cdpClient) {
           id: t.id,
           title: t.title,
           url: t.url,
-          active: t.attached || false,
+          active: cdpClient.browserWsUrl?.endsWith(`/page/${t.id}`) || false,
         }));
       return { ok: true, tabs };
     },
@@ -988,7 +1054,8 @@ function createNativeChromeHandlers(cdpClient) {
 
       // Reconnect CDP to the new tab so events (console, network) are captured
       try {
-        const port = cdpClient.activePort || 9223;
+        const port = cdpClient.activePort;
+        if (!port) throw new Error("No active CDP port");
         const targets = await cdpClient.discoverTargets(port);
         const newTabTarget = targets.find(t => t.id === tabId && t.webSocketDebuggerUrl);
         if (newTabTarget) {
@@ -1328,14 +1395,16 @@ function createNativeChromeHandlers(cdpClient) {
      */
     async resizeWindow(args) {
       const { width, height } = args;
-      if (!width || !height) throw new Error("width and height required");
-
-      const { windowId } = await cdpClient.send("Browser.getWindowForTarget");
-      await cdpClient.send("Browser.setWindowBounds", {
-        windowId,
-        bounds: { width, height },
+      if (!Number.isInteger(width) || !Number.isInteger(height) || width < 320 || width > 7680 || height < 320 || height > 4320) throw new Error("CSS viewport width must be 320..7680 and height 320..4320 integer pixels");
+      // Window bounds are not CSS viewport bounds, especially in UC/headless.
+      // Emulate this target only; never resize a user's other browser tabs.
+      await cdpClient.send("Emulation.setDeviceMetricsOverride", {
+        width, height, screenWidth: width, screenHeight: height,
+        deviceScaleFactor: 1, mobile: false,
       });
-      return { ok: true, width, height };
+      const actual = await evalJSON("({ width: window.innerWidth, height: window.innerHeight })");
+      const matches = actual?.width === width && actual?.height === height;
+      return { ok: matches, width: actual?.width ?? null, height: actual?.height ?? null, requested: { width, height }, ...(matches ? {} : { error: "CSS viewport dimensions did not match the requested dimensions" }) };
     },
 
     /**
@@ -1345,8 +1414,10 @@ function createNativeChromeHandlers(cdpClient) {
      *
      * @param {string} selector - CSS selector for the target element
      */
-    async screenshotElement(selector) {
+    async screenshotElement(selector, options = {}) {
       if (!selector) throw new Error("selector required");
+      const format = options.format || "png";
+      if (!["png", "jpeg", "webp"].includes(format)) throw new Error("Screenshot format must be png, jpeg or webp");
 
       // Get element bounding box via JS
       const bounds = await evalJSON(`(() => {
@@ -1361,7 +1432,7 @@ function createNativeChromeHandlers(cdpClient) {
 
       // Capture screenshot with clip to element bounds
       const result = await cdpClient.send("Page.captureScreenshot", {
-        format: "png",
+        format,
         clip: {
           x: Math.max(0, bounds.x),
           y: Math.max(0, bounds.y),
@@ -1371,23 +1442,14 @@ function createNativeChromeHandlers(cdpClient) {
         },
       });
 
-      // Save to file
-      const fs = require("node:fs");
-      const path = require("node:path");
-      const screenshotsDir = path.join(process.cwd(), ".codebrain", "screenshots");
-      if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
-      const filename = `element-${Date.now()}.png`;
-      const filepath = path.join(screenshotsDir, filename);
-      fs.writeFileSync(filepath, Buffer.from(result.data, "base64"));
-
-      return {
+      return screenshotArtifact({
         ok: true,
-        path: filepath,
-        filename,
+        data: result.data,
+        format,
         width: Math.round(bounds.width),
         height: Math.round(bounds.height),
         text: bounds.text,
-      };
+      }, options, context);
     },
 
     /**
@@ -1426,4 +1488,4 @@ function createNativeChromeHandlers(cdpClient) {
   };
 }
 
-module.exports = { createNativeChromeHandlers };
+module.exports = { createNativeChromeHandlers, screenshotArtifact };

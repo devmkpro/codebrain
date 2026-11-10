@@ -14,6 +14,7 @@ const { createTodoHandlers } = require("./bridge/todo-handlers.js");
 const { createMemoryHandlers } = require("./bridge/memory-handlers.js");
 const { createSwarmHandlers } = require("./bridge/swarm-handlers.js");
 const { createFileHandlers } = require("./bridge/file-handlers.js");
+const { createCommandHandlers } = require("./bridge/command-handlers.js");
 const { createWorkerDispatch } = require("./bridge/worker-dispatch.js");
 const { createHooksHandlers } = require("./bridge/hooks-handlers.js");
 const { createSkillHandlers } = require("./bridge/skill-handlers.js");
@@ -544,10 +545,10 @@ function createMCPBridge(ptyManager, opts = {}) {
 
   // Record write timestamps for activity tracking (patch must come after paneHandlers is created)
   const originalWritePane = paneHandlers.writePane.bind(paneHandlers);
-  paneHandlers.writePane = async function trackedWritePane(paneId, text, submit) {
+  paneHandlers.writePane = async function trackedWritePane(paneId, text, submit, context) {
     const now = Date.now();
     if (!paneActivityStart.has(paneId)) paneActivityStart.set(paneId, now);
-    return originalWritePane(paneId, text, submit);
+    return originalWritePane(paneId, text, submit, context);
   };
 
   // ── Agent registry + message handlers (simple CRUD via memoryStore) ────
@@ -643,6 +644,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     agentScorer,
   });
   const fileHandlers = createFileHandlers({ ...opts, paneLabels, roleMap, ptyManager });
+  const commandHandlers = createCommandHandlers(opts);
   const workerDispatch = createWorkerDispatch({ ...opts, paneLabels, roleMap, ptyManager });
   const hooksHandlers = createHooksHandlers({ ...opts, paneLabels, roleMap });
   const skillHandlers = createSkillHandlers({ ...opts, paneLabels, roleMap });
@@ -740,6 +742,7 @@ function createMCPBridge(ptyManager, opts = {}) {
   const verifyHandlers = createVerifyHandlers({
     ...sharedOpts,
     browserHandlers,
+    scrapingHandlers,
     questionHandlers,
   });
 
@@ -780,7 +783,13 @@ function createMCPBridge(ptyManager, opts = {}) {
     const result = await originalFileWrite(args);
     if (result?.ok && args.path) {
       const ws = opts.getCurrentWorkspacePath?.() || process.cwd();
-      const relPath = path.relative(ws, args.path).replace(/\\/g, "/");
+      // Relative tool paths belong to the selected workspace, not to the
+      // Electron/stdio process cwd (which is often the Codebrain repository).
+      const absolutePath = path.resolve(ws, args.path);
+      const relative = path.relative(ws, absolutePath);
+      const external = relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative);
+      const relPath = (external ? absolutePath : relative).replace(/\\/g, "/");
+      const sensitivePath = /(?:^|\/)(?:\.env(?:\.|$)|id_(?:rsa|ed25519|ecdsa)(?:\.|$)|credentials?(?:\.|$)|secrets?(?:\.|$)|\.?mcp\.json$)|\.(?:pem|key|pfx|p12|ppk)$|\/access-vault/i.test(relPath);
       // Auto-record file change in shared memory (working type)
       try {
         const store = opts.memoryStore;
@@ -790,8 +799,8 @@ function createMCPBridge(ptyManager, opts = {}) {
           store.write({
             type: "working",
             key: `file-changed-${relPath}`,
-            content: `File modified: ${relPath}\nSize: ${result.size || 0} bytes\nPreview: ${contentPreview}`,
-            tags: ["file-change", "auto"],
+            content: `File modified: ${relPath}\nAbsolute path: ${absolutePath}\nWorkspace: ${ws}\nExternal: ${external}\nSize: ${result.size || 0} bytes${external || sensitivePath ? "\nPreview omitted by policy." : `\nPreview: ${contentPreview}`}`,
+            tags: ["file-change", "auto", ...(external ? ["external"] : [])],
             agent_id: "auto-memory",
             workspace: ws,
           });
@@ -855,6 +864,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...memoryHandlers,
     ...swarmHandlers,
     ...fileHandlers,
+    ...commandHandlers,
     ...workerDispatch,
     ...hooksHandlers,
     ...skillHandlers,

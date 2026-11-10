@@ -17,6 +17,7 @@ import { createAppContext, safeSend } from "./context";
 import { createWindow } from "./window";
 import { registerAllIpcHandlers } from "./ipc/register-all";
 import { startMcpServer } from "./services/mcp";
+import { disposeCommands, hasRunningCommands } from "./services/command-runtime";
 import { syncProviderModels } from "./services/providers";
 import { attachNetworkTracking } from "./services/network";
 import { setupHooks } from "./services/hooks";
@@ -294,7 +295,15 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", async () => {
+let commandQuitDrain: Promise<void> | null = null;
+app.on("before-quit", async (event) => {
+  if (hasRunningCommands(ctx)) {
+    event.preventDefault();
+    if (!commandQuitDrain) {
+      commandQuitDrain = disposeCommands(ctx).finally(() => { app.quit(); });
+    }
+    return;
+  }
   teardownDiscordRPC();
   if (ctx.mcpServerInfo) {
     ctx.mcpServerInfo.close();

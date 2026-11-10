@@ -7,8 +7,8 @@ const os = require("node:os");
 const path = require("node:path");
 const { decideHarness, deriveName, loadHarnessTable } = require("./harness.js");
 const { consultDecider } = require("./decider.js");
+const { createSessionHandlers } = require("./session-handlers.js");
 
-const MAX_PANES_PER_CALL = 16;
 const MAX_CATALOG_RESULTS = 60;
 const operationalMission = (id) =>
   typeof id === "string" && id.startsWith("mission_") ? id : null;
@@ -28,6 +28,10 @@ function createHarnessHandlers(paneHandlers, ptyManager, opts = {}) {
   const paneContracts = opts.paneContracts ?? new Map();
   const reservedPanes = new Set();
   let allocationQueue = Promise.resolve();
+  const session = createSessionHandlers({ ...opts, spawnTask: request => {
+    if (request.prompt !== undefined) return spawnOne(request);
+    return paneHandlers.spawnPane(request);
+  } });
   function allocatePane(request) {
     const allocation = allocationQueue.then(async () => {
       const result = await paneHandlers.spawnPane({
@@ -221,6 +225,7 @@ function createHarnessHandlers(paneHandlers, ptyManager, opts = {}) {
             accountLabel: decision.accountLabel ?? undefined,
             taskType: decision.taskId,
             missionId: request.missionId,
+            spawnBrief: request.prompt,
             // Deliver only after installing the contract: a fast worker can
             // hand off while the main process is still awaiting prompt delivery.
           });
@@ -233,6 +238,18 @@ function createHarnessHandlers(paneHandlers, ptyManager, opts = {}) {
           error: result.error ?? "spawn falhou",
           receipt: decision.receipt,
         };
+
+      const assignment = session.persistSpawnAssignment({
+        paneId: result.paneId, prompt: request.prompt, name,
+        workspace: result.workspacePath || result.cwd || request.cwd,
+        missionId: operationalMission(result.missionId) || operationalMission(request.missionId),
+        parentPaneId: request.parentPaneId,
+      });
+      if (!assignment.ok) return {
+        ok: false, paneId: result.paneId, name, receipt: decision.receipt,
+        taskId: assignment.taskId || null, assignmentPersisted: assignment.persisted,
+        promptDelivered: false, error: assignment.error,
+      };
 
       const previousContract = paneContracts.get(result.paneId);
       if (request.expect) {
@@ -256,8 +273,10 @@ function createHarnessHandlers(paneHandlers, ptyManager, opts = {}) {
               })
             : await paneHandlers.writePane(result.paneId, deliveryPrompt, true);
       } catch (err) {
-        delivery = { ok: false, error: err?.message ?? String(err) };
+        delivery = { ok: false, deliveryState: "uncertain", error: err?.message ?? String(err) };
       }
+      const deliveryState = delivery?.deliveryState || (delivery?.ok ? "submitted" : "not_submitted");
+      const deliveryRecord = session.setSpawnPromptDelivery({ paneId: result.paneId, delivered: delivery?.ok === true, state: deliveryState, error: delivery?.error });
       if (!delivery?.ok) {
         if (previousContract) paneContracts.set(result.paneId, previousContract);
         else paneContracts.delete(result.paneId);
@@ -265,6 +284,7 @@ function createHarnessHandlers(paneHandlers, ptyManager, opts = {}) {
           ok: false,
           paneId: result.paneId,
           name,
+          taskId: assignment.taskId, assignmentPersisted: true, promptDelivered: false, deliveryState,
           error: delivery?.error ?? "prompt não foi entregue",
           receipt: decision.receipt,
         };
@@ -285,6 +305,11 @@ function createHarnessHandlers(paneHandlers, ptyManager, opts = {}) {
         ok: true,
         paneId: result.paneId,
         name,
+        taskId: assignment.taskId,
+        assignmentPersisted: true,
+        promptDelivered: true,
+        deliveryState,
+        ...(deliveryRecord?.ok ? {} : { persistenceWarning: deliveryRecord?.error || "Estado de entrega não persistido" }),
         reused: Boolean(result.reused),
         agent: result.agent ?? opts.paneConfigs?.get(result.paneId)?.agent ?? decision.agent,
         model: result.model ?? opts.paneConfigs?.get(result.paneId)?.model ?? decision.model,
@@ -305,28 +330,7 @@ function createHarnessHandlers(paneHandlers, ptyManager, opts = {}) {
 
   return {
     /** Com `prompt` ou `panes`: spawn dirigido. Sem eles, o pane abre vazio. */
-    async spawnTask(request = {}) {
-      if (Array.isArray(request.panes) && request.panes.length) {
-        if (request.panes.length > MAX_PANES_PER_CALL) {
-          return { ok: false, error: `máximo de ${MAX_PANES_PER_CALL} panes por chamada` };
-        }
-        const { panes, ...shared } = request;
-        const results = await Promise.all(
-          panes.map(async (pane) => {
-            try {
-              return await spawnOne({ ...shared, ...pane });
-            } catch (err) {
-              return { ok: false, error: err?.message ?? String(err) };
-            }
-          })
-        );
-        return { ok: results.every((result) => result.ok), panes: results };
-      }
-      if (typeof request.prompt === "string" && request.prompt.trim()) return spawnOne(request);
-      if (request.prompt !== undefined && typeof request.prompt !== "string")
-        return { ok: false, error: "prompt deve ser texto" };
-      return paneHandlers.spawnPane(request);
-    },
+    spawnTask: session.spawnTask,
 
     harnessTable() {
       return { ok: true, table: loadHarnessTable(tablePath()) };

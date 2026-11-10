@@ -14,9 +14,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "2.0.0",
+    "version": "2.0.1",
     "date": "em desenvolvimento",
     "highlights": []
+  },
+  {
+    "version": "2.0.0",
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "release Codebrain 2.0.0 with multi-harness, native skills and secure access"
+      }
+    ]
   },
   {
     "version": "1.21.5",
