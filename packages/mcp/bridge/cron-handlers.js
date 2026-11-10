@@ -9,7 +9,7 @@
  * Includes the CronTickLoop — a 60s interval that checks for due jobs
  * and fires them via the spawn callback.
  *
- * Ported from Overclock sidecar (cronTickLoop.js + cron store).
+ * Schedules stored jobs through the cron tick loop.
  */
 
 const { nextCronAfter, shouldFireJob, isStaleJob, CRON_STALE_MS } = require("./cron-utils.js");

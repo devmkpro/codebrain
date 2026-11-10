@@ -1,9 +1,12 @@
 import React from "react";
-import { X, Terminal as TerminalIcon } from "lucide-react";
+import { X } from "lucide-react";
 import { xtermExports, addonFitExports, L } from "../../lib/xterm-exports";
 import { TERMINAL_THEMES, FONT_OPTIONS, useTerminalSettings } from "../../stores/terminal-settings-store";
 import { PaneTitle } from "../panes/PaneTitle";
 import { PaneIdBadge } from "../panes/PaneIdBadge";
+import { cliIdentity, modelShortName } from "../panes/pane-identity";
+import "../../styles/terminal.css";
+import { terminalThemeFromTokens } from "./xterm-theme";
 
 /**
  * Minimal single-pane view for a detached terminal window.
@@ -26,10 +29,9 @@ export function DetachedPaneView({ paneId, workspacePath }: { paneId: string; wo
 
   React.useEffect(() => {
     window.codeBrainApp?.pty?.list?.().then((result: any) => {
-      if (result?.ok) {
-        const found = result.panes?.find((p: any) => p.paneId === paneId);
-        if (found) setPaneInfo(found);
-      }
+      const panes = Array.isArray(result) ? result : result?.panes;
+      const found = panes?.find((p: any) => p.paneId === paneId);
+      if (found) setPaneInfo(found);
     }).catch(() => {});
   }, [paneId]);
 
@@ -38,7 +40,7 @@ export function DetachedPaneView({ paneId, workspacePath }: { paneId: string; wo
     if (!containerRef.current || termRef.current) return;
 
     const term = new xtermExports.Terminal({
-      theme: TERMINAL_THEMES[theme],
+      theme: terminalThemeFromTokens(TERMINAL_THEMES[theme]),
       fontFamily: fontStack,
       fontSize,
       lineHeight: Math.max(1, lineHeight),
@@ -126,30 +128,25 @@ export function DetachedPaneView({ paneId, workspacePath }: { paneId: string; wo
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-[#0B0B0E] overflow-hidden">
-      {/* Minimal header */}
-      <div
-        className="h-9 shrink-0 bg-black/50 border-b border-white/[0.06] flex items-center px-3 gap-3"
-        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-      >
-        <TerminalIcon size={13} className="text-gray-500" />
-        <span className="font-mono text-[10px] text-gray-400 uppercase tracking-widest font-bold">DETACHED</span>
-        <div className="w-px h-4 bg-white/10" />
-        <PaneTitle pane={{ id: paneId, model: paneInfo?.model, providerId: paneInfo?.providerId, agent: paneInfo?.agent }} />
-        <PaneIdBadge paneId={paneId} />
-        <div className="flex-1" style={{ WebkitAppRegion: "drag" } as React.CSSProperties} />
-        <button
-          onClick={handleClose}
-          className="text-gray-500 hover:text-red-400 px-2 py-1 rounded transition-colors cursor-pointer"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-          title="Fechar janela"
-        >
-          <X size={14} strokeWidth={1.5} />
-        </button>
+    <div className="cb-pane h-screen" data-active="true" style={{ "--cb-status-color": "var(--cb-accent)" } as React.CSSProperties}>
+      <div className="cb-pane-head" style={{ WebkitAppRegion: "drag", cursor: "default" } as React.CSSProperties}>
+        <span className="cb-pane-prompt" aria-hidden>❯</span>
+        <PaneTitle pane={{ agent: paneInfo?.agent, label: paneInfo?.label }} />
+        <div className="cb-pane-meta">
+          {paneInfo?.agent && <span className="cb-pane-meta-item" style={{ "--cb-meta-color": cliIdentity(paneInfo.agent).color } as React.CSSProperties}>{cliIdentity(paneInfo.agent).label}</span>}
+          {modelShortName(paneInfo?.model) && <span className="cb-pane-meta-item">{modelShortName(paneInfo?.model)}</span>}
+        </div>
+        <div className="cb-pane-right" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          <PaneIdBadge paneId={paneId} />
+          <button type="button" onClick={handleClose} className="cb-pane-action" data-danger="true" aria-label="Fechar janela" title="Fechar janela">
+            <X size={13} strokeWidth={1.5} aria-hidden />
+          </button>
+        </div>
       </div>
 
-      {/* Terminal */}
-      <div ref={containerRef} className="flex-1 min-h-0" />
+      <div className="cb-pane-well">
+        <div ref={containerRef} className="h-full w-full" />
+      </div>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 /**
  * clarify-broadcast — Pure extractor for the pane:clarify push payload.
  *
- * Ported from Overclock sidecar (clarifyBroadcast.js).
+ * Coordinates clarification requests between panes.
  * Pure function — no side effects, no deps, unit-testable.
  *
  * When a worker submits a handoff with status='awaiting_clarification',

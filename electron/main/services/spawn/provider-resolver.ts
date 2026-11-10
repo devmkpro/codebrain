@@ -2,6 +2,8 @@ import log from "electron-log/main.js";
 import type { AppContext } from "../../context";
 import { MODEL_MAP_BY_TYPE, PROVIDER_REGISTRY, getProviderTypeForModel } from "../constants";
 import { getEnhancedProviders } from "../providers";
+import { isGenericHarness } from "./cli-registry";
+import { sortModelIds } from "../../../../src/lib/model-catalog-order";
 
 const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
@@ -45,11 +47,34 @@ export function resolveProvider(
     return { agent, provider: null, providerId: null, model: undefined };
   }
 
+  // Registry harnesses sign in with their own CLI and take no Codebrain provider.
+  // Letting the steps below run would map a model like claude-sonnet-5.5 to
+  // claude-oauth and silently launch Claude instead of the requested CLI.
+  const resolveHarness = (): ResolvedProvider => {
+    const saved = ctx.providerStore.listFull();
+    const selected = providerId ? saved.find((item: any) => item.id === providerId) : undefined;
+    const owner = selected?.host ?? PROVIDER_REGISTRY.find((item) => item.id === providerId)?.host;
+    if (providerId && owner && owner !== agent) {
+      return { agent, provider: null, providerId: null, model,
+        error: `Provider "${providerId}" belongs to ${owner}, not ${agent}. Select a provider for ${agent}.` };
+    }
+    const catalog = selected ?? saved.find((item: any) => item.host === agent || item.id === agent);
+    if (model && catalog?.models?.length && !catalog.models.includes(model)) {
+      return { agent, provider: null, providerId: null, model,
+        error: `Model "${model}" is not in the ${agent} catalog. Refresh its models and select again.` };
+    }
+    return { agent, provider: null, providerId: null, model };
+  };
+  if (isGenericHarness(agent)) return resolveHarness();
+
   // A native CLI explicitly requested by the caller is authoritative. Without
   // this pin, the inheritance step can copy the previous pane's Claude provider
   // into a `pane_spawn({ agent: "codex" })` request and silently launch Claude.
-  if (!providerId && agent === "codex") providerId = "codex-oauth";
-  if (!providerId && (agent === "gemini" || agent === "gemini-cli")) providerId = "gemini-cli";
+  const nativeProvider: Record<string, string> = {
+    claude: "claude-oauth", codex: "codex-oauth", gemini: "gemini-cli", "gemini-cli": "gemini-cli",
+    kimi: "kimi", cursor: "cursor", copilot: "copilot",
+  };
+  if (!providerId && config.agent) providerId = nativeProvider[agent] ?? null;
 
   // ── Step 0: claude-oauth virtual provider ───────────────────────────────────
   if (providerId === "claude-oauth") {
@@ -150,6 +175,16 @@ export function resolveProvider(
       env: {},
     };
     log.info(`[resolveProvider] copilot → agent="copilot", ${provider.models.length} models`);
+  }
+
+  // Native CLI catalogs are authoritative, including user-edited lists. Never
+  // reinsert static models or use another CLI's catalog to pick a default.
+  const isNativeProvider = () => Object.values(nativeProvider).includes(providerId ?? "");
+  if (provider && isNativeProvider()) {
+    const saved = ctx.providerStore.listFull().find((item: any) => item.id === providerId);
+    if (Array.isArray(saved?.models) && (saved.models.length || saved.modelsMode === "manual")) {
+      provider.models = sortModelIds(saved.models, Array.isArray(saved.modelsMetadata) ? saved.modelsMetadata : undefined);
+    }
   }
 
   // ── Step 0h: mimo-claude virtual provider (MIMO via Claude Code CLI) ─────────
@@ -354,6 +389,10 @@ export function resolveProvider(
       model = callerCfg.model;
       provider = providerId ? ctx.providerStore.listFull().find((p: any) => p.id === providerId) ?? null : null;
     }
+    // Cloning a registry harness pane: same pin as the early return above.
+    if (isGenericHarness(agent)) {
+      return resolveHarness();
+    }
   }
 
   // ── Step 4: Fallback to first available provider ────────────────────────────
@@ -394,13 +433,13 @@ export function resolveProvider(
       log.info(`[resolveProvider] OpenRouter model "${model}" — skipping strict validation`);
     } else {
     const providerModels: string[] = provider.models ?? [];
-    const enhancedModels: string[] = ENHANCED_MODEL_MAP[provider.type ?? ""] ?? [];
+    const enhancedModels: string[] = isNativeProvider() ? [] : ENHANCED_MODEL_MAP[provider.type ?? ""] ?? [];
     const modelKnown = providerModels.includes(model) || enhancedModels.includes(model);
 
     if (providerModels.length > 0 && !modelKnown) {
       const targetType = getProviderTypeForModel(model);
       // Try to find a better-suited provider
-      const nativeCliPinned = ["codex", "gemini", "gemini-cli", "kimi", "cursor", "copilot"].includes(config.agent ?? "");
+      const nativeCliPinned = isNativeProvider();
       const betterProvider = nativeCliPinned ? null :
         (targetType && targetType !== provider.type
           ? ctx.providerStore.listFull().find((p: any) => p.type === targetType)
@@ -434,7 +473,7 @@ export function resolveProvider(
     };
   } else if (provider && !model) {
     const enhanced = ENHANCED_MODEL_MAP[provider.type ?? ""];
-    model = (enhanced && enhanced.length > 0 ? enhanced : provider.models)?.[0];
+    model = (isNativeProvider() ? provider.models : enhanced?.length ? enhanced : provider.models)?.[0];
   }
 
   // ── Safety: MIMO (mimo-compat/openclaude) has no native CLI — force openclaude ──

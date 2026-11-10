@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Bot, Check, ChevronRight, Cpu, LoaderCircle, Plus, RefreshCw, Search, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ArrowLeft, Bot, ChevronRight, Cpu, LoaderCircle, Plus, RefreshCw, Search, X } from "lucide-react";
 import { notify } from "../../lib/notify";
 import { HOST_LABELS, resolveSpawnTarget } from "../../lib/resolve-spawn-target";
 import { filterModels, filterProviders } from "../../lib/model-filter";
+import { sortModelIds, type ModelReleaseInfo } from "../../lib/model-catalog-order";
 import { useNavStore } from "../../stores/nav-store";
 import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
 import { usePanesStore } from "../../stores/panes-store";
 import { useProvidersStore } from "../../stores/providers-store";
+import { navigateHome } from "../shell/shell-navigation";
 
 interface ProviderLike {
   id: string;
@@ -14,6 +17,7 @@ interface ProviderLike {
   host?: string;
   type?: string;
   models?: string[];
+  modelsMetadata?: ModelReleaseInfo[];
   baseUrl?: string;
   env?: Record<string, string>;
 }
@@ -25,33 +29,83 @@ export function PaneLauncher() {
   const providers = useProvidersStore((state: any) => state.providers) as ProviderLike[];
   const loadProviders = useProvidersStore((state: any) => state.load) as () => Promise<void>;
   const addPane = usePanesStore((state: any) => state.addPane);
-  const tabs = useNavStore((state) => state.tabs) as Array<{ workspacePath: string }>;
-  const activeTabIndex = useNavStore((state) => state.activeTabIndex);
+  const tabs = useNavStore((state: any) => state.tabs) as Array<{ workspacePath: string }>;
+  const activeTabIndex = useNavStore((state: any) => state.activeTabIndex) as number;
   const workspace = tabs[activeTabIndex]?.workspacePath;
   const [providerId, setProviderId] = useState<string | null>(null);
   const [spawning, setSpawning] = useState<string | null>(null);
   const [refreshingModels, setRefreshingModels] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [paneLabel, setPaneLabel] = useState("");
+  const dialogRef = React.useRef<HTMLElement>(null);
+  const selectedHost = React.useRef<string | undefined>(undefined);
+  const spawnPending = React.useRef(false);
 
   const availableProviders = useMemo(() => providers.filter((provider) => (provider.models?.length ?? 0) > 0), [providers]);
   const provider = availableProviders.find((item) => item.id === providerId) ?? null;
   const visibleProviders = useMemo(() => filterProviders(availableProviders, query), [availableProviders, query]);
-  const allModels = provider?.models ?? [];
+  const allModels = useMemo(() => sortModelIds(provider?.models, provider?.modelsMetadata), [provider?.models, provider?.modelsMetadata]);
   const visibleModels = useMemo(() => filterModels(allModels, query), [allModels, query]);
+
+  useEffect(() => {
+    if (providerId && (!provider || provider.host !== selectedHost.current)) {
+      setProviderId(null);
+      setQuery("");
+      setError(null);
+    }
+  }, [providerId, provider?.host]);
 
   useEffect(() => {
     if (!open) return;
     setProviderId(null);
     setError(null);
     setQuery("");
+    setPaneLabel("");
     void loadProviders();
   }, [loadProviders, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      } else if (event.key === "Tab") {
+        const items = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)") ?? []);
+        const first = items[0];
+        const last = items.at(-1);
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialogRef.current)) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [open, close]);
 
   if (!open) return null;
 
   const spawn = async (model: string) => {
-    if (!workspace || !provider) return;
+    if (!workspace || !provider || spawnPending.current) return;
+    const current = (useProvidersStore.getState().providers as ProviderLike[]).find((item) => item.id === provider.id);
+    if (!current || current.host !== selectedHost.current || !current.models?.includes(model)) {
+      setProviderId(null);
+      setQuery("");
+      setError("O provider ou catálogo mudou. Selecione novamente a CLI e o modelo.");
+      return;
+    }
+    spawnPending.current = true;
     setSpawning(model);
     setError(null);
     const target = resolveSpawnTarget({ providerId: provider.id, model, providers, explicit: true });
@@ -77,6 +131,7 @@ export function PaneLauncher() {
         model: target.model,
         permissionMode,
         externallySpawned: true,
+        ...(paneLabel.trim() ? { label: paneLabel.trim(), labelLocked: true } : {}),
       });
       close();
       if (initialPrompt) {
@@ -91,6 +146,7 @@ export function PaneLauncher() {
     } catch (spawnError) {
       setError(spawnError instanceof Error ? spawnError.message : String(spawnError));
     } finally {
+      spawnPending.current = false;
       setSpawning(null);
     }
   };
@@ -114,22 +170,30 @@ export function PaneLauncher() {
     }
   };
 
-  return <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Novo pane">
-    <button className="absolute inset-0" onClick={close} aria-label="Fechar seletor"/>
-    <section className="relative w-[min(680px,94vw)] max-h-[min(720px,90vh)] flex flex-col overflow-hidden border border-cb-line-1 rounded-lg bg-cb-bg-1 shadow-2xl">
+  return createPortal(<div className="cb-scrim isolate app-region-no-drag flex items-center justify-center" style={{ zIndex: "var(--cb-z-modal)" }}>
+    <button type="button" tabIndex={-1} className="absolute inset-0 z-0" onClick={close} aria-label="Fechar seletor"/>
+    <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Novo pane" className="relative z-10 w-[min(680px,94vw)] max-h-[min(720px,90vh)] flex flex-col overflow-hidden border border-cb-line-1 rounded-cb-2 bg-cb-bg-1 shadow-cb-modal outline-none">
       <header className="h-14 px-4 flex items-center gap-3 border-b border-cb-line-0">
         {provider && <button onClick={() => { setProviderId(null); setError(null); setQuery(""); }} className="p-1 text-cb-fg-3 hover:text-cb-fg-0" aria-label="Voltar aos providers"><ArrowLeft size={15}/></button>}
-        <div className="h-8 w-8 rounded-cb-1 border border-cb-accent/30 bg-cb-accent/10 flex items-center justify-center"><Plus size={15} className="text-cb-accent"/></div>
+        <button type="button" onClick={navigateHome} className="text-md font-bold text-cb-accent" aria-label="Codebrain — Início" title="Ir para o início">❯</button>
         <div className="flex-1"><h2 className="text-sm text-cb-fg-0">{request?.title ?? "Novo pane de IA"}</h2><p className="text-2xs text-cb-fg-3">{provider ? "2 de 2 · escolha um modelo compatível" : request?.subtitle ?? "1 de 2 · escolha o provider primeiro"}</p></div>
         <button onClick={close} className="p-1 text-cb-fg-3 hover:text-cb-fg-0" aria-label="Fechar"><X size={15}/></button>
       </header>
 
       <div className="px-4 pt-3 flex items-center gap-2">
-        <div className={`h-1 flex-1 rounded-full ${provider ? "bg-cb-success" : "bg-cb-accent"}`}/>
-        <div className={`h-1 flex-1 rounded-full ${provider ? "bg-cb-accent" : "bg-cb-line-1"}`}/>
+        <div className={`h-0.5 flex-1 ${provider ? "bg-cb-success" : "bg-cb-accent"}`}/>
+        <div className={`h-0.5 flex-1 ${provider ? "bg-cb-accent" : "bg-cb-line-1"}`}/>
       </div>
 
-      {workspace && <div className="px-4 pt-3">
+      {workspace && <div className="px-4 pt-3 space-y-2">
+        <input
+          type="text"
+          value={paneLabel}
+          onChange={(event) => setPaneLabel(event.target.value)}
+          placeholder="objetivo deste terminal (opcional)"
+          aria-label="Nome do terminal"
+          className="cb-input w-full"
+        />
         <div className="relative">
           <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-cb-fg-3"/>
           <input
@@ -147,22 +211,22 @@ export function PaneLauncher() {
         {!workspace ? <div className="py-12 text-center"><p className="text-sm text-cb-fg-1">Abra um workspace antes de criar um pane.</p><p className="mt-1 text-2xs text-cb-fg-3">O agente sempre inicia no projeto ativo.</p></div> : !provider ? <>
           <div className="mb-3"><div className="cb-label">providers disponíveis</div><p className="mt-1 text-2xs text-cb-fg-3">Cada provider abre somente a CLI e os modelos que ele suporta.</p></div>
           {availableProviders.length === 0 ? <div className="py-12 text-center"><Bot size={24} className="mx-auto mb-2 text-cb-fg-3"/><p className="text-xs text-cb-fg-1">Nenhum provider com modelos configurado.</p><p className="mt-1 text-2xs text-cb-fg-3">Configure um provider em Configurações → Providers.</p></div> : visibleProviders.length === 0 ? <div className="py-12 text-center"><Search size={20} className="mx-auto mb-2 text-cb-fg-3"/><p className="text-xs text-cb-fg-1">Nenhum provider ou modelo para “{query}”.</p></div> : <div className="grid grid-cols-2 gap-2">
-            {visibleProviders.map((item) => <button key={item.id} onClick={() => { setProviderId(item.id); setQuery(""); }} className="group min-h-24 p-3 text-left border border-cb-line-1 rounded-cb-1 bg-cb-bg-0 hover:border-cb-accent/60 hover:bg-cb-accent/5 transition-colors">
+            {visibleProviders.map((item) => <button key={item.id} onClick={() => { selectedHost.current = item.host; setProviderId(item.id); setQuery(""); }} className="group min-h-24 p-3 text-left border border-cb-line-1 rounded-cb-1 bg-cb-bg-0 hover:border-cb-accent/60 hover:bg-cb-accent/5 transition-colors">
               <div className="flex items-start gap-3"><div className="h-8 w-8 shrink-0 rounded-cb-1 bg-cb-bg-2 border border-cb-line-0 flex items-center justify-center text-2xs text-cb-accent font-semibold">{(item.label ?? item.id).slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-1 text-xs text-cb-fg-0"><span className="truncate">{item.label ?? item.id}</span><ChevronRight size={12} className="ml-auto text-cb-fg-3 group-hover:text-cb-accent"/></div><div className="mt-1 text-2xs text-cb-fg-3">{HOST_LABELS[item.host ?? ""] ?? item.host ?? "OpenClaude"}</div><div className="mt-2 text-[9px] text-cb-fg-3">{item.models?.length} modelo{item.models?.length === 1 ? "" : "s"}</div></div></div>
             </button>)}
           </div>}
         </> : <>
           <div className="mb-3 flex items-center gap-3"><div className="h-9 w-9 rounded-cb-1 bg-cb-accent/10 border border-cb-accent/30 flex items-center justify-center"><Cpu size={15} className="text-cb-accent"/></div><div className="min-w-0 flex-1"><div className="text-xs text-cb-fg-0">{provider.label ?? provider.id}</div><div className="text-2xs text-cb-fg-3">{HOST_LABELS[provider.host ?? ""] ?? provider.host} · somente modelos compatíveis</div></div><button type="button" onClick={() => void refreshModels()} disabled={refreshingModels || Boolean(spawning)} className="shrink-0 h-8 px-2.5 inline-flex items-center gap-1.5 rounded-cb-1 border border-cb-line-1 text-2xs text-cb-fg-2 hover:text-cb-accent hover:border-cb-accent/60 disabled:opacity-50" title="Consultar o catálogo mais recente deste provider"><RefreshCw size={12} className={refreshingModels ? "animate-spin" : ""}/>{refreshingModels ? "atualizando" : "atualizar"}</button></div>
-          <div className="space-y-2">{visibleModels.length === 0 ? <div className="py-10 text-center"><Search size={20} className="mx-auto mb-2 text-cb-fg-3"/><p className="text-xs text-cb-fg-1">Nenhum modelo para “{query}”.</p></div> : visibleModels.map((model) => { const index = allModels.indexOf(model); return <button key={model} disabled={Boolean(spawning)} onClick={() => void spawn(model)} className="w-full min-h-12 px-3 flex items-center gap-3 text-left border border-cb-line-1 rounded-cb-1 bg-cb-bg-0 hover:border-cb-accent/60 hover:bg-cb-accent/5 disabled:opacity-50">
-            <div className="h-6 w-6 rounded-full border border-cb-line-1 flex items-center justify-center">{spawning === model ? <LoaderCircle size={12} className="animate-spin text-cb-accent"/> : index === 0 ? <Check size={11} className="text-cb-success"/> : <Cpu size={11} className="text-cb-fg-3"/>}</div>
-            <div className="flex-1 min-w-0"><div className="text-xs text-cb-fg-0 truncate">{model}</div>{index === 0 && <div className="text-[9px] text-cb-success">recomendado pelo provider</div>}</div>
+          <div className="space-y-2">{visibleModels.length === 0 ? <div className="py-10 text-center"><Search size={20} className="mx-auto mb-2 text-cb-fg-3"/><p className="text-xs text-cb-fg-1">Nenhum modelo para “{query}”.</p></div> : visibleModels.map((model) => <button key={model} disabled={Boolean(spawning)} onClick={() => void spawn(model)} className="w-full min-h-12 px-3 flex items-center gap-3 text-left border border-cb-line-1 rounded-cb-1 bg-cb-bg-0 hover:border-cb-accent/60 hover:bg-cb-accent/5 disabled:opacity-50">
+            <div className="h-6 w-6 rounded-cb-1 border border-cb-line-1 flex items-center justify-center">{spawning === model ? <LoaderCircle size={12} className="animate-spin text-cb-accent"/> : <Cpu size={11} className="text-cb-fg-3"/>}</div>
+            <div className="flex-1 min-w-0"><div className="text-xs text-cb-fg-0 truncate">{model}</div></div>
             <ChevronRight size={13} className="text-cb-fg-3"/>
-          </button>; })}</div>
+          </button>)}</div>
         </>}
         {error && <div className="mt-3 px-3 py-2 border border-cb-danger/30 rounded-cb-1 bg-cb-danger/5 text-2xs text-cb-danger">{error}</div>}
       </div>
 
       <footer className="px-4 py-3 border-t border-cb-line-0 flex items-center gap-2 text-2xs text-cb-fg-3"><Bot size={12}/><span>provider → CLI correta → modelo compatível</span></footer>
     </section>
-  </div>;
+  </div>, document.body);
 }

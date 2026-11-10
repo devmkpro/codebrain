@@ -92,7 +92,11 @@ export function parseHash(hash: string): Location {
     }
   }
 
-  return { path: normalizePath(decodeURIComponent(pathPart)), query };
+  try {
+    return { path: normalizePath(decodeURIComponent(pathPart)), query };
+  } catch {
+    return ROOT;
+  }
 }
 
 /** Serializa uma Location de volta para um hash (com "#"). */

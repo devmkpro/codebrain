@@ -37,7 +37,20 @@ export interface PaneConfig {
   squadOrchestratorWorkerId?: string;
   taskId?: string;
   activityId?: string;
+  /** ID operacional; consumido pelo harness e pelo registro de atores. */
   missionId?: string;
+  uiMissionId?: string;
+  workspacePath?: string;
+  label?: string;
+  taskType?: string;
+  effort?: string;
+  accountLabel?: string;
+  accountId?: string;
+  allowedSkills?: string[];
+  agentName?: string;
+  codebrainContext?: string;
+  codebrainCatalogPath?: string;
+  parentPaneId?: string;
 }
 
 export interface PaneRegistryEntry {
@@ -114,6 +127,8 @@ export function createAppContext() {
 
     // Pane tracking
     paneConfigs: new Map<string, PaneConfig>(),
+    /** Cache das associações persistidas em configStore.missionAssociations. */
+    missionAssociations: new Map<string, string>(),
     paneRegistry: new Map<string, PaneRegistryEntry>(),
     detachedPaneIds: new Set<string>(),
     hibernatedPanes: new Map<string, PaneConfig & { hibernatedAt: number }>(),

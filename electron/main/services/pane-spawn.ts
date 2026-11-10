@@ -7,8 +7,14 @@ import { safeSend } from "../context";
 import { resolveCommand } from "../pty-manager";
 import { MODEL_MAP_BY_TYPE, getProviderTypeForModel } from "./constants";
 import { resolveProvider } from "./spawn/provider-resolver";
-import { buildSystemPrompt } from "./spawn/prompt-builder";
-import { withCodexDeveloperInstructions, withNativeToolAllowlist } from "./spawn/native-tools";
+import { buildSystemPrompt as buildBaseSystemPrompt } from "./spawn/prompt-builder";
+import { withCodexDeveloperInstructions, withEffort, withNativeToolAllowlist, withSkillWhitelist } from "./spawn/native-tools";
+import { getGenericHarness } from "./spawn/cli-registry";
+import { prepareGenericHarness } from "./spawn/harness-spawn";
+import { accountEnv, getAccount } from "./accounts";
+import { installedSkillNames } from "./catalog";
+import { attachCodebrainContext, prepareCodebrainAdapter, writeSharedCodebrainGuide, type CodebrainAdapterResult } from "./spawn/codebrain-adapter";
+import { externalMcpOverrides, mergeMcpFile, readExternalMcpServers } from "./external-mcp";
 
 const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
@@ -84,21 +90,129 @@ export interface SpawnPaneConfig {
   taskId?: string;
   activityId?: string;
   missionId?: string;
+  uiMissionId?: string;
+  operationalMissionId?: string;
+  workspacePath?: string;
   /** Prompt submitted after the CLI has produced output and becomes quiet. */
   initialPrompt?: string;
   /** Squad workers list — injected into orchestrator system prompt */
   squadCallable?: object[];
   /** High-level instructions for the orchestrator from Squad config */
   orchestratorInstructions?: string;
+  effort?: string;
+  /** Skills liberadas neste pane; vazio mantém o comportamento sem whitelist. */
+  allowedSkills?: string[];
+  agentName?: string;
+  accountId?: string;
+  accountLabel?: string;
+  /** Nome amigável do pane, mostrado na interface. */
+  label?: string;
+  taskType?: string;
+}
+
+const associationKey = (workspace: string, uiMissionId: string): string =>
+  JSON.stringify([process.platform === "win32" ? path.resolve(workspace).toLowerCase() : path.resolve(workspace), uiMissionId]);
+
+function savedMissionAssociations(ctx: AppContext): Record<string, string> {
+  const saved = ctx.configStore?.get?.()?.missionAssociations;
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+  return Object.fromEntries(Object.entries(saved).filter(([, id]) => typeof id === "string" && id.startsWith("mission_"))) as Record<string, string>;
+}
+
+function uiMissionForOperational(ctx: AppContext, workspace: string, operationalId?: string): string | undefined {
+  if (!operationalId) return undefined;
+  const bindings = new Map([...Object.entries(savedMissionAssociations(ctx)), ...(ctx.missionAssociations ?? [])]);
+  for (const [key, id] of bindings) {
+    if (id !== operationalId) continue;
+    try {
+      const [, uiId] = JSON.parse(key);
+      if (key === associationKey(workspace, uiId)) return uiId;
+    } catch { /* ignore malformed persisted entries */ }
+  }
+}
+
+/** Síncrono: spawns concorrentes da mesma missão reservam a associação antes de qualquer await. */
+export function resolvePaneMission(ctx: AppContext, config: SpawnPaneConfig, workspace: string): { uiMissionId?: string; operationalMissionId?: string } {
+  const store = ctx.memoryStore;
+  const parent = config.parentPaneId ? ctx.paneConfigs.get(config.parentPaneId) : undefined;
+  let parentOperational = parent?.missionId;
+  if (!parentOperational && config.parentPaneId) {
+    const role = store?.getActorRole?.({ paneId: config.parentPaneId });
+    parentOperational = role?.missionId ?? role?.mission_id ?? undefined;
+  }
+  let uiMissionId = config.uiMissionId ?? (config.missionId && !config.missionId.startsWith("mission_") ? config.missionId : undefined);
+  let operationalMissionId = config.operationalMissionId ?? (config.missionId?.startsWith("mission_") && config.missionId !== config.uiMissionId ? config.missionId : undefined);
+  // Um ID local explícito tem sua própria associação. Só helpers sem escolha
+  // explícita herdam o pai; a missão ativa do workspace nunca decide por eles.
+  if (!uiMissionId && !operationalMissionId && parentOperational) {
+    operationalMissionId = parentOperational;
+    uiMissionId = parent?.uiMissionId;
+  }
+  if (!uiMissionId && operationalMissionId) {
+    uiMissionId = parent?.missionId === operationalMissionId ? parent.uiMissionId : undefined;
+    uiMissionId ??= uiMissionForOperational(ctx, workspace, operationalMissionId);
+  }
+  const key = uiMissionId ? associationKey(workspace, uiMissionId) : undefined;
+  const saved = savedMissionAssociations(ctx);
+  const previous = key ? ctx.missionAssociations?.get(key) ?? saved[key] : undefined;
+  if (previous && operationalMissionId && previous !== operationalMissionId) throw new Error("A missão da interface já está associada a outra missão operacional.");
+  operationalMissionId ??= previous;
+  const needsMission = Boolean(uiMissionId || operationalMissionId || config.parentPaneId || config.taskId || config.activityId || config.role === "orchestrator" || config.squadCallable?.length || config.orchestratorInstructions?.trim());
+  if (!needsMission) return {};
+  // Preserve o fluxo legado de squads sem ID da UI. Missões nomeadas e helpers
+  // não podem pegar a missão ativa de outro trabalho no mesmo workspace.
+  if (!operationalMissionId && !uiMissionId && !config.parentPaneId) {
+    operationalMissionId = store?.resolveActiveMission?.({ workspace })?.mission?.id;
+  }
+  if (!operationalMissionId) {
+    const created = store?.createMission?.({
+      title: `Workspace · ${path.basename(workspace || "projeto")}`,
+      summary: uiMissionId ? `Missão da interface: ${uiMissionId}` : "Missão operacional criada automaticamente pelo primeiro pane.",
+      workspace,
+    });
+    if (!created?.id || created.ok === false) throw new Error(created?.error ?? "Não foi possível criar a missão operacional.");
+    operationalMissionId = created.id;
+  }
+  if (key) {
+    const collision = uiMissionForOperational(ctx, workspace, operationalMissionId);
+    if (collision && collision !== uiMissionId) throw new Error("A missão operacional já pertence a outra missão da interface.");
+    (ctx.missionAssociations ??= new Map()).set(key, operationalMissionId);
+    if (saved[key] !== operationalMissionId) ctx.configStore?.set?.({ missionAssociations: { ...saved, [key]: operationalMissionId } });
+  }
+  return { uiMissionId, operationalMissionId };
+}
+
+/** Identidade comum aos eventos e à reconciliação; mission_id mantém o contrato legado operacional. */
+export function paneMissionMetadata(ctx: AppContext, paneId: string): {
+  missionId?: string; uiMissionId?: string; operationalMissionId?: string; mission_id?: string; workspacePath?: string; role?: string;
+} {
+  const config = ctx.paneConfigs.get(paneId);
+  let role: any;
+  let actor: any;
+  try { role = ctx.memoryStore?.getActorRole?.({ paneId }); } catch {}
+  if (!config) {
+    try { actor = ctx.memoryStore?.actorGet?.({ paneId })?.actor; } catch {}
+  }
+  const operationalMissionId = role?.missionId ?? role?.mission_id ?? config?.missionId ?? actor?.mission_id;
+  const workspacePath = config?.workspacePath ?? actor?.workspace ?? config?.cwd ?? actor?.cwd;
+  const uiMissionId = (config?.missionId === operationalMissionId ? config?.uiMissionId : undefined) ??
+    (workspacePath ? uiMissionForOperational(ctx, workspacePath, operationalMissionId) : undefined);
+  return { missionId: uiMissionId ?? operationalMissionId, uiMissionId, operationalMissionId, mission_id: operationalMissionId, workspacePath, role: role?.role ?? config?.role ?? actor?.role };
 }
 
 export async function spawnPaneInternal(
   ctx: AppContext,
   config: SpawnPaneConfig,
-): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; missionId?: string; promptSubmitted?: boolean; promptError?: string; error?: string }> {
+): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; workspacePath?: string; missionId?: string; uiMissionId?: string; operationalMissionId?: string; codebrainContext?: string; codebrainCatalogPath?: string; adapterWarnings?: string[]; promptSubmitted?: boolean; promptError?: string; error?: string }> {
   try {
+    if (config.agent !== "shell") await ctx.cliDetector?.getAllAsync?.();
+    const parent = config.parentPaneId ? ctx.paneConfigs.get(config.parentPaneId) : undefined;
+    let parentActor: any;
+    if (config.parentPaneId && !parent) {
+      try { parentActor = ctx.memoryStore?.actorGet?.({ paneId: config.parentPaneId })?.actor; } catch {}
+    }
     // Smart cwd resolution: explicit > most active pane workspace > global > home
-    let cwd = config.cwd;
+    let cwd = config.cwd || parent?.cwd || parentActor?.cwd;
     if (!cwd || cwd === require("node:os").homedir()) {
       // Find the workspace with the most active panes (most likely the caller's workspace)
       const wsCounts = new Map<string, number>();
@@ -115,40 +229,8 @@ export async function spawnPaneInternal(
       }
     }
 
-    // The renderer's mission store is local UI state. When coordination is
-    // active, the operational backend needs a durable mission id so actors,
-    // tasks, handoffs and messages can be joined after a restart. Direct
-    // conversations do not need mission/task state. Resolve or create a
-    // mission only when the pane is participating in coordination; this keeps
-    // the cheap path free of an unconditional SQLite round-trip.
-    const needsMission = Boolean(
-      config.missionId?.startsWith("mission_") ||
-      config.taskId ||
-      config.activityId ||
-      config.role === "orchestrator" ||
-      config.squadCallable?.length ||
-      config.orchestratorInstructions?.trim(),
-    );
-    let operationalMissionId = config.missionId?.startsWith("mission_") ? config.missionId : undefined;
-    if (needsMission) {
-      try {
-        const store = (ctx as any).memoryStore;
-        if (store?.resolveActiveMission && !operationalMissionId) {
-          const active = store.resolveActiveMission({ workspace: cwd });
-          operationalMissionId = active?.mission?.id;
-        }
-        if (!operationalMissionId && store?.createMission) {
-          const created = store.createMission({
-            title: `Workspace · ${path.basename(cwd || "projeto")}`,
-            summary: "Missão operacional criada automaticamente pelo primeiro pane.",
-            workspace: cwd,
-          });
-          operationalMissionId = created?.id;
-        }
-      } catch (error) {
-        log.warn("[spawnPaneInternal] backend mission resolution failed:", error instanceof Error ? error.message : String(error));
-      }
-    }
+    const workspacePath = config.workspacePath || parent?.workspacePath || parentActor?.workspace || parent?.cwd || cwd;
+    const { uiMissionId, operationalMissionId } = resolvePaneMission(ctx, config, workspacePath);
 
     // ── Provider resolution (delegated to provider-resolver module) ────────────
     const resolved = resolveProvider(ctx, {
@@ -165,6 +247,7 @@ export async function spawnPaneInternal(
     let provider = resolved.provider;
     let providerId = resolved.providerId;
     let model = resolved.model;
+    const externalMcpServers = readExternalMcpServers();
 
     // Safety: Claude Code CLI only supports Anthropic-compatible providers.
     // Exception: OpenRouter supports the Anthropic protocol via ANTHROPIC_BASE_URL,
@@ -192,10 +275,37 @@ export async function spawnPaneInternal(
     const isGeminiCli = agent === "gemini-cli" || agent === "gemini" || provider?.type === "gemini-cli";
     const isClaudeCompatible = !isCodex && !isGeminiCli && (agent === "openclaude" || agent === "claude");
 
+    // Conta de outra CLI é ignorada: a variável só faz sentido para a CLI dona dela.
+    const account = getAccount(config.accountId);
+    const paneAccount = account && account.cli === (isCodex ? "codex" : agent) ? account : null;
+    if (paneAccount) Object.assign(env, accountEnv(paneAccount.id));
+    const accountLabel = config.accountLabel ?? paneAccount?.label;
+
+    const { nanoid } = await import("nanoid");
+    const paneId = config.paneId ?? nanoid();
+    // O shell não é harness. Demais CLIs recebem somente o conteúdo selecionado
+    // do host Codebrain, sem copiar configurações de conta ou inventar flags.
+    let adapter: CodebrainAdapterResult | undefined;
+    if (agent !== "shell") {
+      adapter = prepareCodebrainAdapter({ cwd, workspacePath, paneId, agent, agentName: config.agentName, allowedSkills: config.allowedSkills, env: { ...process.env, ...env } });
+      config = { ...config, allowedSkills: adapter.allowedSkills };
+    }
+    const buildSystemPrompt = (context: AppContext, data: Parameters<typeof buildBaseSystemPrompt>[1]): string => {
+      const file = buildBaseSystemPrompt(context, data);
+      if (adapter) fs.writeFileSync(file, attachCodebrainContext(fs.readFileSync(file, "utf-8"), adapter.codebrainContext), "utf-8");
+      return file;
+    };
+
     // Claude Code otherwise sends every native tool schema on every request.
     // Apply a role-specific capability boundary before adding the system
     // prompt; OpenClaude and the other CLIs have different flag contracts.
-    args = withNativeToolAllowlist(args, agent, config.role);
+    const hasSkillWhitelist = config.allowedSkills !== undefined;
+    args = withNativeToolAllowlist(args, agent, config.role, Boolean(config.allowedSkills?.length));
+    if (hasSkillWhitelist) {
+      const claudeConfigDir = env["CLAUDE_CONFIG_DIR"] ?? path.join(os.homedir(), ".claude");
+      args = withSkillWhitelist(args, agent, config.allowedSkills, installedSkillNames(claudeConfigDir, cwd));
+    }
+    args = withEffort(args, isCodex ? "codex" : agent, config.effort);
 
     if (isClaudeCompatible && !args.includes("--permission-mode")) {
       args.push("--permission-mode", config.permissionMode ?? "bypassPermissions");
@@ -205,9 +315,6 @@ export async function spawnPaneInternal(
       args.push("--resume", config.claudeSessionId);
     }
 
-
-    const { nanoid } = await import("nanoid");
-    const paneId = config.paneId ?? nanoid();
 
     // Wait for MCP server — ALL agents need it.
     // Always await mcpServerReady to get the LATEST port (server may have restarted
@@ -226,6 +333,7 @@ export async function spawnPaneInternal(
     if (isClaudeCompatible && ctx.mcpServerInfo && !args.includes("--mcp-config")) {
       const mcpConfigPath = path.join(cwd, ".mcp.json");
       const mcpServers: Record<string, any> = {
+        ...externalMcpServers,
         codebrain: { type: "streamable-http", url: ctx.mcpServerInfo.streamableHttpUrl },
       };
 
@@ -264,9 +372,8 @@ export async function spawnPaneInternal(
         }
       }
 
-      const mcpContent = JSON.stringify({ mcpServers }, null, 2);
       try {
-        fs.writeFileSync(mcpConfigPath, mcpContent, "utf-8");
+        mergeMcpFile(mcpConfigPath, mcpServers);
         log.info(`[spawnPaneInternal] Wrote .mcp.json with ${Object.keys(mcpServers).length} MCPs to ${mcpConfigPath}`);
       } catch (e) {
         log.warn("[spawnPaneInternal] Failed to write .mcp.json to cwd, skipping MCP config:", e);
@@ -277,13 +384,15 @@ export async function spawnPaneInternal(
       // in addition to .mcp.json in CWD. Ensures MCP is found after restart.
       if (isClaudeCompatible) {
         try {
-          const claudeJsonPath = path.join(os.homedir(), ".claude.json");
+          // Conta extra lê o próprio .claude.json; sem isto o pane nasce sem o MCP.
+          const claudeJsonPath = path.join(env["CLAUDE_CONFIG_DIR"] ?? os.homedir(), ".claude.json");
           let claudeJson: Record<string, any> = {};
           try { claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, "utf-8")); } catch {}
           if (!claudeJson.projects) claudeJson.projects = {};
           const projectKey = cwd.replace(/\\/g, "/");
           if (!claudeJson.projects[projectKey]) claudeJson.projects[projectKey] = {};
           if (!claudeJson.projects[projectKey].mcpServers) claudeJson.projects[projectKey].mcpServers = {};
+          claudeJson.projects[projectKey].mcpServers = { ...externalMcpServers, ...claudeJson.projects[projectKey].mcpServers };
           claudeJson.projects[projectKey].mcpServers.codebrain = {
             type: "streamable-http",
             url: ctx.mcpServerInfo.streamableHttpUrl,
@@ -310,6 +419,7 @@ export async function spawnPaneInternal(
           if (!openClaudeConfig.projects[projectKey]) openClaudeConfig.projects[projectKey] = {};
           if (!openClaudeConfig.projects[projectKey].mcpServers) openClaudeConfig.projects[projectKey].mcpServers = {};
           // Add codebrain server (OpenClaude uses "type": "http", not "streamable-http")
+          openClaudeConfig.projects[projectKey].mcpServers = { ...externalMcpServers, ...openClaudeConfig.projects[projectKey].mcpServers };
           openClaudeConfig.projects[projectKey].mcpServers.codebrain = {
             type: "http",
             url: ctx.mcpServerInfo.streamableHttpUrl,
@@ -556,7 +666,7 @@ export async function spawnPaneInternal(
     }
 
     if (isClaudeCompatible && (isAnthropicCompat || isMimo) && !args.includes("--settings")) {
-      const settings: Record<string, unknown> = { alwaysThinkingEnabled: false, effortLevel: "low" };
+      const settings: Record<string, unknown> = { alwaysThinkingEnabled: false, effortLevel: config.effort ?? "low" };
       if (model) settings.model = model;
       args.push("--settings", JSON.stringify(settings));
     }
@@ -718,7 +828,7 @@ export async function spawnPaneInternal(
           fs.mkdirSync(cursorDir, { recursive: true });
           let existing: Record<string, any> = {};
           try { existing = JSON.parse(fs.readFileSync(mcpJsonPath, "utf-8")); } catch {}
-          const mcpServers = existing.mcpServers ?? {};
+          const mcpServers = { ...externalMcpServers, ...existing.mcpServers };
           // cursor-agent supports both SSE and HTTP transports.
           // Use Streamable HTTP (modern, works with all agents).
           mcpServers.codebrain = { url: ctx.mcpServerInfo.streamableHttpUrl, type: "http" };
@@ -730,18 +840,10 @@ export async function spawnPaneInternal(
         }
       }
 
-      // System prompt: write .cursor/rules/codebrain.mdc (Cursor rules file)
-      // cursor-agent loads all *.mdc files from .cursor/rules/ at startup
+      // Cursor carrega regras compartilhadas: só um guia estável, sem persona
+      // nem whitelist do pane. O catálogo específico acompanha a tarefa.
       try {
-        const promptFile = buildSystemPrompt(ctx, {
-          paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
-          squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
-        });
-        const promptContent = fs.readFileSync(promptFile, "utf-8");
-        const rulesDir = path.join(cwd, ".cursor", "rules");
-        fs.mkdirSync(rulesDir, { recursive: true });
-        fs.writeFileSync(path.join(rulesDir, "codebrain.mdc"), promptContent, "utf-8");
-        log.info("[spawnPaneInternal] Cursor rules written to .cursor/rules/codebrain.mdc");
+        writeSharedCodebrainGuide(path.join(cwd, ".cursor", "rules", "codebrain.mdc"));
       } catch (e) {
         log.warn("[spawnPaneInternal] Failed to write .cursor/rules/codebrain.mdc:", e);
       }
@@ -771,6 +873,7 @@ export async function spawnPaneInternal(
         // Copilot expects: {"mcpServers": {"name": {...}}}
         const mcpJson = JSON.stringify({
           mcpServers: {
+            ...externalMcpServers,
             codebrain: { url: ctx.mcpServerInfo.streamableHttpUrl, type: "http" }
           }
         });
@@ -778,28 +881,10 @@ export async function spawnPaneInternal(
         log.info("[spawnPaneInternal] Copilot MCP via --additional-mcp-config");
       }
 
-      // System prompt: write AGENTS.md to cwd (Copilot reads custom instructions from it)
-      // --no-custom-instructions disables this, so only write if not suppressed
+      // Não acrescenta imports nem regras de pane ao AGENTS.md do projeto.
       if (!args.includes("--no-custom-instructions")) {
         try {
-          const promptFile = buildSystemPrompt(ctx, {
-            paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
-            squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
-          });
-          const promptContent = fs.readFileSync(promptFile, "utf-8");
-          // Write to .copilot/codebrain-context.md and include it via AGENTS.md import
-          const copilotDir = path.join(cwd, ".copilot");
-          fs.mkdirSync(copilotDir, { recursive: true });
-          fs.writeFileSync(path.join(copilotDir, "codebrain-context.md"), promptContent, "utf-8");
-          // AGENTS.md: include the codebrain context file
-          const agentsPath = path.join(cwd, "AGENTS.md");
-          let agentsContent = "";
-          try { agentsContent = fs.readFileSync(agentsPath, "utf-8"); } catch {}
-          const importLine = `[import]: # (.copilot/codebrain-context.md)`;
-          if (!agentsContent.includes(".copilot/codebrain-context.md")) {
-            fs.writeFileSync(agentsPath, `${importLine}\n\n${agentsContent}`, "utf-8");
-          }
-          log.info("[spawnPaneInternal] Copilot context written to .copilot/codebrain-context.md");
+          writeSharedCodebrainGuide(path.join(cwd, ".copilot", "codebrain-context.md"));
         } catch (e) {
           log.warn("[spawnPaneInternal] Failed to write Copilot AGENTS.md:", e);
         }
@@ -835,6 +920,7 @@ export async function spawnPaneInternal(
         args.push("-c", `mcp_servers.codebrain.url=${tomlStr(ctx.mcpServerInfo.streamableHttpUrl)}`);
         args.push("-c", `mcp_servers.codebrain.default_tools_approval_mode=${tomlStr("approve")}`);
       }
+      args.push(...externalMcpOverrides(externalMcpServers));
 
       // Codex has no system-prompt-file flag. Use its supported developer
       // instruction override; the generated prompt remains provider-neutral.
@@ -860,7 +946,7 @@ export async function spawnPaneInternal(
 
       log.info("[spawnPaneInternal] Codex model:", model ?? "MISSING");
       log.info("[spawnPaneInternal] Codex auth:", provider?.id === "codex-oauth" ? "ChatGPT OAuth" : (env["OPENAI_API_KEY"] ? "API key" : "MISSING"));
-      log.info("[spawnPaneInternal] Codex args:", args.join(" "));
+      log.info("[spawnPaneInternal] Codex args:", `${args.length} argumentos (instruções e configurações MCP omitidas do log)`);
     }
 
     // ── Gemini CLI branch (native gemini binary, NOT OpenClaude) ──────────────
@@ -904,6 +990,7 @@ export async function spawnPaneInternal(
           } catch {}
           const currentMcp = typeof settings.mcpServers === "object" && settings.mcpServers ? settings.mcpServers : {};
           settings.mcpServers = {
+            ...externalMcpServers,
             ...currentMcp,
             codebrain: {
               url: ctx.mcpServerInfo.streamableHttpUrl,
@@ -923,18 +1010,12 @@ export async function spawnPaneInternal(
         }
       }
 
-      // System prompt → .gemini/codebrain-context.md + add to contextFileName
-      const promptFile = buildSystemPrompt(ctx, {
-        paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
-        squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
-      });
+      // O arquivo Gemini é compartilhado: conteúdo específico só no prompt da tarefa.
       try {
-        const promptContent = fs.readFileSync(promptFile, "utf-8");
         const contextRelPath = ".gemini/codebrain-context.md";
         const contextAbsPath = path.join(cwd, contextRelPath);
         const geminiDir = path.join(cwd, ".gemini");
-        fs.mkdirSync(geminiDir, { recursive: true });
-        fs.writeFileSync(contextAbsPath, promptContent, "utf-8");
+        writeSharedCodebrainGuide(contextAbsPath);
 
         // Gemini CLI reads the configured context name from context.fileName.
         // Keep existing names so the workspace's own GEMINI.md remains active.
@@ -963,7 +1044,7 @@ export async function spawnPaneInternal(
       }
 
       // Only add --allowed-mcp-server-names AFTER config is confirmed written
-      if (geminiMcpConfigured && !args.includes("--allowed-mcp-server-names")) {
+      if (geminiMcpConfigured && Object.keys(externalMcpServers).length === 0 && !args.includes("--allowed-mcp-server-names")) {
         args.push("--allowed-mcp-server-names", "codebrain");
       }
 
@@ -978,6 +1059,27 @@ export async function spawnPaneInternal(
       log.info("[spawnPaneInternal] Gemini CLI args:", args.join(" "));
     }
 
+    // ── Registry-driven CLIs (Kiro, OpenCode, Grok, ...) ──────────────────────
+    const genericHarness = getGenericHarness(agent);
+    if (genericHarness) {
+      args = prepareGenericHarness(genericHarness, {
+        args,
+        env,
+        cwd,
+        model,
+        effort: config.effort,
+        permissionMode: config.permissionMode,
+        resumeSessionId: config.claudeSessionId,
+        mcpUrl: ctx.mcpServerInfo?.streamableHttpUrl,
+        externalMcpServers,
+        buildPromptFile: () => buildSystemPrompt(ctx, {
+          paneId, cwd, model, agent, role: config.role, sessionContext: config.sessionContext,
+          squadCallable: config.squadCallable, orchestratorInstructions: config.orchestratorInstructions,
+        }),
+      });
+      log.info(`[spawnPaneInternal] ${genericHarness.label} args:`, args.filter((arg) => arg.length < 200).join(" "));
+    }
+
     log.info("[spawnPaneInternal]", { agent, providerId, model, providerType, cwd });
 
     // A provider selection is a strict CLI contract. Never replace Claude Code
@@ -986,8 +1088,8 @@ export async function spawnPaneInternal(
     if (cmdCheck.unavailable) {
       const install = agent === "claude"
         ? "Instale com: npm install -g @anthropic-ai/claude-code"
-        : `Instale ou adicione o binário "${agent}" ao PATH.`;
-      const error = `A CLI ${agent === "claude" ? "Claude Code" : agent} não está disponível. ${install}`;
+        : `Instale ou adicione o binário "${genericHarness?.binaries[0] ?? agent}" ao PATH.`;
+      const error = `A CLI ${agent === "claude" ? "Claude Code" : genericHarness?.label ?? agent} não está disponível. ${install}`;
       log.error(`[spawnPaneInternal] ${error}`);
       return { ok: false, error };
     }
@@ -1013,12 +1115,13 @@ export async function spawnPaneInternal(
     ctx.hooksManager.fire("pane_spawned" as any, { paneId, agent, cwd, phase: "pre" });
 
     // Ensure .claude/settings.json exists in target cwd for Claude Code statusline
-    if (cwd) ensureClaudeSettings(cwd);
+    if (cwd && (agent === "claude" || agent === "openclaude")) ensureClaudeSettings(cwd);
 
     const spawnedPaneId = await ctx.ptyManager.spawn({
       paneId,
       agent: agent as any,
       cwd,
+      workspacePath,
       args,
       env,
       providerId: providerId ?? undefined,
@@ -1026,7 +1129,7 @@ export async function spawnPaneInternal(
       permissionMode: config.permissionMode,
       claudeSessionId: config.claudeSessionId,
       role: config.role,
-    });
+    }, cmdCheck);
 
     ctx.paneConfigs.set(paneId, {
       agent,
@@ -1039,6 +1142,17 @@ export async function spawnPaneInternal(
       taskId: config.taskId,
       activityId: config.activityId,
       missionId: operationalMissionId,
+      uiMissionId,
+      workspacePath,
+      label: config.label,
+      taskType: config.taskType,
+      effort: config.effort,
+      accountLabel,
+      accountId: paneAccount?.id,
+      allowedSkills: config.allowedSkills,
+      ...(config.agentName ? { agentName: config.agentName } : {}),
+      ...(adapter ? { codebrainContext: adapter.codebrainContext, codebrainCatalogPath: adapter.codebrainCatalogPath } : {}),
+      parentPaneId: config.parentPaneId,
     });
     ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
 
@@ -1051,7 +1165,7 @@ export async function spawnPaneInternal(
         parentPaneId: config.parentPaneId,
         agent,
         cwd,
-        workspace: cwd,
+        workspace: workspacePath,
         providerId: providerId ?? undefined,
         model: model ?? undefined,
         role: config.role || "worker",
@@ -1065,6 +1179,16 @@ export async function spawnPaneInternal(
       cwd,
       providerId: providerId ?? undefined,
       model: model ?? undefined,
+      label: config.label,
+      taskType: config.taskType,
+      effort: config.effort,
+      accountLabel,
+      missionId: uiMissionId ?? operationalMissionId,
+      uiMissionId,
+      operationalMissionId,
+      workspacePath,
+      parentPaneId: config.parentPaneId,
+      role: config.role,
     });
 
     // Fire hook: pane_spawned
@@ -1072,7 +1196,8 @@ export async function spawnPaneInternal(
 
     let promptSubmitted: boolean | undefined;
     let promptError: string | undefined;
-    const initialPrompt = config.initialPrompt?.trim();
+    const taskPrompt = config.initialPrompt?.trim();
+    const initialPrompt = taskPrompt && adapter ? `${adapter.codebrainContext}\n\n${taskPrompt}` : taskPrompt;
     if (initialPrompt) {
       const delivery = await ctx.ptyManager.submitWhenReady(paneId, initialPrompt, {
         timeoutMs: 20_000,
@@ -1103,7 +1228,11 @@ export async function spawnPaneInternal(
       providerId: providerId ?? undefined,
       model,
       cwd,
+      workspacePath,
       missionId: operationalMissionId,
+      uiMissionId,
+      operationalMissionId,
+      ...(adapter ? { codebrainContext: adapter.codebrainContext, codebrainCatalogPath: adapter.codebrainCatalogPath, adapterWarnings: adapter.warnings } : {}),
       promptSubmitted,
       promptError,
     };

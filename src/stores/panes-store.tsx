@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { nanoid } from "nanoid";
 import { findLeaf, removeLeaf, insertNextToLeaf, appendLeafBalanced, insertWorkLeaf } from "../components/auth/AuthLayout";
 import { useMissionsStore } from "./missions-store";
+import { activityClockKey, derivePaneActivity } from "../components/shell/pane-status";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,34 @@ function missionForPane(config: any): string {
     return "default";
   }
 }
+
+/** Campos de identidade que o backend envia por pane:added e pane.onMeta. */
+const PANE_META_KEYS = [
+  "label", "taskType", "effort", "accountLabel", "parentPaneId", "role",
+  "handoffStatus", "evidence", "contractStatus", "awaitingInput",
+] as const;
+
+function pickPaneMeta(source: any): Record<string, unknown> {
+  const meta: Record<string, unknown> = {};
+  for (const key of PANE_META_KEYS) {
+    if (source?.[key] !== undefined) meta[key] = source[key];
+  }
+  return meta;
+}
+
+/** Atualiza o relógio quando o pane muda de estado; pensar↔executar não conta. */
+function withActivityClock(previous: any, next: any) {
+  const before = activityClockKey(derivePaneActivity(previous));
+  const after = activityClockKey(derivePaneActivity(next));
+  return before === after ? next : { ...next, activitySince: Date.now() };
+}
+
+/**
+ * Metadado que chegou antes do pane existir. Os ouvintes de pane:added rodam
+ * em ordem de registro, e quem cria o pane pode vir depois de quem o descreve.
+ */
+const pendingPaneMeta = new Map<string, Record<string, unknown>>();
+const PENDING_META_LIMIT = 64;
 
 // usePanesStore
 export const usePanesStore = create((set, get) => ({
@@ -81,7 +110,11 @@ export const usePanesStore = create((set, get) => ({
       model: config.model,
       permissionMode: config.permissionMode,
       missionId,
+      activitySince: Date.now(),
+      ...pickPaneMeta(config),
+      ...pendingPaneMeta.get(id),
     };
+    pendingPaneMeta.delete(id);
     set((s: any) => {
       const ws = pane.workspacePath ?? pane.cwd;
       const missionLayouts = s.layouts[ws] ?? {};
@@ -135,7 +168,42 @@ export const usePanesStore = create((set, get) => ({
   setPendingActive: (id: string) => set({ pendingActivePaneId: id }),
 
   updatePane: (id: string, patch: any) => set((s: any) => ({
-    panes: s.panes.map((p: any) => p.id === id ? { ...p, ...patch } : p),
+    panes: s.panes.map((p: any) => p.id === id ? withActivityClock(p, { ...p, ...patch }) : p),
+  })),
+
+  /** Metadado vindo do backend. Um nome dado pelo usuário não é sobrescrito. */
+  applyPaneMeta: (id: string, source: any) => {
+    const meta = pickPaneMeta(source);
+    if (Object.keys(meta).length === 0) return;
+    const pane = (get() as any).panes.find((p: any) => p.id === id);
+    if (!pane) {
+      if (pendingPaneMeta.size >= PENDING_META_LIMIT) {
+        pendingPaneMeta.delete(pendingPaneMeta.keys().next().value as string);
+      }
+      pendingPaneMeta.set(id, { ...pendingPaneMeta.get(id), ...meta });
+      return;
+    }
+    if (pane.labelLocked) delete meta.label;
+    if (Object.keys(meta).every(key => pane[key] === meta[key])) return;
+    set((s: any) => ({
+      panes: s.panes.map((p: any) => p.id === id ? withActivityClock(p, { ...p, ...meta }) : p),
+    }));
+  },
+
+  /** Sinal vivo lido da saída do terminal. Escreve só quando muda. */
+  setPaneLive: (id: string, live: string | null) => {
+    const pane = (get() as any).panes.find((p: any) => p.id === id);
+    if (!pane || (pane.live ?? null) === live) return;
+    set((s: any) => ({
+      panes: s.panes.map((p: any) => p.id === id ? withActivityClock(p, { ...p, live }) : p),
+    }));
+  },
+
+  /** Nome dado pelo usuário: vazio volta ao nome padrão. */
+  renamePane: (id: string, name: string) => set((s: any) => ({
+    panes: s.panes.map((p: any) => p.id === id
+      ? { ...p, label: name.trim() || undefined, labelLocked: Boolean(name.trim()) }
+      : p),
   })),
 
   collapsePane: (id: string, collapsed: boolean) => set((s: any) => ({

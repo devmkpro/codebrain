@@ -141,6 +141,18 @@ const coreActions: Action[] = [
     },
   },
 
+  {
+    id: "nav.central",
+    title: "Central",
+    subtitle: "Missão, quem faz cada tarefa, agentes, contas, findings e mídia",
+    group: "navegação",
+    keywords: ["central", "missão", "agêntico", "piloto", "harness", "decisor", "contas", "limites", "findings", "skills", "mídia"],
+    icon: "Gauge",
+    priority: 55,
+    // A rota revela a home sozinha (ver HomePages em ShellV2).
+    run: () => navigate("/central"),
+  },
+
   /* ── Painéis ────────────────────────────────────────────────────────
      Este grupo é o motivo de o palette existir: cada um destes painéis é
      alcançável hoje por um único ícone sem rótulo.                        */

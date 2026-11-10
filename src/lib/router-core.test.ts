@@ -27,6 +27,9 @@ describe("normalizePath", () => {
 });
 
 describe("parseHash / serializeHash", () => {
+  it("falls back safely for malformed URL escapes", () => {
+    expect(parseHash("#/%not-encoded").path).toBe("/");
+  });
   it("faz parse de caminho puro", () => {
     expect(parseHash("#/settings")).toEqual({ path: "/settings", query: {} });
   });

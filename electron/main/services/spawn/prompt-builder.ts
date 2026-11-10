@@ -8,7 +8,6 @@ import {
   ORCHESTRATOR_PROMPT,
   UI_TESTER_PROMPT,
   GEMINI_WORKER_PROMPT,
-  MK_OPERATING_PROMPT,
 } from "../prompts";
 import { workspaceAccessInstruction } from "../../workspace-config-store";
 
@@ -22,48 +21,10 @@ export interface PromptBuilderConfig {
   squadCallable?: object[];
   orchestratorInstructions?: string;
 }
-interface SkillManifest {
-  id: string;
-  name: string;
-  description?: string;
-  triggers?: string[];
-}
-
-function loadSkills(cwd: string): SkillManifest[] {
-  const dirs = [
-    path.join(cwd || "", ".codebrain", "skills"),
-    path.join(os.homedir(), ".codebrain", "skills"),
-  ];
-  const skills: SkillManifest[] = [];
-  const seen = new Set<string>();
-
-  for (const dir of dirs) {
-    if (!fs.existsSync(dir)) continue;
-    try {
-      for (const entry of fs.readdirSync(dir)) {
-        const file = path.join(dir, entry, "skill.json");
-        if (!fs.existsSync(file)) continue;
-        try {
-          const manifest = JSON.parse(fs.readFileSync(file, "utf-8")) as SkillManifest;
-          if (!manifest.id || seen.has(manifest.id)) continue;
-          seen.add(manifest.id);
-          skills.push(manifest);
-        } catch {}
-      }
-    } catch {}
-  }
-  return skills;
-}
-
-function buildSkillsSection(cwd: string): string {
-  const skills = loadSkills(cwd);
-  if (skills.length === 0) return "";
-  const rows = skills.map((skill) => {
-    const triggers = skill.triggers?.join(", ") || "-";
-    return `| \`${skill.id}\` | ${skill.description || skill.name} | ${triggers} |`;
-  }).join("\n");
-
-  return `\n\n## Skills (lazy)\nLoad a matching skill with \`skill_get({ id })\` before using it.\n\n| Skill | Description | Triggers |\n|---|---|---|\n${rows}`;
+function buildSkillsSection(): string {
+  // Keep discovery constant-size as installed catalogs grow. Descriptions,
+  // triggers and full resources remain available through the skills tools.
+  return "\n\n## Skills (lazy)\nFor task-specific guidance, activate `skills`, then call `skill_list` to discover project/global skills and their descriptions/triggers. Load matching instructions and resources with `skill_get({ id })` before use; project skills take precedence. Do not preload the catalog.";
 }
 
 function buildActiveAgentsContext(ctx: AppContext, workspace: string, ownPaneId: string): string {
@@ -113,7 +74,6 @@ function buildDelegatedWorkerContext(paneId: string): string {
 export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig): string {
   const { paneId, cwd, model, role, sessionContext, squadCallable, orchestratorInstructions } = config;
   let sysPrompt = CODEBRAIN_SYSTEM_PROMPT;
-  if (MK_OPERATING_PROMPT) sysPrompt += `\n\n${MK_OPERATING_PROMPT}`;
 
   sysPrompt += `\n\n## Workspace\n\`${cwd}\`\nPane: \`${paneId}\``;
   sysPrompt += buildMemoryContext();
@@ -138,7 +98,7 @@ export function buildSystemPrompt(ctx: AppContext, config: PromptBuilderConfig):
     sysPrompt += buildDelegatedWorkerContext(paneId);
   }
 
-  sysPrompt += buildSkillsSection(cwd);
+  sysPrompt += buildSkillsSection();
 
   const tmpDir = path.join(cwd || os.homedir(), ".codebrain", "tmp");
   try { fs.mkdirSync(tmpDir, { recursive: true }); } catch {}

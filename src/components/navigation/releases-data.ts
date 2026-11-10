@@ -14,12 +14,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "2.0.0",
+    "date": "em desenvolvimento",
+    "highlights": []
+  },
+  {
     "version": "1.21.5",
     "date": "novembro 2026",
     "highlights": [
       {
         "kind": "feat",
-        "text": "refine shell navigation, status visibility, and repository preparation"
+        "text": "refine shell workspace experience"
       }
     ]
   },
@@ -544,20 +549,6 @@ export const RELEASES: Release[] = [
       {
         "kind": "fix",
         "text": "align mission UX colors with Codebrain palette"
-      },
-      {
-        "kind": "feat",
-        "text": "Mission UX overhaul — wizard, sidebar, close dialog (Overclock-style)"
-      }
-    ]
-  },
-  {
-    "version": "1.10.2",
-    "date": "junho 2026",
-    "highlights": [
-      {
-        "kind": "feat",
-        "text": "port 25 MiMo-Code features (v1.10.2)"
       }
     ]
   },
@@ -585,10 +576,6 @@ export const RELEASES: Release[] = [
     "version": "1.9.5",
     "date": "junho 2026",
     "highlights": [
-      {
-        "kind": "feat",
-        "text": "bundle portable Chromium + fix CDP detection with Brave on port 9222"
-      },
       {
         "kind": "feat",
         "text": "auto-launch native Chrome + smart CDP re-detection + browser_form_input/get_article_text"
@@ -632,10 +619,6 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "integrate paneHandlers into WorkerManager and enhance prompt writing logic"
-      },
-      {
-        "kind": "feat",
-        "text": "enhance MCP server readiness handling and improve port retry logic"
       },
       {
         "kind": "feat",
@@ -709,15 +692,7 @@ export const RELEASES: Release[] = [
       },
       {
         "kind": "fix",
-        "text": "always await mcpServerReady to get latest port before spawning panes"
-      },
-      {
-        "kind": "fix",
         "text": "resolve MCP context loss for OpenClaude agents"
-      },
-      {
-        "kind": "feat",
-        "text": "add MCP port indicator in workspace header"
       },
       {
         "kind": "fix",
@@ -788,10 +763,6 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "organize +shell menu with search, accordion and smart provider ordering"
-      },
-      {
-        "kind": "feat",
-        "text": "enhance Kimi skill integration and persist MCP port to user directory"
       }
     ]
   },
@@ -862,16 +833,6 @@ export const RELEASES: Release[] = [
       {
         "kind": "fix",
         "text": "Windows cmd shim resolver + copilot MCP format"
-      }
-    ]
-  },
-  {
-    "version": "1.8.12",
-    "date": "maio 2026",
-    "highlights": [
-      {
-        "kind": "fix",
-        "text": "Windows CLI binary resolution — port Overclock's cmd.exe pattern"
       }
     ]
   },
@@ -982,20 +943,6 @@ export const RELEASES: Release[] = [
       {
         "kind": "fix",
         "text": "resolve circular type reference + kanban timestamp unit mismatch"
-      },
-      {
-        "kind": "feat",
-        "text": "v1.8.1 — Overclock-style terminal header + text selection zoom fix"
-      }
-    ]
-  },
-  {
-    "version": "1.8.0",
-    "date": "maio 2026",
-    "highlights": [
-      {
-        "kind": "feat",
-        "text": "v1.8.0 — Overclock parity: new CLI agents, kanban, missions, session watchers, terminal settings"
       }
     ]
   },
@@ -1138,16 +1085,6 @@ export const RELEASES: Release[] = [
       {
         "kind": "feat",
         "text": "api-proxy OpenAI-compat routing + custom model input for OpenRouter"
-      }
-    ]
-  },
-  {
-    "version": "1.5.8",
-    "date": "maio 2026",
-    "highlights": [
-      {
-        "kind": "fix",
-        "text": "auto-update .mcp.json on MCP server restart to fix stale port"
       }
     ]
   },

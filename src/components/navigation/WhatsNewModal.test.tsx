@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../lib/router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
 
 import { WhatsNewModal, LATEST_RELEASE_VERSION } from "./WhatsNewModal";
+import { RELEASES } from "./releases-data";
 
 describe("WhatsNewModal", () => {
   afterEach(cleanup);
@@ -32,6 +33,7 @@ describe("WhatsNewModal", () => {
   it("keeps LATEST_RELEASE_VERSION in sync with the generated notes", () => {
     // Regression guard: a release whose commits are all filtered out by
     // gen-releases.mjs would silently leave this pointing at an older version.
-    expect(LATEST_RELEASE_VERSION).toBe("1.21.0");
+    expect(RELEASES[0]?.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(LATEST_RELEASE_VERSION).toBe(RELEASES[0].version);
   });
 });

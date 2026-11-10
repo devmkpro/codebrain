@@ -1,39 +1,40 @@
 import React from "react";
 
-// GradientBg — replaces CodeRain with a minimal indigo/violet ambient gradient
+// CodeRain: textura estática de código, recortada para sumir ao centro.
 import { useNavStore } from "../../stores/nav-store";
+
+const GLYPHS = "<>/{}()=;:01[]*";
+
+/** Sequência determinística: a tela de entrada é a mesma a cada abertura. */
+function field(lines: number, columns: number): string {
+  let seed = 42;
+  const rows: string[] = [];
+  for (let y = 0; y < lines; y++) {
+    let row = "";
+    for (let x = 0; x < columns; x++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      row += seed % 5 === 0 ? GLYPHS[seed % GLYPHS.length] : " ";
+    }
+    rows.push(row);
+  }
+  return rows.join("\n");
+}
+
+const FIELD = field(70, 220);
+
 export function CodeRain() {
   return (
-    <div className="absolute inset-0 w-full h-full pointer-events-none z-0" aria-hidden>
-      {/* Top-center indigo glow */}
-      <div style={{
-        position: "absolute",
-        top: 0,
-        left: "50%",
-        transform: "translateX(-50%)",
-        width: "90%",
-        height: "55%",
-        background: "radial-gradient(ellipse at top, rgba(99,102,241,0.11) 0%, rgba(0,0,0,0) 65%)",
-      }} />
-      {/* Bottom-right violet whisper */}
-      <div style={{
-        position: "absolute",
-        bottom: 0,
-        right: 0,
-        width: "55%",
-        height: "45%",
-        background: "radial-gradient(ellipse at bottom right, rgba(168,85,247,0.06) 0%, rgba(0,0,0,0) 70%)",
-      }} />
-      {/* Bottom-left cool blue hint */}
-      <div style={{
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        width: "40%",
-        height: "35%",
-        background: "radial-gradient(ellipse at bottom left, rgba(59,130,246,0.04) 0%, rgba(0,0,0,0) 70%)",
-      }} />
-    </div>
+    <pre
+      className="absolute inset-0 m-0 overflow-hidden pointer-events-none select-none text-sm text-cb-fg-3 opacity-50"
+      style={{
+        lineHeight: "var(--cb-cell)",
+        maskImage: "radial-gradient(ellipse 46% 56% at center, transparent 45%, black 100%)",
+        WebkitMaskImage: "radial-gradient(ellipse 46% 56% at center, transparent 45%, black 100%)",
+      }}
+      aria-hidden
+    >
+      {FIELD}
+    </pre>
   );
 }
 function switchUserState(email) {

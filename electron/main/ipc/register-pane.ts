@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain } from "electron";
 import { safeSend, type AppContext } from "../context";
-import { spawnPaneInternal } from "../services/pane-spawn";
+import { paneMissionMetadata, spawnPaneInternal } from "../services/pane-spawn";
 import { createDetachedPaneWindow } from "../window";
 
 export function registerPaneHandlers(ctx: AppContext): void {
@@ -51,22 +51,13 @@ export function registerPaneHandlers(ctx: AppContext): void {
 
   // pty:list filters out detached panes so the main window doesn't re-add them
   ipcMain.handle("pty:list", async () => {
-    const panes = ctx.ptyManager.list().filter(p => !ctx.detachedPaneIds.has(p.paneId));
-    // Enrich with role + mission_id from actor_registry (for RoleBadge/MissionBadge)
-    try {
-      const store = ctx.memoryStore;
-      if (store?.getActorRole) {
-        for (const p of panes) {
-          try {
-            const roleInfo = store.getActorRole({ paneId: p.paneId });
-            if (roleInfo?.ok) {
-              (p as any).role = roleInfo.role || undefined;
-              (p as any).mission_id = roleInfo.missionId || undefined;
-            }
-          } catch {}
-        }
-      }
-    } catch {}
+    const panes = ctx.ptyManager.list().filter(p => !ctx.detachedPaneIds.has(p.paneId)).map(p => ({ ...p }));
+    for (const p of panes) {
+      const cfg = ctx.paneConfigs.get(p.paneId);
+      if (cfg) Object.assign(p, { label: cfg.label, taskType: cfg.taskType, effort: cfg.effort, accountLabel: cfg.accountLabel, accountId: cfg.accountId, allowedSkills: cfg.allowedSkills, parentPaneId: cfg.parentPaneId });
+      const metadata = paneMissionMetadata(ctx, p.paneId);
+      Object.assign(p, Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== undefined)));
+    }
     return { ok: true, panes };
   });
 
@@ -95,7 +86,7 @@ export function registerPaneHandlers(ctx: AppContext): void {
 
     // Get workspace path from pane config
     const cfg = ctx.paneConfigs.get(paneId);
-    const workspacePath = cfg?.cwd ?? ctx.currentWorkspacePath;
+    const workspacePath = cfg?.workspacePath ?? cfg?.cwd ?? ctx.currentWorkspacePath;
 
     // Mark as detached so pty:list filters it out of the main window
     ctx.detachedPaneIds.add(paneId);
@@ -125,7 +116,7 @@ export function registerPaneHandlers(ctx: AppContext): void {
       const store = ctx.memoryStore;
       if (store?.getActorRole) {
         const entry = store.getActorRole({ paneId });
-        return { ok: true, role: entry?.role ?? null, missionId: entry?.mission_id ?? null };
+        return { ok: true, role: entry?.role ?? null, missionId: entry?.missionId ?? entry?.mission_id ?? null };
       }
       return { ok: true, role: null, missionId: null };
     } catch (err) {

@@ -1,11 +1,18 @@
 import { ipcMain } from "electron";
 import type { AppContext, McpServerInfo } from "../context";
 import { safeSend } from "../context";
-import { spawnPaneInternal } from "./pane-spawn";
+import { spawnPaneInternal, type SpawnPaneConfig } from "./pane-spawn";
+import { pickAccount } from "./accounts";
+import { getAgentInstructions, listAgents, resolveSkillWhitelist, scanCatalog } from "./catalog";
+import { deciderCredentials, mediaCredentials, type HarnessProvider } from "./harness-providers";
+import { getEnhancedProviders } from "./providers";
+import { getCliDecider } from "./cli-decider";
 import { sendBrowserCmd, saveScreenshot, saveScreenshotElement, getNetworkLog, getConsoleLog, clearBrowserLogs, resolveBrowserPaneId } from "./browser";
 import { refreshAllWorkspaces, writeContextFiles } from "./workspace";
 import { PROVIDER_REGISTRY } from "./constants";
 import { stopDaemon } from "./mcp-runtime";
+import { accessVaultResult, getAccessVault } from "./access-vault-runtime";
+import type { AccessHostInput } from "../../../src/types/access-vault";
 
 // CDP Client for native Chrome browser control
 const { CDPClient } = require("../../packages/mcp/bridge/cdp-client.js");
@@ -23,11 +30,28 @@ function buildMcpBridge(ctx: AppContext) {
 
   return {
     cdpClient,
-    spawnPaneFn: (req: { agent?: string; providerId?: string; model?: string; cwd?: string }) =>
-      spawnPaneInternal(ctx, req),
-    onPaneCreated: (info: { paneId: string; agent: string; cwd?: string; providerId?: string; model?: string }) => {
+    accessHostList: () => accessVaultResult(() => getAccessVault(ctx).list({ source: "agent" })),
+    accessHostSave: (input: AccessHostInput) => accessVaultResult(async () => ({ host: await getAccessVault(ctx).upsertHost(input, { source: "agent" }) })),
+    accessSshOpen: (input: { hostId: string }) => accessVaultResult(() => getAccessVault(ctx).openSsh(input.hostId, { source: "agent" })),
+    spawnPaneFn: (req: SpawnPaneConfig) => spawnPaneInternal(ctx, req),
+    onPaneCreated: (info: { paneId: string; agent: string; cwd?: string; providerId?: string; model?: string; label?: string; taskType?: string; effort?: string; accountLabel?: string }) => {
       safeSend(ctx, "pane:added", info);
     },
+    getAvailableClis: () =>
+      new Set(
+        Object.entries(ctx.cliDetector.getAll())
+          .filter(([name, info]) => name !== "shell" && (info as { found?: boolean }).found)
+          .map(([name]) => name),
+      ),
+    pickAccount,
+    listAgents: () => listAgents(ctx.currentWorkspacePath),
+    getAgentInstructions: (name: string) => getAgentInstructions(name, ctx.currentWorkspacePath),
+    resolveSkills: resolveSkillWhitelist,
+    scanCatalog: () => scanCatalog(ctx.currentWorkspacePath),
+    getDeciderCredentials: (config: { providerId?: string | null }) =>
+      deciderCredentials(getEnhancedProviders(ctx) as HarnessProvider[], config?.providerId),
+    runCliDecider: (args: Parameters<ReturnType<typeof getCliDecider>["run"]>[0]) => getCliDecider(ctx).run(args),
+    getMediaCredentials: () => mediaCredentials(getEnhancedProviders(ctx) as HarnessProvider[]),
     sendBrowserCmd: (paneId: string, cmd: Record<string, unknown>) => sendBrowserCmd(ctx, paneId, cmd),
     saveScreenshot: (paneId?: string, fullPage?: boolean) => saveScreenshot(ctx, paneId, fullPage),
     saveScreenshotElement: (selector: string, paneId?: string) => saveScreenshotElement(ctx, selector, paneId),
@@ -175,6 +199,8 @@ function notifyActivePanesMcpRestart(ctx: AppContext, info: McpServerInfo): void
 
     const hint = `\n[MCP] Server restarted on port ${info.port}. If MCP tools are unavailable, re-initialize your MCP connection.\n`;
     for (const pane of panes) {
+      const agent = ctx.paneConfigs.get(pane.paneId)?.agent ?? pane.agent;
+      if (!agent || agent === "shell" || agent === "browser") continue;
       try {
         ctx.ptyManager.writeSilent(pane.paneId, hint);
       } catch {}

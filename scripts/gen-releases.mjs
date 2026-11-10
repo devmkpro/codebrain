@@ -61,6 +61,8 @@ function parseCommit(subject) {
   const text = match[2].trim();
   // Keep obsolete historical entries for removed capabilities out of the UI.
   if (/\breview/i.test(text)) return null;
+  // Implementation provenance belongs in source history, not release UI.
+  if (/\b(?:ported|port|parity)\b|\b[\w-]+-style\b/i.test(text)) return null;
   // Skip release commits
   if (kind === "chore" && text.startsWith("release")) return null;
   if (text.startsWith("release:")) return null;
@@ -129,6 +131,10 @@ if (tags.length === 0) {
 }
 
 // Always ensure at least one entry so RELEASES[0] is never undefined
+const currentVersion = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).version;
+if (releases.length > 0 && releases[0].version !== currentVersion) {
+  releases.unshift({ version: currentVersion, date: "em desenvolvimento", highlights: [] });
+}
 if (releases.length === 0) {
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).version;
   releases.push({ version: pkg, date: "", highlights: [] });

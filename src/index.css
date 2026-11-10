@@ -1,3 +1,6 @@
+/* O index.html carrega só os pesos 400 e 500. Sem estes, todo `font-bold`
+   vira negrito sintetizado pelo browser, com as hastes borradas. */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;700&display=swap");
 @import "tailwindcss";
 
 /* ── Camada de design system ───────────────────────────────────────────────
@@ -7,6 +10,7 @@
 @import "./styles/tokens.css";
 @import "./styles/theme.css";
 @import "./styles/base.css";
+@import "./styles/primitives.css";
 
 /* ── Base reset ───────────────────────────────────────────────── */
 *, *::before, *::after {
@@ -23,6 +27,12 @@ html, body, #root {
   color: var(--cb-fg-1);
   font-family: var(--cb-font-mono);
 }
+
+/* A faixa de título (UpdateNotificationBanner) fica em fluxo acima do shell.
+   Com o shell em `height: 100%`, os dois somavam mais que a janela e a
+   StatusBar era cortada para fora da tela. */
+#root { display: flex; flex-direction: column; }
+#root > .cb-terminal-shell { flex: 1 1 0; height: auto; min-height: 0; }
 
 /* ── Scrollbar (global, legado) ───────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -182,15 +192,17 @@ html, body, #root {
 .light ::-webkit-scrollbar-thumb:hover  { background: rgba(30,30,80,0.30); }
 
 /* ══ FORM FIELDS ════════════════════════════════════════════════ */
-.light input,
-.light select,
+/* `:not(.cb-*)`: as primitivas já resolvem o tema por token; este override
+   apagava o chevron do select e a borda de foco delas. */
+.light input:not(.cb-field):not(.cb-range):not(.bg-transparent),
+.light select:not(.cb-select),
 .light textarea {
   background: #ffffff !important;
   color: #1a1a2e !important;
   border-color: rgba(30,30,70,0.20) !important;
 }
-.light input::placeholder  { color: #8080a8 !important; }
-.light select option       { background: #ffffff; color: #1a1a2e; }
+.light input:not(.cb-field)::placeholder  { color: #8080a8 !important; }
+.light select:not(.cb-select) option       { background: #ffffff; color: #1a1a2e; }
 
 /* ══ MODAL OVERLAY ══════════════════════════════════════════════ */
 .light .bg-black\/70 { background: rgba(0,0,0,0.45) !important; }
@@ -241,12 +253,12 @@ html, body, #root {
 .light .shadow-2xl { box-shadow: 0 4px 24px rgba(30,30,80,0.12), 0 0 0 1px rgba(30,30,80,0.06) !important; }
 
 /* ══ SLIDERS ════════════════════════════════════════════════════ */
-.light input[type="range"]::-webkit-slider-runnable-track {
+.light input[type="range"]:not(.cb-range)::-webkit-slider-runnable-track {
   height: 4px;
   background: rgba(88,85,229,0.28);
   border-radius: 9999px;
 }
-.light input[type="range"]::-webkit-slider-thumb {
+.light input[type="range"]:not(.cb-range)::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 16px; height: 16px; border-radius: 50%;
   background: #706de8; margin-top: -6px; cursor: pointer;

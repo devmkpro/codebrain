@@ -169,6 +169,48 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     },
   },
 
+  pane: {
+    onMeta: (callback: (meta: unknown) => void) => {
+      const handler = (_evt: unknown, meta: unknown) => callback(meta);
+      ipcRenderer.on("pane:meta", handler);
+      return () => ipcRenderer.off("pane:meta", handler);
+    },
+  },
+
+  harness: {
+    getTable: () => ipcRenderer.invoke("harness:getTable"),
+    saveTable: (table: unknown) => ipcRenderer.invoke("harness:saveTable", table),
+    receipts: (args: unknown) => ipcRenderer.invoke("harness:receipts", args),
+    deciderProviders: () => ipcRenderer.invoke("harness:deciderProviders"),
+    testDecider: (args: unknown) => ipcRenderer.invoke("harness:testDecider", args),
+  },
+
+  findings: {
+    list: (args: unknown) => ipcRenderer.invoke("findings:list", args),
+    update: (args: unknown) => ipcRenderer.invoke("findings:update", args),
+    stats: (args: unknown) => ipcRenderer.invoke("findings:stats", args),
+  },
+
+  agentCatalog: {
+    scan: (args?: unknown) => ipcRenderer.invoke("agentCatalog:scan", args),
+    setMeta: (args: unknown) => ipcRenderer.invoke("agentCatalog:setMeta", args),
+    copyTo: (args: unknown) => ipcRenderer.invoke("agentCatalog:copyTo", args),
+  },
+
+  accounts: {
+    list: () => ipcRenderer.invoke("accounts:list"),
+    add: (args: unknown) => ipcRenderer.invoke("accounts:add", args),
+    remove: (args: unknown) => ipcRenderer.invoke("accounts:remove", args),
+    lock: (args: unknown) => ipcRenderer.invoke("accounts:lock", args),
+    login: (args: unknown) => ipcRenderer.invoke("accounts:login", args),
+  },
+
+  media: {
+    providers: () => ipcRenderer.invoke("media:providers"),
+    list: (args: unknown) => ipcRenderer.invoke("media:list", args),
+    generate: (args: unknown) => ipcRenderer.invoke("media:generate", args),
+  },
+
   conversation: {
     list: (args: { paneId: string; workspace?: string; limit?: number }) => ipcRenderer.invoke("conversation:list", args),
     send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => ipcRenderer.invoke("conversation:send", args),
@@ -181,6 +223,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
 
   operations: {
     snapshot: (args?: { workspace?: string; limit?: number }) => ipcRenderer.invoke("operations:snapshot", args ?? {}),
+    archive: (args: { workspace: string; missionId: string; confirmedActive?: boolean }) => ipcRenderer.invoke("operations:archive", args),
     onUpdated: (callback: (info: { workspace?: string; at: number }) => void) => {
       const handler = (_evt: unknown, info: { workspace?: string; at: number }) => callback(info);
       ipcRenderer.on("operations:updated", handler);
@@ -192,6 +235,16 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     list: (args: { workspace: string }) => ipcRenderer.invoke("spec:list", args),
     create: (args: { workspace: string; answers: Record<string, string> }) => ipcRenderer.invoke("spec:create", args),
     open: (args: { workspace: string; id: string; file?: string }) => ipcRenderer.invoke("spec:open", args),
+  },
+
+  accessVault: {
+    status: () => ipcRenderer.invoke("accessVault:status"),
+    list: () => ipcRenderer.invoke("accessVault:list"),
+    saveCredential: (input: unknown) => ipcRenderer.invoke("accessVault:saveCredential", input),
+    deleteCredential: (input: { id: string; confirmed: true }) => ipcRenderer.invoke("accessVault:deleteCredential", input),
+    saveHost: (input: unknown) => ipcRenderer.invoke("accessVault:saveHost", input),
+    deleteHost: (input: { id: string; confirmed: true }) => ipcRenderer.invoke("accessVault:deleteHost", input),
+    openSsh: (input: { hostId: string }) => ipcRenderer.invoke("accessVault:openSsh", input),
   },
 
   workspace: {
@@ -242,7 +295,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     listModels: (args: unknown) => ipcRenderer.invoke("providers:listModels", args),
     listOpenRouterModels: () => ipcRenderer.invoke("providers:listOpenRouterModels"),
     listClaudeOAuthModels: () => ipcRenderer.invoke("providers:listClaudeOAuthModels"),
-    syncModels: (args?: { providerIds?: string[]; force?: boolean }) => ipcRenderer.invoke("providers:syncModels", args),
+    syncModels: (args?: { providerIds?: string[]; force?: boolean; resetManual?: boolean }) => ipcRenderer.invoke("providers:syncModels", args),
     healthCheck: (args: unknown) => ipcRenderer.invoke("providers:healthCheck", args),
     onUpdated: (callback: (providers: unknown[]) => void) => {
       const handler = (_evt: unknown, providers: unknown[]) => callback(providers);
@@ -339,6 +392,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     redetect: () => ipcRenderer.invoke("cli:redetect"),
     install: () => ipcRenderer.invoke("cli:install"),
     installCli: (cli: string) => ipcRenderer.invoke("cli:install-cli", cli),
+    registry: () => ipcRenderer.invoke("cli:registry"),
     ping9Router: (baseUrl?: string) => ipcRenderer.invoke("cli:ping-9router", baseUrl),
   },
 
@@ -358,9 +412,10 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
   },
 
   tasks: {
-    list: () => ipcRenderer.invoke("tasks:list"),
-    onUpdated: (cb: (state: unknown) => void) => {
-      const handler = (_evt: unknown, state: unknown) => cb(state);
+    list: (opts: { workspace: string; mission_id?: string }) => ipcRenderer.invoke("tasks:list", opts),
+    clear: (args: { workspace: string; scope: "done" | "all"; ids: string[] }) => ipcRenderer.invoke("tasks:clear", args),
+    onUpdated: (cb: (state: { workspace?: string | null; at: number }) => void) => {
+      const handler = (_evt: unknown, state: { workspace?: string | null; at: number }) => cb(state);
       ipcRenderer.on("tasks:updated", handler);
       return () => ipcRenderer.off("tasks:updated", handler);
     },

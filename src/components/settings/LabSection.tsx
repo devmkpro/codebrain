@@ -8,6 +8,7 @@ import {
 } from "../../lib/flags";
 import { useFlagsStore } from "../../stores/flags-store";
 import { resolveFlag } from "../../lib/flags";
+import { Toggle } from "../ui/primitives/Toggle";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LABORATÓRIO — TOGGLES DE FEATURE FLAG
@@ -42,37 +43,34 @@ function FlagToggle({ flagKey }: { flagKey: FlagKey }) {
   const locked = override !== null;
 
   return (
-    <label
-      className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
-        locked
-          ? "border-white/5 opacity-60 cursor-not-allowed"
-          : "border-white/10 hover:border-white/20 cursor-pointer"
-      }`}
+    <div
+      className={`flex items-start gap-3 py-1 ${locked ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
     >
-      <input
-        type="checkbox"
-        checked={value}
+      <Toggle
+        enabled={value}
         disabled={locked}
-        onChange={(event) => setFlag(flagKey, event.target.checked)}
-        className="mt-0.5 accent-violet-500"
+        onChange={(enabled) => setFlag(flagKey, enabled)}
+        aria-labelledby={`flag-${flagKey}-label`}
+        aria-describedby={`flag-${flagKey}-description`}
+        className="mt-0.5"
       />
       <span className="flex-1 min-w-0">
-        <span className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-200 font-bold">{definition.label}</span>
-          <span className="px-1.5 py-px rounded text-[9px] uppercase tracking-wider border border-violet-500/25 text-violet-300">
+        <span className="flex flex-wrap items-center gap-2">
+          <span id={`flag-${flagKey}-label`} className="text-base text-cb-fg-0">{definition.label}</span>
+          <span className="cb-badge shrink-0">
             {STAGE_LABEL[definition.stage] ?? definition.stage}
           </span>
         </span>
-        <span className="block text-[10px] text-slate-500 leading-relaxed mt-1">
+        <span id={`flag-${flagKey}-description`} className="block text-sm text-cb-fg-2 leading-relaxed mt-0.5">
           {definition.description}
         </span>
         {locked && (
-          <span className="block text-[10px] text-amber-400/80 mt-1">
+          <span className="block text-sm text-cb-warn mt-1">
             Travada — {OVERRIDE_REASON[override]}.
           </span>
         )}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -81,9 +79,9 @@ export function LabSection() {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="p-3 rounded-lg bg-violet-500/5 border border-violet-500/15 flex items-start gap-2.5">
-        <FlaskConical size={13} className="text-violet-400 shrink-0 mt-0.5" />
-        <p className="text-[10px] text-slate-500 leading-relaxed">
+      <div className="cb-note">
+        <FlaskConical size={13} className="text-cb-accent shrink-0 mt-0.5" />
+        <p>
           Recursos opcionais e fallback de compatibilidade. O shell
           terminal-first já é a experiência padrão.
         </p>
@@ -95,9 +93,9 @@ export function LabSection() {
 
       <button
         onClick={resetFlags}
-        className="mt-1 w-full py-2 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 transition-all"
+        className="cb-btn mt-1 w-full"
       >
-        Restaurar padrões
+        restaurar padrões
       </button>
     </div>
   );

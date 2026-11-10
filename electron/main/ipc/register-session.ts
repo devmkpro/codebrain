@@ -3,8 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import log from "electron-log/main.js";
 import type { AppContext } from "../context";
+import { clearTasks, listTasks, watchTaskMutations, type TaskClearRequest } from "../services/todo-manager";
 
 export function registerSessionHandlers(ctx: AppContext): void {
+  watchTaskMutations(ctx);
   ipcMain.handle("session:saveSnapshot", async (_event, workspacePath: string) => {
     try {
       const panes = ctx.ptyManager.list();
@@ -205,39 +207,7 @@ ${panesSummary}
   ipcMain.handle("session:load", async () => []);
   ipcMain.handle("claude:sessions", async () => []);
   ipcMain.handle("claude:summary", async () => "");
-  ipcMain.handle("tasks:list", async (_event, opts?: { workspace?: string; mission_id?: string }) => {
-    try {
-      const store = ctx.memoryStore;
-      if (!store?.listKanbanTasks) return { tasks: [] };
-      // Resolve active mission if no mission_id provided
-      let missionId = opts?.mission_id;
-      const workspace = opts?.workspace || ctx.currentWorkspacePath || undefined;
-      if (!missionId && store.resolveActiveMission) {
-        const active = store.resolveActiveMission({ workspace });
-        if (active?.ok && active.mission) missionId = active.mission.id;
-      }
-      const result = store.listKanbanTasks({ workspace, mission_id: missionId, limit: 100 });
-      if (!result?.ok) return { tasks: [] };
-      // Map kanban_tasks to Task shape for the UI
-      const tasks = (result.tasks || []).map((t: any) => ({
-        id: t.id,
-        name: t.title,
-        label: t.title,
-        status: t.column_name === 'done' ? 'done' : t.column_name === 'in_progress' ? 'running' : 'pending',
-        column: t.column_name,
-        priority: t.priority,
-        assigned_to: t.assigned_to,
-        description: t.description,
-        mission_id: t.mission_id,
-        result: t.result,
-        createdAt: t.created_at,
-        updatedAt: t.updated_at,
-      }));
-      return { tasks, activeTaskId: null };
-    } catch (err) {
-      log.error("[tasks:list] error:", err);
-      return { tasks: [] };
-    }
-  });
+  ipcMain.handle("tasks:list", (_event, opts?: { workspace?: string; mission_id?: string }) => listTasks(ctx, opts));
+  ipcMain.handle("tasks:clear", (_event, args: TaskClearRequest) => clearTasks(ctx, args));
 
 }

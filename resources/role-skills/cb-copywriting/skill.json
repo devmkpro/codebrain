@@ -1,0 +1,13 @@
+{
+  "id": "cb-copywriting",
+  "name": "cb-copywriting",
+  "description": "Transformar o briefing em oferta, voz de marca e copy completa por seção, com chamadas para ação concretas e sem inventar preços, prova social ou urgência.",
+  "type": "prompt",
+  "version": "2.0.0",
+  "entrypoint": "SKILL.md",
+  "tags": [
+    "codebrain",
+    "design",
+    "sites"
+  ]
+}

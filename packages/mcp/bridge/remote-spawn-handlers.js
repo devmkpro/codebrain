@@ -7,7 +7,7 @@
  * and hard-fails when the CLI is absent. Validates host aliases (no shell-meta injection).
  * Probes use `ssh -o BatchMode=yes` so password-only hosts fail fast.
  *
- * Ported from Overclock sidecar: remoteSpawn.js
+ * SSH routing for remote panes.
  * Adapted to Codebrain's CommonJS + MCP bridge architecture.
  */
 

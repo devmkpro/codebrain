@@ -1,17 +1,13 @@
 import React from "react";
-import {
-  ArrowRight,
-  FolderOpen,
-  FolderPlus,
-  LoaderCircle,
-  SquareTerminal,
-  Unlink,
-  X,
-} from "lucide-react";
+import { ArrowRight, FolderPlus, LoaderCircle, Unlink, X } from "lucide-react";
 import { useNavStore } from "../../stores/nav-store";
 import { usePanesStore } from "../../stores/panes-store";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { ensureWorkspaceUnlinked } from "../../lib/workspace-unlink";
+import { useWorkspaceRegistry } from "../../components/operations/useWorkspaceRegistry";
+import { activityPresentation, derivePaneActivity } from "../../components/shell/pane-status";
+import { StatusGlyph } from "../../components/shell/pane-status-glyph";
+import { Button, Prompt, SectionRule } from "../../components/ui/primitives";
 
 interface WorkspaceTab {
   workspacePath: string;
@@ -26,6 +22,7 @@ interface PaneLike {
   cwd?: string;
   workspacePath?: string;
   kind?: string;
+  label?: string;
 }
 
 function folderName(path: string): string {
@@ -42,18 +39,19 @@ function belongsToWorkspace(pane: PaneLike, workspacePath: string): boolean {
   return candidate === root || candidate.startsWith(`${root}/`);
 }
 
+function isWorking(pane: PaneLike): boolean {
+  const activity = derivePaneActivity(pane);
+  return activity === "thinking" || activity === "running";
+}
+
 function PaneSummary({ pane }: { pane: PaneLike }) {
-  const running = pane.status === "running" || pane.status === "working";
+  const activity = derivePaneActivity(pane);
   return (
-    <div className="flex min-w-0 items-center gap-2 h-cell px-2 border-t border-cb-line-0 first:border-t-0">
-      <span
-        className="cb-dot"
-        data-pulse={running}
-        style={{ "--cb-dot-color": running ? "var(--cb-agent-running)" : "var(--cb-agent-idle)" } as React.CSSProperties}
-      />
-      <span className="text-2xs text-cb-fg-1 truncate">{pane.agent || "shell"}</span>
-      {pane.model && <span className="text-2xs text-cb-fg-3 truncate">{pane.model}</span>}
-      <span className="ml-auto text-2xs text-cb-fg-3 shrink-0">{pane.id.slice(0, 4)}</span>
+    <div className="cb-row min-w-0">
+      <StatusGlyph activity={activity} />
+      <span className="text-sm text-cb-fg-0 truncate">{pane.label || pane.agent || "shell"}</span>
+      {pane.model && <span className="text-sm text-cb-fg-2 truncate hidden sm:inline">{pane.model}</span>}
+      <span className="ml-auto text-xs text-cb-fg-2 shrink-0">{activityPresentation(activity).label}</span>
     </div>
   );
 }
@@ -75,41 +73,37 @@ function OpenWorkspaceRow({
 }) {
   const name = folderName(tab.workspacePath);
   const workspacePanes = panes.filter((pane) => belongsToWorkspace(pane, tab.workspacePath));
-  const running = workspacePanes.filter((pane) => pane.status === "running" || pane.status === "working").length;
+  const working = workspacePanes.filter(isWorking).length;
 
   return (
-    <article className="relative flex flex-col min-w-0 border border-cb-line-1 bg-cb-bg-1 rounded-cb-1 hover:border-cb-line-2 transition-colors">
-      <div className="absolute left-0 top-0 bottom-0 w-px bg-cb-accent" aria-hidden />
-      <header className="flex items-start gap-3 px-3 py-3 border-b border-cb-line-0">
-        <div className="w-7 h-7 shrink-0 flex items-center justify-center border border-cb-line-1 bg-cb-bg-2 rounded-cb-1">
-          <FolderOpen size={13} className="text-cb-accent" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-xs font-semibold text-cb-fg-0 truncate">{name}</h3>
-          <p className="text-2xs text-cb-fg-3 truncate mt-0.5" title={tab.workspacePath}>{tab.workspacePath}</p>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button type="button" onClick={() => onClose(index)} className="p-1 text-cb-fg-2 hover:text-cb-fg-0 rounded-cb-1 hover:bg-cb-bg-3" title="Fechar — mantém nos recentes" aria-label={`Fechar ${name}`}><X size={12} /></button>
-          <button type="button" onClick={() => onUnlink(tab.workspacePath, index)} className="p-1 text-cb-fg-2 hover:text-cb-danger rounded-cb-1 hover:bg-cb-danger-wash" title="Desvincular — não apaga arquivos" aria-label={`Desvincular ${name}`}><Unlink size={12} /></button>
+    <article className="cb-rail min-w-0" style={{ "--cb-rail-color": "var(--cb-accent)" } as React.CSSProperties}>
+      <header className="flex items-start gap-3">
+        <button type="button" onClick={() => onOpen(index)} className="min-w-0 flex-1 text-left group/open">
+          <span className="flex items-center gap-2">
+            <span className="text-md font-medium text-cb-fg-0 truncate group-hover/open:text-cb-accent">{name}</span>
+            <ArrowRight size={12} className="shrink-0 text-cb-fg-2 group-hover/open:text-cb-accent" />
+          </span>
+          <span className="block text-xs text-cb-fg-2 truncate mt-0.5" title={tab.workspacePath}>{tab.workspacePath}</span>
+        </button>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button type="button" onClick={() => onClose(index)} className="cb-btn cb-btn--ghost cb-btn--sm cb-btn--icon" title="Fechar: mantém nos recentes" aria-label={`Fechar ${name}`}><X size={12} /></button>
+          <button type="button" onClick={() => onUnlink(tab.workspacePath, index)} className="cb-btn cb-btn--ghost cb-btn--sm cb-btn--icon hover:!text-cb-danger" title="Desvincular: não apaga arquivos" aria-label={`Desvincular ${name}`}><Unlink size={12} /></button>
         </div>
       </header>
 
-      <div className="flex items-center gap-4 h-cell-lg px-3 border-b border-cb-line-0 text-2xs">
-        <span className="text-cb-fg-3">panes <strong className="text-cb-fg-1 font-medium">{workspacePanes.length}</strong></span>
-        <span className="text-cb-fg-3">ativos <strong className="text-cb-success font-medium">{running}</strong></span>
-        <span className="text-cb-fg-3 truncate">view <strong className="text-cb-fg-1 font-medium">{tab.view?.kind || "workspace"}</strong></span>
-      </div>
+      <p className="mt-1 text-xs text-cb-fg-2 tabular-nums">
+        <span className="text-cb-fg-1">{workspacePanes.length}</span> {workspacePanes.length === 1 ? "agente" : "agentes"}
+        {" · "}
+        <span className={working > 0 ? "text-cb-agent-running" : "text-cb-fg-1"}>{working}</span> em ação
+        {tab.view?.kind && tab.view.kind !== "workspace" ? ` · ${tab.view.kind}` : ""}
+      </p>
 
-      <div className="min-h-[44px] bg-cb-bg-0/40">
+      <div className="mt-1 -ml-2">
         {workspacePanes.length === 0
-          ? <p className="px-3 h-[44px] flex items-center text-2xs text-cb-fg-3">Nenhum agente aberto neste workspace.</p>
+          ? <p className="px-2 min-h-cell flex items-center text-sm text-cb-fg-2">Nenhum agente aberto neste workspace.</p>
           : workspacePanes.slice(0, 3).map((pane) => <PaneSummary key={pane.id} pane={pane} />)}
-        {workspacePanes.length > 3 && <p className="h-cell px-2 flex items-center text-2xs text-cb-fg-3 border-t border-cb-line-0">+ {workspacePanes.length - 3} agentes</p>}
+        {workspacePanes.length > 3 && <p className="px-2 min-h-cell flex items-center text-xs text-cb-fg-2">+ {workspacePanes.length - 3} agentes</p>}
       </div>
-
-      <button type="button" onClick={() => onOpen(index)} className="flex items-center justify-between h-cell-lg px-3 border-t border-cb-line-1 text-xs text-cb-fg-1 hover:text-cb-accent hover:bg-cb-bg-2">
-        <span>abrir workspace</span><ArrowRight size={12} />
-      </button>
     </article>
   );
 }
@@ -117,24 +111,22 @@ function OpenWorkspaceRow({
 function RecentWorkspaceRow({ path, onOpen, onUnlink, busy }: { path: string; onOpen: (path: string) => void; onUnlink: (path: string) => void; busy: boolean }) {
   const name = folderName(path);
   return (
-    <div className="group flex items-center min-w-0 border-t border-cb-line-0 first:border-t-0 hover:bg-cb-bg-2">
-      <button type="button" onClick={() => onOpen(path)} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left">
-        <FolderOpen size={13} className="text-cb-fg-2 shrink-0" />
+    <div className="group flex items-center min-w-0 rounded-cb-1 hover:bg-cb-bg-2">
+      <button type="button" onClick={() => onOpen(path)} className="flex min-w-0 flex-1 items-center gap-3 px-2 py-1.5 text-left">
         <span className="min-w-0 flex-1">
-          <span className="block text-xs text-cb-fg-0 truncate">{name}</span>
-          <span className="block text-2xs text-cb-fg-3 truncate mt-0.5" title={path}>{path}</span>
+          <span className="block text-base text-cb-fg-0 truncate">{name}</span>
+          <span className="block text-xs text-cb-fg-2 truncate" title={path}>{path}</span>
         </span>
-        <span className="text-2xs text-cb-fg-3 group-hover:text-cb-accent shrink-0">abrir</span>
-        <ArrowRight size={11} className="text-cb-fg-3 group-hover:text-cb-accent shrink-0" />
+        <span className="text-cb-accent opacity-0 group-hover:opacity-100 shrink-0" aria-hidden>❯</span>
       </button>
-      <button type="button" onClick={() => onUnlink(path)} disabled={busy} className="mx-2 p-1.5 text-cb-fg-2 hover:text-cb-danger hover:bg-cb-danger-wash rounded-cb-1 disabled:opacity-40" title="Desvincular — não apaga arquivos" aria-label={`Desvincular ${name}`}><Unlink size={12} /></button>
+      <button type="button" onClick={() => onUnlink(path)} disabled={busy} className="cb-btn cb-btn--ghost cb-btn--sm cb-btn--icon mx-1 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:!text-cb-danger" title="Desvincular: não apaga arquivos" aria-label={`Desvincular ${name}`}><Unlink size={12} /></button>
     </div>
   );
 }
 
 export function WorkspacesPage() {
-  const [recents, setRecents] = React.useState<string[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const { recents, loaded, error: registryError, refresh } = useWorkspaceRegistry();
+  const loading = !loaded;
   const [launching, setLaunching] = React.useState(false);
   const [unlinking, setUnlinking] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -146,15 +138,6 @@ export function WorkspacesPage() {
   const panes = usePanesStore((state) => state.panes) as PaneLike[];
   const setWorkspacePath = useWorkspaceStore((state) => state.setPath);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    window.codeBrainApp.workspaces.recent()
-      .then((items) => { if (!cancelled) setRecents(Array.isArray(items) ? items : []); })
-      .catch(() => { if (!cancelled) setError("Não foi possível carregar os workspaces recentes."); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
-
   const openPath = React.useCallback(async (path?: string) => {
     if (launching) return;
     setLaunching(true);
@@ -165,13 +148,13 @@ export function WorkspacesPage() {
       setWorkspacePath(selected);
       await window.codeBrainApp.workspaces.touch(selected);
       openWorkspace(selected);
-      setRecents((items) => [selected, ...items.filter((item) => normalized(item) !== normalized(selected))]);
+      await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível abrir o workspace.");
     } finally {
       setLaunching(false);
     }
-  }, [launching, openWorkspace, setWorkspacePath]);
+  }, [launching, openWorkspace, setWorkspacePath, refresh]);
 
   const unlink = React.useCallback(async (path: string, tabIndex?: number) => {
     if (unlinking) return;
@@ -180,85 +163,75 @@ export function WorkspacesPage() {
     try {
       const result = await window.codeBrainApp?.workspaces?.remove?.(path);
       ensureWorkspaceUnlinked(result);
-      if (tabIndex !== undefined) closeTab(tabIndex);
-      setRecents((items) => items.filter((item) => normalized(item) !== normalized(path)));
+      // Compare at completion, not by the index captured before awaiting IPC:
+      // other windows/actions may have reordered tabs while unlinking.
+      const nav = useNavStore.getState() as any;
+      for (let index = nav.tabs.length - 1; index >= 0; index--) {
+        if (normalized(nav.tabs[index].workspacePath) === normalized(path)) closeTab(index);
+      }
+      const workspace = useWorkspaceStore.getState() as any;
+      if (workspace.path && normalized(workspace.path) === normalized(path)) {
+        const next = useNavStore.getState() as any;
+        setWorkspacePath(next.tabs[next.activeTabIndex]?.workspacePath || null);
+      }
+      await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível desvincular o workspace.");
     } finally {
       setUnlinking(null);
     }
-  }, [closeTab, unlinking]);
+  }, [closeTab, unlinking, refresh, setWorkspacePath]);
 
   const recentOnly = recents.filter((path) => !tabs.some((tab) => normalized(tab.workspacePath) === normalized(path)));
-  const runningAgents = panes.filter((pane) => pane.status === "running" || pane.status === "working").length;
+  const working = panes.filter(isWorking).length;
 
   return (
-    <section className="relative flex-1 overflow-y-auto bg-cb-bg-0 cb-scroll">
-      <div className="absolute inset-0 pointer-events-none opacity-40" style={{ backgroundImage: "linear-gradient(var(--cb-line-0) 1px, transparent 1px), linear-gradient(90deg, var(--cb-line-0) 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
-      <div className="relative max-w-[1120px] mx-auto px-5 py-5">
-        <header className="flex items-start justify-between gap-5 pb-4 border-b border-cb-line-1">
-          <div>
-            <span className="cb-label text-cb-accent">workspace registry</span>
-            <h1 className="text-base font-semibold text-cb-fg-0 mt-1">Workspaces</h1>
-            <p className="text-2xs text-cb-fg-3 mt-1">Abra projetos e mantenha cada agente no contexto certo.</p>
+    <section className="flex-1 min-h-0 cb-scroll bg-cb-bg-0">
+      <div className="max-w-[1040px] mx-auto px-5 py-5 flex flex-col gap-6">
+        <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0 flex-[1_1_280px]">
+            <h1 className="text-xl font-bold text-cb-fg-0 leading-snug"><Prompt>workspaces</Prompt></h1>
+            <p className="mt-1 text-sm text-cb-fg-2 tabular-nums">
+              {tabs.length} {tabs.length === 1 ? "aberto" : "abertos"} · {recents.length} {recents.length === 1 ? "recente" : "recentes"} · {working} {working === 1 ? "agente" : "agentes"} em ação
+            </p>
           </div>
-          <button type="button" onClick={() => void openPath()} disabled={launching} className="h-cell-lg px-3 flex items-center gap-2 border border-cb-accent bg-cb-accent-wash text-xs text-cb-accent-bright hover:bg-cb-accent-wash-strong rounded-cb-1 disabled:opacity-50">
-            {launching ? <LoaderCircle size={12} className="animate-spin" /> : <FolderPlus size={12} />}
+          <Button variant="primary" size="lg" onClick={() => void openPath()} disabled={launching}>
+            {launching ? <LoaderCircle size={14} className="animate-spin" /> : <FolderPlus size={14} />}
             {launching ? "abrindo…" : "abrir pasta"}
-          </button>
+          </Button>
         </header>
 
-        <div className="grid grid-cols-3 border-b border-cb-line-1">
-          {[
-            ["abertos", tabs.length],
-            ["recentes", recents.length],
-            ["agentes ativos", runningAgents],
-          ].map(([label, value], index) => (
-            <div key={label} className={`h-12 px-3 flex flex-col justify-center ${index > 0 ? "border-l border-cb-line-0" : ""}`}>
-              <span className="text-sm text-cb-fg-0 tabular-nums">{value}</span>
-              <span className="cb-label">{label}</span>
+        {(error || registryError) && <div role="alert" className="cb-note text-cb-danger" style={{ "--cb-rail-color": "var(--cb-danger)" } as React.CSSProperties}>{error || registryError}</div>}
+
+        <section>
+          <SectionRule label="abertos" count={tabs.length} />
+          {tabs.length === 0 ? (
+            <div className="px-2 py-6">
+              <p className="text-base text-cb-fg-0"><Prompt waiting>nenhum workspace aberto</Prompt></p>
+              <p className="mt-1 text-sm text-cb-fg-2">Abra uma pasta ou escolha um recente abaixo. Cada workspace mantém seus agentes no contexto certo.</p>
             </div>
-          ))}
-        </div>
-
-        {error && <div role="alert" className="mt-3 px-3 py-2 border border-cb-danger bg-cb-danger-wash text-xs text-cb-danger rounded-cb-1">{error}</div>}
-
-        <div className="mt-5 flex items-center justify-between">
-          <h2 className="cb-label">abertos · {tabs.length}</h2>
-          <span className="text-2xs text-cb-fg-3">fechar mantém no histórico · desvincular remove da lista</span>
-        </div>
-
-        {tabs.length === 0 ? (
-          <div className="mt-2 min-h-40 flex items-center justify-center border border-cb-line-1 bg-cb-bg-1/80 rounded-cb-1">
-            <div className="text-center px-5 py-7">
-              <div className="w-10 h-10 mx-auto flex items-center justify-center border border-cb-line-1 bg-cb-bg-2 rounded-cb-1"><SquareTerminal size={17} className="text-cb-fg-2" /></div>
-              <p className="text-xs text-cb-fg-1 mt-3">Nenhum workspace aberto</p>
-              <p className="text-2xs text-cb-fg-3 mt-1">Escolha uma pasta abaixo ou abra um novo projeto.</p>
-              <button type="button" onClick={() => void openPath()} className="mt-3 h-cell-lg px-3 border border-cb-line-1 text-xs text-cb-fg-1 hover:text-cb-accent hover:border-cb-accent rounded-cb-1">abrir workspace</button>
+          ) : (
+            <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+              {tabs.map((tab, index) => (
+                <OpenWorkspaceRow key={tab.workspacePath} tab={tab} index={index} panes={panes} onOpen={setActiveTab} onClose={closeTab} onUnlink={(path, tabIndex) => void unlink(path, tabIndex)} />
+              ))}
             </div>
-          </div>
-        ) : (
-          <div className="mt-2 grid grid-cols-1 lg:grid-cols-2 gap-2">
-            {tabs.map((tab, index) => (
-              <OpenWorkspaceRow key={tab.workspacePath} tab={tab} index={index} panes={panes} onOpen={setActiveTab} onClose={closeTab} onUnlink={(path, tabIndex) => void unlink(path, tabIndex)} />
+          )}
+        </section>
+
+        <section>
+          <SectionRule label="recentes" count={recentOnly.length} />
+          <div className="mt-1">
+            {loading ? (
+              <div className="py-6 flex items-center justify-center gap-2 text-sm text-cb-fg-2"><LoaderCircle size={12} className="animate-spin" /> carregando workspaces…</div>
+            ) : recentOnly.length === 0 ? (
+              <p className="px-2 py-3 text-sm text-cb-fg-2">Nenhum workspace recente fora dos abertos.</p>
+            ) : recentOnly.map((path) => (
+              <RecentWorkspaceRow key={path} path={path} onOpen={(item) => void openPath(item)} onUnlink={(item) => void unlink(item)} busy={unlinking !== null} />
             ))}
           </div>
-        )}
-
-        <div className="mt-6 flex items-center justify-between pb-2 border-b border-cb-line-1">
-          <h2 className="cb-label">recentes · {recentOnly.length}</h2>
-          <span className="text-2xs text-cb-fg-3">clique na linha para abrir</span>
-        </div>
-
-        <div className="mt-2 border border-cb-line-1 bg-cb-bg-1 rounded-cb-1 overflow-hidden">
-          {loading ? (
-            <div className="h-20 flex items-center justify-center gap-2 text-xs text-cb-fg-3"><LoaderCircle size={12} className="animate-spin" /> carregando workspaces…</div>
-          ) : recentOnly.length === 0 ? (
-            <div className="h-20 flex items-center justify-center text-xs text-cb-fg-3">Nenhum workspace recente fora dos abertos.</div>
-          ) : recentOnly.map((path) => (
-            <RecentWorkspaceRow key={path} path={path} onOpen={(item) => void openPath(item)} onUnlink={(item) => void unlink(item)} busy={unlinking !== null} />
-          ))}
-        </div>
+          <p className="mt-2 px-2 text-xs text-cb-fg-2">fechar mantém no histórico · desvincular remove da lista, sem apagar arquivos</p>
+        </section>
       </div>
     </section>
   );

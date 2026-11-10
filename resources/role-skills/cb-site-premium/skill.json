@@ -1,0 +1,13 @@
+{
+  "id": "cb-site-premium",
+  "name": "cb-site-premium",
+  "description": "Criar sites premium, landing pages, sites de marca e portfólios com direção visual, tipografia, narrativa, movimento e mídia gerada por provedores configurados no Codebrain.",
+  "type": "prompt",
+  "version": "2.0.0",
+  "entrypoint": "SKILL.md",
+  "tags": [
+    "codebrain",
+    "design",
+    "sites"
+  ]
+}

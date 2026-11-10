@@ -1,0 +1,9 @@
+{
+  "id": "cb-design-dna",
+  "name": "Codebrain Design DNA",
+  "description": "Captura design systems de sites reais com tokens, componentes, estados, motion, evidências e handoff portável.",
+  "type": "prompt",
+  "version": "2.0.0",
+  "entrypoint": "SKILL.md",
+  "tags": ["codebrain", "design", "sites", "tokens", "motion", "browser"]
+}

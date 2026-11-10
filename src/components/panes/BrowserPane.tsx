@@ -521,8 +521,8 @@ export function BrowserPane({
     updatePane(pane.id, { url: target });
   };
 
-  return <div onClick={onClick} className={`h-full flex flex-col bg-black rounded overflow-hidden border cursor-pointer ${isActive ? "border-indigo-500/40" : "border-white/5 hover:border-white/10"}`}>
-      <div className="flex items-center gap-1 px-2 py-1 border-b border-white/5 shrink-0 bg-black cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
+  return <div onClick={onClick} className="cb-pane" data-active={isActive} style={{ "--cb-status-color": isActive ? "var(--cb-accent)" : "var(--cb-line-2)" } as React.CSSProperties}>
+      <div className="cb-pane-head" draggable onDragStart={e => {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData(CODEBRAIN_PANE_DRAG_TYPE, pane.id);
     }}>

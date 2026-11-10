@@ -1,10 +1,10 @@
 /**
- * CloseMissionDialog — Confirmação de fechamento (arquivamento) de missão.
- * Cores do Codebrain: bg-[#0c0c14], indigo accents, slate text.
+ * CloseMissionDialog — confirmação de fechamento (arquivamento) de missão.
  */
 import React from 'react';
 import { X } from 'lucide-react';
-import type { Mission } from '../../stores/missions-store';
+import { MISSION_MODE_LABEL, type Mission } from '../../stores/missions-store';
+import '../central/central.css';
 
 interface CloseMissionDialogProps {
   open: boolean;
@@ -15,86 +15,52 @@ interface CloseMissionDialogProps {
   onConfirm: () => void;
 }
 
+function basename(p: string): string {
+  return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 min-h-cell">
+      <span className="text-xs text-cb-fg-2">{label}</span>
+      <span className="text-xs text-cb-fg-0 truncate">{children}</span>
+    </div>
+  );
+}
+
 export function CloseMissionDialog({ open, mission, paneCount, workspacePath, onClose, onConfirm }: CloseMissionDialogProps) {
   if (!open || !mission) return null;
 
-  function basename(p: string): string {
-    return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
-  }
-
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-xl border border-white/[0.08] bg-[#0c0c14] shadow-2xl overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
-          <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-slate-200">
-            Fechar missão?
-          </p>
-          <button onClick={onClose} className="text-slate-600 hover:text-slate-300 transition-colors">
+    <div className="cbm-scrim" onClick={onClose}>
+      <div className="cbm-dialog" style={{ maxWidth: 440 }} role="dialog" aria-modal="true" aria-label="Fechar missão" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between h-cell-lg px-4 border-b border-cb-line-0">
+          <span className="text-sm font-bold text-cb-fg-0">
+            <span className="cbc-prompt" aria-hidden>❯</span> Fechar missão?
+          </span>
+          <button type="button" onClick={onClose} className="text-cb-fg-2 hover:text-cb-fg-0" aria-label="Fechar">
             <X size={14} />
           </button>
         </div>
 
-        {/* Description */}
-        <div className="border-b border-white/[0.06] px-4 py-3">
-          <p className="font-mono text-[10px] leading-relaxed text-slate-500">
-            Isso arquiva <span className="text-slate-300">{mission.title}</span> neste workspace
-            {paneCount > 0
-              ? ` e encerra ${paneCount} pane${paneCount === 1 ? '' : 's'} dessa missão.`
-              : '.'}
-          </p>
+        <p className="px-4 py-3 text-xs text-cb-fg-1 border-b border-cb-line-0">
+          Isso arquiva <span className="text-cb-fg-0">{mission.title}</span> neste workspace
+          {paneCount > 0 ? ` e encerra ${paneCount} terminal${paneCount === 1 ? '' : 'is'} dessa missão.` : '.'}
+        </p>
+
+        <div className="px-4 py-2 border-b border-cb-line-0">
+          <Row label="Terminais">{paneCount}</Row>
+          <Row label="Workspace">{basename(workspacePath)}</Row>
+          {mission.mode && <Row label="Modo">{MISSION_MODE_LABEL[mission.mode]}</Row>}
         </div>
 
-        {/* Info Grid */}
-        <div className="space-y-2 border-b border-white/[0.06] px-4 py-3">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-600">Missão</span>
-            <span className="font-mono text-[11px] text-slate-300">{mission.title}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-600">Panes</span>
-            <span className="font-mono text-[11px] text-slate-300">{paneCount}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-600">Workspace</span>
-            <span className="font-mono text-[10px] text-slate-500 truncate max-w-[220px]" title={workspacePath}>
-              {basename(workspacePath)}
-            </span>
-          </div>
-          {mission.mode && (
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-slate-600">Modo</span>
-              <span className="font-mono text-[11px] text-slate-300">
-                {mission.mode === 'squad' ? 'Squad' : 'Livre'}
-              </span>
-            </div>
-          )}
-        </div>
+        <p className="px-4 py-3 text-2xs text-cb-fg-2">
+          Arquivos, branch e worktree no disco não são apagados. A missão só sai da lista ativa.
+        </p>
 
-        {/* Note */}
-        <div className="px-4 py-3">
-          <p className="font-mono text-[9px] leading-relaxed text-slate-600">
-            Arquivos, branch e worktree no disco não serão apagados. A missão sai do seletor ativo e fica arquivada no estado local do Codebrain.
-          </p>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] px-4 py-3">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-white/[0.08] px-4 py-1.5 font-mono text-[11px] text-slate-500 hover:text-slate-300 hover:border-white/[0.15] transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onConfirm}
-            className="rounded-lg bg-[#5855e5] px-4 py-1.5 font-mono text-[11px] font-bold text-white hover:bg-[#4a47d6] transition-colors"
-          >
-            Fechar missão
-          </button>
+        <div className="flex items-center justify-end gap-2 px-4 py-2 border-t border-cb-line-0">
+          <button type="button" className="cbc-btn" onClick={onClose}>cancelar</button>
+          <button type="button" className="cbc-btn" data-tone="danger" onClick={onConfirm}>fechar missão</button>
         </div>
       </div>
     </div>

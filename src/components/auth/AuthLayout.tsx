@@ -2,27 +2,17 @@ import React from "react";
 
 // AuthLayout
 import { CodeRain } from "./CodeRain";
-import { Logo } from "./Logo";
+import { CodebrainMark, CodebrainWordmark } from "../ui/AppLogo";
 export function AuthLayout({
   children
 }) {
-  return <div className="flex-1 flex flex-col items-center justify-center bg-black h-full relative overflow-hidden">
+  return <div className="flex-1 flex flex-col items-center justify-center bg-cb-bg-0 h-full relative overflow-hidden p-6">
       <CodeRain />
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[600px] h-[600px] rounded-full bg-white/[0.02] blur-3xl" />
-      </div>
-      <div className="relative z-10 flex flex-col items-center gap-6 w-80">
-        <div className="flex flex-col items-center gap-2">
-          <Logo size={48} />
-          <span className="font-mono text-[11px] tracking-widest" style={{ color: "#818cf8" }}>codebrain</span>
-        </div>
-        <div className="text-center">
-          <h1 className="text-[2rem] font-bold leading-tight tracking-tight">
-            <span style={{ color: "#818cf8" }}>CodeBrain</span>
-          </h1>
-          <p className="font-mono text-xs text-gray-500 mt-3 tracking-wide">
-            Multi-agent AI ADE
-          </p>
+      <div className="relative z-10 flex flex-col items-center gap-7 w-full max-w-80">
+        <div className="flex flex-col items-center gap-4">
+          <CodebrainMark size={72} title="Codebrain" />
+          <CodebrainWordmark className="text-2xl" />
+          <p className="text-sm text-cb-fg-1 text-center">Vários agentes, lado a lado, à vista.</p>
         </div>
         <div className="flex flex-col gap-3 w-full">{children}</div>
       </div>

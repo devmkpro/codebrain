@@ -26,7 +26,7 @@ describe("WorkspaceEmptyState", () => {
   it("shows only the terminal-first empty state and opens the pane launcher", () => {
     render(<WorkspaceEmptyState />);
 
-    expect(screen.getByText("Nenhum agente aberto")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /O que vamos fazer neste projeto/i })).toBeTruthy();
     expect(screen.queryByText("Nenhuma missão ativa")).toBeNull();
     expect(screen.queryByText("Nenhuma sessão salva")).toBeNull();
 

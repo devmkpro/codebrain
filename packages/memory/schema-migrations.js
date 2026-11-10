@@ -30,7 +30,7 @@
 
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const { hasTable, hasIndex } = require("./migrations.js");
+const { addColumnIfMissing, hasTable, hasIndex } = require("./migrations.js");
 
 /**
  * Tabelas que o bloco legado deve ter criado. Se alguma faltar quando a
@@ -239,6 +239,71 @@ const migrations = [
       }
       if (!hasIndex(db, "idx_verify_runs_workspace")) {
         db.exec(`CREATE INDEX idx_verify_runs_workspace ON verify_runs(workspace, created_at DESC)`);
+      }
+    },
+  },
+
+  /* ───────────────────────────────────────────────────────────────────────
+     v4 — harness: evidência no handoff, recibos de spawn e findings.
+     ─────────────────────────────────────────────────────────────────────── */
+  {
+    version: 4,
+    name: "harness_receipts_and_findings",
+    up(db) {
+      addColumnIfMissing(db, "handoffs", "evidence", "TEXT");
+      addColumnIfMissing(db, "handoffs", "output", "TEXT");
+      addColumnIfMissing(db, "handoffs", "contract_status", "TEXT");
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS spawn_receipts (
+          id          TEXT PRIMARY KEY,
+          workspace   TEXT,
+          mission_id  TEXT,
+          pane_id     TEXT NOT NULL,
+          name        TEXT,
+          task_id     TEXT,
+          task_name   TEXT,
+          source      TEXT,
+          agent       TEXT,
+          model       TEXT,
+          effort      TEXT,
+          account     TEXT,
+          skills      TEXT NOT NULL DEFAULT '[]',
+          receipt     TEXT,
+          reused      INTEGER NOT NULL DEFAULT 0,
+          created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS findings (
+          id          TEXT NOT NULL,
+          workspace   TEXT NOT NULL,
+          mission_id  TEXT,
+          title       TEXT NOT NULL,
+          category    TEXT NOT NULL,
+          severity    TEXT NOT NULL,
+          status      TEXT NOT NULL DEFAULT 'open',
+          location    TEXT,
+          steps       TEXT,
+          expected    TEXT,
+          observed    TEXT,
+          evidence    TEXT NOT NULL DEFAULT '[]',
+          fingerprint TEXT NOT NULL,
+          reporter    TEXT,
+          fixed_by    TEXT,
+          fix_note    TEXT,
+          fix_commit  TEXT,
+          verified_by TEXT,
+          created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+          PRIMARY KEY (workspace, id)
+        )
+      `);
+      if (!hasIndex(db, "idx_spawn_receipts_workspace")) {
+        db.exec(`CREATE INDEX idx_spawn_receipts_workspace ON spawn_receipts(workspace, created_at DESC)`);
+      }
+      if (!hasIndex(db, "idx_findings_fingerprint")) {
+        db.exec(`CREATE UNIQUE INDEX idx_findings_fingerprint ON findings(workspace, fingerprint)`);
       }
     },
   },

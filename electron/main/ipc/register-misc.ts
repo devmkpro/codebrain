@@ -31,7 +31,8 @@ export function registerMiscHandlers(ctx: AppContext): void {
     if (Notification.isSupported()) new Notification({ title, body }).show();
   });
 
-  ipcMain.handle("diagnostics:snapshot", () => {
+  ipcMain.handle("diagnostics:snapshot", async () => {
+    await ctx.cliDetector.getAllAsync();
     const mem = process.memoryUsage();
     const panes = ctx.ptyManager.list();
     return {

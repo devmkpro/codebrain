@@ -1,30 +1,33 @@
 import { ipcMain } from "electron";
 import type { AppContext } from "../context";
+import {
+  CLI_REGISTRY,
+  buildRegistryView,
+  getHarness,
+  installRecipes,
+  type InstallRecipe,
+} from "../services/spawn/cli-registry";
 
-type InstallMethod =
-  | { via: "npm"; pkg: string }
-  | { via: "script"; unix: string; win: string; description: string };
+type InstallMethod = InstallRecipe;
 
-// Install recipe for each CLI
+// Harness recipes live in the registry; 9router is a proxy, not a harness.
 const CLI_INSTALL: Record<string, InstallMethod> = {
-  openclaude: { via: "npm", pkg: "@gitlawb/openclaude" },
-  codex:      { via: "npm", pkg: "@openai/codex" },
-  gemini:     { via: "npm", pkg: "@google/gemini-cli" },
-  kimi: {
-    via: "script",
-    unix: "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash",
-    win:  "powershell -ExecutionPolicy Bypass -c \"irm https://code.kimi.com/kimi-code/install.ps1 | iex\"",
-    description: "Script oficial do Kimi Code CLI",
-  },
+  ...installRecipes(),
   "9router": { via: "npm", pkg: "9router" },
 };
+
+/** Vendor command for this OS, or null when none is documented. */
+function scriptFor(recipe: Extract<InstallMethod, { via: "script" }>): string | null {
+  return (process.platform === "win32" ? recipe.win : recipe.unix) ?? null;
+}
 
 function findNpm(): string | null {
   const { execSync } = require("node:child_process") as typeof import("node:child_process");
   const IS_WIN = process.platform === "win32";
   try {
     const out = execSync(IS_WIN ? "where npm" : "which npm", {
-      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     return out.split(/\r?\n/)[0]?.trim() || null;
   } catch {
@@ -32,27 +35,27 @@ function findNpm(): string | null {
   }
 }
 
-function runInstallNpm(
-  npmPath: string,
-  pkg: string,
-): Promise<{ ok: boolean; error?: string }> {
+function runInstallNpm(npmPath: string, pkg: string): Promise<{ ok: boolean; error?: string }> {
   const IS_WIN = process.platform === "win32";
   const { spawn } = require("node:child_process") as typeof import("node:child_process");
   const TIMEOUT_MS = 120_000;
 
   return new Promise((resolve) => {
-    const child = spawn(
-      IS_WIN ? "npm" : npmPath,
-      ["install", "-g", pkg],
-      { stdio: ["ignore", "pipe", "pipe"], shell: IS_WIN },
-    );
+    const child = spawn(IS_WIN ? "npm" : npmPath, ["install", "-g", pkg], {
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: IS_WIN,
+    });
     let stderr = "";
     let done = false;
-    child.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+    child.stderr?.on("data", (d: Buffer) => {
+      stderr += d.toString();
+    });
     const timer = setTimeout(() => {
       if (done) return;
       done = true;
-      try { child.kill(); } catch {}
+      try {
+        child.kill();
+      } catch {}
       resolve({ ok: false, error: "Timeout: instalação demorou mais de 2 minutos." });
     }, TIMEOUT_MS);
     child.on("close", (code: number | null) => {
@@ -71,12 +74,8 @@ function runInstallNpm(
   });
 }
 
-function runInstallScript(
-  recipe: Extract<InstallMethod, { via: "script" }>,
-): Promise<{ ok: boolean; error?: string }> {
-  const IS_WIN = process.platform === "win32";
+function runInstallScript(cmd: string): Promise<{ ok: boolean; error?: string }> {
   const { spawn } = require("node:child_process") as typeof import("node:child_process");
-  const cmd = IS_WIN ? recipe.win : recipe.unix;
   const TIMEOUT_MS = 120_000;
 
   return new Promise((resolve) => {
@@ -86,11 +85,15 @@ function runInstallScript(
     } as any);
     let stderr = "";
     let done = false;
-    child.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+    child.stderr?.on("data", (d: Buffer) => {
+      stderr += d.toString();
+    });
     const timer = setTimeout(() => {
       if (done) return;
       done = true;
-      try { child.kill(); } catch {}
+      try {
+        child.kill();
+      } catch {}
       resolve({ ok: false, error: "Timeout: instalação demorou mais de 2 minutos." });
     }, TIMEOUT_MS);
     child.on("close", (code: number | null) => {
@@ -110,64 +113,97 @@ function runInstallScript(
 }
 
 export function registerCliHandlers(ctx: AppContext): void {
-  ipcMain.handle("cli:detect", () => ctx.cliDetector.getAll());
+  ipcMain.handle("cli:detect", () => ctx.cliDetector.getAllAsync());
 
-  ipcMain.handle("cli:redetect", () => {
-    const info = ctx.cliDetector.redetect();
-    return [
-      { name: "openclaude", found: info.openclaude.found, path: info.openclaude.path, version: info.openclaude.version },
-      { name: "claude",     found: info.claude.found,     path: info.claude.path,     version: info.claude.version },
-      { name: "codex",      found: info.codex.found,      path: info.codex.path,      version: info.codex.version },
-      { name: "gemini",     found: info.gemini.found,     path: info.gemini.path,     version: info.gemini.version },
-      { name: "kimi",       found: info.kimi.found,       path: info.kimi.path,       version: info.kimi.version },
-      { name: "cursor",     found: info.cursor.found,     path: info.cursor.path,     version: info.cursor.version },
-      { name: "copilot",    found: info.copilot.found,    path: info.copilot.path,    version: info.copilot.version },
-      { name: "9router",    found: info["9router"].found, path: info["9router"].path, version: info["9router"].version },
-    ];
+  ipcMain.handle("cli:redetect", async () => {
+    const info = (await ctx.cliDetector.redetectAsync()) as unknown as Record<
+      string,
+      { found?: boolean; path?: string; version?: string } | undefined
+    >;
+    return [...CLI_REGISTRY.map((entry) => entry.id as string), "9router"].map((name) => ({
+      name,
+      found: info[name]?.found ?? false,
+      path: info[name]?.path,
+      version: info[name]?.version,
+    }));
   });
+
+  ipcMain.handle("cli:registry", async () =>
+    buildRegistryView(
+      (await ctx.cliDetector.getAllAsync()) as unknown as Parameters<typeof buildRegistryView>[0]
+    )
+  );
 
   // Legacy: install openclaude only
   ipcMain.handle("cli:install", async () => {
     const npmPath = findNpm();
-    if (!npmPath) return { ok: false, error: "npm não encontrado no PATH. Instale o Node.js em nodejs.org." };
+    if (!npmPath)
+      return { ok: false, error: "npm não encontrado no PATH. Instale o Node.js em nodejs.org." };
     const result = await runInstallNpm(npmPath, "@gitlawb/openclaude");
     if (result.ok) {
-      const info = ctx.cliDetector.redetect();
-      return { ok: true, info: { name: "openclaude", found: info.openclaude.found, path: info.openclaude.path, version: info.openclaude.version } };
+      const info = await ctx.cliDetector.redetectAsync();
+      return {
+        ok: true,
+        info: {
+          name: "openclaude",
+          found: info.openclaude.found,
+          path: info.openclaude.path,
+          version: info.openclaude.version,
+        },
+      };
     }
     return result;
   });
 
   // Generic: install any supported CLI by name
   ipcMain.handle("cli:install-cli", async (_event, cli: string) => {
-    const recipe = CLI_INSTALL[cli];
+    const recipe = Object.hasOwn(CLI_INSTALL, cli) ? CLI_INSTALL[cli] : undefined;
     if (!recipe) return { ok: false, error: `CLI desconhecido: ${cli}` };
 
     let result: { ok: boolean; error?: string };
 
     if (recipe.via === "npm") {
       const npmPath = findNpm();
-      if (!npmPath) return { ok: false, error: "npm não encontrado no PATH. Instale o Node.js em nodejs.org." };
+      if (!npmPath)
+        return { ok: false, error: "npm não encontrado no PATH. Instale o Node.js em nodejs.org." };
       result = await runInstallNpm(npmPath, recipe.pkg);
     } else {
-      result = await runInstallScript(recipe);
+      const script = scriptFor(recipe);
+      if (!script) {
+        const docs = getHarness(cli)?.docsUrl;
+        return {
+          ok: false,
+          error: `Sem instalador automático documentado para este sistema.${docs ? ` Veja ${docs}` : ""}`,
+        };
+      }
+      result = await runInstallScript(script);
     }
 
     if (result.ok) {
-      const info = ctx.cliDetector.redetect();
+      const info = await ctx.cliDetector.redetectAsync();
       const cliInfo = (info as any)[cli];
-      return { ok: true, info: { name: cli, found: cliInfo?.found, path: cliInfo?.path, version: cliInfo?.version } };
+      return {
+        ok: true,
+        info: { name: cli, found: cliInfo?.found, path: cliInfo?.path, version: cliInfo?.version },
+      };
     }
     return result;
   });
 
   // Returns install info for a CLI (method + command shown to user)
   ipcMain.handle("cli:install-info", (_event, cli: string) => {
-    const recipe = CLI_INSTALL[cli];
+    const recipe = Object.hasOwn(CLI_INSTALL, cli) ? CLI_INSTALL[cli] : undefined;
     if (!recipe) return null;
-    const IS_WIN = process.platform === "win32";
     if (recipe.via === "npm") return { via: "npm", cmd: `npm install -g ${recipe.pkg}` };
-    return { via: "script", cmd: IS_WIN ? recipe.win : recipe.unix, description: recipe.description };
+    const script = scriptFor(recipe);
+    if (!script)
+      return {
+        via: "manual",
+        cmd: "",
+        description: recipe.description,
+        docsUrl: getHarness(cli)?.docsUrl,
+      };
+    return { via: "script", cmd: script, description: recipe.description };
   });
 
   // Checks whether a 9Router instance is actually serving requests at baseUrl
@@ -179,7 +215,7 @@ export function registerCliHandlers(ctx: AppContext): void {
     try {
       const resp = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(4000) });
       if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
-      const json = await resp.json().catch(() => null) as any;
+      const json = (await resp.json().catch(() => null)) as any;
       const count = Array.isArray(json?.data) ? json.data.length : 0;
       return { ok: true, baseUrl: base, modelCount: count };
     } catch (err: any) {

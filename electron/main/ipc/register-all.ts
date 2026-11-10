@@ -19,6 +19,9 @@ import { registerSquadHandlers } from "./register-squads";
 import { registerCostIpc } from "./register-cost";
 import { registerSpecHandlers } from "./register-spec";
 import { registerOperationsHandlers } from "./register-operations";
+import { registerHarnessHandlers } from "./register-harness";
+import { registerAccessVaultHandlers } from "./register-access-vault";
+import { getAccessVault } from "../services/access-vault-runtime";
 
 export function registerAllIpcHandlers(ctx: AppContext): void {
   // Each group is isolated: a throw in one registration must not abort the
@@ -45,6 +48,8 @@ export function registerAllIpcHandlers(ctx: AppContext): void {
     ["cost", registerCostIpc],
     ["spec", registerSpecHandlers],
     ["operations", registerOperationsHandlers],
+    ["harness", registerHarnessHandlers],
+    ["access-vault", (context) => { registerAccessVaultHandlers(context, { vault: getAccessVault(context) }); }],
   ];
   for (const [name, fn] of groups) {
     try {

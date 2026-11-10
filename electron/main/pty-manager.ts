@@ -1,12 +1,15 @@
 import { EventEmitter } from "node:events";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as nodefs from "node:fs";
 import * as nodeos from "node:os";
 import * as nodepath from "node:path";
 import log from "electron-log/main.js";
 import { OutputBuffer } from "./output-buffer";
 import { IdleDetector } from "./idle-detector";
+import { PtyInputQueue } from "./pty-input";
+import { buildPtyEnvironment } from "./pty-environment";
 import { waitForTerminalReady, type TerminalReadyOptions, type TerminalReadyResult } from "./services/terminal-prompt";
+import { getHarness, harnessAgentDefaults, harnessSearchPaths } from "./services/spawn/cli-registry";
 
 const IS_WIN = process.platform === "win32";
 
@@ -72,8 +75,11 @@ const AGENT_DEFAULTS: Record<string, { binary: string; args: string[] }> = {
   kimi: { binary: "kimi", args: [] },          // Kimi (Moonshot)
   cursor: { binary: "cursor-agent", args: [] },   // Cursor CLI (installs to %LOCALAPPDATA%\cursor-agent\)
   copilot: { binary: "copilot", args: [] },    // GitHub Copilot
+  ...harnessAgentDefaults(),
   shell: { binary: defaultShell(), args: [] },
 };
+
+const KNOWN_BINARIES = new Set([...Object.values(AGENT_DEFAULTS).map((entry) => entry.binary), "node", "agent"]);
 
 function commonPaths(binary: string): string[] {
   const home = nodeos.homedir();
@@ -86,9 +92,10 @@ function commonPaths(binary: string): string[] {
     // Scan for node-vX.Y.Z-win-x64 directories in Program Files (npm global bins live there)
     const nodeDirs: string[] = [];
     try {
-      const pfEntries = nodefs.readdirSync(programFiles);
+      const pfEntries = nodefs.readdirSync(programFiles).sort().reverse();
       for (const entry of pfEntries) {
         if (/^node-v\d/.test(entry)) nodeDirs.push(`${programFiles}\\${entry}`);
+        if (nodeDirs.length >= 3) break;
       }
     } catch {}
 
@@ -162,86 +169,86 @@ function commonPaths(binary: string): string[] {
   ];
 }
 
-function which(binary: string): string | null {
-  if (pathCache.has(binary)) return pathCache.get(binary) ?? null;
-
-  // If already an absolute path, verify existence and return
-  if (nodepath.isAbsolute(binary)) {
-    if (nodefs.existsSync(binary)) {
-      pathCache.set(binary, binary);
-      return binary;
-    }
-    // On Windows, try common extensions if absolute path doesn't have one
-    if (IS_WIN && !nodepath.extname(binary)) {
-      for (const ext of [".exe", ".cmd", ".bat"]) {
-        const withExt = binary + ext;
-        if (nodefs.existsSync(withExt)) {
-          pathCache.set(binary, withExt);
-          return withExt;
-        }
-      }
-    }
-  }
-
+function executableFile(candidate: string): boolean {
   try {
-    const cmd = IS_WIN ? `where ${JSON.stringify(binary)}` : `which ${JSON.stringify(binary)}`;
-    const result = execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-    const lines = result.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    
-    // Windows: prefer known executable extensions to avoid matching extensionless files (like unix scripts)
-    const preferred = IS_WIN 
-      ? (lines.find((l) => /\.(cmd|exe|bat)$/i.test(l)) ?? lines[0]) 
-      : lines[0];
+    if (!nodefs.statSync(candidate).isFile()) return false;
+    if (!IS_WIN) nodefs.accessSync(candidate, nodefs.constants.X_OK);
+    return true;
+  } catch { return false; }
+}
 
-    if (preferred && nodefs.existsSync(preferred)) {
-      pathCache.set(binary, preferred);
-      return preferred;
+/** Deterministic PATH lookup; never runs the binary, a login shell or where.exe. */
+function findInPath(binary: string, value: string): string | null {
+  const suffixes = IS_WIN && !nodepath.extname(binary)
+    ? [...new Set((process.env.PATHEXT || ".EXE;.CMD;.BAT;.COM").split(";").map((ext) => ext.toLowerCase()).filter((ext) => /^\.(exe|cmd|bat|com)$/.test(ext))), ""]
+    : [""];
+  const directories = [...new Set(value.split(nodepath.delimiter))].slice(0, 256);
+  for (const entry of directories) {
+    const dir = entry.trim().replace(/^"|"$/g, "");
+    // Do not synchronously probe UNC/device paths, empty PATH entries or cwd.
+    if (!dir || !nodepath.isAbsolute(dir) || (IS_WIN && /^\\\\/.test(dir))) continue;
+    for (const suffix of suffixes) {
+      const candidate = nodepath.join(dir, binary + suffix);
+      if (executableFile(candidate)) return candidate;
     }
-  } catch (err) {
-    log.warn(`[pty] which(${binary}) failed:`, err instanceof Error ? err.message : String(err));
+  }
+  return null;
+}
+
+function which(binary: string): string | null {
+  const cached = pathCache.get(binary);
+  if (cached && executableFile(cached)) return cached;
+  pathCache.delete(binary);
+  const remember = (candidate: string) => { pathCache.set(binary, candidate); return candidate; };
+
+  if (nodepath.isAbsolute(binary) || /[\\/]/.test(binary)) {
+    const absolute = nodepath.resolve(binary);
+    if (executableFile(absolute)) return remember(absolute);
+    if (IS_WIN && !nodepath.extname(absolute)) {
+      for (const ext of [".exe", ".cmd", ".bat"]) if (executableFile(absolute + ext)) return remember(absolute + ext);
+    }
+    return null;
   }
 
-  if (!IS_WIN) {
+  const fromPath = findInPath(binary, process.env.PATH ?? process.env.Path ?? "");
+  if (fromPath) return remember(fromPath);
+  for (const candidate of [...harnessSearchPaths(binary), ...commonPaths(binary)]) {
+    if (executableFile(candidate)) return remember(candidate);
+  }
+
+  // Known harnesses must not synchronously start discovery processes in the UI
+  // main thread. A miss is deliberately not cached, so later installation works.
+  if (KNOWN_BINARIES.has(binary) || !/^[a-zA-Z0-9_.+-]+$/.test(binary)) return null;
+
+  // Compatibility fallback for custom commands only. Direct argv avoids cmd.exe
+  // quoting/profile work; one total budget bounds where + both registry probes.
+  const deadline = Date.now() + 750;
+  const probe = (executable: string, args: string[]): string => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return "";
     try {
-      const shell = process.env["SHELL"] ?? "/bin/bash";
-      const result = execSync(`${shell} -lic ${JSON.stringify("command -v " + binary)}`, {
-        encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 3000,
+      return execFileSync(executable, args, {
+        encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+        timeout: Math.min(250, remaining), windowsHide: true, maxBuffer: 128 * 1024,
       }).trim();
-      if (result && nodefs.existsSync(result)) { pathCache.set(binary, result); return result; }
-    } catch {}
-  }
-
-  // Windows: Electron may have a stripped PATH — also search the user/system registry PATH
+    } catch { return ""; }
+  };
+  const system32 = nodepath.join(process.env.SystemRoot ?? "C:\\Windows", "System32");
+  const discovered = IS_WIN ? probe(nodepath.join(system32, "where.exe"), [binary]) : probe("/usr/bin/which", ["--", binary]);
+  for (const candidate of discovered.split(/\r?\n/)) if (candidate && executableFile(candidate)) return remember(candidate);
   if (IS_WIN) {
-    try {
-      const userPath = execSync(
-        `reg query "HKCU\\Environment" /v PATH`,
-        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
-      ).match(/PATH\s+REG(?:_EXPAND)?_SZ\s+(.+)/i)?.[1]?.trim() ?? "";
-      const sysPath = execSync(
-        `reg query "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" /v PATH`,
-        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
-      ).match(/PATH\s+REG(?:_EXPAND)?_SZ\s+(.+)/i)?.[1]?.trim() ?? "";
-      const allDirs = [...new Set([userPath, sysPath].join(";").split(";").filter(Boolean))];
-      for (const dir of allDirs) {
-        for (const ext of [".cmd", ".exe", ".bat", ""]) {
-          const candidate = nodepath.join(dir, binary + ext);
-          if (nodefs.existsSync(candidate)) {
-            pathCache.set(binary, candidate);
-            // Also prepend this dir to process.env.PATH so subsequent `where` calls find it
-            prependWindowsRuntimePath(candidate);
-            return candidate;
-          }
-        }
-      }
-    } catch {}
+    for (const key of ["HKCU\\Environment", "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"]) {
+      const registryPath = probe(nodepath.join(system32, "reg.exe"), ["query", key, "/v", "PATH"])
+        .match(/PATH\s+REG(?:_EXPAND)?_SZ\s+(.+)/i)?.[1]?.trim() ?? "";
+      const expanded = registryPath.replace(/%([^%]+)%/g, (match, name) => process.env[name] ?? match);
+      const result = findInPath(binary, expanded);
+      if (result) { prependWindowsRuntimePath(result); return remember(result); }
+    }
+  } else {
+    const shell = process.env.SHELL ?? "/bin/bash";
+    const result = probe(shell, ["-lic", `command -v -- ${binary}`]);
+    if (result && executableFile(result)) return remember(result);
   }
-
-  for (const candidate of commonPaths(binary)) {
-    if (nodefs.existsSync(candidate)) { pathCache.set(binary, candidate); return candidate; }
-  }
-
-  pathCache.set(binary, null);
   return null;
 }
 
@@ -534,7 +541,7 @@ export function resolveCommand(agent: PaneAgent, extraArgs: string[] = []): { bi
 }
 
 export function isTerminalAgent(agent: string): boolean {
-  return agent === "openclaude" || agent === "claude" || agent === "gemini" || agent === "gemini-cli" || agent === "codex";
+  return agent === "shell" || agent === "gemini-cli" || Boolean(getHarness(agent));
 }
 
 interface PaneState {
@@ -549,8 +556,7 @@ export class PtyManager extends EventEmitter {
   private panes = new Map<string, PaneState>();
   private zombieBuffers = new Map<string, { buffer: OutputBuffer; exitedAt: number }>();
   private idleDetector = new IdleDetector();
-  // Echo suppression: tracks text sent programmatically that should be suppressed from output
-  private pendingEcho = new Map<string, { cleanText: string; consumed: number; time: number }>();
+  private inputs = new Map<string, PtyInputQueue>();
 
   constructor() {
     super();
@@ -579,49 +585,22 @@ export class PtyManager extends EventEmitter {
     }
   }
 
-  async spawn(config: SpawnConfig): Promise<string> {
+  // Trusted argv is a separate main-only argument, never a renderer/IPC config field.
+  async spawn(config: SpawnConfig, command?: { binary: string; args: string[] }): Promise<string> {
     this.reapZombies();
     // Dynamic import to handle optional pty dependency
     const pty = await import("@lydell/node-pty");
     const { nanoid } = await import("nanoid");
     const paneId = config.paneId ?? nanoid();
-    const { binary, args, fellBackToOpenClaude } = resolveCommand(config.agent, config.args ?? []);
+    const { binary, args, fellBackToOpenClaude } = command
+      ? { ...command, fellBackToOpenClaude: false }
+      : resolveCommand(config.agent, config.args ?? []);
     const cwd = config.cwd ?? nodeos.homedir();
     const cols = config.cols ?? DEFAULT_COLS;
     const rows = config.rows ?? DEFAULT_ROWS;
 
-    // Build environment with provider settings if needed.
-    // On Windows, process.env can be very large (long PATH, Electron vars).
-    // Passing the full env to CreateProcess causes error 206 (command line too long).
-    // Filter to only essential variables + our provider config.
-    const essentialVars = [
-      "PATH", "Path", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
-      "TEMP", "TMP", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT",
-      "NODE", "NODE_PATH", "NVM_DIR", "FNM_DIR", "SHELL",
-      "LANG", "LC_ALL", "LC_CTYPE",
-      "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "OPENAI_API_KEY",
-      "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY",
-      "MIMO_API_KEY", "XAI_API_KEY", "DEEPSEEK_API_KEY",
-      "CODEBRAIN_WORKSPACE", "CODEBRAIN_MCP_URL", "CODEBRAIN_MCP_SSE_URL", "CODEBRAIN_MCP_PORT",
-      "CLAUDE_CODE_USE_GEMINI", "CLAUDE_CODE_MODEL_NAME", "CLAUDE_CODE_PROVIDER_NAME",
-      "CLAUDE_CODE_PROVIDER_PROFILE_ENV_APPLIED", "CLAUDE_CODE_DISABLE_PROXY",
-      "GEMINI_BASE_URL", "ANTHROPIC_BASE_URL", "ANTHROPIC_REAL_BASE_URL",
-      "OPENAI_BASE_URL",
-      "MODEL", "ANTHROPIC_MODEL", "GEMINI_MODEL", "OPENAI_MODEL",
-    ];
-    const filteredEnv: Record<string, string> = {};
-    for (const key of essentialVars) {
-      if (process.env[key] !== undefined) {
-        filteredEnv[key] = process.env[key] as string;
-      }
-    }
-    const env: Record<string, string> = {
-      ...filteredEnv,
-      TERM: "xterm-256color",
-      COLORTERM: "truecolor",
-      FORCE_COLOR: "1",
-      ...config.env,
-    };
+    // Keep the environment bounded without dropping Windows installer identity.
+    const env = buildPtyEnvironment(process.env, config.env);
 
     const fallbackNote = fellBackToOpenClaude ? " ⚠️ CLAUDE→OPENCLAUDE FALLBACK (claude CLI não instalado)" : "";
     log.info(`[pty:spawn] binary="${binary}" args=[${args.join(", ")}] cwd="${cwd}"${fallbackNote}`);
@@ -629,45 +608,16 @@ export class PtyManager extends EventEmitter {
     const buffer = new OutputBuffer();
 
     ptyProcess.onData((data: string) => {
-      // Check if this output is an echo of text sent via writeSilent()
-      const pending = this.pendingEcho.get(paneId);
-      if (pending && Date.now() - pending.time < 10000 && pending.consumed < pending.cleanText.length) {
-        const cleanData = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "").replace(/\n/g, "");
-        if (cleanData.length > 0) {
-          // Search for the expected echo text as a substring of cleanData.
-          // Readline prefixes the echo with the prompt ("> ") and cursor movement
-          // codes, so we can't match from position 0 — we search for the text anywhere.
-          const remaining = pending.cleanText.substring(pending.consumed);
-          const startIdx = cleanData.indexOf(remaining[0]);
-          let matchedCount = 0;
-          if (startIdx >= 0) {
-            for (let i = 0; i < cleanData.length - startIdx && i < remaining.length; i++) {
-              if (cleanData[startIdx + i] === remaining[i]) {
-                matchedCount++;
-              } else {
-                break;
-              }
-            }
-          }
-          if (matchedCount > 0) {
-            pending.consumed += matchedCount;
-            if (pending.consumed >= pending.cleanText.length) {
-              this.pendingEcho.delete(paneId);
-            }
-            // Push to buffer (for pane_read) but signal echo to renderer
-            buffer.push(data);
-            this.idleDetector.activity(paneId, buffer);
-            this.emit("output-echo", paneId, data);
-            return;
-          }
-        }
-      }
+      // A TUI redraw is a stateful ANSI stream, not detachable "echo" text.
+      // Dropping even a matching prompt frame loses cursor/erase operations.
       buffer.push(data);
       this.idleDetector.activity(paneId, buffer);
       this.emit("output", paneId, data);
     });
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
+      this.inputs.get(paneId)?.cancel();
+      this.inputs.delete(paneId);
       this.idleDetector.cancel(paneId);
       const state = this.panes.get(paneId);
       if (state) {
@@ -677,50 +627,16 @@ export class PtyManager extends EventEmitter {
       this.emit("exit", paneId, exitCode);
     });
 
-    this.panes.set(paneId, { pty: ptyProcess, buffer, config, paneId });
+    this.inputs.set(paneId, new PtyInputQueue(
+      (text) => ptyProcess.write(text),
+      (error) => log.warn(`[pty:write] pane=${paneId}: ${String(error)}`),
+    ));
+    this.panes.set(paneId, { pty: ptyProcess, buffer, config: { ...config, cols, rows }, paneId });
     return paneId;
   }
 
   write(paneId: string, data: string): void {
-    const state = this.panes.get(paneId);
-    if (!state) return;
-
-    // Split text and newline to avoid race condition on large inputs
-    let textToWrite = data;
-    let trailingCr = false;
-    if (data.endsWith('\r')) {
-      textToWrite = data.slice(0, -1);
-      trailingCr = true;
-    }
-
-    // ── Chunked write for large pastes ──
-    // ConPTY named pipe buffer is ~4-64KB; shell input buffer is ~8KB (cmd.exe).
-    // Sending large text as one write causes silent truncation.
-    // Split into small chunks with delays so the PTY can process each one.
-    const CHUNK_SIZE = 2048;
-    const CHUNK_DELAY_MS = 15;
-
-    if (textToWrite.length <= CHUNK_SIZE) {
-      // Small write — send directly (no chunking needed)
-      (state.pty as any).write(textToWrite);
-      if (trailingCr) {
-        setTimeout(() => (state.pty as any).write('\r'), 50);
-      }
-    } else {
-      // Large write — chunk with delays to prevent ConPTY buffer overflow
-      const chunks: string[] = [];
-      for (let i = 0; i < textToWrite.length; i += CHUNK_SIZE) {
-        chunks.push(textToWrite.slice(i, i + CHUNK_SIZE));
-      }
-      let delay = 0;
-      for (const chunk of chunks) {
-        setTimeout(() => (state.pty as any).write(chunk), delay);
-        delay += CHUNK_DELAY_MS;
-      }
-      if (trailingCr) {
-        setTimeout(() => (state.pty as any).write('\r'), delay + 50);
-      }
-    }
+    this.inputs.get(paneId)?.enqueue(data);
   }
 
   /** Submit a prompt as one ordered PTY operation (paste, then Enter). */
@@ -728,8 +644,10 @@ export class PtyManager extends EventEmitter {
     const state = this.panes.get(paneId);
     if (!state) throw new Error(`pane not found: ${paneId}`);
     const normalized = data.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    this.writeSilent(paneId, normalized, true);
-    (state.pty as any).write("\r");
+    const input = this.inputs.get(paneId)!;
+    // Give the TUI an event-loop turn to consume Paste before the Enter event.
+    input.enqueue(`\x1b[200~${normalized}\x1b[201~`, 150);
+    input.enqueue("\r");
   }
 
   /** Wait for the CLI to finish booting, then submit exactly once. */
@@ -749,23 +667,16 @@ export class PtyManager extends EventEmitter {
   }
 
   /**
-   * Write text to PTY stdin while suppressing the echo from the output.
-   * The PTY normally echoes stdin back as output — this method tracks the
-   * sent text so the onData handler can filter it out from the output events.
+   * Programmatic input (historical name retained for bridge compatibility).
+   * Never filter PTY output: prompt redraws also contain ANSI cursor state.
    *
    * If useBracketedPaste=true, wraps the data in bracketed paste escape codes
    * (\x1b[200~ ... \x1b[201~) so readline treats \n as literal newlines instead
    * of Enter keypresses. This preserves multi-line prompt formatting.
    */
   writeSilent(paneId: string, data: string, useBracketedPaste = false): void {
-    const state = this.panes.get(paneId);
-    if (!state) return;
-    const cleanText = data.replace(/\r/g, "").replace(/\n/g, "");
-    if (cleanText.length > 0) {
-      this.pendingEcho.set(paneId, { cleanText, consumed: 0, time: Date.now() });
-    }
     const payload = useBracketedPaste ? `\x1b[200~${data}\x1b[201~` : data;
-    (state.pty as any).write(payload);
+    this.write(paneId, payload);
   }
 
   hasPane(paneId: string): boolean {
@@ -806,6 +717,8 @@ export class PtyManager extends EventEmitter {
   kill(paneId: string): void {
     const state = this.panes.get(paneId);
     if (!state) return;
+    this.inputs.get(paneId)?.cancel();
+    this.inputs.delete(paneId);
     try { (state.pty as any).kill(); } catch {}
     this.idleDetector.cancel(paneId);
     this.zombieBuffers.set(paneId, { buffer: state.buffer, exitedAt: Date.now() });
@@ -815,7 +728,13 @@ export class PtyManager extends EventEmitter {
   resize(paneId: string, cols: number, rows: number): void {
     const state = this.panes.get(paneId);
     if (!state) return;
-    try { (state.pty as any).resize(cols, rows); } catch {}
+    if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 2 || rows < 1) return;
+    if (state.config.cols === cols && state.config.rows === rows) return;
+    try {
+      (state.pty as any).resize(cols, rows);
+      state.config.cols = cols;
+      state.config.rows = rows;
+    } catch {}
   }
 
   list(): PaneInfo[] {

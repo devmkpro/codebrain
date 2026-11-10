@@ -1,7 +1,12 @@
 import { ipcMain } from "electron";
 import type { AppContext } from "../context";
 import { safeSend } from "../context";
-import { getEnhancedProviders, listModelsFromEndpoint, listClaudeOAuthModels, healthCheckProvider, syncProviderModels } from "../services/providers";
+import {
+  getEnhancedProviders,
+  listModelsFromEndpoint,
+  healthCheckProvider,
+  syncProviderModels,
+} from "../services/providers";
 import { BUILTIN_TEMPLATES } from "../services/constants";
 import { syncClaudeSettingsVersion } from "../services/setup-claude";
 
@@ -20,6 +25,16 @@ function replaceHandler(channel: string, listener: Parameters<typeof ipcMain.han
 }
 
 export function registerProviderHandlers(ctx: AppContext): void {
+  const publicProviders = () =>
+    getEnhancedProviders(ctx).map((provider) => ({
+      ...provider,
+      env: Object.fromEntries(
+        Object.entries(provider.env ?? {}).map(([name, value]) => [
+          name,
+          value && /(API_KEY|AUTH_TOKEN|TOKEN|SECRET|PASSWORD)$/i.test(name) ? "********" : value,
+        ])
+      ),
+    }));
   // ── One-time migration: 9Router switched from openai-compat to anthropic-compat ──
   // 9Router serves the Anthropic protocol at /v1/messages (like MIMO), so saved
   // entries from the openai-compat era need type/host/env keys rewritten.
@@ -28,45 +43,90 @@ export function registerProviderHandlers(ctx: AppContext): void {
       const is9Router = /9router/i.test(p.id ?? "") || /9router/i.test(p.label ?? "");
       if (!is9Router) continue;
       const env = { ...(p.env ?? {}) };
-      const needsMigration = (p.type as string) !== "anthropic-compat" || p.host !== "claude" || !!env["OPENAI_API_KEY"] || !!env["OPENAI_BASE_URL"];
+      const needsMigration =
+        (p.type as string) !== "anthropic-compat" ||
+        p.host !== "claude" ||
+        !!env["OPENAI_API_KEY"] ||
+        !!env["OPENAI_BASE_URL"];
       if (!needsMigration) continue;
       const key = env["ANTHROPIC_AUTH_TOKEN"] || env["OPENAI_API_KEY"] || "";
       // Claude CLI appends /v1 itself — strip a trailing /v1 from the saved base URL
-      const baseUrl = (env["ANTHROPIC_BASE_URL"] || env["OPENAI_BASE_URL"] || "http://localhost:20128").replace(/\/v1\/?$/, "");
+      const baseUrl = (
+        env["ANTHROPIC_BASE_URL"] ||
+        env["OPENAI_BASE_URL"] ||
+        "http://localhost:20128"
+      ).replace(/\/v1\/?$/, "");
       delete env["OPENAI_API_KEY"];
       delete env["OPENAI_BASE_URL"];
       if (key) env["ANTHROPIC_AUTH_TOKEN"] = key;
       env["ANTHROPIC_BASE_URL"] = baseUrl;
       ctx.providerStore.upsert({ ...p, type: "anthropic-compat" as any, host: "claude", env });
-      console.log(`[providers] Migrated 9Router provider "${p.id}" to anthropic-compat (baseUrl=${baseUrl})`);
+      console.log(
+        `[providers] Migrated 9Router provider "${p.id}" to anthropic-compat (baseUrl=${baseUrl})`
+      );
     }
   } catch (err) {
     console.warn("[providers] 9Router migration failed:", err);
   }
 
-  replaceHandler("providers:list", () => getEnhancedProviders(ctx));
+  replaceHandler("providers:list", async () => {
+    await ctx.cliDetector?.getAllAsync?.();
+    // Opening a picker triggers stale-while-refresh. Startup and overlapping
+    // pickers coalesce; provider updates push the refreshed result to the UI.
+    void syncProviderModels(ctx).catch(() => {});
+    return publicProviders();
+  });
   replaceHandler("providers:save", (_event, provider) => {
-    const result = ctx.providerStore.upsert(provider);
+    const current = ctx.providerStore.listFull().find((entry) => entry.id === provider.id);
+    const explicitEdit =
+      Array.isArray(provider.models) &&
+      provider.modelsMode === undefined &&
+      JSON.stringify(provider.models) !== JSON.stringify(current?.models);
+    const result = ctx.providerStore.upsert({
+      ...provider,
+      ...(explicitEdit ? { modelsMode: "manual" } : {}),
+    });
     if (result.ok) void syncProviderModels(ctx, { providerIds: [provider.id] });
     return result;
   });
   replaceHandler("providers:delete", (_event, id: string) => ctx.providerStore.remove(id));
   replaceHandler("providers:templates", () => BUILTIN_TEMPLATES);
-  replaceHandler("providers:testToken", async (_event, _args: { providerId: string; token: string }) => {
-    return { ok: true };
-  });
+  replaceHandler(
+    "providers:testToken",
+    async (_event, _args: { providerId: string; token: string }) => {
+      return { ok: true };
+    }
+  );
 
-  replaceHandler("providers:listModels", async (_event, args: { baseUrl: string; apiKey: string; type: string }) => {
-    return listModelsFromEndpoint(args);
-  });
+  replaceHandler(
+    "providers:listModels",
+    async (_event, args: { baseUrl: string; apiKey: string; type: string }) => {
+      return listModelsFromEndpoint(args);
+    }
+  );
 
-  // Detect models available on Claude OAuth plan (reads token from ~/.claude/.credentials.json)
-  replaceHandler("providers:listClaudeOAuthModels", () => listClaudeOAuthModels());
-  replaceHandler("providers:syncModels", (_event, args?: { providerIds?: string[]; force?: boolean }) => syncProviderModels(ctx, args));
-
-  replaceHandler("providers:healthCheck", async (_event, args: { baseUrl: string; apiKey: string; type: string; model?: string }) => {
-    return healthCheckProvider(args);
+  // Installed CLI aliases/catalog; never scrape the CLI's credential files.
+  replaceHandler("providers:listClaudeOAuthModels", async () => {
+    await syncProviderModels(ctx, { providerIds: ["claude-oauth"], force: true });
+    const provider = getEnhancedProviders(ctx).find((entry) => entry.id === "claude-oauth");
+    return {
+      ok: Boolean(provider?.models.length) && !provider?.modelsStale,
+      models: provider?.models ?? [],
+      error: provider?.modelsSyncError,
+    };
   });
+  replaceHandler(
+    "providers:syncModels",
+    (_event, args?: { providerIds?: string[]; force?: boolean; resetManual?: boolean }) =>
+      syncProviderModels(ctx, args)
+  );
+
+  replaceHandler(
+    "providers:healthCheck",
+    async (_event, args: { baseUrl: string; apiKey: string; type: string; model?: string }) => {
+      return healthCheckProvider(args);
+    }
+  );
 
   // Fetch OpenRouter public model catalog (no API key needed)
   replaceHandler("providers:listOpenRouterModels", async () => {
@@ -75,19 +135,21 @@ export function registerProviderHandlers(ctx: AppContext): void {
     }
     try {
       const resp = await fetch("https://openrouter.ai/api/v1/models?supported_parameters=tools", {
-        headers: { "Accept": "application/json" },
+        headers: { Accept: "application/json" },
         signal: AbortSignal.timeout(15000),
       });
       if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
-      const json = await resp.json() as any;
+      const json = (await resp.json()) as any;
       const models = (json.data ?? []).map((m: any) => ({
         id: m.id,
         name: m.name ?? m.id,
         context_length: m.context_length ?? 0,
-        pricing: m.pricing ? {
-          prompt: parseFloat(m.pricing.prompt ?? "0"),
-          completion: parseFloat(m.pricing.completion ?? "0"),
-        } : undefined,
+        pricing: m.pricing
+          ? {
+              prompt: parseFloat(m.pricing.prompt ?? "0"),
+              completion: parseFloat(m.pricing.completion ?? "0"),
+            }
+          : undefined,
       }));
       openRouterCache = { data: models, ts: Date.now() };
       return { ok: true, models };
@@ -97,7 +159,7 @@ export function registerProviderHandlers(ctx: AppContext): void {
   });
 
   ctx.providerStore.onChange(() => {
-    safeSend(ctx, "providers:updated", getEnhancedProviders(ctx));
+    safeSend(ctx, "providers:updated", publicProviders());
     syncClaudeSettingsVersion();
   });
 }

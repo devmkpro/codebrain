@@ -45,6 +45,14 @@ npm-debug.log*
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+!.env.*.example
+*.pfx
+*.p12
+*.ppk
+*.key
+*.pem
 
 # ── AI tool configs ───────────────────────────────────────────────────────────
 .gemini/*
@@ -74,6 +82,15 @@ electron.vite.config.*.mjs
 .codebrain/config.json
 .codebrain/session-snapshot.json
 .codebrain/screenshots/
+.codebrain/mcp.json
+.codebrain/access-vault*
+.codebrain/accounts/
+.codebrain/credentials*
+.codebrain/*.db*
+.codebrain/*.sqlite*
+.kiro/settings/mcp.json
+.kiro/agents/codebrain-*.json
+.playwright-cli/
 *.screenshot.*
 *.png
 

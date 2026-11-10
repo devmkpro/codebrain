@@ -65,7 +65,7 @@ function ensureInbox(paneId) {
  */
 function createCodebrainMCPServer(bridge) {
   const server = new McpServer(
-    { name: "codebrain", version: "1.0.0" },
+    { name: "codebrain", version: require("./package.json").version },
     { capabilities: { tools: {} } }
   );
 
@@ -93,6 +93,13 @@ function createCodebrainMCPServer(bridge) {
           "kimi",
           "cursor",
           "copilot",
+          "kiro",
+          "opencode",
+          "grok",
+          "antigravity",
+          "hermes",
+          "muse",
+          "commandcode",
           "shell",
         ])
         .optional()
@@ -100,6 +107,8 @@ function createCodebrainMCPServer(bridge) {
           "Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it (for example, Codex → codex). Omit only when the user did not choose a CLI."
         ),
       providerId: z.string().optional().describe("Provider ID to use for the new pane."),
+      accountId: z.string().optional().describe("Explicit account ID when the user selected a configured CLI account."),
+      missionId: z.string().optional().describe("Operational mission ID. Normally inherited from parentPaneId."),
       model: z.string().optional().describe("Model to use for the new pane."),
       label: z
         .string()
@@ -126,19 +135,69 @@ function createCodebrainMCPServer(bridge) {
         .describe(
           "If true (default), automatically reuse a compatible idle worker instead of spawning a new pane. Set to false to force a new spawn."
         ),
+      prompt: z
+        .string()
+        .optional()
+        .describe("The task. The pane is born already executing it, and the harness table picks CLI, model, effort, account and skills. Say what to do; only set agent/model when the user named them."),
+      name: z.string().optional().describe("2 to 5 words starting with the verb of the result. Becomes the pane label."),
+      task: z.string().optional().describe("Task type id from the harness table. Omit to let the app classify the prompt."),
+      effort: z.enum(["low", "medium", "high"]).optional().describe("Only when the user asked for a specific effort."),
+      skills: z.array(z.string()).optional().describe("Only when the user named skills. Replaces the row's whitelist."),
+      expect: z
+        .object({
+          schema: z.record(z.string(), z.any()).optional().describe("JSON Schema the handoff output must match."),
+          retries: z.number().int().min(0).max(3).optional().describe("Times the delivery can be refused. Default 1."),
+          requireEvidence: z.boolean().optional().describe("Default true: a 'done' without evidence is refused."),
+        })
+        .optional()
+        .describe("Delivery contract, checked at handoff_submit."),
+      panes: z
+        .array(
+          z.object({
+            prompt: z.string(),
+            name: z.string().optional(),
+            task: z.string().optional(),
+            cwd: z.string().optional(),
+            agent: z.string().optional(),
+            model: z.string().optional(),
+            providerId: z.string().optional(),
+            accountId: z.string().optional(),
+            missionId: z.string().optional(),
+            parentPaneId: z.string().optional(),
+            effort: z.enum(["low", "medium", "high"]).optional(),
+            skills: z.array(z.string()).optional(),
+            reuseIdle: z.boolean().optional(),
+          })
+        )
+        .optional()
+        .describe("N independent tasks in ONE call, started in parallel."),
     },
     async (args) => {
       try {
-        const result = await bridge.spawnPane({
+        const result = await bridge.spawnTask({
           agent: args.agent,
           cwd: args.cwd,
           providerId: args.providerId,
+          accountId: args.accountId,
+          missionId: args.missionId,
           model: args.model,
           label: args.label,
           description: args.description,
           parentPaneId: args.parentPaneId,
           reuseIdle: args.reuseIdle ?? true,
+          prompt: args.prompt,
+          name: args.name ?? args.label,
+          task: args.task,
+          effort: args.effort,
+          skills: args.skills,
+          expect: args.expect,
+          panes: args.panes,
         });
+
+        // Spawn dirigido: o recibo já é a resposta inteira.
+        if (result?.receipt || result?.panes) {
+          return { content: [{ type: "text", text: JSON.stringify(result) }], isError: result.ok === false };
+        }
 
         const paneId = result?.paneId;
         if (!paneId || result?.error) {
@@ -180,6 +239,13 @@ function createCodebrainMCPServer(bridge) {
           "kimi",
           "cursor",
           "copilot",
+          "kiro",
+          "opencode",
+          "grok",
+          "antigravity",
+          "hermes",
+          "muse",
+          "commandcode",
         ])
         .optional()
         .describe(
@@ -691,6 +757,16 @@ function createCodebrainMCPServer(bridge) {
         .array(z.string())
         .optional()
         .describe("List of artifact paths or identifiers produced (e.g. file paths, URLs)."),
+      evidence: z
+        .object({
+          commands: z.array(z.object({ cmd: z.string(), exitCode: z.number().optional() })).optional(),
+          checks: z.array(z.object({ requirement: z.string(), status: z.enum(["pass", "fail"]), verify: z.string().optional() })).optional(),
+          files: z.array(z.string()).optional(),
+          tested: z.string().optional(),
+        })
+        .optional()
+        .describe("Proof of the claim. A refused handoff lists what is missing."),
+      output: z.any().optional().describe("Structured result, checked against the spawn's expect.schema."),
     },
     async (args) => {
       try {
@@ -700,6 +776,76 @@ function createCodebrainMCPServer(bridge) {
         return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
       }
     }
+  );
+
+  // ── Findings: um defeito por registro, com evidência e ciclo de vida ───────
+  server.tool(
+    "finding_add",
+    "Record one defect. Evidence is required (file:line or screenshot path). The same defect appends evidence to its existing ID; a resolved one that came back is reopened on the same ID.",
+    {
+      title: z.string(),
+      category: z.enum(["functional", "usability", "visual", "performance", "security"]),
+      severity: z.enum(["high", "medium", "low"]).describe("high: blocks use or release, or loses data. medium: has a workaround. low: polish."),
+      evidence: z.string().describe("file:line with the excerpt, or the screenshot path."),
+      location: z.string().optional().describe("Screen, route or file."),
+      steps: z.string().optional(),
+      expected: z.string().optional(),
+      observed: z.string().optional(),
+      reporter: z.string().optional().describe("Your paneId."),
+    },
+    async (args) => ({ content: [{ type: "text", text: JSON.stringify(await bridge.findingAdd(args)) }] })
+  );
+  server.tool(
+    "finding_update",
+    "Move a finding: open→fixed|needs_decision, fixed→verified|reopened, reopened→fixed|needs_decision, needs_decision→open, verified→reopened. 'fixed' requires note; 'verified' and 'reopened' require evidence, and whoever fixed cannot verify.",
+    {
+      id: z.string().describe("F-001"),
+      status: z.enum(["open", "fixed", "verified", "reopened", "needs_decision"]),
+      actor: z.string().optional().describe("Your paneId."),
+      note: z.string().optional().describe("Root cause and how it was validated."),
+      commit: z.string().optional(),
+      evidence: z.string().optional(),
+    },
+    async (args) => ({ content: [{ type: "text", text: JSON.stringify(await bridge.findingUpdate(args)) }] })
+  );
+  server.tool(
+    "finding_list",
+    "List findings of the current workspace, most severe first.",
+    {
+      status: z.enum(["open", "fixed", "verified", "reopened", "needs_decision"]).optional(),
+      severity: z.enum(["high", "medium", "low"]).optional(),
+      limit: z.number().optional(),
+    },
+    async (args) => ({ content: [{ type: "text", text: JSON.stringify(await bridge.findingList(args)) }] })
+  );
+
+  // ── Mídia gerada e catálogo local ──────────────────────────────────────────
+  server.tool(
+    "media_generate",
+    "Generate an image or video and save it under <workspace>/assets/generated. Returns the file path. Uses the first provider with a key unless `provider` is set.",
+    {
+      prompt: z.string(),
+      kind: z.enum(["image", "video"]).optional().describe("Default image. Video requires an OpenAI key."),
+      provider: z.enum(["openai", "gemini", "openrouter"]).optional(),
+      size: z.string().optional().describe("e.g. 1024x1024 (OpenAI only)."),
+      style: z.string().optional().describe("Prefix applied to the prompt. Repeat the same text across a batch for a consistent look."),
+    },
+    async (args) => ({ content: [{ type: "text", text: JSON.stringify(await bridge.mediaGenerate(args)) }] })
+  );
+  server.tool(
+    "media_list",
+    "List generated images and videos of the current workspace, newest first.",
+    {},
+    async () => ({ content: [{ type: "text", text: JSON.stringify(bridge.mediaList()) }] })
+  );
+  server.tool(
+    "catalog_list",
+    "Search the skills and agents installed on this machine and workspace.",
+    {
+      kind: z.enum(["skill", "agent"]).optional(),
+      query: z.string().optional().describe("Matches name and description."),
+    },
+    async (args) => ({ content: [{ type: "text", text: JSON.stringify(bridge.catalogList(args)) }] })
   );
 
   // ── mcp__codebrain__handoff_wait ──────────────────────────────────────────
@@ -4546,7 +4692,7 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
-  // ── Transcript Watcher Tools (Overclock port) ──────────────────────────────
+  // ── Transcript Watcher Tools ──────────────────────────────────────────────
 
   server.tool(
     "transcript_watcher_start",
@@ -4617,7 +4763,7 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
-  // ── Remote Bridge Tools (Overclock port) ────────────────────────────────────
+  // ── Remote Bridge Tools ────────────────────────────────────────────────────
 
   server.tool(
     "remote_bridge_start",
@@ -4689,7 +4835,7 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
-  // ── Remote Spawn Tools (Overclock port) ─────────────────────────────────────
+  // ── Remote Spawn Tools ─────────────────────────────────────────────────────
 
   server.tool(
     "remote_spawn_detect_clis",
@@ -4760,7 +4906,7 @@ function createCodebrainMCPServer(bridge) {
 
   // ── Recipe / Harness MCP Tools ────────────────────────────────────────────────
   // Auto-discovery of buildable deliverables based on available agents + skills.
-  // Ported from Overclock's harnessAssistant.js (enrichCatalog + proposeRecipes).
+  // Catalog enrichment and recipe proposals.
 
   server.tool(
     "recipe_enrich_catalog",
@@ -4902,7 +5048,7 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
-  // ── Cron Jobs (Overclock port) ─────────────────────────────────────────────
+  // ── Cron Jobs ─────────────────────────────────────────────────────────────
   // Scheduled autonomous spawns. Jobs use 5-field cron expressions and fire
   // via pane_spawn at the scheduled time. Skip-if-stale: jobs overdue by >5min
   // are silently skipped (handles laptop-closed case).
@@ -4987,6 +5133,42 @@ function createCodebrainMCPServer(bridge) {
     }
   );
 
+  // ── Centralized SSH access (metadata only; never expose credential values) ──
+  const accessResponse = (result) => ({
+    content: [{ type: "text", text: JSON.stringify(result) }], isError: result?.ok === false,
+  });
+  const accessCall = async (method, args) => {
+    if (typeof bridge[method] !== "function") return { ok: false, code: "VAULT_UNAVAILABLE", error: "O cofre seguro não está disponível neste servidor." };
+    try { return await bridge[method](args); }
+    catch { return { ok: false, code: "VAULT_OPERATION_FAILED", error: "Não foi possível concluir a operação segura de acesso." }; }
+  };
+  server.tool(
+    "access_host_list",
+    "List registered SSH machines and credential references authorized for agents. Never returns passwords, keys or tokens. Configure access in Central → Acessos.",
+    {},
+    async () => accessResponse(await accessCall("accessHostList")),
+  );
+  server.tool(
+    "access_host_save",
+    "Register or update an SSH machine using metadata and an optional credential ID, never secret values. A new machine requires the user's permission in Central → Acessos before agents can connect. Cannot grant permissions.",
+    {
+      id: z.string().uuid().optional(),
+      label: z.string().min(1).max(120),
+      hostname: z.string().min(1).max(253),
+      username: z.string().min(1).max(64),
+      port: z.number().int().min(1).max(65535).optional(),
+      credentialId: z.string().uuid().nullable().optional(),
+      useSshConfig: z.boolean().optional().describe("Use local SSH identities and ProxyJump. Explicit username and port remain authoritative. Changing a connection route revokes agent permission until the user authorizes it again."),
+    },
+    async (args) => accessResponse(await accessCall("accessHostSave", args)),
+  );
+  server.tool(
+    "access_ssh_open",
+    "Open a visible SSH terminal for a machine and credential already authorized by the user. Bypass mode does not ask again for each connection. New/revoked hosts remain blocked; host-key verification stays strict. Returns paneId, never credentials. Password authentication requires the user to open the terminal.",
+    { hostId: z.string().uuid() },
+    async (args) => accessResponse(await accessCall("accessSshOpen", args)),
+  );
+
   // ── Minimal default surface ───────────────────────────────────────────────
   // The SDK registers every tool so groups can be enabled later, but only the
   // tools below are advertised on a fresh session. This removes schema cost
@@ -5016,7 +5198,7 @@ function createCodebrainMCPServer(bridge) {
   ]);
   const advancedRefs = new Set(Object.values(advancedToolGroups).flat());
   const groupForTool = (name) => {
-    if (name.startsWith("pane_")) return "coordination";
+    if (name.startsWith("pane_") || name.startsWith("finding_")) return "coordination";
     if (name.startsWith("actor_") || name.startsWith("agent_") || name.startsWith("handoff_"))
       return "coordination";
     // `ledger_record` acompanha o trabalho real, que é quando `coordination`
@@ -5028,7 +5210,8 @@ function createCodebrainMCPServer(bridge) {
     if (name.startsWith("ledger_") || name.startsWith("lesson_")) return "learning";
     if (name.startsWith("verify_")) return "verify";
     if (name.startsWith("file_")) return "files";
-    if (name.startsWith("skill_")) return "skills";
+    if (name.startsWith("skill_") || name.startsWith("catalog_")) return "skills";
+    if (name.startsWith("media_")) return "media";
     if (name.startsWith("provider_")) return "providers";
     if (name.startsWith("memory_")) return "memory_advanced";
     if (name.startsWith("pattern_")) return "patterns";
@@ -5060,6 +5243,15 @@ function createCodebrainMCPServer(bridge) {
   };
 
   for (const [name, ref] of Object.entries(server._registeredTools || {})) {
+    // The bundled SSH skill must work on a fresh session, without a hidden
+    // activation dependency. These three small schemas never accept secrets.
+    if (name.startsWith("access_")) {
+      ref.enable();
+      const refs = registeredToolGroups.get("access") || [];
+      refs.push(ref);
+      registeredToolGroups.set("access", refs);
+      continue;
+    }
     // Browser tools are discoverable from the first MCP tools/list response.
     // See the registration note above: disabling them here would leave an
     // agent with an "active" group but no callable browser_* schema.

@@ -1,0 +1,9 @@
+{
+  "id": "cb-safe-deploy",
+  "name": "Deploy seguro",
+  "description": "Deploy autorizado com contexto do workspace, continuidade de jobs, backup, rollback e validação em produção.",
+  "type": "prompt",
+  "version": "1.0.0",
+  "entrypoint": "SKILL.md",
+  "tags": ["codebrain", "deploy", "production", "operations"]
+}

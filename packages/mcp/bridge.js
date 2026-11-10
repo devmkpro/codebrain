@@ -5,6 +5,9 @@ const fs = require("node:fs");
 const os = require("node:os");
 
 const { createPaneHandlers } = require("./bridge/pane-handlers.js");
+const { createHarnessHandlers } = require("./bridge/harness-handlers.js");
+const { createMediaHandlers } = require("./bridge/media-handlers.js");
+const { createAccessHandlers } = require("./bridge/access-handlers.js");
 const { createBrowserHandlers } = require("./bridge/browser-handlers.js");
 const { CDPClient } = require("./bridge/cdp-client.js");
 const { createTodoHandlers } = require("./bridge/todo-handlers.js");
@@ -393,6 +396,9 @@ function createMCPBridge(ptyManager, opts = {}) {
     try {
       const store = opts.memoryStore;
       if (!store?.taskGateCheck) return;
+      const agent = opts.paneConfigs?.get?.(paneId)?.agent
+        ?? ptyManager.list?.().find(pane => pane.paneId === paneId)?.agent;
+      if (!agent || agent === "shell" || agent === "browser") return;
       // Only check if there was meaningful activity (not empty idle pings)
       const lastLines = idle?.lastOutput?.slice(-5) || [];
       const summary = lastLines
@@ -533,6 +539,7 @@ function createMCPBridge(ptyManager, opts = {}) {
 
   // ── Create handler factories ─────────────────────────────────────────────
   const sharedOpts = { ...opts, paneLabels, roleMap, messageBus, agentScorer };
+  sharedOpts.paneContracts = sharedOpts.paneContracts || new Map();
   const paneHandlers = createPaneHandlers(ptyManager, sharedOpts);
 
   // Record write timestamps for activity tracking (patch must come after paneHandlers is created)
@@ -612,6 +619,19 @@ function createMCPBridge(ptyManager, opts = {}) {
     });
   }
   paneHandlers.roleMap = roleMap;
+  const harnessHandlers = createHarnessHandlers(paneHandlers, ptyManager, {
+    ...opts,
+    paneContracts: sharedOpts.paneContracts,
+    paneLabels,
+    memoryStore: opts.memoryStore,
+    getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
+  });
+
+  const mediaHandlers = createMediaHandlers({
+    getMediaCredentials: opts.getMediaCredentials,
+    getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
+  });
+  const accessHandlers = createAccessHandlers(opts);
 
   const browserHandlers = createBrowserHandlers(opts);
   const todoHandlers = createTodoHandlers({ memoryStore: opts.memoryStore });
@@ -642,7 +662,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
   });
 
-  // ── Transcript Watchers (Overclock port) ────────────────────────────────
+  // ── Transcript Watchers ────────────────────────────────────────────────
   const transcriptWatcherHandlers = createTranscriptWatcherHandlers({
     memoryStore: opts.memoryStore,
     ptyManager,
@@ -656,7 +676,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     transcriptWatcherHandlers.transcriptWatcherStart({ workspace: _twWorkspace }).catch(() => {});
   }
 
-  // ── Recipe / Harness Handlers (Overclock port) ──────────────────────────
+  // ── Recipe / Harness Handlers ──────────────────────────────────────────
   const recipeHandlers = createRecipeHandlers({
     memoryStore: opts.memoryStore,
     providerStore: opts.providerStore,
@@ -665,7 +685,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     getCurrentWorkspacePath: opts.getCurrentWorkspacePath,
   });
 
-  // ── Cron Jobs (Overclock port) ────────────────────────────────────────────
+  // ── Cron Jobs ────────────────────────────────────────────────────────────
   const cronHandlers = createCronHandlers({
     memoryStore: opts.memoryStore,
     spawnPaneFn: opts.spawnPaneFn,
@@ -675,7 +695,7 @@ function createMCPBridge(ptyManager, opts = {}) {
   // Auto-start cron tick loop (60s interval)
   cronHandlers.startTickLoop();
 
-  // ── Remote Bridge (Overclock port) — WSS thin-client control ────────────
+  // ── Remote Bridge — WSS thin-client control ────────────────────────────
   const remoteBridgeHandlers = createRemoteBridgeHandlers({
     ptyManager,
     memoryStore: opts.memoryStore,
@@ -685,7 +705,7 @@ function createMCPBridge(ptyManager, opts = {}) {
     port: opts.remoteBridgePort || undefined,
   });
 
-  // ── Remote Spawn (Overclock port) — SSH:// routing ──────────────────────
+  // ── Remote Spawn — SSH:// routing ──────────────────────────────────────
   const remoteSpawnHandlers = createRemoteSpawnHandlers({
     ptyManager,
     spawnPaneFn: opts.spawnPaneFn,
@@ -827,6 +847,9 @@ function createMCPBridge(ptyManager, opts = {}) {
 
   return {
     ...paneHandlers,
+    ...harnessHandlers,
+    ...mediaHandlers,
+    ...accessHandlers,
     ...browserHandlers,
     ...todoHandlers,
     ...memoryHandlers,
@@ -867,9 +890,9 @@ function createMCPBridge(ptyManager, opts = {}) {
     ...autoMemoryHandlers,
     ...securityHandlers,
     ...transcriptWatcherHandlers,
-    // Recipe / Harness (Overclock port)
+    // Recipe / Harness
     ...recipeHandlers,
-    // Cron jobs (Overclock port)
+    // Cron jobs
     ...cronHandlers,
     ...remoteBridgeHandlers,
     ...remoteSpawnHandlers,

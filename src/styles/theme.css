@@ -42,6 +42,8 @@
   --color-cb-accent-wash:     var(--cb-accent-wash);
   --color-cb-accent-wash-strong: var(--cb-accent-wash-strong);
 
+  --color-cb-brand:           var(--cb-brand);
+
   /* ── Cores: semântica ────────────────────────────────────────────────── */
   --color-cb-success:         var(--cb-success);
   --color-cb-success-wash:    var(--cb-success-wash);
@@ -93,6 +95,8 @@
   --spacing-cell-sm:          var(--cb-cell-sm);
   --spacing-cell-lg:          var(--cb-cell-lg);
   --spacing-ch:               var(--cb-ch);
+  --spacing-cell-xl:          var(--cb-cell-xl);
+  --spacing-bar:              var(--cb-bar-h);
 
   /* ── Raios ───────────────────────────────────────────────────────────── */
   --radius-cb-0:              var(--cb-radius-0);

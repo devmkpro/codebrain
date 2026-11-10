@@ -7,6 +7,7 @@ const { tokenize, buildTfIdf, cosineSimilarity } = require("./vector-store.js");
 const { runMigrations, applyConnectionPragmas, getVersion } = require("./migrations.js");
 const { createLessonsLedgerApi } = require("./lessons-ledger.js");
 const { createVerifyStore } = require("./verify-store.js");
+const { createFindingsStore } = require("./findings-store.js");
 const { migrations: schemaMigrations } = require("./schema-migrations.js");
 const { loadDatabase } = require("./sqlite.js");
 
@@ -455,7 +456,7 @@ function createMemoryStore(dbPath) {
   `);
 
   // ── Cron Jobs (scheduled autonomous spawns) ─────────────────────────────────
-  // Ported from Overclock sidecar. Jobs are scheduled with 5-field cron expressions.
+  // Jobs are scheduled with 5-field cron expressions.
   // Skip-if-stale: jobs overdue by >5min are skipped (handles laptop-closed).
   db.exec(`
     CREATE TABLE IF NOT EXISTS cron_jobs (
@@ -497,6 +498,13 @@ function createMemoryStore(dbPath) {
   // ── Verificação visual: concessões de acesso + execuções ──────────────────
   // Tabelas da migração v3.
   const verifyStore = createVerifyStore(db);
+
+  // ── Harness: findings e recibos de spawn (migração v4) ───────────
+  const findingsStore = createFindingsStore(db);
+  const insertSpawnReceipt = db.prepare(`
+    INSERT INTO spawn_receipts (id, workspace, mission_id, pane_id, name, task_id, task_name, source, agent, model, effort, account, skills, receipt, reused)
+    VALUES (@id, @workspace, @mission_id, @pane_id, @name, @task_id, @task_name, @source, @agent, @model, @effort, @account, @skills, @receipt, @reused)
+  `);
 
   // ── Knowledge Graph + Vector Store ────────────────────────────────────────
   let knowledgeGraph;
@@ -647,8 +655,8 @@ function createMemoryStore(dbPath) {
     clearSessionHistory: db.prepare(`DELETE FROM session_history WHERE (@workspace IS NULL OR workspace = @workspace)`),
     // Handoffs
     insertHandoff: db.prepare(`
-      INSERT OR REPLACE INTO handoffs (id, pane_id, summary, status, artifacts, submitted_at, workspace)
-      VALUES (@id, @pane_id, @summary, @status, @artifacts, @submitted_at, @workspace)
+      INSERT OR REPLACE INTO handoffs (id, pane_id, summary, status, artifacts, submitted_at, workspace, evidence, output, contract_status)
+      VALUES (@id, @pane_id, @summary, @status, @artifacts, @submitted_at, @workspace, @evidence, @output, @contract_status)
     `),
     getHandoffByPane: db.prepare(`SELECT * FROM handoffs WHERE pane_id = ? ORDER BY submitted_at DESC LIMIT 1`),
     listHandoffs: db.prepare(`
@@ -749,6 +757,39 @@ function createMemoryStore(dbPath) {
 
     // Verificação visual de front-end (ver verify-store.js).
     ...verifyStore,
+
+    ...findingsStore,
+
+    recordSpawnReceipt({ workspace, missionId, paneId, name, taskId, taskName, source, agent, model, effort, account, skills, receipt, reused }) {
+      const id = `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      insertSpawnReceipt.run({
+        id, workspace: workspace ?? null, mission_id: missionId ?? null, pane_id: paneId, name: name ?? null,
+        task_id: taskId ?? null, task_name: taskName ?? null, source: source ?? null, agent: agent ?? null,
+        model: model ?? null, effort: effort ?? null, account: account ?? null,
+        skills: JSON.stringify(skills ?? []), receipt: receipt ?? null, reused: reused ? 1 : 0,
+      });
+      return { ok: true, id };
+    },
+
+    /** Recibos com a última entrega de cada pane: é o que a tela da missão mostra. */
+    listSpawnReceipts({ workspace, limit = 60 }) {
+      const rows = db.prepare(`
+        SELECT r.*, h.summary AS handoff_summary, h.status AS handoff_status, h.evidence AS handoff_evidence,
+               h.contract_status AS handoff_contract, h.submitted_at AS handoff_at
+        FROM spawn_receipts r
+        LEFT JOIN handoffs h ON h.id = (SELECT id FROM handoffs WHERE pane_id = r.pane_id ORDER BY submitted_at DESC LIMIT 1)
+        WHERE (@workspace IS NULL OR r.workspace = @workspace)
+        ORDER BY r.created_at DESC, r.rowid DESC LIMIT @limit
+      `).all({ workspace: workspace ?? null, limit: Math.min(limit, 300) });
+      return {
+        ok: true,
+        receipts: rows.map((row) => ({
+          ...row,
+          skills: JSON.parse(row.skills || "[]"),
+          handoff_evidence: row.handoff_evidence ? JSON.parse(row.handoff_evidence) : null,
+        })),
+      };
+    },
 
     /**
      * Versão de schema deste banco (PRAGMA user_version).
@@ -1554,7 +1595,7 @@ function createMemoryStore(dbPath) {
      * Submit a handoff result from a worker pane.
      * @param {{ paneId: string, summary: string, status: string, artifacts?: string[], workspace?: string }} opts
      */
-    submitHandoff({ paneId, summary, status, artifacts, workspace }) {
+    submitHandoff({ paneId, summary, status, artifacts, workspace, evidence, output, contractStatus }) {
       if (!paneId || !summary || !status) return { ok: false, error: "paneId, summary, and status are required" };
       if (!["done", "blocked", "error"].includes(status)) return { ok: false, error: "status must be done|blocked|error" };
       const id = genHandoffId();
@@ -1566,6 +1607,9 @@ function createMemoryStore(dbPath) {
         artifacts: JSON.stringify(artifacts || []),
         submitted_at: Date.now(),
         workspace: workspace || null,
+        evidence: evidence ? JSON.stringify(evidence) : null,
+        output: output === undefined ? null : JSON.stringify(output),
+        contract_status: contractStatus || null,
       });
       return { ok: true, id };
     },
@@ -1578,7 +1622,7 @@ function createMemoryStore(dbPath) {
       if (!paneId) return { ok: false, error: "paneId is required" };
       const row = stmts.getHandoffByPane.get(paneId);
       if (!row) return { ok: false, error: "no handoff found" };
-      return { ok: true, handoff: { ...row, artifacts: JSON.parse(row.artifacts || "[]") } };
+      return { ok: true, handoff: { ...row, artifacts: JSON.parse(row.artifacts || "[]"), evidence: row.evidence ? JSON.parse(row.evidence) : null } };
     },
 
     /**

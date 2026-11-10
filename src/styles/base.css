@@ -12,9 +12,11 @@
 /* ── Foco ────────────────────────────────────────────────────────────────
    Um anel de foco, global, só no teclado. O app antigo não tinha nenhum
    indicador consistente — navegar por Tab era invisível.                   */
-:where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: none;
-  box-shadow: var(--cb-focus-ring);
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  /* Contorno em vez de sombra: sobrevive a utilitários `shadow-*`, e o
+     Windows em alto contraste mantém `outline` e descarta `box-shadow`. */
+  outline: 2px solid var(--cb-accent);
+  outline-offset: 1px;
   border-radius: var(--cb-radius-1);
 }
 
@@ -81,7 +83,9 @@
 .cb-row[aria-selected="true"] {
   background: var(--cb-bg-3);
   color: var(--cb-fg-0);
+  box-shadow: inset 2px 0 0 var(--cb-rail-color, var(--cb-accent));
 }
+.cb-row.cb-rail { padding-left: var(--cb-space-5); }
 
 /* ── Trilho ──────────────────────────────────────────────────────────────
    Barra de 2px na borda esquerda marcando estado. É o vocabulário visual
@@ -103,15 +107,84 @@
 }
 
 /* ── Micro-label ─────────────────────────────────────────────────────────
-   Caixa alta, tracking largo, minúsculo. O rótulo de seção do shell.       */
-.cb-label {
-  font-size: var(--cb-text-2xs);
-  line-height: var(--cb-leading-tight);
-  text-transform: uppercase;
-  letter-spacing: var(--cb-tracking-label);
-  color: var(--cb-fg-2);
-  font-weight: var(--cb-weight-medium);
+   Caixa alta, tracking largo. O rótulo de seção do shell. Fica em camada
+   para que `cb-label text-cb-accent` funcione: fora de camada, esta cor
+   venceria qualquer utilitário.                                            */
+@layer components {
+  .cb-label {
+    font-size: var(--cb-text-xs);
+    line-height: var(--cb-leading-tight);
+    text-transform: uppercase;
+    letter-spacing: var(--cb-tracking-label);
+    color: var(--cb-fg-2);
+    font-weight: var(--cb-weight-medium);
+  }
 }
+
+/* ── Prompt ──────────────────────────────────────────────────────────────
+   A assinatura. `❯` marca onde você está e onde o app espera por você.
+   Regras em docs/design/brand.md.                                          */
+.cb-prompt {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1ch;
+  min-width: 0;
+}
+.cb-prompt::before {
+  content: "❯";
+  flex: none;
+  color: var(--cb-accent);
+  font-weight: var(--cb-weight-bold);
+}
+
+/* Cursor de bloco. Só onde o app está de fato aguardando entrada. Pisca em
+   degrau, como um terminal; sem movimento reduzido fica aceso e parado. */
+.cb-caret {
+  display: inline-block;
+  flex: none;
+  width: 0.6em;
+  height: 1.1em;
+  margin-left: 0.15em;
+  align-self: center;
+  background: var(--cb-accent);
+  animation: cb-caret 1.06s steps(1, end) infinite;
+}
+@keyframes cb-caret {
+  0%, 60% { opacity: 1; }
+  61%, 100% { opacity: 0; }
+}
+
+/* ── Régua ───────────────────────────────────────────────────────────────
+   Cabeçalho de seção à moda TUI: rótulo embutido numa linha de 1px, contador
+   na ponta. É o que separa blocos sem precisar de cartão.                  */
+.cb-rule {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-space-4);
+  min-height: var(--cb-cell);
+}
+.cb-rule::after {
+  content: "";
+  order: 1;
+  flex: 1;
+  min-width: var(--cb-space-5);
+  height: 1px;
+  background: var(--cb-line-1);
+}
+.cb-rule > [data-rule-end] { order: 2; }
+
+/* ── Movimento reduzido ──────────────────────────────────────────────────
+   Preferência do SO. O toggle do app continua em `.reduced-motion`.        */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .cb-caret { animation: none; }
+}
+.reduced-motion .cb-caret { animation: none; opacity: 1; }
 
 /* ── Divisor ─────────────────────────────────────────────────────────── */
 .cb-divider {

@@ -1,7 +1,7 @@
 ﻿import React from "react";
 import { savedContextLines } from "../terminal/TerminalPane";
 
-// SavedContextPanel
+// SavedContextPanel — últimas linhas de uma sessão restaurada.
 export function SavedContextPanel({
   pane,
   open,
@@ -10,19 +10,22 @@ export function SavedContextPanel({
   const lines = savedContextLines(pane.lastLines);
   if (lines.length === 0) return null;
   const hasResume = pane.session?.confidence === "high";
-  const label = hasResume ? `${pane.session?.provider}: resume` : `${pane.agent}: new session`;
-  return <div className="shrink-0 border-b border-indigo-500/10 bg-black/70">
-      <button type="button" onClick={e => {
-      e.stopPropagation();
-      onToggle();
-    }} className="w-full flex items-center justify-between gap-3 px-3 py-1.5 text-left hover:bg-white/[0.03]">
-        <span className="font-mono text-[9px] uppercase tracking-widest text-red-400/80">
-          saved context
-        </span>
-        <span className="font-mono text-[9px] text-gray-500 truncate">{label}</span>
+  const label = hasResume ? `${pane.session?.provider}: retomar` : `${pane.agent}: nova sessão`;
+  return (
+    <div className="cb-saved-context">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={event => {
+          event.stopPropagation();
+          onToggle();
+        }}
+        className="cb-saved-context-toggle"
+      >
+        <span className="cb-label">contexto salvo</span>
+        <span className="truncate text-2xs text-cb-fg-2">{label}</span>
       </button>
-      {open && <pre className="max-h-28 overflow-auto px-3 pb-2 font-mono text-[10px] leading-relaxed text-gray-400 whitespace-pre-wrap break-words">
-          {lines.join("\n")}
-        </pre>}
-    </div>;
+      {open && <pre className="cb-scroll">{lines.join("\n")}</pre>}
+    </div>
+  );
 }

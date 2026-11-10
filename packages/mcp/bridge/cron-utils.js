@@ -2,7 +2,7 @@
 
 // cron-utils — Lightweight cron scheduling utilities.
 //
-// Ported from Overclock @overclock-app/core.
+// Shared cron expression utilities.
 // Self-contained: no npm deps. Supports standard 5-field cron expressions.
 //
 // Fields: minute hour day-of-month month day-of-week

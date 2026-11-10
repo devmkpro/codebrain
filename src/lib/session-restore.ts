@@ -28,7 +28,7 @@ export interface RestoreResult {
 }
 
 interface PTYService {
-  list(): Promise<{ paneId: string }[]>;
+  list(): Promise<{ paneId: string }[] | { ok: boolean; panes: { paneId: string }[] }>;
   spawn(opts: Record<string, unknown>): Promise<{ ok: boolean; paneId?: string }>;
 }
 
@@ -149,7 +149,8 @@ export async function deterministicRestore(
   // Check which panes are already running
   let livePaneIds = new Set<string>();
   try {
-    const livePanes = await p.list();
+    const response = await p.list();
+    const livePanes = Array.isArray(response) ? response : response.panes;
     livePaneIds = new Set(livePanes.map((lp: { paneId: string }) => lp.paneId));
   } catch { /* ignore */ }
 

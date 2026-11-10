@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
 import {
   Terminal, Zap, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, Info, Save,
@@ -7,7 +6,7 @@ import {
   Type, Monitor, Plus, X, Variable, Gamepad2, Bell,
   Mic, Cloud, Cpu, Link, Copy, Check, ExternalLink,
   Globe, Lock, GitPullRequest, FolderGit2,
-  Store, Search, Package, Filter, FlaskConical,
+  Store, FlaskConical,
 } from 'lucide-react';
 import {
   useTerminalSettings,
@@ -19,80 +18,92 @@ import {
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
 import { LabSection } from '../../components/settings/LabSection';
+import { MarketplaceSection, type MarketplaceSummary } from '../../components/settings/MarketplaceSection';
 import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
 import { HOST_LABELS } from '../../lib/resolve-spawn-target';
+import { Badge, Prompt, Section as SectionBlock, SectionRule, SettingRow, Toggle } from '../../components/ui/primitives';
+import { useSectionNavigation } from '../../components/shell/section-navigation';
 
 type Section = 'terminal' | 'shell' | 'providers' | 'preferredAgent' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'lab' | 'advanced';
-
-// ─── Toggle ───────────────────────────────────────────────────────────────────
-function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!enabled)}
-      className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${enabled ? 'bg-[#5855e5]' : 'bg-white/10 hover:bg-white/15'}`}
-    >
-      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
-    </button>
-  );
-}
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
 function Stepper({ value, onIncrease, onDecrease, onReset, unit = '' }: {
   value: number | string; onIncrease?: () => void; onDecrease?: () => void; onReset?: () => void; unit?: string;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      {onDecrease && <button onClick={onDecrease} className="w-6 h-6 rounded bg-white/5 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center text-[14px] transition-colors">−</button>}
-      <span className="font-mono text-[12px] text-[#5855e5] w-14 text-center">{value}{unit}</span>
-      {onIncrease && <button onClick={onIncrease} className="w-6 h-6 rounded bg-white/5 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center text-[14px] transition-colors">+</button>}
-      {onReset && <button onClick={onReset} className="text-[9px] font-mono text-slate-600 hover:text-slate-400 transition-colors">reset</button>}
+    <div className="flex items-center gap-1">
+      {onDecrease && <button type="button" onClick={onDecrease} aria-label="Diminuir" className="cb-btn cb-btn--sm cb-btn--icon">−</button>}
+      <span className="text-sm text-cb-fg-0 w-12 text-center tabular-nums">{value}{unit}</span>
+      {onIncrease && <button type="button" onClick={onIncrease} aria-label="Aumentar" className="cb-btn cb-btn--sm cb-btn--icon">+</button>}
+      {onReset && <button type="button" onClick={onReset} className="cb-btn cb-btn--ghost cb-btn--sm">padrão</button>}
     </div>
   );
 }
 
-// ─── Section Card ─────────────────────────────────────────────────────────────
+// ─── Seção ────────────────────────────────────────────────────────────────────
 function SectionCard({ id, icon, title, badge, children, active, onToggle }: {
   id: Section; icon: React.ReactNode; title: string; badge?: string;
   children: React.ReactNode; active: boolean; onToggle: (s: Section) => void;
 }) {
   return (
-    <div className="rounded-xl border border-white/5 bg-[#0A0A0B]/50 overflow-hidden">
-      <button onClick={() => onToggle(id)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition-colors">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#5855e5]/10 border border-[#5855e5]/20 flex items-center justify-center text-[#5855e5]">{icon}</div>
-          <span className="text-[12px] font-bold text-slate-200">{title}</span>
-          {badge && <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#5855e5]/10 text-indigo-400 uppercase tracking-widest border border-indigo-500/20">{badge}</span>}
-        </div>
-        {active ? <ChevronDown size={13} className="text-slate-500" /> : <ChevronRight size={13} className="text-slate-700" />}
-      </button>
-      {active && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="px-5 pb-5 space-y-5 border-t border-white/5 pt-5"
-        >
-          {children}
-        </motion.div>
-      )}
-    </div>
+    <SectionBlock
+      id={`settings-${id}`}
+      icon={icon}
+      title={title}
+      badge={badge ? <Badge>{badge}</Badge> : undefined}
+      open={active}
+      onToggle={() => onToggle(id)}
+    >
+      {children}
+    </SectionBlock>
   );
 }
 
+/** Rotula o interruptor com o próprio texto da linha, para leitores de tela. */
 function Row({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-medium text-slate-300">{label}</p>
-        {description && <p className="text-[10px] text-slate-600 mt-0.5">{description}</p>}
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  );
+  const control = React.isValidElement(children) && children.type === Toggle
+    ? React.cloneElement(children as React.ReactElement<{ 'aria-label'?: string }>, { 'aria-label': label })
+    : children;
+  return <SettingRow label={label} description={description}>{control}</SettingRow>;
 }
 
 function Divider() {
-  return <div className="border-t border-white/5" />;
+  return <div className="border-t border-cb-line-0" />;
 }
+
+function RangeLimits({ min, max }: { min: string; max: string }) {
+  return <div className="flex justify-between text-xs text-cb-fg-2 -mt-3"><span>{min}</span><span>{max}</span></div>;
+}
+
+function StatusValue({ state, children }: { state: 'ok' | 'off' | 'unknown'; children: React.ReactNode }) {
+  return <span className={state === 'ok' ? 'text-cb-success' : 'text-cb-fg-2'}>{children}</span>;
+}
+
+const NAV_GROUPS: { label: string; items: { id: Section; icon: React.ReactNode; label: string }[] }[] = [
+  { label: 'ambiente', items: [
+    { id: 'terminal', icon: <Type size={13} />, label: 'Terminal' },
+    { id: 'shell', icon: <Terminal size={13} />, label: 'Shell' },
+  ] },
+  { label: 'agentes', items: [
+    { id: 'providers', icon: <Zap size={13} />, label: 'Providers' },
+    { id: 'preferredAgent', icon: <Cpu size={13} />, label: 'CLI preferido' },
+    { id: 'spawn', icon: <Monitor size={13} />, label: 'Spawn padrão' },
+    { id: 'envvars', icon: <Variable size={13} />, label: 'Env vars' },
+  ] },
+  { label: 'extensões', items: [
+    { id: 'skill', icon: <Download size={13} />, label: 'Skill & CLI' },
+    { id: 'marketplace', icon: <Store size={13} />, label: 'Marketplace' },
+  ] },
+  { label: 'integrações', items: [
+    { id: 'notifications', icon: <Bell size={13} />, label: 'Notificações' },
+    { id: 'voice', icon: <Mic size={13} />, label: 'Voz' },
+    { id: 'discord', icon: <Gamepad2 size={13} />, label: 'Discord' },
+  ] },
+  { label: 'sistema', items: [
+    { id: 'lab', icon: <FlaskConical size={13} />, label: 'Laboratório' },
+    { id: 'advanced', icon: <Shield size={13} />, label: 'Avançado' },
+  ] },
+];
 
 // ─── Add Env Var Row ─────────────────────────────────────────────────────────
 function AddEnvVarRow({ onAdd }: { onAdd: (key: string, value: string) => void }) {
@@ -111,7 +122,7 @@ function AddEnvVarRow({ onAdd }: { onAdd: (key: string, value: string) => void }
         value={key}
         onChange={e => setKey(e.target.value)}
         placeholder="KEY"
-        className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40 transition-colors"
+        className="cb-field flex-1"
         onKeyDown={e => e.key === 'Enter' && handleAdd()}
       />
       <input
@@ -119,13 +130,13 @@ function AddEnvVarRow({ onAdd }: { onAdd: (key: string, value: string) => void }
         value={value}
         onChange={e => setValue(e.target.value)}
         placeholder="value"
-        className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40 transition-colors"
+        className="cb-field flex-1"
         onKeyDown={e => e.key === 'Enter' && handleAdd()}
       />
       <button
         onClick={handleAdd}
         disabled={!key.trim()}
-        className="w-7 h-7 flex items-center justify-center rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-30 transition-all"
+        className="cb-btn cb-btn--accent justify-center"
       >
         <Plus size={11} />
       </button>
@@ -174,22 +185,22 @@ function CliRow({
     <div className="flex items-start justify-between gap-4">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
-          <p className="text-[11px] font-medium text-slate-300">{label}</p>
+          <p className="cb-setting__label">{label}</p>
           {status && (
-            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${status.found ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-amber-400 border-amber-500/20 bg-amber-500/5'}`}>
+            <span className={`cb-badge ${status.found ? 'cb-badge--success' : 'cb-badge--warn'}`}>
               {status.found ? '✓ instalado' : '✗ não encontrado'}
             </span>
           )}
         </div>
-        <p className="text-[10px] text-slate-600 mt-0.5 leading-relaxed">{description}</p>
+        <p className="cb-setting__help">{description}</p>
         {status?.path && status.found && (
-          <p className="text-[9px] font-mono text-slate-700 mt-0.5 truncate">{status.path}</p>
+          <p className="text-xs font-mono text-cb-fg-2 mt-0.5 truncate">{status.path}</p>
         )}
         {status?.version && (
-          <p className="text-[9px] font-mono text-slate-700 mt-0.5">{status.version}</p>
+          <p className="text-xs font-mono text-cb-fg-2 mt-0.5">{status.version}</p>
         )}
         {installErr && (
-          <p className="text-[9px] font-mono text-red-400 mt-1 leading-relaxed">{installErr}</p>
+          <p className="text-xs font-mono text-cb-danger mt-1 leading-relaxed">{installErr}</p>
         )}
       </div>
       <div className="flex gap-2 shrink-0">
@@ -197,7 +208,7 @@ function CliRow({
           <button
             onClick={handleInstall}
             disabled={isInstalling || cliBusy}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-300 text-[10px] font-bold uppercase tracking-widest hover:bg-violet-500/20 disabled:opacity-40 transition-all whitespace-nowrap"
+            className="cb-btn cb-btn--accent"
           >
             {isInstalling
               ? <RefreshCw size={11} className="animate-spin" />
@@ -208,7 +219,7 @@ function CliRow({
         <button
           onClick={onDetect}
           disabled={cliBusy}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all whitespace-nowrap"
+          className="cb-btn"
         >
           <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
         </button>
@@ -229,6 +240,7 @@ export function SettingsPage() {
     } catch {}
     return ['terminal'];
   });
+  const { scrollRef, selectSection } = useSectionNavigation(setOpen);
   const [saved,     setSaved]  = useState(false);
   const [shells,    setShells] = useState<string[]>([]);
   const [skillStatus, setSkillStatus] = useState<{ installed: boolean } | null>(null);
@@ -247,11 +259,7 @@ export function SettingsPage() {
   const [nineRouterInstallErr, setNineRouterInstallErr] = useState<string | null>(null);
   const [skillBusy,   setSkillBusy]   = useState(false);
   // Marketplace
-  const [registryIndex, setRegistryIndex] = useState<any[]>([]);
-  const [registryLoading, setRegistryLoading] = useState(false);
-  const [marketSearch, setMarketSearch] = useState('');
-  const [marketCategory, setMarketCategory] = useState<'all' | 'agent' | 'skill'>('all');
-  const [installingId, setInstallingId] = useState<string | null>(null);
+  const [marketplaceSummary, setMarketplaceSummary] = useState<MarketplaceSummary | null>(null);
   const [cliBusy,     setCliBusy]     = useState(false);
   // Voice / BrainVoice
   const [audioConfig, setAudioConfig] = useState<any>(null);
@@ -334,12 +342,6 @@ export function SettingsPage() {
     (window as any).codeBrainApp?.skill?.list?.()
       .then((skills: string[]) => setInstalledSkills(skills))
       .catch(() => {});
-    // Load marketplace registry
-    setRegistryLoading(true);
-    (window as any).codeBrainApp?.skill?.registryIndex?.()
-      .then((res: any) => { if (res?.ok && res.index?.skills) setRegistryIndex(res.index.skills); })
-      .catch(() => {})
-      .finally(() => setRegistryLoading(false));
     // Load CLI status — detect returns AllCliInfo { openclaude, claude, shell }
     (window as any).codeBrainApp?.cli?.detect?.()
       .then((s: any) => {
@@ -488,81 +490,56 @@ export function SettingsPage() {
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Left nav */}
-      <aside className="w-52 border-r border-white/5 bg-[#0F0F13] p-5 hidden md:flex flex-col gap-2 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-        <h3 className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-3">Seções</h3>
-        {([
-          { id: 'terminal'  as Section, icon: <Type size={12} />,     label: 'Terminal'  },
-          { id: 'shell'     as Section, icon: <Terminal size={12} />, label: 'Shell'     },
-          { id: 'providers' as Section, icon: <Zap size={12} />,      label: 'Providers' },
-          { id: 'spawn'     as Section, icon: <Monitor size={12} />,  label: 'Spawn Padrão' },
-          { id: 'envvars'   as Section, icon: <Variable size={12} />, label: 'Env Vars' },
-          { id: 'skill'          as Section, icon: <Download size={12} />, label: 'Skill & CLI' },
-          { id: 'marketplace'    as Section, icon: <Store size={12} />,    label: 'Marketplace' },
-          { id: 'notifications'  as Section, icon: <Bell size={12} />,     label: 'Notificações' },
-          { id: 'discord'        as Section, icon: <Gamepad2 size={12} />, label: 'Discord'   },
-          { id: 'lab'            as Section, icon: <FlaskConical size={12} />, label: 'Laboratório' },
-          { id: 'advanced'       as Section, icon: <Shield size={12} />,   label: 'Avançado'  },
-        ] as const).map(({ id, icon, label }) => (
-          <button key={id} onClick={() => toggleSection(id)}
-            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-[11px] transition-all ${open.includes(id) ? 'bg-[#5855e5]/10 border border-[#5855e5]/20 text-indigo-300' : 'text-slate-500 hover:bg-white/5 border border-transparent hover:border-white/5 hover:text-slate-300'}`}
-          >{icon}{label}</button>
+      {/* Navegação das seções */}
+      <aside className="w-48 shrink-0 border-r border-cb-line-0 bg-cb-bg-1 hidden lg:flex flex-col cb-scroll p-3 gap-4">
+        {NAV_GROUPS.map((group) => (
+          <nav key={group.label} aria-label={group.label}>
+            <h2 className="cb-label px-2 mb-1">{group.label}</h2>
+            {group.items.map(({ id, icon, label }) => (
+              <button key={id} type="button" onClick={() => selectSection(id)} data-active={open.includes(id)} className="cb-row w-full text-left text-sm min-h-cell-lg">
+                <span className={open.includes(id) ? 'text-cb-accent' : 'text-cb-fg-2'} aria-hidden>{icon}</span>
+                {label}
+              </button>
+            ))}
+          </nav>
         ))}
 
-        <div className="mt-auto pt-4 border-t border-white/5 space-y-2">
-          <div className="p-2.5 rounded-lg bg-[#0A0A0B]/50 border border-white/5">
-            <p className="text-[9px] font-mono text-slate-600 uppercase tracking-widest mb-1">Marketplace</p>
-            <p className={`text-[10px] font-bold ${registryIndex.length > 0 ? 'text-indigo-400' : 'text-slate-600'}`}>
-              {registryLoading ? '...' : `${registryIndex.length} itens`}
-            </p>
-          </div>
-          <div className="p-2.5 rounded-lg bg-[#0A0A0B]/50 border border-white/5">
-            <p className="text-[9px] font-mono text-slate-600 uppercase tracking-widest mb-1">Skill</p>
-            <p className={`text-[10px] font-bold ${skillStatus?.installed ? 'text-emerald-400' : 'text-slate-600'}`}>
-              {skillStatus === null ? '—' : skillStatus.installed ? '✓ Instalada' : '✗ Não instalada'}
-            </p>
-          </div>
-          <div className="p-2.5 rounded-lg bg-[#0A0A0B]/50 border border-white/5">
-            <p className="text-[9px] font-mono text-slate-600 uppercase tracking-widest mb-1">CLI</p>
-            <p className={`text-[10px] font-bold ${cliStatus?.found ? 'text-emerald-400' : 'text-slate-600'}`}>
-              {cliStatus === null ? '—' : cliStatus.found ? '✓ Encontrada' : '✗ Não encontrada'}
-            </p>
-          </div>
-        </div>
+        <dl className="mt-auto pt-3 border-t border-cb-line-0 text-xs space-y-1 px-2">
+          <div className="flex justify-between gap-2"><dt className="text-cb-fg-2">marketplace</dt><dd className="text-cb-fg-1 tabular-nums">{marketplaceSummary?.loading ? '…' : marketplaceSummary ? `${marketplaceSummary.online} online` : 'online'}</dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-cb-fg-2">skill</dt><dd><StatusValue state={skillStatus?.installed ? 'ok' : 'off'}>{skillStatus === null ? '—' : skillStatus.installed ? 'instalada' : 'ausente'}</StatusValue></dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-cb-fg-2">cli</dt><dd><StatusValue state={cliStatus?.found ? 'ok' : 'off'}>{cliStatus === null ? '—' : cliStatus.found ? 'encontrada' : 'ausente'}</StatusValue></dd></div>
+        </dl>
       </aside>
 
       {/* Center */}
-      <section className="flex-1 p-5 overflow-y-auto relative" style={{ scrollbarWidth: 'thin' }}>
-        <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-        <div className="relative z-10 max-w-2xl space-y-4">
+      <section ref={scrollRef} className="flex-1 min-w-0 cb-scroll bg-cb-bg-0">
+        <div className="max-w-[760px] mx-auto px-5 py-5">
 
-          {/* Header */}
-          <div className="flex items-start justify-between mb-2">
-            <div>
-              <h1 className="text-[16px] font-bold text-white">Settings</h1>
-              <p className="text-[10px] text-slate-500 mt-0.5">Configurações aplicadas em tempo real</p>
+          <header className="flex flex-wrap items-start justify-between gap-3 mb-5">
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-cb-fg-0 leading-snug"><Prompt>configurações</Prompt></h1>
+              <p className="mt-1 text-sm text-cb-fg-2">Aplicadas em tempo real.</p>
             </div>
-            <button onClick={handleSave}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-bold uppercase tracking-widest transition-all ${saved ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400' : 'bg-[#5855e5] text-white hover:bg-[#4a47d6]'}`}
-            >
-              {saved ? <><CheckCircle2 size={12} />Salvo!</> : <><Save size={12} />Salvar</>}
+            <button type="button" onClick={handleSave} className={`cb-btn cb-btn--lg ${saved ? 'cb-btn--success' : 'cb-btn--primary'}`}>
+              {saved ? <><CheckCircle2 size={14} />salvo</> : <><Save size={14} />salvar</>}
             </button>
-          </div>
+          </header>
 
+          <SectionRule label="ambiente" className="mt-2" />
           {/* ── Terminal ─────────────────────────────────────────────── */}
           <SectionCard id="terminal" icon={<Type size={13} />} title="Terminal" badge="Ativo" active={open.includes('terminal')} onToggle={toggleSection}>
             <Row label="Tamanho da Fonte" description={`Tamanho atual: ${fontSize}px`}>
               <Stepper value={fontSize} unit="px" onIncrease={increaseFontSize} onDecrease={decreaseFontSize} onReset={resetFontSize} />
             </Row>
             <div>
-              <input type="range" min={MIN_SIZE} max={MAX_SIZE} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="w-full h-1 bg-white/5 rounded-full appearance-none accent-[#5855e5]" />
-              <div className="flex justify-between text-[9px] text-slate-700 mt-1"><span>{MIN_SIZE}px</span><span>{MAX_SIZE}px</span></div>
+              <input type="range" min={MIN_SIZE} max={MAX_SIZE} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="cb-range w-full" />
+              <div className="mt-3"><RangeLimits min={`${MIN_SIZE}px`} max={`${MAX_SIZE}px`} /></div>
             </div>
             <Divider />
 
             <Row label="Família de Fonte">
               <select value={fontFamily} onChange={e => setFontFamily(e.target.value)}
-                className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer hover:border-white/20 transition-colors"
+                className="cb-select"
               >
                 {FONT_OPTIONS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
               </select>
@@ -583,8 +560,8 @@ export function SettingsPage() {
               <Stepper value={`${(appZoom * 100).toFixed(0)}%`} onIncrease={increaseAppZoom} onDecrease={decreaseAppZoom} onReset={resetAppZoom} />
             </Row>
             <div>
-              <input type="range" min={50} max={200} step={10} value={Math.round(appZoom * 100)} onChange={e => useTerminalSettings.setState({ appZoom: Math.max(0.5, Math.min(3, Number(e.target.value) / 100)) })} className="w-full h-1 bg-white/5 rounded-full appearance-none accent-[#5855e5]" />
-              <div className="flex justify-between text-[9px] text-slate-700 mt-1"><span>50%</span><span>200%</span></div>
+              <input type="range" min={50} max={200} step={10} value={Math.round(appZoom * 100)} onChange={e => useTerminalSettings.setState({ appZoom: Math.max(0.5, Math.min(3, Number(e.target.value) / 100)) })} className="cb-range w-full" />
+              <div className="mt-3"><RangeLimits min="50%" max="200%" /></div>
             </div>
             <Divider />
 
@@ -617,7 +594,7 @@ export function SettingsPage() {
               <select
                 value={scrollbackSize}
                 onChange={e => setScrollbackSize(Number(e.target.value))}
-                className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer hover:border-white/20 transition-colors"
+                className="cb-select"
               >
                 {SCROLLBACK_OPTIONS.map(o => (
                   <option key={o.id} value={o.value}>{o.label}</option>
@@ -633,26 +610,27 @@ export function SettingsPage() {
                 <select
                   value={defaultShellPath ?? ''}
                   onChange={e => setDefaultShell(e.target.value || null)}
-                  className="bg-[#1A1A22] border border-white/10 rounded px-3 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer hover:border-white/20 transition-colors max-w-[200px] truncate"
+                  className="cb-select max-w-[200px] truncate"
                 >
                   <option value="">Sistema padrão</option>
                   {shells.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </Row>
             ) : (
-              <p className="text-[10px] text-slate-600 font-mono">Nenhum shell detectado além do padrão do sistema.</p>
+              <p className="text-xs text-cb-fg-2 font-mono">Nenhum shell detectado além do padrão do sistema.</p>
             )}
             {defaultShellPath && (
-              <p className="text-[9px] font-mono text-slate-600 truncate">Atual: {defaultShellPath}</p>
+              <p className="text-xs font-mono text-cb-fg-2 truncate">Atual: {defaultShellPath}</p>
             )}
           </SectionCard>
 
+          <SectionRule label="agentes" className="mt-5" />
           {/* ── Providers ────────────────────────────────────────────── */}
           <SectionCard id="providers" icon={<Zap size={13} />} title="Providers" active={open.includes('providers')} onToggle={toggleSection}>
             <Row label="Modelos e APIs" description="Cada pane pode usar um endpoint ou modelo LLM próprio. Configure aqui — depois escolhe no + PANE">
               <button
                 onClick={() => { document.dispatchEvent(new CustomEvent('open-providers-modal')); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-[10px] font-mono text-indigo-400 uppercase tracking-widest transition-all"
+                className="cb-btn cb-btn--accent"
               >
                 Configurar Providers
               </button>
@@ -660,46 +638,46 @@ export function SettingsPage() {
             {providers.length > 0 && <Divider />}
             {providers.length === 0 ? (
               <div className="py-2 text-center">
-                <p className="text-[11px] text-slate-600">Nenhum provider configurado</p>
-                <p className="text-[10px] text-slate-700 mt-1">Clique acima para adicionar</p>
+                <p className="text-sm text-cb-fg-2">Nenhum provider configurado</p>
+                <p className="text-xs text-cb-fg-2 mt-1">Clique acima para adicionar</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {providers.map((p: any) => (
-                  <div key={p.id} className="p-3.5 rounded-xl border border-white/5 bg-[#1A1A22]">
+                  <div key={p.id} className="cb-rail" style={{ '--cb-rail-color': 'var(--cb-line-2)' } as React.CSSProperties}>
                     <div className="flex items-start justify-between mb-2">
                       <div>
-                        <p className="text-[11px] font-bold text-slate-200">{p.label}</p>
-                        <p className="text-[9px] font-mono text-slate-600 mt-0.5">{p.id}</p>
+                        <p className="text-sm font-bold text-cb-fg-0">{p.label}</p>
+                        <p className="text-xs font-mono text-cb-fg-2 mt-0.5">{p.id}</p>
                       </div>
-                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 uppercase">{p.type ?? 'custom'}</span>
+                      <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-cb-accent-wash text-cb-accent border border-cb-accent-dim uppercase">{p.type ?? 'custom'}</span>
                     </div>
                     {(p.models ?? []).length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {(p.models as string[]).map((m: string) => (
-                          <span key={m} className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-slate-500 border border-white/5 truncate max-w-[160px]">{m}</span>
+                          <span key={m} className="text-xs font-mono px-1.5 py-0.5 rounded-cb-1 bg-cb-bg-2 text-cb-fg-2 border border-cb-line-0 truncate max-w-[160px]">{m}</span>
                         ))}
                       </div>
                     )}
-                    {p.host && <p className="text-[9px] font-mono text-slate-600 mt-1.5">host: {p.host}</p>}
+                    {p.host && <p className="text-xs font-mono text-cb-fg-2 mt-1.5">host: {p.host}</p>}
                   </div>
                 ))}
               </div>
             )}
             <button onClick={() => loadProviders()}
-              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 transition-all"
+              className="cb-btn w-full justify-center"
             ><RefreshCw size={11} /> Recarregar Providers</button>
           </SectionCard>
 
           {/* ── Agent/CLI Preferido ──────────────────────────────────── */}
           <SectionCard id="preferredAgent" icon={<Cpu size={13} />} title="Agent/CLI Preferido" active={open.includes('preferredAgent')} onToggle={toggleSection}>
-            <p className="text-[10px] text-slate-500 leading-relaxed">
+            <p className="cb-help">
               Desempata qual CLI usar quando um modelo existe em múltiplos providers.
-              Ex: <span className="font-mono text-slate-400">mimo-v2.5-pro</span> está no OpenClaude e no Claude Code CLI — a preferência decide.
+              Ex: <span className="font-mono text-cb-fg-1">mimo-v2.5-pro</span> está no OpenClaude e no Claude Code CLI — a preferência decide.
             </p>
             <div className="mt-3 space-y-3">
               <div>
-                <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">CLI Preferido</label>
+                <label className="cb-label block mb-1.5">CLI Preferido</label>
                 <select
                   value={preferredAgent ?? ''}
                   onChange={e => {
@@ -713,7 +691,7 @@ export function SettingsPage() {
                       (window as any).codeBrainApp?.appConfig?.set?.({ ...cfg, preferredAgent: val ?? undefined });
                     }).catch(() => {});
                   }}
-                  className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer"
+                  className="cb-select w-full"
                 >
                   <option value="">Automático (nenhum)</option>
                   <option value="claude">Claude Code CLI</option>
@@ -722,7 +700,7 @@ export function SettingsPage() {
                   <option value="codex">Codex</option>
                 </select>
               </div>
-              <p className="text-[9px] text-slate-600 font-mono">
+              <p className="text-xs text-cb-fg-2 font-mono">
                 {preferredAgent
                   ? `Ativo: ${HOST_LABELS[preferredAgent] ?? preferredAgent}`
                   : 'Nenhum — usa o primeiro provider que casar com o modelo.'}
@@ -732,13 +710,13 @@ export function SettingsPage() {
 
           {/* ── Spawn Padrão ─────────────────────────────────────────── */}
           <SectionCard id="spawn" icon={<Monitor size={13} />} title="Spawn Padrão" badge="Por Workspace" active={open.includes('spawn')} onToggle={toggleSection}>
-            <p className="text-[10px] text-slate-500 leading-relaxed">
-              Modelo aberto ao clicar em <span className="text-slate-300 font-mono">+Pane</span> ou ao abrir um workspace.
-              {activeWorkspace && <span className="ml-1 font-mono text-indigo-400 text-[9px]">{activeWorkspace.split(/[\\/]/).pop()}</span>}
+            <p className="cb-help">
+              Modelo aberto ao clicar em <span className="text-cb-fg-1 font-mono">+Pane</span> ou ao abrir um workspace.
+              {activeWorkspace && <span className="ml-1 font-mono text-cb-accent text-xs">{activeWorkspace.split(/[\\/]/).pop()}</span>}
             </p>
             <div className="space-y-3 mt-2">
               <div>
-                <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">Provider padrão</label>
+                <label className="cb-label block mb-1.5">Provider padrão</label>
                 <select
                   value={defaultProviderId}
                   onChange={e => {
@@ -746,7 +724,7 @@ export function SettingsPage() {
                     const p = providers.find((p: any) => p.id === e.target.value);
                     setDefaultModel(providerDefaultModels[e.target.value] ?? p?.models?.[0] ?? '');
                   }}
-                  className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer"
+                  className="cb-select w-full"
                 >
                   <option value="">— Sem preferência —</option>
                   {providers.map((p: any) => (
@@ -759,11 +737,11 @@ export function SettingsPage() {
                 const models: string[] = p?.models ?? [];
                 return models.length > 0 ? (
                   <div>
-                    <label className="block font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-1.5">Modelo padrão</label>
+                    <label className="cb-label block mb-1.5">Modelo padrão</label>
                     <select
                       value={defaultModel}
                       onChange={e => setDefaultModel(e.target.value)}
-                      className="w-full bg-[#1A1A22] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer"
+                      className="cb-select w-full"
                     >
                       {models.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
@@ -795,21 +773,21 @@ export function SettingsPage() {
                       setTimeout(() => setSpawnMsg(null), 2500);
                     }
                   }}
-                  className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#5855e5] text-white rounded-lg hover:bg-[#4a47d6] transition-colors"
+                  className="cb-btn cb-btn--primary"
                 >Salvar Padrão</button>
-                {spawnMsg && <span className={`font-mono text-[10px] ${spawnMsg.startsWith('Erro') ? 'text-red-400' : 'text-emerald-400'}`}>{spawnMsg}</span>}
+                {spawnMsg && <span className={`text-xs ${spawnMsg.startsWith('Erro') ? 'text-cb-danger' : 'text-cb-success'}`}>{spawnMsg}</span>}
               </div>
             </div>
             {providers.length > 0 && (
               <>
                 <Divider />
-                <p className="font-mono text-[9px] text-slate-500 uppercase tracking-widest mb-2">Padrão por provider</p>
+                <p className="cb-label block mb-2">Padrão por provider</p>
                 <div className="space-y-2">
                   {providers.map((p: any) => {
                     const models: string[] = p.models ?? [];
                     return (
                       <div key={p.id} className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 w-28 truncate shrink-0">{p.label ?? p.id}</span>
+                        <span className="text-xs text-cb-fg-1 w-28 truncate shrink-0">{p.label ?? p.id}</span>
                         {models.length > 0 ? (
                           <select
                             value={providerDefaultModels[p.id] ?? models[0]}
@@ -818,7 +796,7 @@ export function SettingsPage() {
                               setProviderDefaultModels(next);
                               localStorage.setItem('codebrain.providerDefaultModels', JSON.stringify(next));
                             }}
-                            className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 outline-none focus:border-[#5855e5] appearance-none cursor-pointer"
+                            className="cb-select flex-1"
                           >
                             {models.map(m => <option key={m} value={m}>{m}</option>)}
                           </select>
@@ -832,7 +810,7 @@ export function SettingsPage() {
                               setProviderDefaultModels(next);
                               localStorage.setItem('codebrain.providerDefaultModels', JSON.stringify(next));
                             }}
-                            className="flex-1 bg-[#1A1A22] border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 placeholder-slate-700 outline-none focus:border-[#5855e5] transition-colors"
+                            className="cb-field flex-1"
                           />
                         )}
                       </div>
@@ -845,8 +823,8 @@ export function SettingsPage() {
 
           {/* ── Custom Env Vars ───────────────────────────────────────── */}
           <SectionCard id="envvars" icon={<Variable size={13} />} title="Custom Env Vars" badge="Global" active={open.includes('envvars')} onToggle={toggleSection}>
-            <p className="text-[10px] text-slate-500 leading-relaxed mb-3">
-              Variáveis de ambiente aplicadas a <span className="text-slate-300 font-medium">todos</span> os agentes spawnados.
+            <p className="cb-help mb-3">
+              Variáveis de ambiente aplicadas a <span className="text-cb-fg-1 font-medium">todos</span> os agentes spawnados.
               Útil para API keys, base URLs, e flags que precisam estar disponíveis em qualquer terminal.
             </p>
             <div className="space-y-2">
@@ -856,7 +834,7 @@ export function SettingsPage() {
                     type="text"
                     value={key}
                     readOnly
-                    className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-400 placeholder-slate-700 focus:outline-none"
+                    className="cb-field flex-1"
                   />
                   <input
                     type="password"
@@ -865,7 +843,7 @@ export function SettingsPage() {
                       const next = { ...globalEnv, [key]: e.target.value };
                       setGlobalEnv(next);
                     }}
-                    className="flex-1 bg-black/30 border border-white/10 rounded px-2.5 py-1.5 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40 transition-colors"
+                    className="cb-field flex-1"
                   />
                   <button
                     onClick={() => {
@@ -873,14 +851,14 @@ export function SettingsPage() {
                       delete next[key];
                       setGlobalEnv(next);
                     }}
-                    className="w-7 h-7 flex items-center justify-center rounded bg-white/5 border border-white/10 text-slate-500 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/5 transition-all"
+                    className="cb-btn justify-center"
                   >
                     <X size={11} />
                   </button>
                 </div>
               ))}
               {Object.keys(globalEnv).length === 0 && (
-                <p className="text-[10px] text-slate-600 font-mono py-2 text-center">Nenhuma variável configurada</p>
+                <p className="text-xs text-cb-fg-2 font-mono py-2 text-center">Nenhuma variável configurada</p>
               )}
             </div>
             <AddEnvVarRow onAdd={(k, v) => setGlobalEnv(prev => ({ ...prev, [k]: v }))} />
@@ -896,42 +874,43 @@ export function SettingsPage() {
                     setTimeout(() => setEnvMsg(null), 2500);
                   }
                 }}
-                className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#5855e5] text-white rounded-lg hover:bg-[#4a47d6] transition-colors"
+                className="cb-btn cb-btn--primary"
               >
                 Salvar Env Vars
               </button>
               {envMsg && (
-                <span className={`font-mono text-[10px] ${envMsg.startsWith('Erro') ? 'text-red-400' : 'text-emerald-400'}`}>
+                <span className={`text-xs ${envMsg.startsWith('Erro') ? 'text-cb-danger' : 'text-cb-success'}`}>
                   {envMsg}
                 </span>
               )}
             </div>
-            <p className="text-[9px] text-slate-600 font-mono mt-2">Aplicado em todos os spawns. Para session-only, use export no terminal.</p>
+            <p className="text-xs text-cb-fg-2 font-mono mt-2">Aplicado em todos os spawns. Para session-only, use export no terminal.</p>
           </SectionCard>
 
+          <SectionRule label="extensões" className="mt-5" />
           {/* ── Skill & CLI ──────────────────────────────────────────── */}
           <SectionCard id="skill" icon={<Download size={13} />} title="Skill & CLI" active={open.includes('skill')} onToggle={toggleSection}>
             {/* Outras skills */}
             <div className="flex flex-col gap-3 mb-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[11px] font-medium text-slate-300">Skills do OpenClaude</p>
-                  <p className="text-[10px] text-slate-600 mt-0.5">Skills instaladas em <span className="font-mono bg-white/5 px-1 rounded">~/.claude/skills</span></p>
+                  <p className="cb-setting__label">Skills do OpenClaude</p>
+                  <p className="cb-setting__help">Skills instaladas em <span className="cb-code">~/.claude/skills</span></p>
                 </div>
                 <button
                   onClick={() => (window as any).codeBrainApp?.skill?.openFolder?.()}
-                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 hover:bg-white/5 text-slate-300 transition-colors"
+                  className="cb-btn"
                 >
                   Abrir Pasta
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {installedSkills.length === 0 ? (
-                  <span className="text-[10px] text-slate-600">Nenhuma skill encontrada (abra a pasta e coloque a sua lá).</span>
+                  <span className="text-xs text-cb-fg-2">Nenhuma skill encontrada (abra a pasta e coloque a sua lá).</span>
                 ) : (
                   installedSkills.map(skill => (
-                    <span key={skill} className="px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-mono text-indigo-300 flex items-center gap-1.5">
-                      <Zap size={10} className={skill === 'codebrain-skill' ? 'text-emerald-400' : 'text-indigo-400'} />
+                    <span key={skill} className="px-2 py-1 rounded-cb-1 bg-cb-accent-wash border border-cb-accent-dim text-xs font-mono text-cb-accent flex items-center gap-1.5">
+                      <Zap size={10} className={skill === 'codebrain-skill' ? 'text-cb-success' : 'text-cb-accent'} />
                       {skill}
                     </span>
                   ))
@@ -944,10 +923,10 @@ export function SettingsPage() {
             {/* Codebrain Skill */}
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] font-medium text-slate-300">Codebrain Skill</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">Instala o skill do Codebrain no ambiente Claude.</p>
+                <p className="cb-setting__label">Codebrain Skill</p>
+                <p className="cb-setting__help">Instala o skill do Codebrain no ambiente Claude.</p>
                 {skillStatus && (
-                  <p className={`text-[9px] font-mono mt-1 ${skillStatus.installed ? 'text-emerald-400' : 'text-slate-700'}`}>
+                  <p className={`text-xs font-mono mt-1 ${skillStatus.installed ? 'text-cb-success' : 'text-cb-fg-2'}`}>
                     {skillStatus.installed ? '✓ Instalada' : '✗ Não instalada'}
                   </p>
                 )}
@@ -955,7 +934,7 @@ export function SettingsPage() {
               <button
                 onClick={handleSkillToggle}
                 disabled={skillBusy || skillStatus === null}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-40 ${skillStatus?.installed ? 'border border-red-500/20 text-red-400 hover:bg-red-500/5' : 'bg-[#5855e5] text-white hover:bg-[#4a47d6]'}`}
+                className={skillStatus?.installed ? 'cb-btn cb-btn--danger' : 'cb-btn cb-btn--primary'}
               >
                 {skillBusy ? '…' : skillStatus?.installed ? 'Desinstalar' : 'Instalar'}
               </button>
@@ -966,7 +945,7 @@ export function SettingsPage() {
             {/* OpenClaude CLI */}
             <CliRow
               label="OpenClaude CLI"
-              description={<>Motor principal dos agentes Codebrain. Instale via <span className="font-mono">npm install -g @gitlawb/openclaude</span>.</>}
+              description={<>Motor principal dos agentes Codebrain. A instalação automática usa <span className="font-mono">npm</span>, portanto requer Node.js.</>}
               status={cliStatus}
               installKey="openclaude"
               cliBusy={cliBusy}
@@ -994,7 +973,7 @@ export function SettingsPage() {
             {/* Codex CLI (OpenAI) */}
             <CliRow
               label="Codex CLI (OpenAI)"
-              description={<>CLI da OpenAI — provider <span className="font-mono">Codex (ChatGPT)</span>. Instale via <span className="font-mono">npm install -g @openai/codex</span>.</>}
+              description={<>CLI da OpenAI — provider <span className="font-mono">Codex (ChatGPT)</span>. A instalação automática usa <span className="font-mono">npm</span>, portanto requer Node.js.</>}
               status={codexCliStatus}
               installKey="codex"
               cliBusy={cliBusy}
@@ -1008,7 +987,7 @@ export function SettingsPage() {
             {/* Gemini CLI (Google) */}
             <CliRow
               label="Gemini CLI (Google)"
-              description={<>CLI nativo da Google — provider <span className="font-mono">Gemini CLI</span>. Instale via <span className="font-mono">npm install -g @google/gemini-cli</span>.</>}
+              description={<>CLI nativo da Google — provider <span className="font-mono">Gemini CLI</span>. A instalação automática usa <span className="font-mono">npm</span>, portanto requer Node.js.</>}
               status={geminiCliStatus}
               installKey="gemini"
               cliBusy={cliBusy}
@@ -1022,7 +1001,7 @@ export function SettingsPage() {
             {/* Kimi CLI (Moonshot) */}
             <CliRow
               label="Kimi CLI (Moonshot)"
-              description={<>Kimi Code CLI da Moonshot AI. Instala via script oficial: <span className="font-mono">curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash</span></>}
+              description={<>Kimi Code CLI da Moonshot AI. Usa o instalador oficial (PowerShell no Windows); não requer Node.js nem npm.</>}
               status={kimiCliStatus}
               installKey="kimi"
               cliBusy={cliBusy}
@@ -1036,8 +1015,8 @@ export function SettingsPage() {
             {/* Cursor CLI */}
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] font-medium text-slate-300">Cursor CLI</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">
+                <p className="cb-setting__label">Cursor CLI</p>
+                <p className="cb-setting__help">
                   Cursor Agent — binário <span className="font-mono">cursor-agent</span>.
                   {!cursorCliStatus?.found && (
                     <> Instale via <span className="font-mono">cursor.com</span>.</>
@@ -1045,17 +1024,17 @@ export function SettingsPage() {
                 </p>
                 {cursorCliStatus && (
                   <>
-                    <p className={`text-[9px] font-mono mt-1 ${cursorCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <p className={`text-xs font-mono mt-1 ${cursorCliStatus.found ? 'text-cb-success' : 'text-cb-warn'}`}>
                       {cursorCliStatus.found ? `✓ ${cursorCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
                     </p>
-                    {cursorCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{cursorCliStatus.version}</p>}
+                    {cursorCliStatus.version && <p className="text-xs font-mono text-cb-fg-2 mt-0.5">{cursorCliStatus.version}</p>}
                   </>
                 )}
               </div>
               <button
                 onClick={handleRedetectCli}
                 disabled={cliBusy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+                className="cb-btn"
               >
                 <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
               </button>
@@ -1066,8 +1045,8 @@ export function SettingsPage() {
             {/* Copilot CLI (GitHub) */}
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] font-medium text-slate-300">GitHub Copilot CLI</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">
+                <p className="cb-setting__label">GitHub Copilot CLI</p>
+                <p className="cb-setting__help">
                   GitHub Copilot — binário <span className="font-mono">copilot</span>.
                   {!copilotCliStatus?.found && (
                     <> Instale com <span className="font-mono">npm install -g @github/copilot</span>.</>
@@ -1075,17 +1054,17 @@ export function SettingsPage() {
                 </p>
                 {copilotCliStatus && (
                   <>
-                    <p className={`text-[9px] font-mono mt-1 ${copilotCliStatus.found ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <p className={`text-xs font-mono mt-1 ${copilotCliStatus.found ? 'text-cb-success' : 'text-cb-warn'}`}>
                       {copilotCliStatus.found ? `✓ ${copilotCliStatus.path ?? 'encontrado'}` : '✗ Não encontrado no PATH'}
                     </p>
-                    {copilotCliStatus.version && <p className="text-[9px] font-mono text-slate-700 mt-0.5">{copilotCliStatus.version}</p>}
+                    {copilotCliStatus.version && <p className="text-xs font-mono text-cb-fg-2 mt-0.5">{copilotCliStatus.version}</p>}
                   </>
                 )}
               </div>
               <button
                 onClick={handleRedetectCli}
                 disabled={cliBusy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+                className="cb-btn"
               >
                 <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
               </button>
@@ -1097,27 +1076,27 @@ export function SettingsPage() {
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <p className="text-[11px] font-medium text-slate-300">9Router</p>
+                  <p className="cb-setting__label">9Router</p>
                   {nineRouterCliStatus && (
-                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${nineRouterCliStatus.found ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-amber-400 border-amber-500/20 bg-amber-500/5'}`}>
+                    <span className={`cb-badge ${nineRouterCliStatus.found ? 'cb-badge--success' : 'cb-badge--warn'}`}>
                       {nineRouterCliStatus.found ? '✓ instalado' : '✗ não encontrado'}
                     </span>
                   )}
                 </div>
-                <p className="text-[10px] text-slate-600 mt-0.5 leading-relaxed">
+                <p className="cb-setting__help">
                   Proxy/roteador de LLMs — provider <span className="font-mono">9Router</span> (self-host em <span className="font-mono">localhost:20128</span> ou instância remota/VPS). Instale via <span className="font-mono">npm install -g 9router</span>, depois rode <span className="font-mono">9router</span> num terminal para subir o servidor.
                 </p>
                 {nineRouterCliStatus?.path && nineRouterCliStatus.found && (
-                  <p className="text-[9px] font-mono text-slate-700 mt-0.5 truncate">{nineRouterCliStatus.path}</p>
+                  <p className="text-xs font-mono text-cb-fg-2 mt-0.5 truncate">{nineRouterCliStatus.path}</p>
                 )}
                 {nineRouterCliStatus?.version && (
-                  <p className="text-[9px] font-mono text-slate-700 mt-0.5">{nineRouterCliStatus.version}</p>
+                  <p className="text-xs font-mono text-cb-fg-2 mt-0.5">{nineRouterCliStatus.version}</p>
                 )}
                 {nineRouterInstallErr && (
-                  <p className="text-[9px] font-mono text-red-400 mt-1 leading-relaxed">{nineRouterInstallErr}</p>
+                  <p className="text-xs font-mono text-cb-danger mt-1 leading-relaxed">{nineRouterInstallErr}</p>
                 )}
                 {nineRouterServer?.checked && (
-                  <p className={`text-[9px] font-mono mt-1 ${nineRouterServer.running ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  <p className={`text-xs font-mono mt-1 ${nineRouterServer.running ? 'text-cb-success' : 'text-cb-warn'}`}>
                     {nineRouterServer.running
                       ? `✓ servidor respondendo em localhost:20128 (${nineRouterServer.modelCount ?? 0} modelos)`
                       : `✗ servidor não respondeu em localhost:20128 — ${nineRouterServer.error} (instâncias remotas: verifique a conexão em Providers → 9Router)`}
@@ -1129,7 +1108,7 @@ export function SettingsPage() {
                   <button
                     onClick={handleInstall9Router}
                     disabled={nineRouterInstalling || cliBusy}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-300 text-[10px] font-bold uppercase tracking-widest hover:bg-violet-500/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                    className="cb-btn cb-btn--accent"
                   >
                     {nineRouterInstalling ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}
                     {nineRouterInstalling ? 'Instalando…' : 'Instalar'}
@@ -1138,14 +1117,14 @@ export function SettingsPage() {
                 <button
                   onClick={handleCheck9RouterServer}
                   disabled={nineRouterChecking}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all whitespace-nowrap"
+                  className="cb-btn"
                 >
                   <Link size={11} className={nineRouterChecking ? 'animate-spin' : ''} /> Verificar servidor
                 </button>
                 <button
                   onClick={handleRedetectCli}
                   disabled={cliBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 disabled:opacity-40 transition-all"
+                  className="cb-btn"
                 >
                   <RefreshCw size={11} className={cliBusy ? 'animate-spin' : ''} /> Detectar
                 </button>
@@ -1154,182 +1133,14 @@ export function SettingsPage() {
           </SectionCard>
 
           {/* ── Marketplace ─────────────────────────────────────────────── */}
-          <SectionCard id="marketplace" icon={<Store size={13} />} title="Marketplace" badge={`${registryIndex.length} itens`} active={open.includes('marketplace')} onToggle={toggleSection}>
-            <div className="space-y-3">
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[11px] font-medium text-slate-300">Catálogo · 1 clique</p>
-                  <p className="text-[10px] text-slate-600 mt-0.5">
-                    codebrain-skills · {registryIndex.length} componentes
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setRegistryLoading(true);
-                    (window as any).codeBrainApp?.skill?.registryIndex?.()
-                      .then((res: any) => { if (res?.ok && res.index?.skills) setRegistryIndex(res.index.skills); })
-                      .catch(() => {})
-                      .finally(() => setRegistryLoading(false));
-                  }}
-                  disabled={registryLoading}
-                  className="flex items-center gap-1 px-2 py-1 rounded border border-white/10 text-slate-500 text-[9px] hover:text-slate-300 hover:border-white/20 transition-colors"
-                >
-                  <RefreshCw size={10} className={registryLoading ? 'animate-spin' : ''} />
-                </button>
-              </div>
-
-              {/* Search */}
-              <div className="relative">
-                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
-                <input
-                  type="text"
-                  value={marketSearch}
-                  onChange={e => setMarketSearch(e.target.value)}
-                  placeholder="Buscar agents e skills..."
-                  className="w-full pl-7 pr-3 py-2 rounded-lg border border-white/[0.08] bg-white/[0.03] text-[10px] text-slate-300 placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-colors"
-                />
-              </div>
-
-              {/* Category tabs */}
-              <div className="flex gap-1">
-                {[
-                  { key: 'all' as const, label: 'Todos' },
-                  { key: 'agent' as const, label: 'Agents' },
-                  { key: 'skill' as const, label: 'Skills' },
-                ].map(tab => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setMarketCategory(tab.key)}
-                    className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-colors ${
-                      marketCategory === tab.key
-                        ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20'
-                        : 'text-slate-600 border border-transparent hover:text-slate-400 hover:border-white/5'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Registry list */}
-              {registryLoading ? (
-                <div className="flex items-center justify-center py-6">
-                  <RefreshCw size={14} className="animate-spin text-slate-600" />
-                </div>
-              ) : registryIndex.length === 0 ? (
-                <div className="text-center py-6">
-                  <Package size={20} className="text-slate-700 mx-auto mb-2" />
-                  <p className="text-[10px] text-slate-600">Nenhum item encontrado no catálogo.</p>
-                  <p className="text-[9px] text-slate-700 mt-1">Verifique sua conexão ou adicione skills manualmente.</p>
-                </div>
-              ) : (
-                <div className="space-y-1.5 max-h-[320px] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-                  {registryIndex
-                    .filter((item: any, idx: number, arr: any[]) => arr.findIndex((x: any) => x.id === item.id) === idx)
-                    .filter(item => {
-                      if (marketCategory !== 'all' && item.type !== marketCategory) return false;
-                      if (marketSearch.trim()) {
-                        const q = marketSearch.toLowerCase();
-                        return (item.name || item.id || '').toLowerCase().includes(q)
-                          || (item.description || '').toLowerCase().includes(q)
-                          || (item.tags || []).some((t: string) => t.toLowerCase().includes(q));
-                      }
-                      return true;
-                    })
-                    .map((item: any) => {
-                      const isInstalled = item.installed === true || installedSkills.includes(item.id);
-                      const isInstalling = installingId === item.id;
-                      return (
-                        <div
-                          key={item.id}
-                          className="group flex items-start gap-3 p-3 rounded-lg border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03] hover:border-indigo-500/15 transition-all"
-                        >
-                          <div className="mt-0.5">
-                            {item.type === 'agent' ? (
-                              <Cpu size={14} className="text-violet-400/60" />
-                            ) : (
-                              <Zap size={14} className="text-amber-400/60" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-[11px] font-bold text-slate-300 truncate">
-                                {item.name || item.id}
-                              </span>
-                              {isInstalled && (
-                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-bold text-emerald-400 uppercase">
-                                  Instalado
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[9px] text-slate-600 mt-0.5 line-clamp-2">
-                              {item.description || 'Sem descrição'}
-                            </p>
-                            {item.tags && item.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1.5">
-                                {item.tags.slice(0, 4).map((tag: string) => (
-                                  <span key={tag} className="px-1.5 py-0.5 rounded bg-white/[0.04] text-[8px] text-slate-600">
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={async () => {
-                              if (isInstalled) {
-                                // Uninstall — only works for .codebrain/skills/ items
-                                if (item.scope === 'codebrain') {
-                                  setInstallingId(item.id);
-                                  await (window as any).codeBrainApp?.skill?.uninstall?.({ id: item.id }).catch(() => {});
-                                  setInstalledSkills(prev => prev.filter(s => s !== item.id));
-                                  setInstallingId(null);
-                                }
-                                // Claude/workspace skills: no uninstall from marketplace
-                              } else {
-                                // Install from registry (remote only)
-                                setInstallingId(item.id);
-                                const res = await (window as any).codeBrainApp?.skill?.installFromRegistry?.({ id: item.id }).catch(() => null);
-                                if (res?.ok !== false) setInstalledSkills(prev => [...prev, item.id]);
-                                setInstallingId(null);
-                              }
-                            }}
-                            disabled={isInstalling || (isInstalled && item.scope !== 'codebrain')}
-                            className={`shrink-0 px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all disabled:opacity-40 ${
-                              isInstalled
-                                ? item.scope === 'codebrain'
-                                  ? 'border border-white/10 text-slate-500 hover:text-red-400 hover:border-red-500/20'
-                                  : 'border border-emerald-500/20 text-emerald-400/60 cursor-default'
-                                : 'bg-[#5855e5] text-white hover:bg-[#4a47d6]'
-                            }`}
-                          >
-                            {isInstalling ? '…' : isInstalled ? '✓ Instalado' : 'Instalar'}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  {registryIndex.filter(item => {
-                    if (marketCategory !== 'all' && item.type !== marketCategory) return false;
-                    if (marketSearch.trim()) {
-                      const q = marketSearch.toLowerCase();
-                      return (item.name || item.id || '').toLowerCase().includes(q)
-                        || (item.description || '').toLowerCase().includes(q);
-                    }
-                    return true;
-                  }).length === 0 && (
-                    <div className="text-center py-4">
-                      <p className="text-[10px] text-slate-600">Nenhum resultado para "{marketSearch}"</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+          <SectionCard id="marketplace" icon={<Store size={13} />} title="Marketplace" badge={marketplaceSummary ? `${marketplaceSummary.online} online · ${marketplaceSummary.installed} instaladas` : "Online"} active={open.includes("marketplace")} onToggle={toggleSection}>
+            <MarketplaceSection onSummaryChange={setMarketplaceSummary} />
           </SectionCard>
 
+          <SectionRule label="integrações" className="mt-5" />
           {/* ── Notificações ──────────────────────────────────────────── */}
           <SectionCard id="notifications" icon={<Bell size={13} />} title="Notificações" badge="Desktop" active={open.includes('notifications')} onToggle={toggleSection}>
-            <p className="text-[10px] text-slate-500 leading-relaxed mb-3">
+            <p className="cb-help mb-3">
               Notificações desktop nativas. Configure quando o Codebrain deve te alertar.
             </p>
             <Row label="Agente completa tarefa" description="Notifica quando um agente fica idle após >30s de atividade">
@@ -1361,7 +1172,7 @@ export function SettingsPage() {
                 }}
               />
             </Row>
-            <p className="text-[9px] text-slate-600 font-mono mt-3">
+            <p className="text-xs text-cb-fg-2 font-mono mt-3">
               As notificações são salvas automaticamente ao alternar.
             </p>
           </SectionCard>
@@ -1371,25 +1182,27 @@ export function SettingsPage() {
             <div className="space-y-3">
               {/* Provider selector */}
               <div>
-                <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1.5">Provider de transcrição</p>
+                <p className="cb-label block mb-1.5">Provider de transcrição</p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setAudioConfig((c: any) => c ? { ...c, provider: 'local' } : { provider: 'local' })}
-                    className={`text-left p-2 rounded border transition-all ${audioConfig?.provider === 'local' ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-white/10 bg-white/[0.02] text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
+                    aria-pressed={audioConfig?.provider === 'local'}
+                    className="cb-choice"
                   >
-                    <div className="flex items-center gap-1.5 mb-1 font-mono text-[10px] font-bold uppercase tracking-widest">
+                    <div className="flex items-center gap-1.5 mb-1 text-xs font-medium">
                       <Cpu size={12} strokeWidth={1.5} /> Local
                     </div>
-                    <p className="font-mono text-[9px] leading-relaxed text-slate-600">Zero custo. Usa CPU/GPU e modelo no disco.</p>
+                    <p className="text-xs leading-relaxed text-cb-fg-2">Zero custo. Usa CPU/GPU e modelo no disco.</p>
                   </button>
                   <button
                     onClick={() => setAudioConfig((c: any) => c ? { ...c, provider: 'groq' } : { provider: 'groq' })}
-                    className={`text-left p-2 rounded border transition-all ${audioConfig?.provider === 'groq' || !audioConfig?.provider ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-white/10 bg-white/[0.02] text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
+                    aria-pressed={audioConfig?.provider === 'groq' || !audioConfig?.provider}
+                    className="cb-choice"
                   >
-                    <div className="flex items-center gap-1.5 mb-1 font-mono text-[10px] font-bold uppercase tracking-widest">
+                    <div className="flex items-center gap-1.5 mb-1 text-xs font-medium">
                       <Cloud size={12} strokeWidth={1.5} /> Groq
                     </div>
-                    <p className="font-mono text-[9px] leading-relaxed text-slate-600">Cloud rápido. Usa API key Groq (whisper-large-v3).</p>
+                    <p className="text-xs leading-relaxed text-cb-fg-2">Cloud rápido. Usa API key Groq (whisper-large-v3).</p>
                   </button>
                 </div>
               </div>
@@ -1398,33 +1211,33 @@ export function SettingsPage() {
               {audioConfig?.provider === 'local' ? (
                 <div className="space-y-2">
                   <div>
-                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Binário whisper.cpp</p>
+                    <p className="cb-label block mb-1">Binário whisper.cpp</p>
                     <input
                       value={audioConfig?.localBinaryPath ?? ''}
                       onChange={e => setAudioConfig((c: any) => ({ ...c, localBinaryPath: e.target.value }))}
-                      className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-violet-500/40"
+                      className="cb-field w-full"
                       placeholder="Auto: whisper-cli no PATH"
                     />
                   </div>
                   <div>
-                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Modelo local .bin</p>
+                    <p className="cb-label block mb-1">Modelo local .bin</p>
                     <input
                       value={audioConfig?.localModelPath ?? ''}
                       onChange={e => setAudioConfig((c: any) => ({ ...c, localModelPath: e.target.value }))}
-                      className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-violet-500/40"
+                      className="cb-field w-full"
                       placeholder="ex: ~/.codebrain-app/models/ggml-small.bin"
                     />
-                    <p className="font-mono text-[9px] text-slate-700 mt-1">whisper.cpp + modelo ggml. O Codebrain converte chunks com ffmpeg.</p>
+                    <p className="text-xs text-cb-fg-2 mt-1">whisper.cpp + modelo ggml. O Codebrain converte chunks com ffmpeg.</p>
                   </div>
                 </div>
               ) : (
                 <div>
-                  <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Groq API Key</p>
+                  <p className="cb-label block mb-1">Groq API Key</p>
                   <input
                     type="password"
                     value={audioKey}
                     onChange={e => setAudioKey(e.target.value)}
-                    className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-violet-500/40"
+                    className="cb-field w-full"
                     placeholder={audioConfig?.apiKeySet ? '••••••••' : 'gsk_...'}
                   />
                 </div>
@@ -1436,11 +1249,11 @@ export function SettingsPage() {
               <div className="grid grid-cols-2 gap-2">
                 {audioConfig?.provider !== 'local' && (
                   <div>
-                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Modelo</p>
+                    <p className="cb-label block mb-1">Modelo</p>
                     <select
                       value={audioConfig?.model ?? 'whisper-large-v3'}
                       onChange={e => setAudioConfig((c: any) => ({ ...c, model: e.target.value }))}
-                      className="w-full bg-[#1A1A22] border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300 focus:outline-none focus:border-violet-500/40 appearance-none"
+                      className="cb-select w-full"
                     >
                       <option value="whisper-large-v3">whisper-large-v3</option>
                       <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
@@ -1448,11 +1261,11 @@ export function SettingsPage() {
                   </div>
                 )}
                 <div>
-                  <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Idioma</p>
+                  <p className="cb-label block mb-1">Idioma</p>
                   <select
                     value={audioConfig?.language ?? ''}
                     onChange={e => setAudioConfig((c: any) => ({ ...c, language: e.target.value }))}
-                    className="w-full bg-[#1A1A22] border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300 focus:outline-none focus:border-violet-500/40 appearance-none"
+                    className="cb-select w-full"
                   >
                     <option value="">Auto</option>
                     <option value="pt">pt</option>
@@ -1464,31 +1277,33 @@ export function SettingsPage() {
 
               {/* Capture mode */}
               <div>
-                <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Captura</p>
+                <p className="cb-label block mb-1">Captura</p>
                 <div className="grid grid-cols-2 gap-1">
                   <button
                     onClick={() => setAudioConfig((c: any) => ({ ...c, captureMode: 'hold' }))}
-                    className={`px-2 py-1.5 rounded border font-mono text-[10px] font-bold uppercase tracking-wider transition-all ${(audioConfig?.captureMode ?? 'hold') === 'hold' ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
+                    aria-pressed={(audioConfig?.captureMode ?? 'hold') === 'hold'}
+                    className="cb-choice text-center text-sm"
                   >Hold</button>
                   <button
                     onClick={() => setAudioConfig((c: any) => ({ ...c, captureMode: 'toggle' }))}
-                    className={`px-2 py-1.5 rounded border font-mono text-[10px] font-bold uppercase tracking-wider transition-all ${audioConfig?.captureMode === 'toggle' ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20'}`}
+                    aria-pressed={audioConfig?.captureMode === 'toggle'}
+                    className="cb-choice text-center text-sm"
                   >Toggle</button>
                 </div>
               </div>
 
               {/* Interaction mode */}
               <div>
-                <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Modo</p>
+                <p className="cb-label block mb-1">Modo</p>
                 <button
                   onClick={() => {
                     const cur = normalizedVoiceMode(audioConfig?.interactionMode);
                     const next = cur === 'coding' ? 'conversation' : 'coding';
                     setAudioConfig((c: any) => ({ ...c, interactionMode: next, outputMode: outputModeForInteractionMode(next) }));
                   }}
-                  className="w-full px-2 py-1.5 rounded border border-white/10 bg-white/[0.02] font-mono text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:border-white/20 transition-all"
+                  className="cb-btn w-full"
                 >
-                  {normalizedVoiceMode(audioConfig?.interactionMode) === 'coding' ? '🖥 Code (traduz para EN)' : '💬 Chat (mantém idioma original)'}
+                  {normalizedVoiceMode(audioConfig?.interactionMode) === 'coding' ? 'Code (traduz para EN)' : 'Chat (mantém idioma original)'}
                 </button>
               </div>
 
@@ -1496,33 +1311,33 @@ export function SettingsPage() {
               <div className="space-y-2">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest">Chunk</p>
-                    <span className="font-mono text-[9px] text-slate-500">{((audioConfig?.chunkMs ?? 2800) / 1000).toFixed(1)}s</span>
+                    <p className="cb-label block">Chunk</p>
+                    <span className="text-xs text-cb-fg-2">{((audioConfig?.chunkMs ?? 2800) / 1000).toFixed(1)}s</span>
                   </div>
                   <input type="range" min={1800} max={6000} step={100}
                     value={audioConfig?.chunkMs ?? 2800}
                     onChange={e => setAudioConfig((c: any) => ({ ...c, chunkMs: Number(e.target.value) }))}
-                    className="w-full accent-violet-500" />
+                    className="cb-range w-full" />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest">Ritmo alvo</p>
-                    <span className="font-mono text-[9px] text-slate-500">{audioConfig?.targetWpm ?? 150} PPM</span>
+                    <p className="cb-label block">Ritmo alvo</p>
+                    <span className="text-xs text-cb-fg-2">{audioConfig?.targetWpm ?? 150} PPM</span>
                   </div>
                   <input type="range" min={80} max={240} step={5}
                     value={audioConfig?.targetWpm ?? 150}
                     onChange={e => setAudioConfig((c: any) => ({ ...c, targetWpm: Number(e.target.value) }))}
-                    className="w-full accent-violet-500" />
+                    className="cb-range w-full" />
                 </div>
               </div>
 
               {/* STT Prompt */}
               <div>
-                <p className="font-mono text-[9px] text-slate-600 uppercase tracking-widest mb-1">Prompt STT (contexto técnico)</p>
+                <p className="cb-label block mb-1">Prompt STT (contexto técnico)</p>
                 <input
                   value={audioConfig?.prompt ?? ''}
                   onChange={e => setAudioConfig((c: any) => ({ ...c, prompt: e.target.value }))}
-                  className="w-full bg-black border border-white/10 rounded px-2 py-1.5 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-violet-500/40"
+                  className="cb-field w-full"
                   placeholder="Codebrain, Claude, Codex, MCP, Supabase, Groq"
                 />
               </div>
@@ -1562,36 +1377,36 @@ export function SettingsPage() {
                     finally { setAudioBusy(false); setTimeout(() => setAudioMsg(null), 3000); }
                   }}
                   disabled={audioBusy || !audioConfig}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-violet-500/30 text-violet-300 hover:bg-violet-500/10 disabled:opacity-50 transition-all font-mono text-[10px]"
+                  className="cb-btn cb-btn--accent"
                 >
                   {audioBusy ? <RefreshCw size={12} strokeWidth={1.5} className="animate-spin" /> : <Save size={12} strokeWidth={1.5} />}
                   {audioBusy ? 'Salvando…' : 'Salvar voz'}
                 </button>
-                {audioMsg && <p className="font-mono text-[9px] text-slate-500">{audioMsg}</p>}
+                {audioMsg && <p className="text-xs text-cb-fg-2">{audioMsg}</p>}
               </div>
             </div>
           </SectionCard>
 
           {/* ── Discord ──────────────────────────────────────────────── */}
           <SectionCard id="discord" icon={<Gamepad2 size={13} />} title="Discord Rich Presence" active={open.includes('discord')} onToggle={toggleSection}>
-            <p className="text-[10px] text-slate-500 leading-relaxed">
+            <p className="cb-help">
               Mostre "Codebrain" no seu perfil do Discord enquanto o app estiver aberto.
-              Crie um Application em <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">discord.com/developers</a> e cole o Client ID abaixo.
+              Crie um Application em <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer" className="text-cb-accent hover:underline">discord.com/developers</a> e cole o Client ID abaixo.
             </p>
 
             <div className="flex items-center gap-2 mt-2">
-              <div className={`w-2 h-2 rounded-full ${discordConnected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-              <span className="text-[10px] text-slate-400">{discordConnected ? 'Conectado ao Discord' : 'Desconectado'}</span>
+              <div className="cb-dot" style={{ '--cb-dot-color': discordConnected ? 'var(--cb-success)' : 'var(--cb-fg-3)' } as React.CSSProperties} />
+              <span className="text-xs text-cb-fg-1">{discordConnected ? 'Conectado ao Discord' : 'Desconectado'}</span>
             </div>
 
             <div className="mt-3 space-y-2">
-              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Application ID</label>
+              <label className="text-xs text-cb-fg-2 font-medium">Application ID</label>
               <input
                 type="text"
                 value={discordClientId}
                 onChange={e => { setDiscordClientId(e.target.value); setDiscordMsg(null); }}
                 placeholder="1510333918245683380"
-                className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono placeholder-slate-700 focus:outline-none focus:border-indigo-500/50"
+                className="cb-field w-full"
               />
             </div>
 
@@ -1609,14 +1424,15 @@ export function SettingsPage() {
                   }, 2000);
                 } catch { setDiscordMsg('Erro ao salvar'); }
               }}
-              className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-600/30 transition-all"
+              className="cb-btn cb-btn--accent mt-3"
             >
               <Save size={11} /> Salvar e Reconectar
             </button>
 
-            {discordMsg && <p className="text-[10px] text-slate-400 mt-1">{discordMsg}</p>}
+            {discordMsg && <p className="text-xs text-cb-fg-1 mt-1">{discordMsg}</p>}
           </SectionCard>
 
+          <SectionRule label="sistema" className="mt-5" />
           {/* ── Laboratório ──────────────────────────────────────────── */}
           <SectionCard id="lab" icon={<FlaskConical size={13} />} title="Laboratório" badge="Beta" active={open.includes('lab')} onToggle={toggleSection}>
             <LabSection />
@@ -1624,9 +1440,9 @@ export function SettingsPage() {
 
           {/* ── Avançado ─────────────────────────────────────────────── */}
           <SectionCard id="advanced" icon={<Shield size={13} />} title="Avançado" badge="Cuidado" active={open.includes('advanced')} onToggle={toggleSection}>
-            <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/15 flex items-start gap-2.5">
-              <AlertTriangle size={13} className="text-red-400 shrink-0 mt-0.5" />
-              <p className="text-[10px] text-slate-500 leading-relaxed">Ações irreversíveis. Confirme antes de prosseguir.</p>
+            <div className="cb-note" style={{ '--cb-rail-color': 'var(--cb-danger)' } as React.CSSProperties}>
+              <AlertTriangle size={13} className="text-cb-danger shrink-0 mt-0.5" />
+              <p className="cb-help">Ações irreversíveis. Confirme antes de prosseguir.</p>
             </div>
 
             <button
@@ -1636,7 +1452,7 @@ export function SettingsPage() {
                 resetAppZoom();
                 setLineHeight(1);
               }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 transition-all"
+              className="cb-btn w-full justify-center"
             >
               <RotateCcw size={11} /> Resetar Terminal ao Padrão
             </button>
@@ -1647,7 +1463,7 @@ export function SettingsPage() {
                 resetAppZoom();
                 resetFontSize();
               }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/10 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:border-white/20 hover:text-slate-300 transition-all"
+              className="cb-btn w-full justify-center"
             >
               <Monitor size={11} /> Resetar Zoom da Interface
             </button>
@@ -1655,14 +1471,10 @@ export function SettingsPage() {
         </div>
       </section>
 
-      {/* Right sidebar — live summary */}
-      <aside className="w-64 border-l border-white/5 bg-[#0F0F13] hidden xl:flex flex-col p-6 gap-6 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-        <div>
-          <h2 className="text-[13px] font-bold text-white mb-1">Config Atual</h2>
-          <p className="text-[9px] text-slate-500 font-mono">Aplicado ao terminal</p>
-        </div>
-
-        <div className="space-y-0.5">
+      {/* Resumo vivo */}
+      <aside className="w-60 shrink-0 border-l border-cb-line-0 bg-cb-bg-1 hidden xl:flex flex-col cb-scroll p-4 gap-3">
+        <SectionRule label="config atual" />
+        <dl className="text-xs">
           {[
             { label: 'Fonte',      value: FONT_OPTIONS.find(f => f.id === fontFamily)?.label ?? fontFamily },
             { label: 'Tamanho',   value: `${fontSize}px` },
@@ -1675,20 +1487,14 @@ export function SettingsPage() {
             { label: 'Skill',     value: skillStatus === null ? '—' : skillStatus.installed ? 'Instalada' : 'Não instalada' },
             { label: 'CLI',       value: cliStatus === null ? '—' : cliStatus.found ? 'Encontrada' : 'Não encontrada' },
             { label: 'Notificações', value: `${[notifOnTaskComplete && 'tarefa', notifOnMessage && 'msg', notifOnBuildResult && 'build'].filter(Boolean).length} ativa(s)` },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex justify-between text-[10px] py-2 border-b border-white/[0.04]">
-              <span className="text-slate-600">{label}</span>
-              <span className="font-mono text-slate-300 truncate ml-2 max-w-[120px] text-right">{value}</span>
+                    ].map(({ label, value }) => (
+            <div key={label} className="flex justify-between gap-3 min-h-cell items-center">
+              <dt className="text-cb-fg-2">{label}</dt>
+              <dd className="text-cb-fg-0 truncate text-right">{value}</dd>
             </div>
           ))}
-        </div>
-
-        <div className="mt-auto">
-          <div className="p-3 rounded-lg bg-[#5855e5]/5 border border-[#5855e5]/10 flex items-start gap-2">
-            <Info size={11} className="text-[#5855e5] shrink-0 mt-0.5" />
-            <p className="text-[9px] text-slate-600 leading-relaxed">Todas as configurações são salvas automaticamente via Zustand + localStorage.</p>
-          </div>
-        </div>
+        </dl>
+        <p className="mt-auto cb-help text-xs">Terminal e aparência são salvos sozinhos, ao alterar.</p>
       </aside>
     </div>
   );

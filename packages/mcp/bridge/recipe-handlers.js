@@ -3,8 +3,7 @@
 /**
  * recipe-handlers.js — Harness "Receitas" (Recipes) for Codebrain.
  *
- * Ported from Overclock's harnessAssistant.js with adaptations for Codebrain's
- * architecture (MCP tools, skill system, provider store).
+ * Integrates Codebrain's MCP tools, skill system and provider store.
  *
  * Two core LLM passes:
  *   - enrichCatalog: reads agent+skill names → assigns role + "when/how to use" blurb

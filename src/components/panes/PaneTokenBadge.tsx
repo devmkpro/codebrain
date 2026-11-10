@@ -119,7 +119,7 @@ export function PaneTokenBadge({
 
   return (
     <span
-      className="flex items-center gap-1 ml-1 px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-950/60 text-emerald-300 border border-emerald-800/40 shrink-0 select-none"
+      className="cb-chip select-none"
       title={
         hasCounts && counts
           ? [
@@ -136,45 +136,40 @@ export function PaneTokenBadge({
           : `~${liveOut.toLocaleString()} tokens (estimativa ao vivo do terminal)`
       }
     >
-      {/* Live pulse dot when generating */}
-      {isRunning && (
-        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-      )}
-
       {hasCounts && counts ? (
         <>
-          <span className="text-slate-400">in</span>
-          <span>{fmtTok(counts.input)}</span>
-          <span className="text-slate-600">·</span>
-          <span className="text-slate-400">out</span>
-          <span>{fmtTok(counts.output)}</span>
+          <span>in</span>
+          <span className="cb-chip-value">{fmtTok(counts.input)}</span>
+          <span className="cb-chip-sep">·</span>
+          <span>out</span>
+          <span className="cb-chip-value">{fmtTok(counts.output)}</span>
           {counts.cache_read > 0 && (
             <>
-              <span className="text-slate-600">·</span>
-              <span className="text-slate-400">cache</span>
-              <span>{fmtTok(counts.cache_read)}</span>
+              <span className="cb-chip-sep">·</span>
+              <span>cache</span>
+              <span className="cb-chip-value">{fmtTok(counts.cache_read)}</span>
             </>
           )}
           {counts.cost_usd > 0 && (
             <>
-              <span className="text-slate-600">·</span>
-              <span className="text-emerald-500">{fmtUsd(counts.cost_usd)}</span>
+              <span className="cb-chip-sep">·</span>
+              <span className="cb-chip-value">{fmtUsd(counts.cost_usd)}</span>
             </>
           )}
           {/* Orchestrator mission total */}
           {hasMission && missionCounts && (
             <>
-              <span className="text-slate-600 mx-0.5">│</span>
-              <span className="text-amber-400/80">Σ</span>
-              <span className="text-slate-400">in</span>
-              <span>{fmtTok(missionCounts.input)}</span>
-              <span className="text-slate-600">·</span>
-              <span className="text-slate-400">out</span>
-              <span>{fmtTok(missionCounts.output)}</span>
+              <span className="cb-chip-sep">│</span>
+              <span className="cb-chip-value">Σ</span>
+              <span>in</span>
+              <span className="cb-chip-value">{fmtTok(missionCounts.input)}</span>
+              <span className="cb-chip-sep">·</span>
+              <span>out</span>
+              <span className="cb-chip-value">{fmtTok(missionCounts.output)}</span>
               {missionCounts.cost_usd > 0 && (
                 <>
-                  <span className="text-slate-600">·</span>
-                  <span className="text-amber-400/80">{fmtUsd(missionCounts.cost_usd)}</span>
+                  <span className="cb-chip-sep">·</span>
+                  <span className="cb-chip-value">{fmtUsd(missionCounts.cost_usd)}</span>
                 </>
               )}
             </>
@@ -183,7 +178,7 @@ export function PaneTokenBadge({
       ) : (
         <>
           <span>~{fmtTok(liveOut)}</span>
-          <span className="text-emerald-600">tok</span>
+          <span>tok</span>
         </>
       )}
     </span>

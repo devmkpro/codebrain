@@ -1,0 +1,18 @@
+{
+  "$comment": "P0 anti-AI-slop rules. Mirrors Open Design craft/anti-ai-slop.md. Editing this changes what lint-artifact.mjs blocks.",
+  "forbiddenAccentHexes": [
+    "#6366f1",
+    "#4f46e5",
+    "#4338ca",
+    "#3730a3",
+    "#8b5cf6",
+    "#7c3aed",
+    "#a855f7"
+  ],
+  "trustGradientPatterns": [
+    "linear-gradient\\([^)]*#(6366f1|4f46e5|4338ca|3730a3|8b5cf6|7c3aed|a855f7)[^)]*#(3b82f6|2563eb|60a5fa|0ea5e9|06b6d4|22d3ee|ec4899|db2777|f472b6)",
+    "linear-gradient\\([^)]*#(3b82f6|2563eb|60a5fa)[^)]*#(06b6d4|22d3ee|0ea5e9)",
+    "linear-gradient\\([^)]*(purple|indigo|violet)[^)]*(blue|cyan|pink|fuchsia)",
+    "linear-gradient\\([^)]*(blue)[^)]*(cyan)"
+  ]
+}

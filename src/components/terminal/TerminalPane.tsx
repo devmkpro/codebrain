@@ -3,91 +3,35 @@ import { X$1 } from "../../stores/providers-store";
 import { usePushToTalk, spawnedPaneIds, openWebLink } from "../../stores/voice-store";
 import { xtermExports, addonFitExports, L } from "../../lib/xterm-exports";
 import { CODEBRAIN_PANE_DRAG_TYPE } from "../../lib/pane-drag";
-import { Copy, Clipboard, Square, MessageSquare, Terminal as TerminalIcon, Settings, ExternalLink } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
-
-// ── MK Thinking Labels ────────────────────────────────────────────────────────
-const MK_THINKING_PHRASES = [
-  "Codebrain ativado 🧠",
-  "café do MK esquentando ☕",
-  "MK mode: ON 🔥",
-  "isso aqui é Codebrain baby 💜",
-  "Codebrain pensando forte... 🤯",
-  "agentes em campo 🕵️",
-  "Codebrain não para nunca 🚀",
-  "tokens voando pelo ar ✨",
-  "multi-agente mode ativado 🤖",
-  "analisando o universo... 🌌",
-  "squad reunido, missão em andamento 🎯",
-];
-
-function MKThinkingLabelWrapper({ paneId, isActivelyWorking }: { paneId: string; isActivelyWorking: boolean }) {
-  // Só aparece após 3s de output contínuo — reseta imediatamente ao parar
-  const [visible, setVisible] = React.useState(false);
-  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  React.useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (isActivelyWorking) {
-      timerRef.current = setTimeout(() => setVisible(true), 3000);
-    } else {
-      setVisible(false);
-    }
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [isActivelyWorking]);
-  // Quando não está ativamente trabalhando → nada (nem o dot)
-  if (!visible) return null;
-  return (
-    <span className="flex items-center gap-2 text-[10px] font-mono text-red-400/80">
-      <span className="w-1.5 h-3 bg-red-500 animate-pulse"></span>
-      <MKThinkingLabel paneId={paneId} />
-    </span>
-  );
-}
-
-function MKThinkingLabel({ paneId }: { paneId: string }) {
-  const phrases = MK_THINKING_PHRASES;
-  const safePaneId = paneId || "";
-  const [idx, setIdx] = React.useState(() =>
-    Math.abs((safePaneId || "x").split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % phrases.length
-  );
-  React.useEffect(() => {
-    // Troca a frase a cada 8s — bem mais devagar
-    const interval = setInterval(() => {
-      setIdx((i) => (i + 1) % phrases.length);
-    }, 8000);
-    return () => clearInterval(interval);
-  }, []);
-  return (
-    <span>
-      {phrases[idx]}
-    </span>
-  );
-}
+import { Copy, Clipboard, Square, MessageSquare, Settings, Moon, Zap } from "lucide-react";
+import "../../styles/terminal.css";
 
 // TerminalPane
 import { usePanesStore } from "../../stores/panes-store";
 import { FONT_OPTIONS, TERMINAL_THEMES, useTerminalSettings } from "../../stores/terminal-settings-store";
-import { StatusDot, shortenPath } from "../panes/StatusDot";
-import { PaneTitle } from "../panes/PaneTitle";
-import { ProviderBadge } from "../panes/ProviderBadge";
+import { PaneHeader } from "../panes/PaneHeader";
 import { PaneIdBadge } from "../panes/PaneIdBadge";
 import { PaneTokenBadge } from "../panes/PaneTokenBadge";
 import { MissionBadge } from "../panes/MissionBadge";
-import { RoleBadge } from "../panes/RoleBadge";
 import { SavedContextPanel } from "../panes/SavedContextPanel";
+import { paneDisplayName } from "../panes/pane-identity";
+import { notePaneInput } from "../panes/pane-runtime";
+import { paneActivityPresentation } from "../shell/pane-status";
+import { observeTokenTheme, terminalThemeFromTokens, useBrandTerminalFont } from "./xterm-theme";
 
 /** Wait for xterm cols/rows to stabilize across animation frames before syncing to PTY. */
-async function waitForReplayFit(container: HTMLElement, fitAddon: any, term: any) {
+async function waitForReplayFit(container: HTMLElement, fitAddon: any, term: any, isCurrent: () => boolean) {
   let lastCols = -1;
   let lastRows = -1;
   let stableFrames = 0;
   for (let i = 0; i < 60; i++) {
+    if (!isCurrent()) return false;
     if (container.clientWidth >= 10 && container.clientHeight >= 10) {
       try { fitAddon.fit(); } catch {}
       if (term.cols >= 20) {
         if (term.cols === lastCols && term.rows === lastRows) {
           stableFrames++;
-          if (stableFrames >= 2) return;
+          if (stableFrames >= 2) return true;
         } else {
           stableFrames = 0;
         }
@@ -97,6 +41,7 @@ async function waitForReplayFit(container: HTMLElement, fitAddon: any, term: any
     }
     await new Promise(r => requestAnimationFrame(() => r(undefined)));
   }
+  return false;
 }
 
 export function TerminalPane({
@@ -108,8 +53,6 @@ export function TerminalPane({
   const termRef = React.useRef(null);
   const fitAddonRef = React.useRef(null);
   const spawnedRef = React.useRef(false);
-  const lastOutputRef = React.useRef(0);
-  const [isActivelyWorking, setIsActivelyWorking] = React.useState(false);
   // Cancelable paste queue
   const pasteQueueRef = React.useRef<string[]>([]);
   const pastingRef = React.useRef(false);
@@ -123,9 +66,9 @@ export function TerminalPane({
   const lineHeight = useTerminalSettings(s => s.lineHeight);
   const theme = useTerminalSettings(s => s.theme);
   const cursorBlink = useTerminalSettings(s => s.cursorBlink);
-  const lowGpuMode = useTerminalSettings(s => s.lowGpuMode);
   const scrollbackSize = useTerminalSettings(s => (s as any).scrollbackSize ?? 5000);
-  const fontStack = (FONT_OPTIONS.find(f => f.id === fontFamilyId) ?? FONT_OPTIONS[0]).stack;
+  const baseFontStack = (FONT_OPTIONS.find(f => f.id === fontFamilyId) ?? FONT_OPTIONS[0]).stack;
+  const fontStack = useBrandTerminalFont(fontFamilyId, baseFontStack);
   const [dropHover, setDropHover] = React.useState(false);
   const [showSavedContext, setShowSavedContext] = React.useState(true);
   const [envPopup, setEnvPopup] = React.useState(false);
@@ -134,8 +77,6 @@ export function TerminalPane({
   const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
   const savedSelectionRef = React.useRef('');
   const lastPtySizeRef = React.useRef<{ cols: number; rows: number } | null>(null);
-  const followOutputRef = React.useRef(true);
-  const userPausedFollowRef = React.useRef(false);
 
   const handleRightMouseDownCapture = React.useCallback((e: React.MouseEvent) => {
     if (e.button === 2) {
@@ -232,15 +173,27 @@ export function TerminalPane({
     if (!isActive) onClick();
     termRef.current?.focus();
   }, [isActive, onClick]);
+  // Controles do header (nome, detalhes) ativam o pane sem roubar o foco para
+  // o xterm — senão o campo de renomear perderia o cursor a cada clique.
+  const handlePointerDownCapture = React.useCallback((event: React.PointerEvent) => {
+    if ((event.target as HTMLElement).closest?.("[data-pane-control]")) {
+      if (!isActive) onClick();
+      return;
+    }
+    activatePane();
+  }, [activatePane, isActive, onClick]);
+  const handleRootClick = React.useCallback((event: React.MouseEvent) => {
+    if ((event.target as HTMLElement).closest?.("[data-pane-control]")) return;
+    activatePane();
+  }, [activatePane]);
   const handleFocusCapture = React.useCallback(event => {
     if (!(event.target instanceof HTMLElement)) return;
     if (event.target.closest(".xterm")) activatePane();
   }, [activatePane]);
 
   /** Force-fit + redraw + sync dims to PTY. */
-  const recoverTerminalRender = React.useCallback((options: { refresh?: boolean; follow?: boolean } = {}) => {
+  const recoverTerminalRender = React.useCallback((options: { refresh?: boolean } = {}) => {
     const shouldRefresh = options.refresh ?? true;
-    const shouldFollow = options.follow ?? (followOutputRef.current && !userPausedFollowRef.current);
     const term = termRef.current;
     const container = containerRef.current;
     if (!term || !container || container.clientWidth < 10 || container.clientHeight < 10) return;
@@ -248,7 +201,6 @@ export function TerminalPane({
     if (shouldRefresh) {
       try { term.refresh(0, Math.max(0, term.rows - 1)); } catch {}
     }
-    if (shouldFollow) term.scrollToBottom();
     const size = { cols: term.cols, rows: term.rows };
     const lastSize = lastPtySizeRef.current;
     if (window.codeBrainApp && size.cols > 2 && size.rows > 2 && (!lastSize || lastSize.cols !== size.cols || lastSize.rows !== size.rows)) {
@@ -273,7 +225,7 @@ export function TerminalPane({
     if (!containerRef.current || termRef.current) return;
     const currentPane = paneRef.current;
     const term = new xtermExports.Terminal({
-      theme: TERMINAL_THEMES[theme],
+      theme: terminalThemeFromTokens(TERMINAL_THEMES[theme]),
       fontFamily: fontStack,
       fontSize,
       lineHeight: Math.max(1, lineHeight),
@@ -293,8 +245,12 @@ export function TerminalPane({
     termRef.current = term;
     fitAddonRef.current = fitAddon;
     // Wait for dimensions to stabilize before first fit (avoids flash of misaligned content)
-    waitForReplayFit(containerRef.current, fitAddon, term).then(() => {
-      lastPtySizeRef.current = { cols: term.cols, rows: term.rows };
+    waitForReplayFit(containerRef.current, fitAddon, term, () => termRef.current === term).then((fitted) => {
+      if (!fitted || termRef.current !== term) return;
+      // External panes start at backend defaults; caching without sending this
+      // resize leaves the CLI drawing for 220 columns into a much narrower grid.
+      lastPtySizeRef.current = null;
+      recoverTerminalRender({ refresh: true });
     });
 
     // Alt+Click: move cursor to clicked position in terminal
@@ -377,6 +333,7 @@ export function TerminalPane({
       return true;
     });
     term.onData(data => {
+      notePaneInput(currentPane.id);
       window.codeBrainApp?.pty.write(currentPane.id, data);
     });
     if (currentPane.externallySpawned || spawnedPaneIds.has(currentPane.id)) {
@@ -387,8 +344,10 @@ export function TerminalPane({
     } else if (window.codeBrainApp && !spawnedRef.current) {
       spawnedRef.current = true;
       spawnedPaneIds.add(currentPane.id);
-      window.codeBrainApp.pty.spawn({
+      const config = {
         paneId: currentPane.id,
+        cols: term.cols,
+        rows: term.rows,
         agent: currentPane.agent,
         cwd: currentPane.cwd,
         args: currentPane.args,
@@ -399,8 +358,14 @@ export function TerminalPane({
         session: currentPane.session,
         claudeSessionId: currentPane.claudeSessionId,
         permissionMode: currentPane.permissionMode
-      }).then(result => {
+      };
+      window.codeBrainApp.pty.spawn(config).then(result => {
         if (result.ok) {
+          if (termRef.current === term) {
+            // Earlier resize effects may have run before the process existed.
+            lastPtySizeRef.current = null;
+            recoverTerminalRender({ refresh: true });
+          }
           updatePaneRef.current(currentPane.id, {
             status: "running"
           });
@@ -424,23 +389,20 @@ export function TerminalPane({
         status: "idle"
       });
     }
-  }, [pane.id, cursorBlink]);
+  }, [pane.id, recoverTerminalRender]);
   // Runtime cursorBlink update without re-creating terminal
   React.useEffect(() => {
     if (termRef.current) termRef.current.options.cursorBlink = cursorBlink;
   }, [cursorBlink]);
   React.useEffect(() => {
-    const unsub = window.codeBrainApp?.pty.onOutput((paneId, data, echo) => {
+    const unsub = window.codeBrainApp?.pty.onOutput((paneId, data) => {
       if (paneId === pane.id && termRef.current) {
-        // Suppress echo from programmatic writes (MCP pane_write / pane_send_message)
-        // so the sent text doesn't appear duplicated in the terminal
-        if (echo) return;
-        termRef.current.write(data, () => {
-          if (followOutputRef.current && !userPausedFollowRef.current) {
-            termRef.current?.scrollToBottom();
-          }
-        });
-        lastOutputRef.current = Date.now();
+        // All output belongs to the TUI's ANSI state, including prompt redraws
+        // previously marked as "echo" by older main-process bundles.
+        // xterm follows output only when its viewport is already at the end.
+        // Forcing scrollToBottom here races wheel/scrollbar/keyboard scrolling
+        // and pulls readers out of history on every streamed chunk.
+        termRef.current.write(data);
       }
     });
     const unsubExit = window.codeBrainApp?.pty.onExit((paneId) => {
@@ -462,45 +424,6 @@ export function TerminalPane({
     };
   }, [initTerminal]);
 
-  // Detect user scroll — pause auto-follow when scrolling up, resume when at bottom
-  React.useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const checkAndSync = () => {
-      const term = termRef.current;
-      if (!term) return;
-      // Find xterm's viewport scroll element
-      const viewport = container.querySelector(".xterm-viewport") as HTMLElement | null;
-      if (!viewport) return;
-      const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 30;
-      if (atBottom) {
-        userPausedFollowRef.current = false;
-        followOutputRef.current = true;
-      } else {
-        userPausedFollowRef.current = true;
-        followOutputRef.current = false;
-      }
-    };
-    const handleWheel = () => requestAnimationFrame(checkAndSync);
-    container.addEventListener("wheel", handleWheel, { passive: true });
-    return () => container.removeEventListener("wheel", handleWheel);
-  }, []);
-
-  // Rastreia output ativo real — reseta quando pane para de rodar
-  React.useEffect(() => {
-    if (pane.status !== "running") {
-      lastOutputRef.current = 0;
-      setIsActivelyWorking(false);
-      return;
-    }
-    const interval = setInterval(() => {
-      const lastOutput = lastOutputRef.current;
-      // Só considera ativo se houve output nos últimos 4s
-      const isActive = lastOutput > 0 && (Date.now() - lastOutput) < 4000;
-      setIsActivelyWorking(isActive);
-    }, 500);
-    return () => clearInterval(interval);
-  }, [pane.status]);
   React.useEffect(() => {
     const obs = new ResizeObserver(() => recoverTerminalRender({ refresh: true }));
     if (containerRef.current) obs.observe(containerRef.current);
@@ -525,38 +448,28 @@ export function TerminalPane({
     const term = termRef.current;
     if (!term) return;
     term.options.fontSize = fontSize;
-    try { fitAddonRef.current?.fit(); } catch {}
-    // Notify PTY of new dimensions + scroll to bottom
-    if (term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
-      window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => {});
-    }
-    term.scrollToBottom();
-  }, [fontSize, pane.id]);
+    recoverTerminalRender({ refresh: true });
+  }, [fontSize, recoverTerminalRender]);
   React.useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = TERMINAL_THEMES[theme];
+    term.options.theme = terminalThemeFromTokens(TERMINAL_THEMES[theme]);
+    return observeTokenTheme(() => {
+      if (termRef.current) termRef.current.options.theme = terminalThemeFromTokens(TERMINAL_THEMES[theme]);
+    });
   }, [theme]);
   React.useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     term.options.fontFamily = fontStack;
-    try { fitAddonRef.current?.fit(); } catch {}
-    if (term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
-      window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => {});
-    }
-    term.scrollToBottom();
-  }, [fontStack, pane.id]);
+    recoverTerminalRender({ refresh: true });
+  }, [fontStack, recoverTerminalRender]);
   React.useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     term.options.lineHeight = Math.max(1, lineHeight);
-    try { fitAddonRef.current?.fit(); } catch {}
-    if (term.cols > 2 && term.rows > 2 && window.codeBrainApp) {
-      window.codeBrainApp.pty.resize(pane.id, term.cols, term.rows).catch(() => {});
-    }
-    term.scrollToBottom();
-  }, [lineHeight, pane.id]);
+    recoverTerminalRender({ refresh: true });
+  }, [lineHeight, recoverTerminalRender]);
   // Live-update scrollback when setting changes (applies to existing panes)
   React.useEffect(() => {
     const term = termRef.current;
@@ -589,109 +502,73 @@ export function TerminalPane({
     const text = paths.map(p => /\s/.test(p) ? `"${p}"` : p).join(" ");
     api.pty.write(pane.id, text + " ");
   }, [pane.id]);
-  return <div className={`flex flex-col h-full border cursor-pointer ${
-      isActive
-        ? pane.status === "running"
-          ? lowGpuMode
-            ? "border-violet-500/50"
-            : "border-violet-500/50 shadow-[0_0_16px_rgba(139,92,246,0.15)] animate-[thinking-pulse_3s_ease-in-out_infinite]"
-          : lowGpuMode
-            ? "border-indigo-500/40"
-            : "border-indigo-500/40 shadow-[0_0_12px_rgba(99,102,241,0.1)]"
-        : "border-white/5 hover:border-white/10"
-    } rounded-lg overflow-hidden bg-black ${lowGpuMode ? "" : "backdrop-blur"} ${lowGpuMode ? "" : "transition-all duration-300"} relative group`} onClick={activatePane} onFocusCapture={handleFocusCapture} onPointerDownCapture={activatePane} onMouseDownCapture={handleRightMouseDownCapture} onContextMenu={handleContextMenu}>
+  const presentation = paneActivityPresentation(pane);
+  const { name: paneName } = paneDisplayName(pane);
 
-    <AnimatePresence>
-      {contextMenu && (
-        <>
-          <div className="absolute inset-0 z-[9998]" onClick={closeMenu} onContextMenu={(e) => { e.preventDefault(); closeMenu(); }} />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            style={{ top: contextMenu.y, left: contextMenu.x }}
-            className="absolute z-[9999] min-w-[160px] bg-[#0A0A0B] border border-white/10 rounded-lg shadow-2xl py-1 overflow-hidden backdrop-blur-xl terminal-context-menu"
-          >
-            <button onClick={copyToClipboard} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
-              <Copy size={12} className="text-slate-500" />
-              <span>Copiar</span>
-            </button>
-            <button onClick={pasteFromClipboard} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
-              <Clipboard size={12} className="text-slate-500" />
-              <span>Colar</span>
-            </button>
-            <div className="h-[1px] bg-white/5 my-1" />
-            {pane.status === "hibernated" ? (
-              <button onClick={() => { window.codeBrainApp?.pty?.wake?.(pane.id); closeMenu(); }} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 transition-colors">
-                <span className="text-amber-400">⚡</span>
-                <span>Acordar Pane</span>
-              </button>
-            ) : (
-              <button onClick={() => { window.codeBrainApp?.pty?.hibernate?.(pane.id); closeMenu(); }} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-purple-400 hover:bg-purple-500/10 hover:text-purple-300 transition-colors">
-                <span className="text-purple-400">💤</span>
-                <span>Hibernar Pane</span>
-              </button>
-            )}
-            <button onClick={stopTerminal} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors">
-              <Square size={10} className="fill-current" />
-              <span>Parar Terminal</span>
-            </button>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+  const detachPane = () => {
+    window.codeBrainApp?.pty?.detach(pane.id).then((result: any) => {
+      // O pane passa a viver na própria janela; sai da grade desta.
+      if (result?.ok) usePanesStore.getState().removePane(pane.id);
+    });
+  };
 
-      {/* ── Pane Header ─────────────────────────────────── */}
-      <div className="relative flex min-h-7 items-center overflow-hidden bg-black/50 border-b border-white/5 py-1.5 pl-3 pr-16 select-none shrink-0 cursor-grab active:cursor-grabbing" draggable onDragStart={e => {
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData(CODEBRAIN_PANE_DRAG_TYPE, pane.id);
-      }}>
-        <div className="flex min-w-0 max-w-full items-center gap-1.5 overflow-hidden">
-          <StatusDot status={pane.status} />
-          <PaneTitle pane={pane} />
-          <ProviderBadge providerId={pane.providerId} model={pane.model} agent={pane.agent} />
-          <PaneIdBadge paneId={pane.id} />
-          <MissionBadge missionId={pane.missionId} workspacePath={pane.workspacePath ?? pane.cwd} />
-          <RoleBadge paneId={pane.id} agent={pane.agent} />
-          <PaneTokenBadge paneId={pane.id} isRunning={pane.status === "running"} />
-        </div>
-        {/* Right-side action buttons */}
-        <div className="absolute right-1.5 top-1/2 z-20 flex -translate-y-1/2 items-center gap-0.5 rounded bg-black/95 px-1 py-0.5 shadow-[0_0_8px_rgba(0,0,0,0.85)]">
-          <button
-            type="button"
-            className="text-gray-600 hover:text-gray-300 px-1 leading-none transition-colors"
-            onClick={e => {
-              e.stopPropagation();
-              window.codeBrainApp?.pty?.detach(pane.id).then((result: any) => {
-                if (result?.ok) {
-                  // Remove from main window grid — it now lives in its own window
-                  usePanesStore.getState().removePane(pane.id);
-                }
-              });
-            }}
-            draggable={false}
-            title="Destacar pane em nova janela"
-            aria-label="Destacar pane em nova janela"
-          >
-            <ExternalLink size={12} strokeWidth={1.5} />
+  const killPane = () => {
+    window.codeBrainApp?.pty.kill(pane.id);
+    spawnedPaneIds.delete(pane.id);
+    usePanesStore.getState().removePane(pane.id);
+  };
+
+  return <div
+    className="cb-pane group"
+    role="group"
+    aria-label={`Terminal ${paneName}, ${presentation.label}`}
+    data-active={isActive}
+    data-activity={presentation.activity}
+    data-urgent={presentation.urgent}
+    style={{ "--cb-status-color": presentation.color } as React.CSSProperties}
+    onClick={handleRootClick}
+    onFocusCapture={handleFocusCapture}
+    onPointerDownCapture={handlePointerDownCapture}
+    onMouseDownCapture={handleRightMouseDownCapture}
+    onContextMenu={handleContextMenu}
+  >
+    {contextMenu && (
+      <>
+        <div className="absolute inset-0" style={{ zIndex: "var(--cb-z-popover)" }} onClick={closeMenu} onContextMenu={(e) => { e.preventDefault(); closeMenu(); }} />
+        <div style={{ top: contextMenu.y, left: contextMenu.x }} className="cb-pane-context cb-float terminal-context-menu" role="menu" data-pane-control>
+          <button role="menuitem" onClick={copyToClipboard} className="cb-menu-item">
+            <Copy size={11} aria-hidden />
+            <span>Copiar</span>
           </button>
-          <button
-            className="text-gray-500 hover:text-red-400 px-1 leading-none transition-colors"
-            onClick={e => {
-              e.stopPropagation();
-              window.codeBrainApp?.pty.kill(pane.id);
-              spawnedPaneIds.delete(pane.id);
-              usePanesStore.getState().removePane(pane.id);
-            }}
-            title="Close pane (Cmd+W)"
-          >
-            <X$1 size={12} strokeWidth={1.5} />
+          <button role="menuitem" onClick={pasteFromClipboard} className="cb-menu-item">
+            <Clipboard size={11} aria-hidden />
+            <span>Colar</span>
+          </button>
+          <hr className="cb-divider" />
+          {pane.status === "hibernated" ? (
+            <button role="menuitem" onClick={() => { window.codeBrainApp?.pty?.wake?.(pane.id); closeMenu(); }} className="cb-menu-item">
+              <Zap size={11} aria-hidden />
+              <span>Acordar terminal</span>
+            </button>
+          ) : (
+            <button role="menuitem" onClick={() => { window.codeBrainApp?.pty?.hibernate?.(pane.id); closeMenu(); }} className="cb-menu-item">
+              <Moon size={11} aria-hidden />
+              <span>Hibernar terminal</span>
+            </button>
+          )}
+          <button role="menuitem" onClick={stopTerminal} className="cb-menu-item" data-danger="true">
+            <Square size={10} className="fill-current" aria-hidden />
+            <span>Parar terminal</span>
           </button>
         </div>
-      </div>
-    <div className="relative z-0 h-full flex flex-col">
+      </>
+    )}
+
+    <PaneHeader pane={pane} onDetach={detachPane} onKill={killPane} onRenameEnd={() => termRef.current?.focus()} />
+
+    <div className="cb-pane-body">
       <SavedContextPanel pane={pane} open={showSavedContext} onToggle={() => setShowSavedContext(v2 => !v2)} />
-      <div className={`flex-1 min-h-0 relative flex flex-col ${dropHover ? "ring-2 ring-red-500/40" : ""}`} onDragEnter={e => {
+      <div className="cb-pane-drop" data-hover={dropHover} onDragEnter={e => {
         if (e.dataTransfer.types.includes("Files")) {
           e.preventDefault();
           setDropHover(true);
@@ -705,97 +582,83 @@ export function TerminalPane({
         if (e.currentTarget === e.target) setDropHover(false);
       }} onDrop={handleDrop}>
 
-        {/* Terminal container — flex-1 so footer sits below, no overlap */}
-        <div className="flex-1 min-h-0 px-2 pt-2 overflow-hidden">
+        <div className="cb-pane-well">
           <div ref={containerRef} className="h-full w-full" />
         </div>
 
-        {/* Input Feedback & Quick Actions Rodapé — natural flex flow, no absolute */}
-        <div className="shrink-0 h-8 bg-linear-gradient-to-t from-zinc-300 via-zinc-700  dark:from-black dark:via-black/80 to-transparent flex items-end px-3 pb-1">
-          <div className="flex items-center justify-between w-full border-t border-white/5 pt-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-red-500 font-mono text-[10px] font-bold animate-pulse">❯</span>
-              {pane.status === "running" ? (
-                <MKThinkingLabelWrapper paneId={pane.paneId} isActivelyWorking={isActivelyWorking} />
-              ) : (
-                <span className="w-1.5 h-3 bg-gray-500/50 animate-[pulse_2s_infinite]"></span>
+        <div className="cb-pane-foot" data-pane-control>
+          <span className="cb-pane-foot-prompt" aria-hidden>❯</span>
+          <PaneIdBadge paneId={pane.id} />
+          <MissionBadge missionId={pane.missionId} workspacePath={pane.workspacePath ?? pane.cwd} />
+          <PaneTokenBadge paneId={pane.id} isRunning={presentation.ticking} />
+          <span className="cb-pane-foot-spacer" />
+
+          <div className="cb-pane-quick" data-open={envPopup}>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); sendQuickCommand("/btw"); }}
+              className="cb-pane-quick-btn"
+              title="Enviar dúvida ou pergunta (/btw)"
+            >
+              <MessageSquare size={10} aria-hidden />
+              <span>/btw</span>
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setEnvPopup(!envPopup); }}
+                className="cb-pane-quick-btn"
+                aria-expanded={envPopup}
+                title="Definir variável de ambiente (persiste e aplica neste terminal)"
+              >
+                <Settings size={10} aria-hidden />
+                <span>/env</span>
+              </button>
+              {envPopup && (
+                <div className="cb-env-pop cb-float" onClick={e => e.stopPropagation()}>
+                  <p className="cb-label">variável de ambiente</p>
+                  <input
+                    type="text"
+                    value={envKey}
+                    onChange={e => setEnvKey(e.target.value)}
+                    placeholder="CHAVE"
+                    aria-label="Nome da variável"
+                    className="cb-input"
+                    onKeyDown={e => e.key === 'Enter' && handleSaveEnvVar()}
+                    autoFocus
+                  />
+                  <input
+                    type="text"
+                    value={envValue}
+                    onChange={e => setEnvValue(e.target.value)}
+                    placeholder="valor"
+                    aria-label="Valor da variável"
+                    className="cb-input"
+                    onKeyDown={e => e.key === 'Enter' && handleSaveEnvVar()}
+                  />
+                  <div className="cb-env-actions">
+                    <button type="button" onClick={handleSaveEnvVar} disabled={!envKey.trim()} className="cb-env-save">
+                      salvar e exportar
+                    </button>
+                    <button type="button" onClick={() => { setEnvPopup(false); setEnvKey(''); setEnvValue(''); }} className="cb-env-cancel">
+                      cancelar
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
-            {/* Quick Actions */}
-            <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <button
-                onClick={(e) => { e.stopPropagation(); sendQuickCommand("/btw"); }}
-                className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-indigo-500/20 bg-indigo-500/5 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500/40 transition-all group/btn"
-                title="Enviar dúvida/pergunta (/btw)"
-              >
-                <MessageSquare size={10} className="group-hover/btn:scale-110 transition-transform" />
-                <span className="text-[9px] font-bold uppercase tracking-tighter">/btw</span>
-              </button>
-
-              {/* /env quick action */}
-              <div className="relative">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setEnvPopup(!envPopup); }}
-                  className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/btn"
-                  title="Set env var (persiste + aplica no terminal)"
-                >
-                  <Settings size={10} className="group-hover/btn:scale-110 transition-transform" />
-                  <span className="text-[9px] font-bold uppercase tracking-tighter">/env</span>
-                </button>
-                {envPopup && (
-                  <div
-                    className="absolute bottom-full right-0 mb-2 p-2.5 rounded-lg bg-[#1A1A22] border border-white/10 shadow-xl z-50 w-64"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <p className="text-[9px] text-slate-500 font-mono uppercase tracking-widest mb-2">Set Environment Variable</p>
-                    <div className="flex flex-col gap-1.5">
-                      <input
-                        type="text"
-                        value={envKey}
-                        onChange={e => setEnvKey(e.target.value)}
-                        placeholder="KEY"
-                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40"
-                        onKeyDown={e => e.key === 'Enter' && handleSaveEnvVar()}
-                        autoFocus
-                      />
-                      <input
-                        type="text"
-                        value={envValue}
-                        onChange={e => setEnvValue(e.target.value)}
-                        placeholder="value"
-                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] font-mono text-slate-300 placeholder-slate-700 focus:outline-none focus:border-[#5855e5]/40"
-                        onKeyDown={e => e.key === 'Enter' && handleSaveEnvVar()}
-                      />
-                      <div className="flex gap-1.5">
-                        <button
-                          onClick={handleSaveEnvVar}
-                          disabled={!envKey.trim()}
-                          className="flex-1 px-2 py-1 rounded bg-[#5855e5] text-white text-[9px] font-bold uppercase tracking-widest hover:bg-[#4a47d6] disabled:opacity-30 transition-colors"
-                        >
-                          Salvar + Export
-                        </button>
-                        <button
-                          onClick={() => { setEnvPopup(false); setEnvKey(''); setEnvValue(''); }}
-                          className="px-2 py-1 rounded bg-white/5 text-slate-500 text-[9px] font-bold hover:text-slate-300 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-[8px] text-slate-600 mt-1.5">Persiste no config + exporta no terminal atual</p>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={(e) => { e.stopPropagation(); stopTerminal(); }}
-                className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-white/5 bg-white/5 text-slate-500 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 transition-all group/btn"
-                title="Parar execução"
-              >
-                <Square size={10} className="group-hover/btn:scale-110 transition-transform" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); stopTerminal(); }}
+              className="cb-pane-quick-btn"
+              data-danger="true"
+              aria-label="Parar execução"
+              title="Parar execução"
+            >
+              <Square size={10} aria-hidden />
+            </button>
           </div>
         </div>
       </div>

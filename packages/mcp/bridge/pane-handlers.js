@@ -2,6 +2,7 @@
 
 const { buildWakeMessage, buildWakeMessageParts } = require("./handoff-wake-message.js");
 const { clarifyBroadcastPayload } = require("./clarify-broadcast.js");
+const { describeEvidence, evaluateHandoff } = require("./contract.js");
 
 /**
  * Memory protocol injected into pane_write so the AI agent is
@@ -20,7 +21,7 @@ Coordenação: pane_write entrega tasks; pane_send_message envia updates curtos.
  * Ensures workers always terminate via handoff_submit instead of going idle silently.
  */
 const WORKER_CONTRACT_FOOTER = `
-Final da task: chame mcp__codebrain__handoff_submit({ paneId: "<your_pane_id>", summary: "...", status: "done"|"blocked"|"error", artifacts: [...] }) como última ação.`;
+Final da task: chame mcp__codebrain__handoff_submit({ paneId: "<your_pane_id>", summary: "...", status: "done"|"blocked"|"error", artifacts: [...], evidence: { commands: [{ cmd, exitCode }], checks: [...], files: [...], tested } }) como última ação.`;
 
 /**
  * Orchestrator no-edit warning — injected on first write to orchestrator panes.
@@ -241,7 +242,7 @@ function createPaneHandlers(ptyManager, opts) {
   //   - matches model/providerId/agent (if specified)
   //   - not in excludePaneIds
   // Returns the best candidate (lowest turn_count) or null.
-  function findIdleWorker({ model, providerId, agent, excludePaneIds = [] } = {}) {
+  function findIdleWorker({ model, providerId, agent, cwd, effort, accountId, allowedSkills, parentPaneId, missionId, agentName, excludePaneIds = [] } = {}) {
     try {
       const store = opts.memoryStore;
       if (!store?.actorList) return null;
@@ -271,6 +272,8 @@ function createPaneHandlers(ptyManager, opts) {
         if (actor.status !== "idle") continue;
         // Pane must still be alive
         if (!aliveIds.has(actor.pane_id)) continue;
+        const livePane = panesAlive.find((pane) => pane.paneId === actor.pane_id);
+        if (livePane?.status && livePane.status !== "idle") continue;
         // Not in exclude list
         if (excludeSet.has(actor.pane_id)) continue;
         // Must not have an in_progress kanban task
@@ -280,6 +283,7 @@ function createPaneHandlers(ptyManager, opts) {
         if (model && actor.model !== model) continue;
         if (providerId && actor.provider_id !== providerId) continue;
         if (agent && actor.agent !== agent) continue;
+        if (!matchesRuntime(actor.pane_id, { cwd, effort, accountId, allowedSkills, parentPaneId, missionId, agentName })) continue;
 
         candidates.push(actor);
       }
@@ -294,17 +298,53 @@ function createPaneHandlers(ptyManager, opts) {
     }
   }
 
+  // A live CLI cannot change its account, skill permissions or working directory
+  // when it receives a second task. Reuse only a matching runtime.
+  function matchesRuntime(paneId, requested) {
+    const cfg = opts.paneConfigs?.get?.(paneId);
+    const live = ptyManager.list().find((pane) => pane.paneId === paneId);
+    for (const key of ["cwd", "effort", "accountId", "parentPaneId", "missionId", "agentName"]) {
+      if (requested[key] !== undefined && requested[key] !== (cfg?.[key] ?? live?.[key])) return false;
+    }
+    if (requested.allowedSkills !== undefined) {
+      const current = cfg?.allowedSkills;
+      if (!Array.isArray(current)) return false;
+      const wanted = new Set(requested.allowedSkills);
+      if (current.length !== wanted.size || current.some((skill) => !wanted.has(skill))) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Avisa a tela de que um pane mudou de nome, tarefa ou entrega. Esforço e conta
+   * vêm do que o pane realmente abriu: reaproveitar não muda o processo.
+   */
+  function emitPaneMeta(paneId, meta) {
+    const config = opts.paneConfigs?.get?.(paneId);
+    if (config) {
+      if (meta.label) config.label = meta.label;
+      if (meta.taskType) config.taskType = meta.taskType;
+    }
+    opts.emitToRenderer?.("pane:meta", {
+      paneId,
+      effort: config?.effort,
+      accountLabel: config?.accountLabel,
+      ...meta,
+    });
+  }
+
   return {
     roleMap,
     findIdleWorker,
+    emitPaneMeta,
 
-    async spawnPane({ agent, cwd, providerId, model, label, description, parentPaneId, reuseIdle = true }) {
+    async spawnPane({ agent, cwd, providerId, model, label, description, parentPaneId, reuseIdle = true, effort, allowedSkills, accountId, accountLabel, taskType, missionId, initialPrompt, agentName }) {
       try {
         // ── Idle worker reuse: find a compatible idle worker before spawning ──
         // If reuseIdle is enabled (default) and no explicit NEW label is provided,
         // try to find an idle worker with matching model/provider instead of spawning.
         if (reuseIdle) {
-          const idleWorker = findIdleWorker({ model, providerId, agent });
+          const idleWorker = findIdleWorker({ model, providerId, agent, cwd, effort, accountId, allowedSkills, parentPaneId, missionId, agentName });
           if (idleWorker) {
             // Update label/description if provided (rebrand the reused worker)
             if (label && opts.paneLabels) {
@@ -314,10 +354,14 @@ function createPaneHandlers(ptyManager, opts) {
             try {
               const workspace = opts.getCurrentWorkspacePath?.() || null;
               opts.memoryStore?.actorRegister?.({
-                paneId: idleWorker.pane_id, parentPaneId: parentPaneId || null,
-                agent, label, description, workspace, cwd, providerId, model,
+                paneId: idleWorker.pane_id, parentPaneId: parentPaneId ?? idleWorker.parent_pane_id ?? null,
+                agent: agent ?? idleWorker.agent, label, description, workspace,
+                cwd: cwd ?? idleWorker.cwd, providerId: providerId ?? idleWorker.provider_id,
+                model: model ?? idleWorker.model, role: "worker",
+                missionId: idleWorker.mission_id ?? missionId,
               });
             } catch {}
+            emitPaneMeta(idleWorker.pane_id, { label, taskType });
             return {
               ok: true,
               paneId: idleWorker.pane_id,
@@ -334,7 +378,7 @@ function createPaneHandlers(ptyManager, opts) {
 
         // ── Duplicate guard: if a pane with this label already exists and is alive, reuse it ──
         // BUT only if providerId+model match — otherwise the user wants a different provider.
-        if (label && opts.paneLabels) {
+        if (reuseIdle && label && opts.paneLabels) {
           for (const [existingPaneId, existingLabel] of opts.paneLabels) {
             if (existingLabel === label) {
               // Check if the pane is still alive
@@ -345,7 +389,8 @@ function createPaneHandlers(ptyManager, opts) {
                 const agentMatch = !agent || pane.agent === agent;
                 const providerMatch = !providerId || pane.providerId === providerId;
                 const modelMatch = !model || pane.model === model;
-                if (agentMatch && providerMatch && modelMatch) {
+                if (pane.status === "idle" && agentMatch && providerMatch && modelMatch && matchesRuntime(existingPaneId, { cwd, effort, accountId, allowedSkills, parentPaneId, missionId, agentName })) {
+                  emitPaneMeta(existingPaneId, { label, taskType });
                   return {
                     ok: true,
                     paneId: existingPaneId,
@@ -358,8 +403,8 @@ function createPaneHandlers(ptyManager, opts) {
                     message: `Reusing existing "${label}" pane (${existingPaneId}). It is already active.`,
                   };
                 }
-                // Label matches but provider/model differ — remove stale label, spawn new
-                opts.paneLabels.delete(existingPaneId);
+                // Keep the live pane's identity. A matching label does not
+                // make a busy or incompatible process safe to reuse.
               } else {
                 // Pane exited — remove stale label
                 opts.paneLabels.delete(existingPaneId);
@@ -369,7 +414,7 @@ function createPaneHandlers(ptyManager, opts) {
         }
 
         if (opts.spawnPaneFn) {
-          const result = await opts.spawnPaneFn({ agent, cwd, providerId, model });
+          const result = await opts.spawnPaneFn({ agent, cwd, providerId, model, effort, allowedSkills, accountId, accountLabel, label, taskType, missionId, parentPaneId, role: "worker", initialPrompt, agentName });
           if (result.ok && result.paneId) {
             roleMap.set(result.paneId, "worker");
             if (label && opts.paneLabels) opts.paneLabels.set(result.paneId, label);
@@ -382,6 +427,8 @@ function createPaneHandlers(ptyManager, opts) {
                 cwd: result.cwd || cwd,
                 providerId: result.providerId || providerId,
                 model: result.model || model,
+                role: "worker",
+                missionId: result.missionId ?? opts.memoryStore?.getActorRole?.({ paneId: result.paneId })?.missionId ?? missionId,
               });
             } catch {}
           }
@@ -397,13 +444,13 @@ function createPaneHandlers(ptyManager, opts) {
         const paneId = await ptyManager.spawn(config);
         roleMap.set(paneId, "worker");
         if (label && opts.paneLabels) opts.paneLabels.set(paneId, label);
-        if (opts.onPaneCreated) opts.onPaneCreated({ paneId, agent: config.agent, cwd: config.cwd, providerId, model });
+        if (opts.onPaneCreated) opts.onPaneCreated({ paneId, agent: config.agent, cwd: config.cwd, providerId, model, label, taskType, effort, accountLabel });
         // Register in actor registry
         try {
           const workspace = opts.getCurrentWorkspacePath?.() || null;
           opts.memoryStore?.actorRegister?.({
             paneId, parentPaneId: parentPaneId || null,
-            agent: config.agent, label, description, workspace, cwd, providerId, model,
+            agent: config.agent, label, description, workspace, cwd, providerId, model, role: "worker", missionId,
           });
         } catch {}
         return { paneId };
@@ -414,12 +461,17 @@ function createPaneHandlers(ptyManager, opts) {
 
     async writePane(paneId, text, submit = true) {
       if (!ptyManager.hasPane(paneId)) return { ok: false, error: "pane not found" };
+      // SSH panes are shells, not AI workers. Roles can be stale; only a
+      // known agent runtime may receive natural-language task decorations.
+      const agent = opts.paneConfigs?.get?.(paneId)?.agent
+        ?? ptyManager.list?.().find(pane => pane.paneId === paneId)?.agent;
+      const isAgentPane = Boolean(agent && agent !== "shell" && agent !== "browser");
       // ── Code-level memory protocol enforcement ────────────────────────────
       // Prepend memory protocol instructions on the first write to each pane
       // and whenever a pane receives a new task after going idle.
       // This is enforced in code, not just in prompt files.
       let finalText = text;
-      if (opts.paneMemoryState) {
+      if (isAgentPane && opts.paneMemoryState) {
         const existing = opts.paneMemoryState.get(paneId);
         const isFirstWrite = !existing;
         const isAfterIdle = existing?.wentIdleSinceLastWrite === true;
@@ -443,7 +495,9 @@ function createPaneHandlers(ptyManager, opts) {
       // does NOT already contain handoff_submit, and this is a submit write.
       // Auto-append contract footer to long task writes.
       // NOTE: Only for workers — orchestrators get the no-edit banner instead.
-      const paneRole = roleMap.get(paneId) || opts.memoryStore?.getActorRole?.({ paneId })?.role || null;
+      const paneRole = isAgentPane
+        ? roleMap.get(paneId) || opts.memoryStore?.getActorRole?.({ paneId })?.role || null
+        : null;
       const isOrchestratorPane = paneRole === "orchestrator";
 
       // ── Orchestrator no-edit banner (code-level enforcement) ───────────
@@ -463,6 +517,7 @@ function createPaneHandlers(ptyManager, opts) {
         }
       }
       if (
+        isAgentPane &&
         submit &&
         finalText.length > 80 &&
         !finalText.includes("handoff_submit") &&
@@ -513,6 +568,12 @@ function createPaneHandlers(ptyManager, opts) {
           role: roleMap.get(p.paneId) || "worker",
           label: paneLabels.get(p.paneId) || p.agent,
         };
+        const paneConfig = opts.paneConfigs?.get?.(p.paneId);
+        if (paneConfig) {
+          base.taskType = paneConfig.taskType;
+          base.effort = paneConfig.effort;
+          base.accountLabel = paneConfig.accountLabel;
+        }
         // Enrich with store data (role + mission_id from actor_registry)
         try {
           const store = opts.memoryStore;
@@ -566,14 +627,30 @@ function createPaneHandlers(ptyManager, opts) {
       }
     },
 
-    async handoffSubmit({ paneId, summary, status, artifacts }) {
+    async handoffSubmit({ paneId, summary, status, artifacts, evidence, output }) {
       try {
         const store = opts.memoryStore;
         if (!store) return { ok: false, error: "memory store not available" };
         const workspace = opts.getCurrentWorkspacePath?.() || null;
-        const result = store.submitHandoff({ paneId, summary, status, artifacts, workspace });
+
+        // Contrato do spawn: a entrega volta para o worker enquanto houver tentativa.
+        const contract = opts.paneContracts?.get(paneId);
+        const verdict = evaluateHandoff({ status, output, evidence, contract });
+        if (!verdict.accepted) {
+          emitPaneMeta(paneId, { handoffStatus: "rejected", contractStatus: verdict.status, evidence: describeEvidence(evidence, verdict.status) });
+          return {
+            ok: false,
+            rejected: true,
+            missing: verdict.problems,
+            message: "Entrega recusada pelo contrato. Corrija o que falta e chame handoff_submit de novo.",
+          };
+        }
+        if (status === "done" || status === "error") opts.paneContracts?.delete(paneId);
+
+        const result = store.submitHandoff({ paneId, summary, status, artifacts, workspace, evidence, output, contractStatus: verdict.status });
         // Fire hook event
         try { opts.hooksManager?.fire?.("handoff_submitted", { paneId, status, summary: summary.slice(0, 100) }); } catch {}
+        emitPaneMeta(paneId, { handoffStatus: status, contractStatus: verdict.status, evidence: describeEvidence(evidence, verdict.status) });
 
         // ── Auto-record handoff as searchable memory (FASE 2) ─────────────
         // Every handoff result becomes an episodic memory so other agents can
@@ -622,7 +699,7 @@ function createPaneHandlers(ptyManager, opts) {
 
         // ── pokeOrchestrator: notify the orchestrator automatically ────────
         // Find the orchestrator pane (role === "orchestrator") and inject the
-        // result as a structured wake message (ported from Overclock).
+        // result as a structured wake message.
         // Uses buildWakeMessage for human-legible output with status glyphs,
         // item references, and technical pointers.
         // Clarify entries also get a clarify broadcast payload.
@@ -632,7 +709,7 @@ function createPaneHandlers(ptyManager, opts) {
 
           // Build structured wake message using pure builder (handoff-wake-message.js)
           const entry = { paneId, summary, status, artifacts };
-          const msg = buildWakeMessage(entry, squadRole);
+          const msg = `${buildWakeMessage(entry, squadRole)} [${describeEvidence(evidence, verdict.status)}]`;
 
           // Find orchestrator pane — store-first (mission-aware), fallback to roleMap
           const orchestratorPaneId = (() => {

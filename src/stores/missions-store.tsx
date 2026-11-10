@@ -4,7 +4,7 @@ import { appStorage } from './persist-storage';
 import { nanoid } from 'nanoid';
 
 export type MissionStatus = 'active' | 'running' | 'blocked' | 'ready_to_integrate' | 'archived';
-export type MissionMode = 'livre' | 'squad';
+export type MissionMode = 'livre' | 'squad' | 'agentico';
 
 export interface ProviderPaneConfig {
   providerId: string;
@@ -23,6 +23,11 @@ export interface Mission {
   providerConfig?: ProviderPaneConfig[];
   branch?: string;
   worktreePath?: string;
+  /** Só em missão agêntica: o pane do piloto e com o que ele foi aberto. */
+  pilotPaneId?: string;
+  pilot?: { agent?: string; providerId?: string; model?: string };
+  /** Id da missão no backend; o id daqui é só estado local da interface. */
+  operationalMissionId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -74,7 +79,8 @@ export const useMissionsStore = create<MissionsState>()(
 
       ensureMissionForWorkspace: (workspacePath) => {
         const state = get();
-        const existing = (state.missionsByWorkspace[workspacePath] ?? []).filter(
+        const history = state.missionsByWorkspace[workspacePath] ?? [];
+        const existing = history.filter(
           m => m.status !== 'archived',
         );
         if (existing.length > 0) {
@@ -92,7 +98,7 @@ export const useMissionsStore = create<MissionsState>()(
         const now = Date.now();
         const mission: Mission = {
           id: nanoid(),
-          title: nextMissionTitle(existing),
+          title: nextMissionTitle(history),
           status: 'active',
           createdAt: now,
           updatedAt: now,
@@ -100,7 +106,7 @@ export const useMissionsStore = create<MissionsState>()(
         set(s => ({
           missionsByWorkspace: {
             ...s.missionsByWorkspace,
-            [workspacePath]: [mission],
+            [workspacePath]: [...history, mission],
           },
           activeMissionByWorkspace: {
             ...s.activeMissionByWorkspace,
@@ -149,6 +155,9 @@ export const useMissionsStore = create<MissionsState>()(
           providerConfig: mission.providerConfig,
           branch: mission.branch?.trim(),
           worktreePath: mission.worktreePath?.trim(),
+          pilot: mission.pilot,
+          pilotPaneId: mission.pilotPaneId,
+          operationalMissionId: mission.operationalMissionId,
           createdAt: now,
           updatedAt: now,
         };
@@ -207,11 +216,18 @@ export const useMissionsStore = create<MissionsState>()(
 );
 
 export const MISSION_STATUS_DOT_CLASS: Record<MissionStatus, string> = {
-  active: 'bg-green-400',
-  running: 'bg-blue-400',
-  blocked: 'bg-amber-400',
-  ready_to_integrate: 'bg-emerald-400',
-  archived: 'bg-gray-600',
+  active: 'bg-cb-success',
+  running: 'bg-cb-agent-running',
+  blocked: 'bg-cb-agent-blocked',
+  ready_to_integrate: 'bg-cb-agent-done',
+  archived: 'bg-cb-fg-3',
+};
+
+/** Missões antigas não têm `mode`; aparecem como Livre. */
+export const MISSION_MODE_LABEL: Record<MissionMode, string> = {
+  livre: 'Livre',
+  squad: 'Squad',
+  agentico: 'Agêntico',
 };
 
 export const MISSION_STATUS_TITLE: Record<MissionStatus, string> = {

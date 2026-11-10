@@ -29,4 +29,3 @@ export const ORCHESTRATOR_PROMPT = loadPrompt("squad-orchestrator.md");
 export const UI_TESTER_PROMPT = loadPrompt("squad-ui-tester.md");
 export const GEMINI_WORKER_PROMPT = loadPrompt("squad-worker-gemini.md");
 export const CODEBRAIN_SYSTEM_PROMPT = loadPrompt("codebrain-system.md");
-export const MK_OPERATING_PROMPT = loadPrompt("mk-operational.md");

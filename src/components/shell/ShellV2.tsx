@@ -4,6 +4,7 @@ import { useNavStore } from "../../stores/nav-store";
 import { DashboardPage } from "../../views/home/DashboardPage";
 import { SettingsPage } from "../../views/home/SettingsPage";
 import { WorkspacesPage } from "../../views/home/WorkspacesPage";
+import { CentralPage } from "../../views/home/CentralPage";
 import { ClarifyPrompt } from "../clarify/ClarifyPrompt";
 import { ConversationPanel } from "../conversation/ConversationPanel";
 import { SpecPanel } from "../spec/SpecPanel";
@@ -21,6 +22,7 @@ import { NavRail } from "./NavRail";
 import { CommandBar } from "./CommandBar";
 import { StatusBar } from "./StatusBar";
 import { GlobalModalsHost } from "../ui/AppHeader";
+import { useShellNavigation } from "./shell-navigation";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SHELL V2 — TERMINAL-FIRST
@@ -57,11 +59,13 @@ import { GlobalModalsHost } from "../ui/AppHeader";
 
 function HomePages() {
   const { route } = useRouter();
+
   return (
     <div className="flex-1 min-h-0 flex overflow-hidden">
-      {(route === "/" || !["/workspaces", "/settings"].includes(route)) && <DashboardPage />}
+      {(route === "/" || !["/workspaces", "/settings", "/central"].includes(route)) && <DashboardPage />}
       {route === "/workspaces" && <WorkspacesPage />}
       {route === "/settings" && <SettingsPage />}
+      {route === "/central" && <CentralPage />}
     </div>
   );
 }
@@ -71,6 +75,7 @@ interface Props {
 }
 
 export function ShellV2({ appVersion }: Props) {
+  useShellNavigation();
   const onHome = useNavStore((state) => state.onHome);
   const tabs = useNavStore((state) => state.tabs) as {
     id?: string;

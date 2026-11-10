@@ -10,13 +10,16 @@ import {
   Plus,
   X,
   MessageSquare,
-  GripVertical,
   ChevronLeft,
   DollarSign,
+  Server,
 } from "lucide-react";
 import { usePanesStore } from "../../stores/panes-store";
 import { useShellStore } from "../../stores/shell-store";
-import { statusPresentation, toPaneStatus } from "./pane-status";
+import { derivePaneActivity, activityPresentation } from "./pane-status";
+import { ElapsedTime, StatusGlyph } from "./pane-status-glyph";
+import { cliIdentity, groupPanesForRail, modelShortName, paneDisplayName, roleLabel } from "../panes/pane-identity";
+import { usePaneRuntime } from "../panes/pane-runtime";
 import { useConversationStore } from "../../stores/conversation-store";
 import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
 import { useCronStore } from "../../stores/cron-store";
@@ -25,13 +28,16 @@ import { useSessionHistoryStore } from "../../stores/session-history-store";
 import { useTasksStore } from "../../stores/tasks-store";
 import { useCostStore } from "../../stores/cost-store";
 import { useRouter } from "../../lib/router";
+import { navigateHome } from "./shell-navigation";
 import { CODEBRAIN_PANE_DRAG_TYPE } from "../../lib/pane-drag";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NAV RAIL — ATTOS-STYLE DUAL-COLUMN SIDEBAR
    ═══════════════════════════════════════════════════════════════════════════
 
-   Tira de ícones (48px) + painel de panes (196px colapsável).
+   Tira de ícones (48px) + painel de panes (196px colapsável). Cada pane é
+   nome primeiro, estado depois, CLI por último; ajudantes ficam pendurados no
+   piloto. Estado e glifo vêm de pane-status, os mesmos do header do terminal.
 
    MUTEX: abrir qualquer painel overlay (Tasks, Cron, Memory, Sessions)
    fecha os demais — painéis têm z-20 fixo e não se empilham visualmente.
@@ -46,6 +52,12 @@ interface PaneLike {
   status?: string;
   kind?: string;
   cwd?: string;
+  label?: string;
+  model?: string;
+  role?: string;
+  parentPaneId?: string;
+  registryMissionId?: string;
+  activitySince?: number;
 }
 
 // ── Ícone de nav ─────────────────────────────────────────────────────────────
@@ -102,6 +114,8 @@ function NavIconButton({
 function AgentRow({
   pane,
   active,
+  depth,
+  last,
   onSelect,
   onConversation,
   onClose,
@@ -111,75 +125,82 @@ function AgentRow({
 }: {
   pane: PaneLike;
   active: boolean;
+  depth: number;
+  last: boolean;
   onSelect: () => void;
   onConversation: () => void;
   onClose: () => void;
-  onDragStart: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragStart: (event: React.DragEvent<HTMLLIElement>) => void;
   onDragEnd: () => void;
   dragging: boolean;
 }) {
-  const presentation = statusPresentation(pane.status);
-  const label = pane.title || pane.agent || "shell";
+  const activity = derivePaneActivity(pane);
+  const presentation = activityPresentation(activity);
+  const { name, isDefault } = paneDisplayName(pane);
+  const role = roleLabel(pane);
+  const cli = cliIdentity(pane.agent).label;
+  const model = modelShortName(pane.model);
+  const secondary = [role, isDefault ? null : cli, model].filter(Boolean).join(" · ");
 
   return (
-    <div
-      role="option"
-      aria-selected={active}
-      aria-grabbed={dragging}
-      aria-label={`${label} — ${presentation.label}`}
-      title="Arraste para dividir a tela"
+    <li
+      title={`${name}\n${presentation.label}${secondary ? ` · ${secondary}` : ""}\nArraste sobre outro pane para dividir a tela`}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`cb-row cb-rail w-full text-left h-cell group cursor-grab active:cursor-grabbing ${dragging ? "opacity-40" : ""}`}
-      style={
-        {
-          "--cb-rail-color": active ? "var(--cb-accent)" : presentation.color,
-        } as React.CSSProperties
-      }
+      className="cb-agent-row group"
+      data-active={active}
+      data-urgent={presentation.urgent}
+      data-dragging={dragging}
+      data-depth={depth}
+      data-last={last}
+      style={{ "--cb-status-color": presentation.color } as React.CSSProperties}
     >
+      {depth > 0 && <span className="cb-agent-guide" aria-hidden />}
       <button
         type="button"
         onClick={onSelect}
-        className="flex flex-1 min-w-0 items-center gap-2"
-        aria-label={`${label} — ${presentation.label}`}
+        className="cb-agent-main"
+        aria-current={active ? "true" : undefined}
+        aria-label={`${name}, ${presentation.label}${secondary ? `, ${secondary}` : ""}`}
       >
-        <span
-          className="cb-dot"
-          data-pulse={presentation.pulse}
-          style={{ "--cb-dot-color": presentation.color } as React.CSSProperties}
-          aria-hidden
-        />
-        <span className="flex-1 min-w-0 truncate text-xs">{label}</span>
+        <span className="cb-agent-line">
+          <StatusGlyph activity={activity} />
+          <span className="cb-agent-name" data-default={isDefault}>{name}</span>
+        </span>
+        <span className="cb-agent-sub">
+          <span className="cb-agent-state" data-urgent={presentation.urgent}>{presentation.label}</span>
+          <ElapsedTime since={pane.activitySince} ticking={presentation.ticking} />
+          {secondary && <span className="cb-agent-cli">{secondary}</span>}
+        </span>
       </button>
 
-      <GripVertical size={10} className="text-cb-fg-3 shrink-0" aria-hidden />
-      <span className="text-2xs text-cb-fg-3 shrink-0 tabular-nums">
-        {pane.id.slice(0, 4)}
+      <span className="cb-agent-actions" data-pane-action>
+        <button
+          type="button"
+          data-pane-action
+          draggable={false}
+          onClick={onConversation}
+          className="cb-agent-action"
+          aria-label={`Conversar com ${name}`}
+          title="Abrir conversa"
+        >
+          <MessageSquare size={11} aria-hidden />
+        </button>
+        <button
+          type="button"
+          data-pane-action
+          draggable={false}
+          onClick={onClose}
+          className="cb-agent-action"
+          data-danger="true"
+          aria-label={`Encerrar ${name}`}
+          title="Encerrar agente"
+        >
+          <X size={11} aria-hidden />
+        </button>
       </span>
-      <button
-        type="button"
-        data-pane-action
-        draggable={false}
-        onClick={onConversation}
-        className="opacity-0 group-hover:opacity-100 text-cb-fg-3 hover:text-cb-accent"
-        aria-label={`Conversar com ${label}`}
-        title="Abrir conversa"
-      >
-        <MessageSquare size={11} />
-      </button>
-      <button
-        type="button"
-        data-pane-action
-        draggable={false}
-        onClick={onClose}
-        className="opacity-60 group-hover:opacity-100 text-cb-fg-2 hover:text-cb-danger"
-        aria-label={`Encerrar ${label}`}
-        title="Encerrar agente"
-      >
-        <X size={11} />
-      </button>
-    </div>
+    </li>
   );
 }
 
@@ -242,6 +263,7 @@ function useOverlayMutex() {
 
   return {
     open,
+    closeAll,
     active: {
       tasks: taskVisible,
       cron: cronVisible,
@@ -255,6 +277,8 @@ function useOverlayMutex() {
 // ── NavRail ───────────────────────────────────────────────────────────────────
 
 export function NavRail() {
+  usePaneRuntime();
+
   const panes = usePanesStore((state) => state.panes) as PaneLike[];
   const activePaneId = usePanesStore((state) => state.activePaneId);
   const setActive = usePanesStore((state) => state.setActive);
@@ -266,18 +290,23 @@ export function NavRail() {
   const openConversation = useConversationStore((state) => state.openFor);
   const openPaneLauncher = usePaneLauncherStore((state) => state.show);
 
-  const { navigate, route } = useRouter();
-  const { open: openOverlay, active: overlayActive } = useOverlayMutex();
+  const { navigate, route, query } = useRouter();
+  const { open: openOverlay, active: overlayActive, closeAll } = useOverlayMutex();
 
   const [draggingPaneId, setDraggingPaneId] = React.useState<string | null>(null);
 
-  // Contagem de panes ativos para badge no ícone de agentes.
-  const runningCount = React.useMemo(() => {
-    return panes.filter((p) => {
-      const s = toPaneStatus(p.status);
-      return s === "running" || s === "booting";
-    }).length;
+  // Quem precisa do usuário vence o badge: é a contagem que importa de relance.
+  const { waitingCount, workingCount } = React.useMemo(() => {
+    let waiting = 0;
+    let working = 0;
+    for (const pane of panes) {
+      const activity = derivePaneActivity(pane);
+      if (activity === "waiting") waiting++;
+      if (activity === "thinking" || activity === "running") working++;
+    }
+    return { waitingCount: waiting, workingCount: working };
   }, [panes]);
+  const rows = React.useMemo(() => groupPanesForRail(panes), [panes]);
 
   // Contagem de tarefas pendentes para badge no ícone Tasks.
   const taskCount = useTasksStore((s: any) => (s.list as unknown[])?.length ?? 0);
@@ -293,14 +322,14 @@ export function NavRail() {
   );
 
   const startPaneDrag = React.useCallback(
-    (event: React.DragEvent<HTMLDivElement>, pane: PaneLike) => {
+    (event: React.DragEvent<HTMLLIElement>, pane: PaneLike) => {
       if ((event.target as HTMLElement).closest("[data-pane-action]")) {
         event.preventDefault();
         return;
       }
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData(CODEBRAIN_PANE_DRAG_TYPE, pane.id);
-      event.dataTransfer.setData("text/plain", pane.title || pane.agent || "agente");
+      event.dataTransfer.setData("text/plain", paneDisplayName(pane).name);
       setDraggingPaneId(pane.id);
     },
     [],
@@ -314,7 +343,7 @@ export function NavRail() {
     <aside aria-label="Navegação" className="flex min-h-0 shrink-0">
       {/* ── Tira de ícones (48px) ───────────────────────────────────────── */}
       <div
-        className="cb-glass flex flex-col items-center py-2 shrink-0"
+        className="flex flex-col items-center py-2 shrink-0 bg-cb-bg-1 border-r border-cb-line-0"
         style={{ width: "var(--cb-nav-strip-width)" }}
       >
         <nav className="flex flex-col items-center gap-0.5 flex-1" aria-label="Seções">
@@ -322,14 +351,15 @@ export function NavRail() {
             icon={<LayoutDashboard size={16} strokeWidth={1.5} />}
             label="Início"
             active={!anyOverlayActive && (route === "/" || route === "")}
-            onClick={() => { navigate("/"); }}
+            onClick={() => { closeAll(); navigateHome(); }}
           />
 
           <NavIconButton
             icon={<Terminal size={16} strokeWidth={1.5} />}
             label={`Agentes (${panes.length})`}
             active={!panelCollapsed}
-            badge={runningCount > 0 ? runningCount : undefined}
+            badge={waitingCount > 0 ? waitingCount : workingCount > 0 ? workingCount : undefined}
+            badgeVariant={waitingCount > 0 ? "warn" : "accent"}
             onClick={toggleRail}
           />
 
@@ -368,19 +398,32 @@ export function NavRail() {
             active={overlayActive.cost}
             onClick={() => openOverlay("cost")}
           />
+          <NavIconButton
+            icon={<Server size={16} strokeWidth={1.5} />}
+            label="SSH e máquinas"
+            active={!anyOverlayActive && route === "/central" && query.s === "acessos"}
+            onClick={() => { closeAll(); navigate("/central", { query: { s: "acessos" } }); }}
+          />
         </nav>
 
         <div
           className="w-5 h-px mb-1"
-          style={{ background: "var(--cb-glass-border)" }}
+          style={{ background: "var(--cb-line-0)" }}
           aria-hidden
+        />
+
+        <NavIconButton
+          icon={<span className="text-sm font-bold leading-none" aria-hidden>❯</span>}
+          label="Central"
+          active={!anyOverlayActive && route === "/central" && query.s !== "acessos"}
+          onClick={() => { closeAll(); navigate("/central"); }}
         />
 
         <NavIconButton
           icon={<Settings size={16} strokeWidth={1.5} />}
           label="Configurações"
           active={!anyOverlayActive && route === "/settings"}
-          onClick={() => { navigate("/settings"); }}
+          onClick={() => { closeAll(); navigate("/settings"); }}
         />
       </div>
 
@@ -400,6 +443,16 @@ export function NavRail() {
           <span className="cb-label flex-1 truncate">
             agentes · {panes.length}
           </span>
+          {waitingCount > 0 && (
+            <span
+              className="cb-agent-waiting"
+              role="status"
+              aria-label={`${waitingCount} aguardando você`}
+              title={`${waitingCount} aguardando você`}
+            >
+              {waitingCount}
+            </span>
+          )}
           <button
             type="button"
             onClick={toggleRail}
@@ -411,38 +464,42 @@ export function NavRail() {
           </button>
         </div>
 
-        <div className="cb-scroll flex-1 py-1 px-1" role="listbox" aria-label="Panes">
+        <div className="cb-scroll flex-1 py-1 px-1">
           {panes.length === 0 ? (
-            <p className="px-3 py-4 text-2xs text-cb-fg-3 leading-relaxed">
-              Nenhum agente.{" "}
-              <span className="text-cb-fg-2">Ctrl+T</span> abre um.
+            <p className="cb-agent-empty">
+              <b>nenhum terminal</b>
+              <kbd className="cb-kbd">Ctrl T</kbd> abre um.
             </p>
           ) : (
-            panes.map((pane) => (
-              <AgentRow
-                key={pane.id}
-                pane={pane}
-                active={pane.id === activePaneId}
-                onSelect={() => setActive(pane.id)}
-                onConversation={() => openConversation(pane.id)}
-                onClose={() => closePane(pane.id)}
-                onDragStart={(e) => startPaneDrag(e, pane)}
-                onDragEnd={() => setDraggingPaneId(null)}
-                dragging={draggingPaneId === pane.id}
-              />
-            ))
+            <ul className="cb-agent-list" aria-label="Terminais">
+              {rows.map(({ pane, depth, last }) => (
+                <AgentRow
+                  key={pane.id}
+                  pane={pane}
+                  active={pane.id === activePaneId}
+                  depth={depth}
+                  last={last}
+                  onSelect={() => setActive(pane.id)}
+                  onConversation={() => openConversation(pane.id)}
+                  onClose={() => closePane(pane.id)}
+                  onDragStart={(e) => startPaneDrag(e, pane)}
+                  onDragEnd={() => setDraggingPaneId(null)}
+                  dragging={draggingPaneId === pane.id}
+                />
+              ))}
+            </ul>
           )}
         </div>
 
         <button
           type="button"
           onClick={openPaneLauncher}
-          aria-label="Novo pane"
-          title="Novo pane — Ctrl+T"
+          aria-label="Novo terminal"
+          title="Novo terminal — Ctrl+T"
           className="flex items-center gap-2 h-cell-lg px-3 border-t border-cb-line-0 text-cb-fg-2 hover:text-cb-accent hover:bg-cb-bg-2 shrink-0"
         >
           <Plus size={13} strokeWidth={1.5} />
-          <span className="text-xs">+ pane</span>
+          <span className="text-xs">novo terminal</span>
         </button>
       </div>
     </aside>

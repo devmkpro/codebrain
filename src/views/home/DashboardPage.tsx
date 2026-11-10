@@ -1,115 +1,120 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import {
-  FolderOpen, Terminal, Zap, Bot, ChevronRight,
-  RefreshCw, Plus, Activity, Circle, Server, X,
-  Store, Download, Gamepad2, Sparkles,
-} from 'lucide-react';
-import { Link, useRouter } from '../../lib/router';
+import { ArrowRight, FolderOpen, Plus, RefreshCw, X } from 'lucide-react';
+import { useRouter } from '../../lib/router';
 import { useNavStore }       from '../../stores/nav-store';
 import { useWorkspaceStore } from '../../stores/workspace-store';
 import { useProvidersStore } from '../../stores/providers-store';
 import { useTasksStore }     from '../../stores/tasks-store';
 import { usePanesStore }     from '../../stores/panes-store';
+import { usePaletteStore }   from '../../stores/palette-store';
 import { usePaneLauncherStore } from '../../stores/pane-launcher-store';
 import { OperationsBoard } from '../../components/operations/OperationsBoard';
+import { useWorkspaceRegistry } from '../../components/operations/useWorkspaceRegistry';
+import { operationWorkspacePaths } from '../../components/operations/workspace-paths';
+import { derivePaneActivity, activityPresentation, type PaneActivity } from '../../components/shell/pane-status';
+import { StatusGlyph } from '../../components/shell/pane-status-glyph';
+import { CodebrainMark, CodebrainWordmark } from '../../components/ui/AppLogo';
+import { Badge, Button, Kbd, Prompt, SectionRule } from '../../components/ui/primitives';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function timeAgo(ts: number): string {
-  const d = Math.max(0, Date.now() - ts);
-  const m = Math.floor(d / 60000);
-  if (m < 1)  return 'agora';
-  if (m < 60) return `${m}m atrás`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h atrás`;
-  return `${Math.floor(h / 24)}d atrás`;
-}
+/* ═══════════════════════════════════════════════════════════════════════════
+   INÍCIO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   A home é o prompt do app. A primeira linha responde "como estão meus
+   agentes?"; logo abaixo vem o que precisa de você, depois o que está rodando.
+   Workspaces recentes ficam ao lado e, em janela estreita, descem.
+
+   Sem nada aberto e sem histórico, vira a tela de primeiro uso.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 function folderName(p: string) {
   return p.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? p;
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-function StatCard({ icon, label, value, sub, color = '#5855e5' }: { icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="p-4 rounded-cb-1 border border-cb-line-1 bg-cb-bg-1 flex flex-col gap-2 hover:border-cb-line-2 hover:bg-cb-bg-2 transition-all group cursor-default">
-      <div className="flex items-center gap-2" style={{ color }}>
-        {icon}
-        <span className="text-[9px] font-mono uppercase tracking-widest text-cb-fg-3">{label}</span>
-      </div>
-      <p className="text-2xl font-bold text-cb-fg-0 font-mono group-hover:scale-105 transition-transform origin-left">{value}</p>
-      {sub && <p className="text-[9px] text-cb-fg-3">{sub}</p>}
-    </div>
-  );
+function normalized(p: string) {
+  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
+function plural(n: number, one: string, many: string) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+const ATTENTION: ReadonlySet<PaneActivity> = new Set<PaneActivity>(['failed', 'waiting', 'blocked']);
+const WORKING: ReadonlySet<PaneActivity> = new Set<PaneActivity>(['thinking', 'running']);
+
+function paneTitle(pane: any): string {
+  return pane.label || pane.agent || 'shell';
+}
+
+// ─── Linhas ───────────────────────────────────────────────────────────────────
 function PaneRow({ pane, onClose }: { pane: any; onClose?: (id: string) => void }) {
-  const isRun = pane.status === 'running';
+  const activity: PaneActivity = pane.kind === 'browser' ? 'idle' : derivePaneActivity(pane);
+  const state = activityPresentation(activity);
   return (
-    <div className="flex items-center gap-2.5 px-3 py-2 rounded-cb-1 border border-cb-line-1 bg-cb-bg-1 hover:border-cb-line-2 hover:bg-cb-bg-2 transition-all group/pane">
-      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRun ? 'bg-cb-success animate-pulse' : pane.kind === 'browser' ? 'bg-cb-accent' : 'bg-cb-fg-3'}`} />
-      <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-mono text-cb-fg-1 truncate">
-          {pane.agent ?? 'shell'}{pane.model ? ` · ${pane.model}` : ''}
-        </p>
-      </div>
-      <span className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-full shrink-0 ${
-        isRun ? 'bg-cb-success-wash text-cb-success border border-cb-success/30' : pane.kind === 'browser' ? 'bg-cb-accent-wash text-cb-accent' : 'bg-cb-bg-2 text-cb-fg-3'
-      }`}>
-        {pane.kind === 'browser' ? 'browser' : pane.status ?? 'idle'}
+    <div className="cb-row cb-rail group/pane min-h-cell-lg" style={{ '--cb-rail-color': state.color } as React.CSSProperties}>
+      <StatusGlyph activity={activity} />
+      <span className="text-base text-cb-fg-0 truncate">{paneTitle(pane)}</span>
+      {pane.label && pane.agent && <span className="text-sm text-cb-fg-2 truncate hidden sm:inline">{pane.agent}</span>}
+      {pane.model && <span className="text-sm text-cb-fg-2 truncate hidden sm:inline">{pane.model}</span>}
+      <span className="ml-auto text-sm shrink-0" style={{ color: activity === 'idle' ? 'var(--cb-fg-2)' : state.color }}>
+        {pane.kind === 'browser' ? 'browser' : state.label}
       </span>
       {onClose && (
         <button
+          type="button"
           onClick={(e) => { e.stopPropagation(); onClose(pane.id); }}
-          className="opacity-0 group-hover/pane:opacity-100 w-5 h-5 rounded-cb-1 flex items-center justify-center text-cb-fg-3 hover:text-cb-danger hover:bg-cb-danger-wash transition-all shrink-0"
+          className="cb-btn cb-btn--ghost cb-btn--sm cb-btn--icon shrink-0 opacity-0 group-hover/pane:opacity-100 focus-visible:opacity-100"
           title="Fechar pane"
+          aria-label={`Fechar ${paneTitle(pane)}`}
         >
-          <X size={10} strokeWidth={2} />
+          <X size={12} />
         </button>
       )}
     </div>
   );
 }
 
-function WorkspaceGroup({ tab, panes, onSwitch, onClosePane }: { tab: any; panes: any[]; onSwitch: () => void; onClosePane?: (id: string) => void }) {
-  const name    = folderName(tab.workspacePath);
-  const running = panes.filter(p => p.status === 'running').length;
-  const [open,  setOpen] = useState(true);
+function WorkspaceGroup({ name, path, panes, onGo, onClosePane }: {
+  name: string;
+  path: string | null;
+  panes: any[];
+  onGo?: () => void;
+  onClosePane: (id: string) => void;
+}) {
   return (
-    <div className="rounded-cb-1 border border-cb-line-1 bg-cb-bg-1 overflow-hidden mb-3 hover:border-cb-line-2 transition-all">
-      <div
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-cb-bg-2 transition-all cursor-pointer"
-      >
-          <div className="w-7 h-7 rounded-cb-1 bg-cb-accent-wash border border-cb-accent-dim flex items-center justify-center shrink-0">
-          <Server size={12} className="text-cb-accent" />
-        </div>
-        <div className="flex-1 min-w-0 text-left">
-          <p className="text-[11px] font-bold text-cb-fg-1 truncate">{name}</p>
-          <p className="text-[9px] font-mono text-cb-fg-3 truncate">{tab.workspacePath}</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full ${running > 0 ? 'text-cb-success bg-cb-success-wash border border-cb-success/30' : 'text-cb-fg-3 bg-cb-bg-2'}`}>
-            {panes.length} pane{panes.length !== 1 ? 's' : ''}{running > 0 ? ` · ${running} ativo${running !== 1 ? 's' : ''}` : ''}
-          </span>
-          <button
-            onClick={e => { e.stopPropagation(); onSwitch(); }}
-            className="text-[9px] font-mono text-cb-accent bg-cb-accent-wash border border-cb-accent-dim px-2 py-0.5 rounded-cb-1 hover:bg-cb-accent-wash-strong transition-all uppercase tracking-widest"
-          >
-            ir →
+    <section className="min-w-0">
+      <div className="flex items-baseline gap-2 min-h-cell px-2">
+        <h3 className="text-sm font-medium text-cb-fg-1 truncate" title={path ?? undefined}>{name}</h3>
+        <span className="text-xs text-cb-fg-2 tabular-nums shrink-0">{panes.length}</span>
+        {onGo && (
+          <button type="button" onClick={onGo} className="ml-auto text-xs text-cb-fg-2 hover:text-cb-accent shrink-0 inline-flex items-center gap-1">
+            abrir <ArrowRight size={11} />
           </button>
-        </div>
+        )}
       </div>
-      {open && (
-        <div className="border-t border-cb-line-0 px-3 pb-2 pt-1.5 space-y-1">
-          {panes.length === 0 ? (
-            <p className="text-[9px] font-mono text-cb-fg-3 py-1">Sem panes ativos</p>
-          ) : (
-            panes.map(p => <PaneRow key={p.id} pane={p} onClose={onClosePane} />)
-          )}
-        </div>
-      )}
-    </div>
+      {panes.length === 0
+        ? <p className="px-2 min-h-cell flex items-center text-sm text-cb-fg-2">nenhum agente neste workspace</p>
+        : panes.map((pane) => <PaneRow key={pane.id} pane={pane} onClose={onClosePane} />)}
+    </section>
+  );
+}
+
+function AttentionRow({ pane, workspace, onGo }: { pane: any; workspace: string | null; onGo: () => void }) {
+  const activity = derivePaneActivity(pane);
+  const state = activityPresentation(activity);
+  return (
+    <button
+      type="button"
+      onClick={onGo}
+      className="cb-row cb-rail w-full text-left min-h-cell-lg group/att"
+      style={{ '--cb-rail-color': state.color } as React.CSSProperties}
+    >
+      <StatusGlyph activity={activity} />
+      <span className="text-base text-cb-fg-0 truncate">{paneTitle(pane)}</span>
+      {workspace && <span className="text-sm text-cb-fg-2 truncate">{folderName(workspace)}</span>}
+      <span className="ml-auto text-sm shrink-0" style={{ color: state.color }}>{state.label}</span>
+      <ArrowRight size={12} className="shrink-0 text-cb-fg-2 group-hover/att:text-cb-accent" />
+    </button>
   );
 }
 
@@ -117,48 +122,101 @@ function TaskRow({ task }: { task: any }) {
   const label = task.status === 'in_progress' && task.taskNameActive ? task.taskNameActive
     : task.status === 'done' && task.taskNameComplete ? task.taskNameComplete
     : task.name;
+  const activity: PaneActivity = task.status === 'done' ? 'done' : task.status === 'in_progress' ? 'running' : 'idle';
   return (
-      <div className={`flex items-start gap-2.5 p-3 rounded-cb-1 border transition-all ${
-      task.status === 'in_progress' ? 'border-cb-accent-dim bg-cb-accent-wash'
-      : task.status === 'done'      ? 'border-cb-line-0 opacity-60'
-      : 'border-cb-line-1 bg-cb-bg-1 hover:border-cb-line-2'
-    }`}>
-      {task.status === 'done'
-        ? <Activity size={11} className="text-cb-success shrink-0 mt-0.5" />
-        : task.status === 'in_progress'
-        ? <RefreshCw size={11} className="text-cb-accent animate-spin shrink-0 mt-0.5" />
-        : <Circle size={11} className="text-cb-fg-3 shrink-0 mt-0.5" />}
-      <p className={`text-[10px] font-mono leading-snug ${
-        task.status === 'done' ? 'text-cb-fg-3 line-through'
-        : task.status === 'in_progress' ? 'text-cb-fg-0'
-        : 'text-cb-fg-2'
-      }`}>{label}</p>
+    <div className="cb-row min-h-cell-lg">
+      <StatusGlyph activity={activity} />
+      <span className={`text-base truncate ${task.status === 'done' ? 'text-cb-fg-2 line-through' : task.status === 'in_progress' ? 'text-cb-fg-0' : 'text-cb-fg-1'}`}>{label}</span>
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+function RecentRow({ path, agents, onOpen }: { path: string; agents: number; onOpen: () => void }) {
+  return (
+    <button type="button" onClick={onOpen} className="cb-row w-full text-left py-1.5 group/rec">
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-2">
+          <span className="text-base text-cb-fg-0 truncate">{folderName(path)}</span>
+          {agents > 0 && <span className="text-xs text-cb-fg-2 tabular-nums shrink-0">{plural(agents, 'agente', 'agentes')}</span>}
+        </span>
+        <span className="block text-xs text-cb-fg-2 truncate" title={path}>{path}</span>
+      </span>
+      <span className="text-cb-accent opacity-0 group-hover/rec:opacity-100 group-focus-visible/rec:opacity-100 shrink-0" aria-hidden>❯</span>
+    </button>
+  );
+}
+
+function Note({ children }: { children: React.ReactNode }) {
+  return <p className="px-2 py-6 text-center text-sm text-cb-fg-2">{children}</p>;
+}
+
+// ─── Primeiro uso ─────────────────────────────────────────────────────────────
+function FirstRun({ launching, onOpen, onPalette, onProviders }: {
+  launching: boolean;
+  onOpen: () => void;
+  onPalette: () => void;
+  onProviders: () => void;
+}) {
+  return (
+    <div className="cb-scroll flex-1 min-h-0 bg-cb-bg-0">
+      <div className="min-h-full flex items-center justify-center p-6">
+        <div className="w-full max-w-[560px]">
+          <div className="flex items-center gap-3">
+            <CodebrainMark size={40} />
+            <CodebrainWordmark className="text-xl" />
+          </div>
+
+          <h1 className="mt-7 text-xl font-bold text-cb-fg-0 leading-snug">
+            <Prompt waiting>abra um projeto para começar</Prompt>
+          </h1>
+          <p className="mt-2 text-base text-cb-fg-1 leading-relaxed">
+            Vários agentes de IA trabalhando lado a lado, cada um no seu terminal, todos à vista.
+          </p>
+
+          <ol className="cb-steps mt-6">
+            <li><span className="cb-steps__n">01</span><span>abra uma pasta <span className="text-cb-fg-2">vira um workspace</span></span></li>
+            <li><span className="cb-steps__n">02</span><span>inicie um agente <span className="text-cb-fg-2">Claude, Codex, Gemini…</span></span></li>
+            <li><span className="cb-steps__n">03</span><span>acompanhe por aqui <span className="text-cb-fg-2">o que roda, o que precisa de você</span></span></li>
+          </ol>
+
+          <div className="mt-7 flex flex-wrap items-center gap-3">
+            <Button variant="primary" size="lg" onClick={onOpen} disabled={launching}>
+              <FolderOpen size={14} />
+              {launching ? 'abrindo…' : 'abrir workspace'}
+            </Button>
+            <Button variant="secondary" size="lg" onClick={onProviders}>configurar providers</Button>
+            <button type="button" onClick={onPalette} className="inline-flex items-center gap-2 text-sm text-cb-fg-2 hover:text-cb-fg-0">
+              <Kbd keys={['Ctrl', 'K']} /> buscar qualquer ação
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Página ───────────────────────────────────────────────────────────────────
+type HomeView = 'panes' | 'board' | 'tasks';
+
 export function DashboardPage() {
   const { navigate } = useRouter();
-  const [recents,    setRecents]   = useState<string[]>([]);
-  const [launching,  setLaunching] = useState(false);
-  const [activeView, setView]      = useState<'board' | 'panes' | 'tasks'>('board');
+  const { recents, loaded: recentsLoaded, refresh: refreshWorkspaces } = useWorkspaceRegistry();
+  const [launching,     setLaunching]     = useState(false);
+  const [activeView,    setView]          = useState<HomeView>('panes');
 
   const openWorkspace    = useNavStore(s => s.openWorkspace);
   const setWorkspacePath = useWorkspaceStore(s => s.setPath);
+  const activeWorkspacePath = useWorkspaceStore((s: any) => s.path) as string | null;
   const providers        = useProvidersStore(s => s.providers) as any[];
   const loadProviders    = useProvidersStore(s => s.load);
   const tasks            = useTasksStore(s => s.list) as any[];
   const loadTasks        = useTasksStore(s => s.load);
   const panes            = usePanesStore(s => s.panes) as any[];
+  const openPalette      = usePaletteStore(s => s.openPalette);
 
   useEffect(() => {
-    (window as any).codeBrainApp?.workspaces?.recent?.()
-      .then((d: string[]) => { if (d) setRecents(d); })
-      .catch(() => {});
     loadProviders().catch(() => {});
     loadTasks().catch(() => {});
-
   }, []);
 
   const handleClosePane = useCallback((id: string) => {
@@ -198,6 +256,11 @@ export function DashboardPage() {
     }, 0);
   }, [activateWorkspace]);
 
+  const openSettings = useCallback((section: string) => {
+    try { localStorage.setItem('codebrain.settings.openSection', section); } catch {}
+    navigate('/settings');
+  }, [navigate]);
+
   // Auto-detect: only switch to existing tab, never spawn PTY
   const hasAutoOpenedRef = React.useRef(false);
   useEffect(() => {
@@ -220,243 +283,220 @@ export function DashboardPage() {
 
   const tabs         = useNavStore(s => s.tabs) as any[];
   const setActiveTab = useNavStore(s => s.setActiveTab);
-  const activePanes  = panes.filter(p => p.status === 'running');
   const pendingTasks = tasks.filter((t: any) => t.status !== 'done');
-  const boardWorkspaces = Array.from(new Set([
-    ...tabs.map((tab: any) => tab.workspacePath).filter(Boolean),
-    ...recents,
-  ]));
+  const boardWorkspaces = operationWorkspacePaths(recents,
+    tabs.some((tab) => activeWorkspacePath && normalized(tab.workspacePath) === normalized(activeWorkspacePath))
+      ? activeWorkspacePath : null);
 
-  // Group panes by workspace
-  // Track which panes have already been assigned to a workspace
-  const assignedPaneIds = new Set<string>();
+  const belongsToTab = (pane: any, tab: any) =>
+    pane.workspacePath === tab.workspacePath ||
+    (pane.cwd && tab.workspacePath && pane.cwd.startsWith(tab.workspacePath));
 
-  // First pass: mark panes that will be assigned to tabs
-  for (const tab of tabs) {
-    for (const p of panes) {
-      if (p.workspacePath === tab.workspacePath ||
-          (p.cwd && tab.workspacePath && p.cwd.startsWith(tab.workspacePath))) {
-        assignedPaneIds.add(p.id);
-      }
+  const paneWorkspace = (pane: any): string | null => {
+    const tab = tabs.find((t: any) => belongsToTab(pane, t));
+    return tab?.workspacePath ?? pane.workspacePath ?? pane.cwd ?? null;
+  };
+
+  const goToWorkspace = (path: string | null) => {
+    if (!path) return;
+    const index = tabs.findIndex((t: any) => normalized(t.workspacePath) === normalized(path));
+    if (index >= 0) setActiveTab(index);
+    else void handleOpen(path);
+  };
+
+  // Abas abertas primeiro, mesmo sem agentes; depois os panes de outras pastas.
+  const groups: { key: string; name: string; path: string | null; panes: any[] }[] = tabs.map((tab: any) => ({
+    key: normalized(tab.workspacePath),
+    name: folderName(tab.workspacePath),
+    path: tab.workspacePath,
+    panes: [],
+  }));
+  for (const pane of panes) {
+    const path = paneWorkspace(pane);
+    const key = path ? normalized(path) : '';
+    let group = groups.find((g) => g.key === key);
+    if (!group) {
+      group = { key, name: path ? folderName(path) : 'sem workspace', path, panes: [] };
+      groups.push(group);
     }
+    group.panes.push(pane);
   }
 
-  const orphanPanes = (panes as any[]).filter(p => !assignedPaneIds.has(p.id));
+  const activities = panes.map((pane) => (pane.kind === 'browser' ? 'idle' : derivePaneActivity(pane)) as PaneActivity);
+  const attention = panes.filter((_, i) => ATTENTION.has(activities[i]));
+  const working = activities.filter((a) => WORKING.has(a)).length;
+  const agentsIn = (path: string) => panes.filter((p) => { const w = paneWorkspace(p); return w && normalized(w) === normalized(path); }).length;
+
+  if (recentsLoaded && recents.length === 0 && panes.length === 0 && tabs.length === 0) {
+    return (
+      <FirstRun
+        launching={launching}
+        onOpen={() => void handleOpen()}
+        onPalette={openPalette}
+        onProviders={() => {
+          try { localStorage.setItem('codebrain.settings.openSection', 'providers'); } catch {}
+          navigate('/settings');
+        }}
+      />
+    );
+  }
+
+  const headline = attention.length > 0
+    ? `${plural(attention.length, 'agente precisa', 'agentes precisam')} de você`
+    : working > 0
+      ? `${plural(working, 'agente', 'agentes')} em ação`
+      : panes.length > 0
+        ? 'tudo calmo. o que vem agora?'
+        : 'o que vamos construir?';
+
+  const workspaceCount = new Set(panes.map((p) => { const w = paneWorkspace(p); return w ? normalized(w) : ''; })).size;
+  const summary = [
+    panes.length === 0 ? 'nenhum agente aberto' : `${plural(panes.length, 'agente', 'agentes')} em ${plural(workspaceCount, 'workspace', 'workspaces')}`,
+    pendingTasks.length > 0 ? plural(pendingTasks.length, 'task pendente', 'tasks pendentes') : null,
+    providers.length === 0 ? 'nenhum provider' : plural(providers.length, 'provider', 'providers'),
+  ].filter(Boolean).join(' · ');
+
+  const VIEWS: { id: HomeView; label: string; count: number }[] = [
+    { id: 'panes', label: 'agentes', count: panes.length },
+    { id: 'board', label: 'operações', count: boardWorkspaces.length },
+    { id: 'tasks', label: 'tasks', count: tasks.length },
+  ];
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* ── Left sidebar ─────────────────────────────────────────── */}
-      <aside className="w-72 border-r border-cb-line-0 hidden md:flex flex-col overflow-hidden cb-sidebar bg-cb-bg-1">
-        {/* CTA */}
-        <div className="p-5 border-b border-cb-line-0">
-          <button
-            onClick={() => handleOpen()}
-            disabled={launching}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-cb-1 bg-cb-accent text-cb-on-accent text-[11px] font-bold uppercase tracking-widest hover:bg-cb-accent-bright disabled:opacity-60 disabled:cursor-wait transition-all"
-          >
-            <FolderOpen size={14} />
-            {launching ? 'Iniciando…' : 'Abrir Workspace'}
-          </button>
-        </div>
+    <div className="cb-scroll flex-1 min-h-0 bg-cb-bg-0 @container">
+      <div className="mx-auto max-w-[1280px] px-5 @3xl:px-7 py-5 @3xl:py-6 flex flex-col gap-5">
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-2 p-4 border-b border-cb-line-0">
-          <StatCard icon={<Terminal size={13} />}  label="Panes"      value={panes.length}     sub={`${activePanes.length} ativos`} />
-          <StatCard icon={<Zap size={13} />}        label="Tasks"      value={tasks.length}     sub={`${pendingTasks.length} pendentes`} color="#F59E0B" />
-          <StatCard icon={<Bot size={13} />}         label="Providers"  value={providers.length} color="#06B6D4" />
-          <StatCard icon={<FolderOpen size={13} />} label="Recentes"   value={recents.length}   color="#10B981" />
-        </div>
-
-        {/* Features recentes — quick access to Settings sections */}
-        <div className="p-4 space-y-1">
-          <p className="text-[9px] font-mono text-cb-fg-3 uppercase tracking-widest mb-1.5 px-1">Acesso rápido</p>
-          {([
-            { section: 'marketplace', label: 'Marketplace', icon: <Store size={11} />, badge: 'Novo' },
-            { section: 'skill',       label: 'Skill & CLI', icon: <Download size={11} />, badge: null },
-            { section: 'discord',     label: 'Discord RPC', icon: <Gamepad2 size={11} />, badge: null },
-            { section: 'providers',   label: 'Providers',   icon: <Zap size={11} />, badge: null },
-          ] as const).map(({ section, label, icon, badge }) => (
-            <button key={section}
-              onClick={() => {
-                try { localStorage.setItem('codebrain.settings.openSection', section); } catch {}
-                navigate('/settings');
-              }}
-              className="w-full flex items-center justify-between p-2.5 rounded-cb-1 border border-transparent hover:border-cb-line-1 hover:bg-cb-bg-2 transition-all group text-left"
-            >
-              <div className="flex items-center gap-2 text-cb-fg-3 group-hover:text-cb-fg-1">
-                {icon}
-                <span className="text-[10px] font-medium">{label}</span>
-              </div>
-              {badge ? (
-                <span className="px-1.5 py-0.5 rounded bg-cb-accent-wash text-[8px] font-bold text-cb-accent border border-cb-accent-dim">{badge}</span>
-              ) : (
-                <ChevronRight size={10} className="text-cb-fg-3 group-hover:text-cb-fg-2 transition-colors" />
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Navigation links */}
-        <div className="p-4 space-y-1.5 border-t border-cb-line-0">
-          {([
-            { href: '/workspaces' as const, label: 'Ver Workspaces', icon: <FolderOpen size={12} /> },
-            { href: '/settings'   as const, label: 'Configurações',   icon: <Zap size={12} /> },
-          ]).map(({ href, label, icon }) => (
-            <Link key={href} href={href}
-              className="flex items-center justify-between p-3 rounded-cb-1 border border-cb-line-1 hover:border-cb-accent-dim hover:bg-cb-accent-wash transition-all group"
-            >
-              <div className="flex items-center gap-2 text-cb-fg-3 group-hover:text-cb-fg-1">{icon}<span className="text-[10px] font-medium">{label}</span></div>
-              <ChevronRight size={12} className="text-cb-fg-3 group-hover:text-cb-accent transition-colors" />
-            </Link>
-          ))}
-        </div>
-      </aside>
-
-      {/* ── Center ───────────────────────────────────────────────── */}
-      <section className="flex-1 flex flex-col bg-cb-bg-0 overflow-hidden">
-        {/* Sub-nav */}
-        <div className="h-10 border-b border-cb-line-0 flex items-center px-6 justify-between bg-cb-bg-1/50 shrink-0 backdrop-blur-sm">
-          <div className="flex h-7 bg-cb-bg-2 rounded-cb-1 p-0.5 border border-cb-line-1">
-            {(['board', 'panes', 'tasks'] as const).map(t => (
-              <button key={t} onClick={() => setView(t)}
-                className={`px-3 text-[10px] font-bold uppercase tracking-tight rounded-cb-1 transition-all ${activeView === t ? 'bg-cb-bg-3 text-cb-fg-0' : 'text-cb-fg-3 hover:text-cb-fg-1'}`}
-              >
-                {t === 'board' ? `Operações (${boardWorkspaces.length})` : t === 'panes' ? `Panes (${panes.length})` : `Tasks (${tasks.length})`}
-              </button>
-            ))}
+        {/* Prompt */}
+        <header className="flex flex-wrap items-start justify-between gap-x-7 gap-y-3">
+          <div className="min-w-0 flex-[1_1_320px]">
+            <h1 className="text-xl font-bold text-cb-fg-0 leading-snug">
+              <Prompt waiting>{headline}</Prompt>
+            </h1>
+            <p className="mt-1 text-sm text-cb-fg-2">{summary}</p>
           </div>
-          <button onClick={() => loadTasks().catch(() => {})} className="p-1.5 rounded-cb-1 text-cb-fg-3 hover:text-cb-fg-1 hover:bg-cb-bg-2 transition-all">
-            <RefreshCw size={12} />
-          </button>
-          {panes.length > 0 && (
-            <button
-              onClick={handleCloseAll}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-cb-1 text-[9px] font-mono font-bold uppercase tracking-wider text-cb-fg-3 hover:text-cb-danger hover:bg-cb-danger-wash border border-transparent hover:border-cb-danger/30 transition-all"
-              title="Fechar todos os panes"
-            >
-              <X size={10} strokeWidth={2} />
-              Fechar tudo
-            </button>
-          )}
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="lg" onClick={openPalette}>
+              buscar ações <Kbd keys={['Ctrl', 'K']} />
+            </Button>
+            <Button variant="primary" size="lg" onClick={() => void handleOpen()} disabled={launching}>
+              <FolderOpen size={14} />
+              {launching ? 'abrindo…' : 'abrir workspace'}
+            </Button>
+          </div>
+        </header>
 
-        <div className="flex-1 p-5 overflow-y-auto relative" style={{ scrollbarWidth: 'thin' }}>
-          <div className="absolute inset-0 opacity-[0.035] pointer-events-none" style={{ backgroundImage: 'linear-gradient(var(--cb-fg-0) 1px, transparent 1px), linear-gradient(90deg, var(--cb-fg-0) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-          <AnimatePresence mode="wait">
-            {activeView === 'board' ? (
-              <OperationsBoard
-                workspacePaths={boardWorkspaces}
-                onOpenWorkspace={(path) => void activateWorkspace(path)}
-                onNewPane={(path) => void handleNewPane(path)}
-                onRefresh={() => { void loadTasks(); void loadProviders(); }}
-              />
-            ) : activeView === 'panes' ? (
-              <motion.div key="panes" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="relative z-10">
-                {panes.length === 0 ? (
-                  <EmptyState
-                    icon={<Terminal size={32} className="text-cb-accent" />}
-                    title="Nenhum pane ativo"
-                    sub="Abra um workspace para começar"
-                    action={{ label: 'Abrir Workspace', onClick: () => handleOpen() }}
-                  />
-                ) : (
-                  <>
-                    {/* Open workspace tabs with their panes */}
-                    {tabs.length > 0 && tabs.map((tab: any, i: number) => {
-                      const tabPanes = (panes as any[]).filter(p =>
-                        p.workspacePath === tab.workspacePath ||
-                        (p.cwd && tab.workspacePath && p.cwd.startsWith(tab.workspacePath))
-                      );
-                      return (
-                        <WorkspaceGroup
-                          key={tab.workspacePath ?? i}
-                          tab={tab}
-                          panes={tabPanes}
-                          onSwitch={() => setActiveTab(i)}
-                          onClosePane={handleClosePane}
-                        />
-                      );
-                    })}
-                    {/* Panes without workspace (orphans) */}
-                    {orphanPanes.length > 0 && (
-                      <div className="mt-2">
-                        <p className="text-[9px] font-mono text-cb-fg-3 uppercase tracking-widest mb-2">Sem workspace</p>
-                        <div className="space-y-1">
-                          {orphanPanes.map((p: any) => <PaneRow key={p.id} pane={p} onClose={handleClosePane} />)}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div key="tasks" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="relative z-10 space-y-2">
-                {tasks.length === 0
-                  ? <EmptyState icon={<Zap size={32} className="text-cb-warn" />} title="Sem tasks" sub="O agente cria tasks via tool todo_manager" />
-                  : tasks.map((t: any, i: number) => <TaskRow key={t.id ?? i} task={t} />)
-                }
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </section>
-
-      {/* ── Right sidebar — Recent workspaces ────────────────────── */}
-      <aside className="w-80 border-l border-cb-line-0 hidden xl:flex flex-col overflow-hidden cb-sidebar bg-cb-bg-1">
-        <div className="p-5 border-b border-cb-line-0 flex items-center justify-between">
-          <h3 className="text-[10px] font-bold text-cb-fg-3 uppercase tracking-widest">Recentes</h3>
-          <span className="text-[9px] font-mono text-cb-fg-3 bg-cb-bg-2 px-1.5 py-0.5 rounded">{recents.length}</span>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ scrollbarWidth: 'thin' }}>
-          {recents.length === 0 ? (
-            <EmptyState icon={<FolderOpen size={24} className="text-cb-fg-3" />} title="Nenhum recente" sub="" />
-          ) : recents.map((path: string, i: number) => (
-            <motion.button
-              key={path}
-              initial={{ opacity: 0, x: 8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.04 }}
-              onClick={() => handleOpen(path)}
-              className="w-full p-3.5 rounded-cb-1 border border-cb-line-1 bg-cb-bg-1 hover:border-cb-accent-dim hover:bg-cb-accent-wash transition-all text-left group"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="w-7 h-7 rounded-cb-1 bg-cb-accent-wash border border-cb-accent-dim flex items-center justify-center shrink-0 group-hover:bg-cb-accent-wash-strong transition-all">
-                  <FolderOpen size={13} className="text-cb-accent" />
+        <div className="grid grid-cols-1 @4xl:grid-cols-[minmax(0,1fr)_300px] gap-x-8 gap-y-6 items-start">
+          {/* Coluna principal */}
+          <div className="min-w-0 flex flex-col gap-5">
+            {attention.length > 0 && (
+              <section>
+                <SectionRule label="precisa de você" count={attention.length} tone="text-cb-warn" />
+                <div className="mt-1">
+                  {attention.map((pane) => (
+                    <AttentionRow key={pane.id} pane={pane} workspace={paneWorkspace(pane)} onGo={() => goToWorkspace(paneWorkspace(pane))} />
+                  ))}
                 </div>
-                <ChevronRight size={12} className="text-cb-fg-3 group-hover:text-cb-accent transition-colors" />
-              </div>
-              <p className="text-[12px] font-bold text-cb-fg-1 truncate group-hover:text-cb-fg-0 transition-colors">{folderName(path)}</p>
-              <p className="text-[9px] font-mono text-cb-fg-3 truncate mt-0.5">{path}</p>
-            </motion.button>
-          ))}
-        </div>
-        {recents.length > 0 && (
-          <div className="p-4 border-t border-cb-line-0">
-            <button onClick={() => handleOpen()}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-cb-1 border border-cb-line-1 text-cb-fg-3 text-[10px] font-bold uppercase tracking-widest hover:border-cb-accent-dim hover:text-cb-fg-1 hover:bg-cb-accent-wash transition-all cursor-pointer"
-            ><Plus size={11} /> Outro Workspace</button>
-          </div>
-        )}
-      </aside>
-    </div>
-  );
-}
+              </section>
+            )}
 
-function EmptyState({ icon, title, sub, action }: { icon: React.ReactNode; title: string; sub: string; action?: { label: string; onClick: () => void } }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4">
-      <div className="w-16 h-16 rounded-cb-2 bg-cb-accent-wash border border-cb-accent-dim flex items-center justify-center">
-        {icon}
+            <section className="min-w-0">
+              <div className="flex items-end justify-between gap-3 cb-tabs">
+                <div role="tablist" aria-label="Visões do início" className="flex gap-5 min-w-0">
+                  {VIEWS.map((view) => (
+                    <button
+                      key={view.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeView === view.id}
+                      onClick={() => setView(view.id)}
+                      className="cb-tab"
+                    >
+                      {view.label}
+                      <span className="text-xs text-cb-fg-2 tabular-nums">{view.count}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 pb-1 shrink-0">
+                  <button type="button" onClick={() => loadTasks().catch(() => {})} className="cb-btn cb-btn--ghost cb-btn--sm cb-btn--icon" title="Atualizar tasks" aria-label="Atualizar tasks">
+                    <RefreshCw size={12} />
+                  </button>
+                  {panes.length > 0 && (
+                    <button type="button" onClick={handleCloseAll} className="cb-btn cb-btn--ghost cb-btn--sm hover:!text-cb-danger" title="Fechar todos os panes">
+                      <X size={12} /> fechar tudo
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3">
+                {activeView === 'board' ? (
+                  <OperationsBoard
+                    workspacePaths={boardWorkspaces}
+                    onOpenWorkspace={(path) => void activateWorkspace(path)}
+                    onNewPane={(path) => void handleNewPane(path)}
+                    onRefresh={() => { void refreshWorkspaces(); void loadTasks(); void loadProviders(); }}
+                  />
+                ) : activeView === 'panes' ? (
+                  groups.length === 0
+                    ? <Note>Nenhum agente aberto. Abra um workspace e inicie o primeiro.</Note>
+                    : (
+                      <div className="flex flex-col gap-3">
+                        {groups.map((group) => (
+                          <WorkspaceGroup
+                            key={group.key || 'none'}
+                            name={group.name}
+                            path={group.path}
+                            panes={group.panes}
+                            onGo={group.path ? () => goToWorkspace(group.path) : undefined}
+                            onClosePane={handleClosePane}
+                          />
+                        ))}
+                      </div>
+                    )
+                ) : tasks.length === 0
+                  ? <Note>Nenhuma task. Os agentes criam tasks pela ferramenta todo_manager.</Note>
+                  : tasks.map((t: any, i: number) => <TaskRow key={t.id ?? i} task={t} />)}
+              </div>
+            </section>
+          </div>
+
+          {/* Coluna lateral */}
+          <div className="min-w-0 flex flex-col gap-5">
+            <section>
+              <SectionRule label="recentes" count={recents.length} />
+              <div className="mt-1">
+                {recents.length === 0
+                  ? <p className="px-2 py-2 text-sm text-cb-fg-2">Os projetos que você abrir aparecem aqui.</p>
+                  : recents.map((path) => <RecentRow key={path} path={path} agents={agentsIn(path)} onOpen={() => void handleOpen(path)} />)}
+                {recents.length > 0 && (
+                  <button type="button" onClick={() => void handleOpen()} className="cb-row w-full text-left text-sm text-cb-fg-2 min-h-cell-lg">
+                    <Plus size={12} /> outro workspace
+                  </button>
+                )}
+              </div>
+            </section>
+
+            <section>
+              <SectionRule label="atalhos" />
+              <div className="mt-1">
+                {([
+                  { section: 'marketplace', label: 'Marketplace', badge: 'novo' },
+                  { section: 'skill',       label: 'Skill & CLI', badge: null },
+                  { section: 'providers',   label: 'Providers',   badge: null },
+                  { section: 'discord',     label: 'Discord RPC', badge: null },
+                ] as const).map(({ section, label, badge }) => (
+                  <button key={section} type="button" onClick={() => openSettings(section)} className="cb-row w-full text-left text-sm min-h-cell-lg">
+                    <span className="flex-1 min-w-0 truncate">{label}</span>
+                    {badge && <Badge tone="accent">{badge}</Badge>}
+                  </button>
+                ))}
+                <button type="button" onClick={() => navigate('/workspaces')} className="cb-row w-full text-left text-sm min-h-cell-lg">Ver workspaces</button>
+                <button type="button" onClick={() => navigate('/settings')} className="cb-row w-full text-left text-sm min-h-cell-lg">Configurações</button>
+              </div>
+            </section>
+          </div>
+        </div>
       </div>
-      <div className="text-center">
-        <p className="text-[13px] font-bold text-cb-fg-2">{title}</p>
-        {sub && <p className="text-[10px] text-cb-fg-3 mt-1.5 max-w-xs leading-relaxed">{sub}</p>}
-      </div>
-      {action && (
-        <button onClick={action.onClick} className="mt-1 px-5 py-2.5 rounded-cb-1 bg-cb-accent text-cb-on-accent text-[11px] font-bold uppercase tracking-widest hover:bg-cb-accent-bright transition-all cursor-pointer">
-          {action.label}
-        </button>
-      )}
     </div>
   );
 }

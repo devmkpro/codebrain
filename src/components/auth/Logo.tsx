@@ -1,4 +1,4 @@
-import logoUrl from "../../assets/logo.png";
+import { CodebrainMark } from "../ui/AppLogo";
 
 export function Logo({
   size = 24,
@@ -7,14 +7,5 @@ export function Logo({
   size?: number;
   className?: string;
 }) {
-  return (
-    <img
-      src={logoUrl}
-      width={size}
-      height={size}
-      alt="CodeBrain"
-      className={className}
-      style={{ objectFit: "contain" }}
-    />
-  );
+  return <CodebrainMark size={size} title="Codebrain" className={className} />;
 }

@@ -8,7 +8,7 @@
  *   2. Detect active session IDs for potential --resume capability
  *   3. Broadcast token updates (onRecorded callback)
  *
- * Ported from Overclock sidecar: ClaudeTranscriptWatcher.js + CodexTranscriptWatcher.js.
+ * Watches Claude and Codex session transcripts.
  * Adapted to Codebrain's CommonJS + memoryStore architecture.
  *
  * Source JSONL locations:

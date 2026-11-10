@@ -3,7 +3,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import type { AppContext } from "../context";
-import { readRecentWorkspaces, saveRecentWorkspaces, touchWorkspace, writeContextFiles } from "../services/workspace";
+import { readRecentWorkspaces, touchWorkspace, writeContextFiles } from "../services/workspace";
+import { removeWorkspace } from "../services/workspace-list";
 import { getRepositoryPreparationStatus, prepareRepository } from "../services/repository-preparation";
 
 /** Directories that indicate a project root */
@@ -85,13 +86,7 @@ export function registerWorkspaceHandlers(ctx: AppContext): void {
   ipcMain.handle("workspaces:remove", async (_event, wsPath: string) => {
     try {
       if (typeof wsPath !== "string" || !wsPath.trim()) return { ok: false, error: "workspace path is required" };
-      const canonical = (value: string) => {
-        const resolved = path.resolve(value).replace(/\\/g, "/").replace(/\/$/, "");
-        return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-      };
-      const target = canonical(wsPath);
-      const list = readRecentWorkspaces(ctx).filter((item) => canonical(item) !== target);
-      saveRecentWorkspaces(ctx, list);
+      removeWorkspace(ctx, wsPath);
       return { ok: true };
     } catch (error) {
       console.error("[workspaces:remove] Failed:", error);

@@ -2,15 +2,18 @@ import React from "react";
 import { usePanesStore } from "../../stores/panes-store";
 import { useShellStore, applyDensity, type Density } from "../../stores/shell-store";
 import { useCostStore } from "../../stores/cost-store";
-import { toPaneStatus } from "./pane-status";
+import { activityPresentation, derivePaneActivity, type PaneActivity, type PaneStatusInput } from "./pane-status";
+import { StatusGlyph } from "./pane-status-glyph";
 import { McpRouteStatus } from "./McpRouteStatus";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    BARRA DE STATUS
    ═══════════════════════════════════════════════════════════════════════════
 
-   Rodapé de uma linha: presença global, contagem de agentes, custo acumulado
-   da sessão, densidade e versão.
+   Rodapé de uma linha: agentes por estado, MCP, custo, densidade e versão.
+
+   Os estados vêm do vocabulário único de pane-status: mesmo rótulo, mesma cor
+   e mesma forma do header do pane e da NavRail.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const DENSITIES: Density[] = ["compact", "normal", "comfortable"];
@@ -20,16 +23,8 @@ const DENSITY_LABEL: Record<Density, string> = {
   comfortable: "amplo",
 };
 
-function PresenceDot({ color, pulse }: { color: string; pulse?: boolean }) {
-  return (
-    <span
-      className="cb-dot"
-      data-pulse={pulse ? "true" : undefined}
-      style={{ "--cb-dot-color": color } as React.CSSProperties}
-      aria-hidden
-    />
-  );
-}
+/** Ordem de leitura: o que pede ação primeiro. */
+const STATE_ORDER: PaneActivity[] = ["failed", "waiting", "blocked", "thinking", "running", "done", "idle"];
 
 function formatCost(usd: number): string {
   if (usd < 0.001) return "<$0.001";
@@ -37,8 +32,12 @@ function formatCost(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
+function Separator() {
+  return <span className="h-3 w-px bg-cb-line-1 shrink-0" aria-hidden />;
+}
+
 export function StatusBar({ appVersion }: { appVersion?: string | null }) {
-  const panes = usePanesStore((state) => state.panes) as { status?: string }[];
+  const panes = usePanesStore((state) => state.panes) as PaneStatusInput[];
   const density = useShellStore((state) => state.density);
   const setDensity = useShellStore((state) => state.setDensity);
   const costSummary = useCostStore((s) => s.summary);
@@ -54,75 +53,47 @@ export function StatusBar({ appVersion }: { appVersion?: string | null }) {
     return () => clearInterval(id);
   }, [loadCostSummary]);
 
-  const counts = React.useMemo(() => {
-    let working = 0;
-    let failed = 0;
-    let blocked = 0;
+  const states = React.useMemo(() => {
+    const counts = new Map<PaneActivity, number>();
     for (const pane of panes) {
-      const status = toPaneStatus(pane.status);
-      if (status === "running" || status === "booting") working++;
-      if (status === "error") failed++;
-      if (status === "blocked") blocked++;
+      const activity = derivePaneActivity(pane);
+      counts.set(activity, (counts.get(activity) ?? 0) + 1);
     }
-    return { working, failed, blocked, total: panes.length };
+    return STATE_ORDER
+      .filter((activity) => counts.has(activity))
+      .map((activity) => ({ activity, count: counts.get(activity)!, ...activityPresentation(activity) }));
   }, [panes]);
-
-  const presenceColor =
-    counts.failed > 0
-      ? "var(--cb-danger)"
-      : counts.blocked > 0
-        ? "var(--cb-warn)"
-        : counts.working > 0
-          ? "var(--cb-agent-thinking)"
-          : "var(--cb-agent-done)";
-
-  const presencePulse = counts.working > 0 || counts.failed > 0;
 
   const totalCost = costSummary?.totalCost ?? 0;
 
   return (
-    <footer
-      className="flex items-center gap-3 h-cell shrink-0 px-3 border-t border-cb-line-0 text-2xs text-cb-fg-3"
-      style={{
-        background: "linear-gradient(0deg, var(--cb-bg-0) 0%, var(--cb-bg-1) 100%)",
-      }}
-    >
-      {/* Presença global */}
-      <PresenceDot color={presenceColor} pulse={presencePulse} />
-
-      {/* Contagem de agentes */}
-      <span className="tabular-nums">
-        {counts.total} {counts.total === 1 ? "agente" : "agentes"}
-      </span>
-
-      {counts.working > 0 && (
-        <span className="text-cb-agent-thinking tabular-nums">
-          {counts.working} trabalhando
-        </span>
-      )}
-      {counts.blocked > 0 && (
-        <span className="text-cb-agent-blocked tabular-nums">
-          {counts.blocked} bloqueado{counts.blocked > 1 ? "s" : ""}
-        </span>
-      )}
-      {counts.failed > 0 && (
-        <span className="text-cb-danger tabular-nums">
-          {counts.failed} com erro
-        </span>
+    <footer className="flex items-center gap-3 h-cell shrink-0 px-3 border-t border-cb-line-0 bg-cb-bg-1 text-xs text-cb-fg-2 whitespace-nowrap overflow-hidden">
+      {states.length === 0 ? (
+        <span>nenhum agente</span>
+      ) : (
+        <ul className="flex items-center gap-3 min-w-0 overflow-hidden" aria-label="Agentes por estado">
+          {states.map((state) => (
+            <li key={state.activity} className="flex items-center gap-1.5 tabular-nums shrink-0">
+              <StatusGlyph activity={state.activity} size={11} />
+              <span className="text-cb-fg-0">{state.count}</span>
+              <span style={{ color: state.activity === "idle" ? undefined : state.color }}>{state.label}</span>
+            </li>
+          ))}
+        </ul>
       )}
 
-      <span className="h-3 w-px bg-cb-line-0" aria-hidden />
+      <Separator />
       <McpRouteStatus />
 
-      {/* Custo acumulado — clicável para abrir o painel completo */}
+      {/* Custo acumulado: clicável para abrir o painel completo. */}
       {totalCost > 0 && (
         <>
-          <span className="h-3 w-px bg-cb-line-0" aria-hidden />
+          <Separator />
           <button
             type="button"
             onClick={toggleCost}
             title="Ver uso e custos detalhados"
-            className="hover:text-cb-fg-1 tabular-nums transition-colors duration-[var(--cb-duration-fast)]"
+            className="hover:text-cb-fg-0 tabular-nums transition-colors duration-[var(--cb-duration-fast)]"
           >
             {formatCost(totalCost)}
           </button>
@@ -131,26 +102,18 @@ export function StatusBar({ appVersion }: { appVersion?: string | null }) {
 
       <span className="flex-1" />
 
-      {/* Toggle de densidade */}
       <button
         type="button"
         onClick={() =>
           setDensity(DENSITIES[(DENSITIES.indexOf(density) + 1) % DENSITIES.length])
         }
         title="Densidade da interface"
-        className="hover:text-cb-fg-1 rounded-cb-1 px-1 transition-colors duration-[var(--cb-duration-fast)]"
+        className="hover:text-cb-fg-0 rounded-cb-1 px-1 transition-colors duration-[var(--cb-duration-fast)]"
       >
         {DENSITY_LABEL[density]}
       </button>
 
-      {appVersion && (
-        <span
-          className="tabular-nums px-1.5 py-0.5 rounded-cb-1"
-          style={{ background: "var(--cb-bg-2)", color: "var(--cb-fg-3)" }}
-        >
-          v{appVersion}
-        </span>
-      )}
+      {appVersion && <span className="tabular-nums">v{appVersion}</span>}
     </footer>
   );
 }

@@ -1,0 +1,9 @@
+{
+  "id": "cb-ssh-operations",
+  "name": "Operações SSH seguras",
+  "description": "Operação remota autorizada com acessos centralizados, proteção de credenciais, continuidade e rollback.",
+  "type": "prompt",
+  "version": "2.0.0",
+  "entrypoint": "SKILL.md",
+  "tags": ["codebrain", "ssh", "operations", "security"]
+}

@@ -106,11 +106,11 @@ const Row = React.memo(function Row({
       </span>
 
       <span className="flex-1 min-w-0 flex items-baseline gap-2">
-        <span className="text-sm truncate">
+        <span className="text-base truncate">
           <HighlightedTitle text={action.title} indices={indices} />
         </span>
         {action.subtitle && (
-          <span className="text-xs text-cb-fg-3 truncate">{action.subtitle}</span>
+          <span className="text-sm text-cb-fg-2 truncate">{action.subtitle}</span>
         )}
       </span>
 
@@ -272,7 +272,7 @@ export function CommandPalette() {
       />
 
       <div
-        className="fixed left-1/2 -translate-x-1/2 top-[12vh] w-[min(640px,92vw)] cb-float overflow-hidden"
+        className="fixed left-1/2 -translate-x-1/2 top-[12vh] w-[min(640px,92vw)] cb-float shadow-cb-modal overflow-hidden"
         style={{ zIndex: "var(--cb-z-palette)" }}
         role="dialog"
         aria-modal="true"
@@ -281,8 +281,8 @@ export function CommandPalette() {
       >
         {/* Prompt — a barra de busca é escrita como um prompt de shell, que é
             o vocabulário visual do shell v2. */}
-        <div className="flex items-center gap-3 px-4 h-cell-lg border-b border-cb-line-0">
-          <span className="text-cb-accent text-sm select-none" aria-hidden>
+        <div className="flex items-center gap-3 px-4 h-11 border-b border-cb-line-1">
+          <span className="text-cb-accent text-md font-bold select-none" aria-hidden>
             ❯
           </span>
           <input
@@ -298,7 +298,7 @@ export function CommandPalette() {
             aria-expanded
             aria-controls="cb-palette-list"
             aria-activedescendant={`cb-palette-item-${selected}`}
-            className="flex-1 bg-transparent border-0 outline-none text-md text-cb-fg-0 placeholder:text-cb-fg-3"
+            className="flex-1 bg-transparent border-0 outline-none text-md text-cb-fg-0 placeholder:text-cb-fg-2 min-w-0"
           />
           <kbd className="cb-kbd">Esc</kbd>
         </div>
@@ -312,8 +312,8 @@ export function CommandPalette() {
         >
           {entries.length === 0 ? (
             <div className="px-4 py-6 text-center">
-              <p className="text-sm text-cb-fg-2">Nada encontrado para “{query}”.</p>
-              <p className="text-xs text-cb-fg-3 mt-1">
+              <p className="text-base text-cb-fg-1">Nada encontrado para “{query}”.</p>
+              <p className="text-sm text-cb-fg-2 mt-1">
                 Tente o nome do painel, o termo em inglês ou o nome da MCP tool.
               </p>
             </div>
@@ -338,7 +338,7 @@ export function CommandPalette() {
         </div>
 
         {/* Rodapé — ensina a navegação. */}
-        <div className="flex items-center gap-4 px-4 h-cell border-t border-cb-line-0 text-2xs text-cb-fg-3">
+        <div className="flex items-center gap-4 px-4 h-cell border-t border-cb-line-0 text-xs text-cb-fg-2">
           <span className="flex items-center gap-1.5">
             <kbd className="cb-kbd">↑</kbd>
             <kbd className="cb-kbd">↓</kbd>

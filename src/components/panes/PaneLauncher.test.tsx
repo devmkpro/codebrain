@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
@@ -46,6 +46,35 @@ describe("PaneLauncher search", () => {
     expect(screen.queryAllByText("Codex")).toHaveLength(0);
   });
 
+  it("orders newest first using source dates without promoting an old default or calling model zero recommended", () => {
+    const provider = {
+      ...codex, models: ["auto", "gpt-5.9", "gpt-5.10", "gpt-4.1"],
+      defaultModel: "gpt-5.9", recommendedModel: "gpt-5.9",
+      modelsMetadata: [
+        { id: "gpt-5.9", created: "2025-01-01" },
+        { id: "gpt-4.1", created: "2026-01-01" },
+        { id: "gpt-5.10", created: "2026-11-01" },
+      ],
+    };
+    useProvidersStore.setState({ providers: [provider] } as any);
+    render(<PaneLauncher />);
+    fireEvent.click(screen.getAllByText("Codex")[0]);
+    const modelLabels = () => screen.getAllByRole("button").map((button) => button.textContent).filter((text) => text === "auto" || text?.startsWith("gpt-"));
+    expect(modelLabels()).toEqual(["gpt-5.10", "gpt-4.1", "gpt-5.9", "auto"]);
+    expect(screen.queryByText(/recomendado pelo provider/)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Buscar modelo"), { target: { value: "gpt" } });
+    expect(modelLabels()).toEqual(["gpt-5.10", "gpt-4.1", "gpt-5.9"]);
+    expect(provider.models).toEqual(["auto", "gpt-5.9", "gpt-5.10", "gpt-4.1"]);
+  });
+
+  it("uses numeric version order when release metadata is absent", () => {
+    useProvidersStore.setState({ providers: [{ ...codex, models: ["gpt-5.9", "auto", "gpt-5.10"] }] } as any);
+    render(<PaneLauncher />);
+    fireEvent.click(screen.getAllByText("Codex")[0]);
+    expect(screen.getAllByRole("button").map((button) => button.textContent).filter((text) => text === "auto" || text?.startsWith("gpt-")))
+      .toEqual(["gpt-5.10", "gpt-5.9", "auto"]);
+  });
+
   it("filters the model list once a provider is picked", () => {
     render(<PaneLauncher />);
     fireEvent.click(screen.getAllByText("OpenRouter")[0]);
@@ -61,12 +90,49 @@ describe("PaneLauncher search", () => {
     expect(screen.queryByText("x-ai/grok-4.3")).toBeNull();
   });
 
+  it("resets model selection when a provider changes harness during a refresh", () => {
+    useProvidersStore.setState({ providers: [codex] } as any);
+    const { rerender } = render(<PaneLauncher />);
+    fireEvent.click(screen.getAllByText("Codex")[0]);
+    act(() => useProvidersStore.setState({ providers: [{ ...codex, host: "kiro", models: ["auto"] }] } as any));
+    rerender(<PaneLauncher />);
+    expect(screen.getByLabelText("Buscar provider")).toBeTruthy();
+    expect(screen.queryByText("gpt-5.6-terra")).toBeNull();
+  });
+
   it("explains an empty result instead of showing a blank list", () => {
     render(<PaneLauncher />);
     fireEvent.click(screen.getAllByText("OpenRouter")[0]);
     fireEvent.change(screen.getByLabelText("Buscar modelo"), { target: { value: "mistral" } });
 
     expect(screen.getByText(/Nenhum modelo para/)).toBeTruthy();
+  });
+
+  it("portals the dialog above its backdrop and closes with Escape", () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const { container } = render(<PaneLauncher />);
+    const dialog = screen.getByRole("dialog", { name: "Novo pane" });
+    expect(container.contains(dialog)).toBe(false);
+    expect(dialog.className).toContain("z-10");
+    expect(screen.getByRole("button", { name: "Fechar seletor" }).className).toContain("z-0");
+    expect(document.activeElement).toBe(dialog);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
+
+  it("keeps provider back inside the selector and the brand Home action closes it", () => {
+    render(<PaneLauncher />);
+    fireEvent.click(screen.getAllByText("Codex")[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Voltar aos providers" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("searchbox", { name: "Buscar provider" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Codebrain — Início" }));
+    expect((useNavStore.getState() as { onHome: boolean }).onHome).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("sends the preparation prompt as part of spawn instead of racing a delayed write", async () => {

@@ -1,0 +1,13 @@
+{
+  "id": "cb-image-assets",
+  "name": "cb-image-assets",
+  "description": "Planejar e gerar imagens de produto, ilustrações, sprites, texturas e galerias com assunto literal, consistência visual e provedores de mídia configurados no Codebrain.",
+  "type": "prompt",
+  "version": "2.0.0",
+  "entrypoint": "SKILL.md",
+  "tags": [
+    "codebrain",
+    "design",
+    "sites"
+  ]
+}

@@ -5,11 +5,11 @@ export function InfoRow({
   label,
   value
 }) {
-  return <div className="min-w-0 rounded border border-white/5 bg-white/[0.02] px-2 py-1.5">
-      <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-gray-600">
+  return <div className="min-w-0 rounded-cb-1 border border-cb-line-0 bg-cb-bg-inset px-2 py-1.5">
+      <p className="cb-label">
         {label}
       </p>
-      <p className="mt-0.5 truncate font-mono text-[11px] text-gray-300" title={String(value ?? "-")}>
+      <p className="mt-0.5 truncate font-mono text-sm text-cb-fg-1" title={String(value ?? "-")}>
         {value ?? "-"}
       </p>
     </div>;

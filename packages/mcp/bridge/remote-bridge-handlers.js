@@ -13,7 +13,7 @@
  *       Token hash (SHA-256) + issuedAt persisted in <userData>/remote-bridge/tokens.json.
  *       Tokens expire after 30 days.
  *
- * Ported from Overclock sidecar: remoteBridge.js
+ * WebSocket bridge for remote control.
  * Adapted to Codebrain's Electron + MCP bridge architecture.
  */
 

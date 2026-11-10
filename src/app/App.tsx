@@ -8,7 +8,7 @@ import { useWorkspaceStore } from "../stores/workspace-store";
 import { useNavStore } from "../stores/nav-store";
 import { subscribeTaskUpdates } from "../stores/tasks-store";
 import { subscribeProviderUpdates } from "../stores/providers-store";
-import { useBrowserStore } from "../stores/browser-store";
+import { extractUrl, useBrowserStore } from "../stores/browser-store";
 import { useTerminalSettings } from "../stores/terminal-settings-store";
 import { useSessionRestore } from "../hooks/useSessionRestore";
 import { UpdateNotificationBanner } from "../components/navigation/UpdateNotificationBanner";
@@ -18,9 +18,8 @@ import { useNotificationsStore } from "../stores/notifications-store";
 import { AppShell } from "../components/ui/AppShell";
 import { WhatsNewModal, LATEST_RELEASE_VERSION } from "../components/navigation/WhatsNewModal";
 import { useWhatsNewStore } from "../stores/whats-new-store";
-import { CliInstallModal } from "../components/modals/CliInstallModal";
-import { CliSetupBanner } from "../components/modals/CliSetupBanner";
 import { DetachedPaneView } from "../components/terminal/DetachedPaneView";
+import { ingestMissionPane } from "../components/missions/mission-association";
 
 // Detect detached pane mode from URL search params
 const _urlParams = new URLSearchParams(window.location.search);
@@ -51,44 +50,11 @@ export function App() {
   const [navHydrated, setNavHydrated] = React.useState(false);
   const [workspaceToast, setWorkspaceToast] = React.useState(null);
   const toastTimeout = React.useRef(null);
-  const [cliMissing, setCliMissing] = React.useState(false);
-  const [cliStatuses, setCliStatuses] = React.useState<Record<string, any>>({});
-  const [showCliSetup, setShowCliSetup] = React.useState(false);
 
   React.useEffect(() => {
     useNavStore.persist.rehydrate();
     setNavHydrated(true);
 
-    // Check CLIs on startup — show banner if openclaude missing OR if optional CLIs not installed
-    const checkCli = async () => {
-      try {
-        const info = await (window as any).codeBrainApp?.cli?.detect();
-        if (!info) return;
-        setCliStatuses({
-          openclaude: info.openclaude,
-          codex: info.codex,
-          gemini: info.gemini,
-          claude: info.claude,
-        });
-        // Show old modal if openclaude missing (blocks usage)
-        if (!info.openclaude?.found) {
-          setCliMissing(true);
-        }
-        // Show optional CLI setup banner if codex or gemini missing (user may want them)
-        // Only show once per session — use sessionStorage flag
-        const key = "codebrain.cliSetupShown";
-        if (!sessionStorage.getItem(key)) {
-          sessionStorage.setItem(key, "1");
-          // Show if openclaude is fine but optional ones are missing
-          if (info.openclaude?.found && (!info.codex?.found || !info.gemini?.found)) {
-            setTimeout(() => setShowCliSetup(true), 1500); // slight delay after startup
-          }
-        }
-      } catch (err) {
-        console.error("Failed to detect CLI:", err);
-      }
-    };
-    checkCli();
   }, []);
   React.useEffect(() => {
     const handler = () => {
@@ -152,24 +118,11 @@ export function App() {
     return () => { off?.(); offExit?.(); };
   }, []);
   const reconcileLivePanes = React.useCallback(async () => {
-    const livePanes = await window.codeBrainApp?.pty.list?.();
+    const result: any = await window.codeBrainApp?.pty.list?.();
+    const livePanes = Array.isArray(result) ? result : result?.panes;
     if (!livePanes?.length) return;
     for (const livePane of livePanes) {
-      if (!isTerminalAgent(livePane.agent)) continue;
-      addPane({
-        ...{
-          id: livePane.paneId,
-          externallySpawned: true
-        },
-        agent: livePane.agent,
-        cwd: livePane.cwd,
-        workspacePath: livePane.workspacePath,
-        args: livePane.args,
-        session: livePane.session,
-        claudeSessionId: livePane.claudeSessionId,
-        providerId: livePane.providerId,
-        model: livePane.model
-      });
+      ingestMissionPane(livePane);
     }
   }, [addPane]);
   React.useEffect(() => {
@@ -186,19 +139,10 @@ export function App() {
     const off = window.codeBrainApp?.pty.onPaneReattached?.((paneId: string) => {
       // Fetch live pane info and re-add it
       window.codeBrainApp?.pty.list?.().then((result: any) => {
-        const found = result?.panes?.find?.((p: any) => p.paneId === paneId);
+        const list = Array.isArray(result) ? result : result?.panes;
+        const found = list?.find?.((p: any) => p.paneId === paneId);
         if (found) {
-          addPane({
-            id: found.paneId,
-            externallySpawned: true,
-            agent: found.agent,
-            cwd: found.cwd,
-            workspacePath: found.workspacePath,
-            session: found.session,
-            claudeSessionId: found.claudeSessionId,
-            providerId: found.providerId,
-            model: found.model,
-          });
+          ingestMissionPane(found);
         }
       }).catch(() => {});
     });
@@ -207,20 +151,7 @@ export function App() {
 
   React.useEffect(() => {
     const off = window.codeBrainApp?.pty.onPaneAdded?.(info => {
-      const extra = info;
-      addPane({
-        ...{
-          id: info.paneId,
-          externallySpawned: true
-        },
-        agent: info.agent,
-        cwd: info.cwd,
-        workspacePath: info.workspacePath,
-        session: info.session,
-        claudeSessionId: info.claudeSessionId,
-        providerId: extra.providerId,
-        model: extra.model
-      });
+      ingestMissionPane(info);
     });
     return () => off?.();
   }, [addPane]);
@@ -415,18 +346,6 @@ export function App() {
           appVersion={appVersion}
           workspaceToast={workspaceToast}
         />
-        <CliInstallModal
-          open={cliMissing}
-          onClose={() => setCliMissing(false)}
-          onInstalled={() => setCliMissing(false)}
-        />
-        {showCliSetup && !cliMissing && (
-          <CliSetupBanner
-            cliStatuses={cliStatuses}
-            onClose={() => setShowCliSetup(false)}
-            onInstalled={(cli) => setCliStatuses(s => ({ ...s, [cli]: { found: true } }))}
-          />
-        )}
       </AuthGate>
     </React.Fragment>;
 }

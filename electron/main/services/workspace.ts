@@ -3,6 +3,8 @@ import * as path from "node:path";
 import * as os from "node:os";
 import type { AppContext, McpServerInfo } from "../context";
 import { buildStdioServerConfig, isStdioConfigCurrent, type StdioServerConfig } from "./mcp-runtime";
+import { mergeMcpFile, readExternalMcpServers } from "./external-mcp";
+export { readRecentWorkspaces, saveRecentWorkspaces, touchWorkspace } from "./workspace-list";
 
 /**
  * Write .vscode/mcp.json so the VS Code MCP client (1.102+) picks Codebrain up
@@ -27,25 +29,6 @@ function writeVsCodeMcpConfig(wsPath: string, stdioServer: StdioServerConfig): v
   } catch (err) {
     console.warn(`[refreshAllWorkspaces] Failed to write .vscode/mcp.json for ${wsPath}:`, err);
   }
-}
-
-export function readRecentWorkspaces(ctx: AppContext): string[] {
-  try {
-    const raw: string[] = JSON.parse(fs.readFileSync(ctx.WORKSPACES_FILE, "utf-8"));
-    const valid = raw.filter((p) => typeof p === "string" && fs.existsSync(p));
-    if (valid.length !== raw.length) saveRecentWorkspaces(ctx, valid);
-    return valid;
-  } catch { return []; }
-}
-
-export function saveRecentWorkspaces(ctx: AppContext, workspaces: string[]): void {
-  try { fs.writeFileSync(ctx.WORKSPACES_FILE, JSON.stringify(workspaces, null, 2), "utf-8"); } catch {}
-}
-
-export function touchWorkspace(ctx: AppContext, wsPath: string): void {
-  if (!fs.existsSync(wsPath)) return; // don't persist non-existent paths
-  const list = readRecentWorkspaces(ctx).filter((p) => p !== wsPath);
-  saveRecentWorkspaces(ctx, [wsPath, ...list].slice(0, 20));
 }
 
 /**
@@ -136,6 +119,9 @@ ${projectInfo}
  *   - All          → .claude/codebrain-context.md
  */
 export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo, projectRoot?: string): void {
+  let externalMcpServers = {};
+  try { externalMcpServers = readExternalMcpServers(); }
+  catch { console.warn("[refreshAllWorkspaces] Registro MCP externo inválido; preservado."); }
   // Collect all known workspaces: current + active panes + recent list
   const wsSet = new Set<string>();
 
@@ -171,10 +157,7 @@ export function refreshAllWorkspaces(ctx: AppContext, mcpInfo?: McpServerInfo, p
       //    with higher priority than ~/.mcp.json. If we write HTTP here, standalone Claude Code
       //    (outside the app) fails because no MCP server is listening. Stdio always works.
       //    Other agents (OpenClaude, Gemini, Codex, Kimi) use their own config files (HTTP).
-      const mcpJson = JSON.stringify({
-        mcpServers: { codebrain: stdioServer },
-      }, null, 2);
-      fs.writeFileSync(path.join(wsPath, ".mcp.json"), mcpJson, "utf-8");
+      mergeMcpFile(path.join(wsPath, ".mcp.json"), { ...externalMcpServers, codebrain: stdioServer });
 
       // 1b. .vscode/mcp.json — VS Code (1.102+) reads MCP servers from here.
       //     Same stdio launch config, different envelope ("servers", not "mcpServers").
@@ -309,6 +292,7 @@ Query the MCP server at ${httpUrl} using Streamable HTTP transport.
     let settings: Record<string, any> = {};
     try { settings = JSON.parse(fs.readFileSync(geminiSettingsPath, "utf-8")); } catch {}
     settings.mcpServers = {
+      ...externalMcpServers,
       ...(settings.mcpServers || {}),
       codebrain: { url: httpUrl, type: "http" },
     };

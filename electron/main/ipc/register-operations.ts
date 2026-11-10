@@ -1,9 +1,18 @@
 import { ipcMain } from "electron";
 import type { AppContext } from "../context";
 import { safeSend } from "../context";
-import { getOperationsSnapshot } from "../services/operations";
+import { archiveOperation, getOperationsSnapshot, type ArchiveOperationInput } from "../services/operations";
 
 export function registerOperationsHandlers(ctx: AppContext): void {
+  ipcMain.handle("operations:archive", async (_event, args: ArchiveOperationInput) => {
+    try {
+      const result = archiveOperation(ctx, args);
+      if (result.ok) safeSend(ctx, "operations:updated", { workspace: args.workspace, at: Date.now() });
+      return result;
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
   ipcMain.handle("operations:snapshot", async (_event, args?: { workspace?: string; limit?: number }) => {
     try {
       return getOperationsSnapshot(ctx, args?.workspace, args?.limit ?? 100);

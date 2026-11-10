@@ -81,7 +81,7 @@ function syncHash(): void {
   }
 }
 
-function subscribe(listener: Listener): () => void {
+export function subscribeRouter(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
@@ -92,14 +92,19 @@ function getSnapshot(): HistoryState {
 
 /* Hash alterado por fora (deep-link colado, botões de navegação do
    Electron) — adota como uma navegação normal. */
-if (hasWindow) {
-  window.addEventListener("hashchange", () => {
+function adoptWindowHash(): void {
+  if (hasWindow) {
     if (writingHash) return;
     const incoming = parseHash(window.location.hash);
     if (isSameLocation(current(state), incoming)) return;
     state = push(state, incoming);
     emit();
-  });
+  }
+}
+
+if (hasWindow) {
+  window.addEventListener("hashchange", adoptWindowHash);
+  import.meta.hot?.dispose(() => window.removeEventListener("hashchange", adoptWindowHash));
 }
 
 /* ── API imperativa (utilizável fora do React) ────────────────────────── */
@@ -127,7 +132,7 @@ export function getLocation(): Location {
 /* ── Hooks ────────────────────────────────────────────────────────────── */
 
 function useHistoryState(): HistoryState {
-  return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return React.useSyncExternalStore(subscribeRouter, getSnapshot, getSnapshot);
 }
 
 export interface RouterApi {
@@ -185,6 +190,9 @@ export function useRouteMatch(pattern: string): Record<string, string> | null {
 
 export function RouterProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
+    // Auth/startup can delay this mount. A deep link entered since module
+    // import is newer than our snapshot and must never be replaced by it.
+    adoptWindowHash();
     syncHash();
   }, []);
   return <>{children}</>;

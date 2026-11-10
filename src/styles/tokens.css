@@ -63,8 +63,9 @@
      quinto nível, o layout está errado, não a paleta.                       */
   --cb-fg-0:                  #e6e6f0;  /* primário — títulos, valores      */
   --cb-fg-1:                  #a8a8bd;  /* secundário — corpo, labels       */
-  --cb-fg-2:                  #6f6f88;  /* mudo — metadados, placeholders   */
-  --cb-fg-3:                  #4a4a5e;  /* fraco — separadores, disabled    */
+  --cb-fg-2:                  #7f7f9a;  /* mudo — metadados; AA em bg-0..3  */
+  --cb-fg-3:                  #5e5e75;  /* fraco — separadores, disabled;
+                                           3:1, nunca para texto de leitura */
   --cb-fg-on-accent:          #0a0a0f;  /* texto sobre preenchimento accent */
 
   /* ── Linhas ────────────────────────────────────────────────────────────
@@ -84,6 +85,11 @@
   --cb-accent-dim:            #4a3a6b;
   --cb-accent-wash:           rgb(183 140 255 / 0.10);
   --cb-accent-wash-strong:    rgb(183 140 255 / 0.18);
+
+  /* ── Marca ─────────────────────────────────────────────────────────────
+     O índigo do ícone do app. Exclusivo do logotipo: nunca em botão, link
+     ou estado — para isso existe --cb-accent. Ver docs/design/brand.md.     */
+  --cb-brand:                 #5855e5;
 
   /* ── Semântica de estado ───────────────────────────────────────────────
      Apontam para ANSI de propósito — um agente com falha e um stderr
@@ -127,6 +133,7 @@
 
   --cb-leading-tight:         1.25;
   --cb-leading-normal:        1.5;
+  --cb-leading-relaxed:       1.6;      /* parágrafos de ajuda em mono      */
 
   --cb-tracking-label:        0.08em;   /* micro-labels em caixa alta       */
   --cb-tracking-normal:       0;
@@ -144,6 +151,8 @@
   --cb-cell-sm:               18px;     /* linha densa                      */
   --cb-cell-lg:               28px;     /* linha confortável / botão        */
   --cb-ch:                    7.8px;    /* largura aprox. de 1 char @13px    */
+  --cb-cell-xl:               calc(var(--cb-cell) * 1.5); /* botão primário */
+  --cb-bar-h:                 32px;     /* CommandBar                       */
 
   /* Espaçamento — passos de 4px alinhados à grade. */
   --cb-space-0:               0px;
@@ -175,7 +184,7 @@
                               0 0 12px rgb(183 140 255 / 0.15);
 
   /* Anel de foco — um só, consistente, sempre visível no teclado. */
-  --cb-focus-ring:            0 0 0 1px var(--cb-bg-1), 0 0 0 2px var(--cb-accent);
+  --cb-focus-ring:            0 0 0 1px var(--cb-bg-1), 0 0 0 3px var(--cb-accent);
 
   /* ── Movimento ─────────────────────────────────────────────────────────
      Rápido e reto. Sem bounce, sem spring — coisas de terminal aparecem,
@@ -232,8 +241,8 @@
 :root.light {
   --cb-ansi-black:            #2b2b36;
   --cb-ansi-red:              #c2314b;
-  --cb-ansi-green:            #1f7a4d;
-  --cb-ansi-yellow:           #96650a;
+  --cb-ansi-green:            #1b6f46;  /* AA também sobre bg-3             */
+  --cb-ansi-yellow:           #875a08;  /* AA também sobre bg-3             */
   --cb-ansi-blue:             #2c5fd0;
   --cb-ansi-magenta:          #7a3fd0;
   --cb-ansi-cyan:             #10707a;
@@ -260,7 +269,7 @@
   --cb-fg-0:                  #14141f;
   --cb-fg-1:                  #3d3d52;
   --cb-fg-2:                  #62627a;
-  --cb-fg-3:                  #9494a8;
+  --cb-fg-3:                  #7f7f96;
   --cb-fg-on-accent:          #ffffff;
 
   --cb-line-0:                #e2e2ea;

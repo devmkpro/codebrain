@@ -4,7 +4,7 @@
  * handoff-wake-message — Pure builder for the human-legible wake message
  * poked into an orchestrator's PTY input on a worker handoff.
  *
- * Ported from Overclock sidecar (handoffWakeMessage.js).
+ * Structured handoff notifications for the orchestrator.
  * Pure function — no side effects, no deps, unit-testable.
  *
  * The message contract:

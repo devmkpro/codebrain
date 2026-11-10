@@ -66,48 +66,48 @@ export function UpdateNotificationBanner() {
       off7();
     };
   }, []);
-  const baseClasses = "fixed top-0 left-0 right-0 z-[9999] flex items-center justify-between pl-20 pr-[140px] bg-gray-900/95 backdrop-blur border-b border-gray-700/60 font-mono text-[10px] shadow-lg select-none";
+  const baseClasses = "flex items-center justify-between pl-20 pr-[140px] bg-cb-bg-1 border-b border-cb-line-0 text-xs select-none";
   // removed unused variables
   const versionLabel = version ? `v${version}` : "";
   const renderStatus = () => {
     switch (state.kind) {
       case "idle":
         return
-        <div className="flex items-center gap-2 text-gray-500">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-600" />
+        <div className="flex items-center gap-2 text-cb-fg-2">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-cb-fg-3" />
           <span></span>
         </div>;
       case "checking":
-        return <div className="flex items-center gap-2 text-gray-400">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-500 animate-pulse" />
+        return <div className="flex items-center gap-2 text-cb-fg-1">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-cb-fg-3 animate-pulse" />
           <span>Verificando…</span>
         </div>;
       case "up_to_date":
-        return <div className="flex items-center gap-2 text-green-500">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+        return <div className="flex items-center gap-2 text-cb-success">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-cb-success" />
           <span>Atualizado</span>
         </div>;
       case "available":
       case "downloading":
         {
           const percent = state.kind === "downloading" ? state.percent : 0;
-          return <div className="flex items-center gap-2 text-amber-400">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+          return <div className="flex items-center gap-2 text-cb-warn">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-cb-warn animate-pulse" />
             <span>Baixando v{state.version}</span>
             {percent > 0 && <React.Fragment>
-              <div className="h-1 w-20 bg-gray-800 rounded overflow-hidden">
-                <div className="h-full bg-amber-400 transition-all duration-300" style={{
+              <div className="h-1 w-20 bg-cb-bg-3 rounded-cb-1 overflow-hidden">
+                <div className="h-full bg-cb-warn transition-all duration-300" style={{
                   width: `${Math.max(2, percent)}%`
                 }} />
               </div>
-              <span className="text-amber-500/70">{Math.round(percent)}%</span>
+              <span className="text-cb-warn">{Math.round(percent)}%</span>
             </React.Fragment>}
           </div>;
         }
       case "downloaded":
         return <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-green-400">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+          <div className="flex items-center gap-2 text-cb-success">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-cb-success" />
             <span>v{state.version} pronta</span>
           </div>
           <button onClick={() => {
@@ -120,37 +120,34 @@ export function UpdateNotificationBanner() {
                 });
               }
             });
-          }} className="cursor-pointer px-2 py-0.5 text-green-400 border border-green-500/30 hover:border-green-500/60 hover:bg-green-500/10 rounded transition-colors relative z-50 pointer-events-auto" style={{ WebkitAppRegion: 'no-drag' } as any}>
+          }} className="cb-btn" style={{ WebkitAppRegion: 'no-drag' } as any}>
             Reiniciar agora
           </button>
         </div>;
       case "installing":
-        return <div className="flex items-center gap-2 text-blue-400">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+        return <div className="flex items-center gap-2 text-cb-info">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-cb-info animate-pulse" />
           <span>Instalando v{state.version}…</span>
         </div>;
       case "error":
         return <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 text-red-400">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
+          <div className="flex items-center gap-2 text-cb-danger">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-cb-danger" />
             <span>Erro: {state.message.slice(0, 60)}</span>
           </div>
-          <button onClick={() => window.codeBrainApp.update.check()} className="px-2 py-0.5 text-gray-400 hover:text-gray-200 transition-colors">
+          <button onClick={() => window.codeBrainApp.update.check()} className="px-2 py-0.5 text-cb-fg-1 hover:text-cb-fg-0 transition-colors">
             Tentar de novo
           </button>
         </div>;
     }
   };
-  return <div className={`${baseClasses} h-[38px] relative`}>
+  return <div className={`${baseClasses} h-[38px] shrink-0 relative`}>
     {/* Background drag region */}
     <div className="absolute inset-0" style={{ WebkitAppRegion: 'drag' } as any} />
 
     {/* Content wrapper */}
     <div className="relative z-10 flex items-center justify-between w-full h-full pointer-events-none">
-      <div className="flex items-center gap-2 text-gray-500">
-        <span className="text-gray-600">CodeBrain</span>
-        <span className="text-gray-300">{versionLabel}</span>
-      </div>
+      <div className="flex items-center gap-2 text-cb-fg-2 tabular-nums">{versionLabel}</div>
       <div className="pointer-events-auto flex items-center mr-4" style={{ WebkitAppRegion: 'no-drag' } as any}>
         {renderStatus()}
       </div>

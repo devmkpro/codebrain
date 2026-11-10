@@ -8,6 +8,7 @@ import { app, session } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import log from "electron-log/main.js";
+import { guardConsoleOutput } from "./logging";
 
 import { platform } from "./platform";
 import { enrichShellPath } from "./shell-path";
@@ -26,7 +27,10 @@ import { setupDiscordRPC, teardownDiscordRPC } from "./discord-rpc";
 import { createSessionWatchers } from "./services/session-watchers";
 import { parseTokenUsage, type TokenUsage } from "./token-parser";
 import { getTokenTracker } from "./services/token-tracker";
+import { installRoleSkills } from "./services/role-skills";
+import { startUsageRefresh } from "./services/accounts";
 
+guardConsoleOutput(log.transports.console);
 log.initialize();
 
 const ctx = createAppContext();
@@ -38,10 +42,18 @@ app.whenReady().then(async () => {
   // service that spawns child processes (PTY, MCP, CLI detector).
   enrichShellPath();
 
+  // Start one bounded async inventory before providers or MCP can request it.
+  // Their readers await the same promise instead of running synchronous probes.
+  void ctx.cliDetector.getAllAsync().catch(err => log.warn("[cli] Detection failed:", err));
+
   fs.mkdirSync(ctx.DATA_DIR, { recursive: true });
 
   // Auto-install Claude Code integration (statusline, .mcp.json, helpers)
   setupClaudeIntegration();
+
+  // Fora do caminho de abertura da janela: nenhum dos dois é pré-requisito do boot.
+  void installRoleSkills().catch(err => log.warn("[role-skills] install failed:", err));
+  startUsageRefresh();
 
   // `codebrain --mcp-server` is the user-facing Linux/macOS entry point for
   // the server-only mode. It runs the same MCP + PTY stack but deliberately
@@ -265,7 +277,7 @@ app.whenReady().then(async () => {
   startMcpServer(ctx).catch((err) => log.error("[MCP] startup error:", err));
 
   // Detect CLI tools
-  ctx.cliDetector.redetect();
+  await ctx.cliDetector.redetectAsync();
 
   app.on("activate", () => {
     const { BrowserWindow } = require("electron");

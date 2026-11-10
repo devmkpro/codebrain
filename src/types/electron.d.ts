@@ -1,6 +1,7 @@
 // Window API exposed by the Electron preload script via contextBridge
 
 import type { OperationsSnapshot } from "./operations";
+import type { AccessVaultBridge } from "./access-vault";
 
 export interface AuthStatus {
   authenticated: boolean;
@@ -34,6 +35,70 @@ export interface PtyInfo {
   claudeSessionId?: string;
   providerId?: string;
   model?: string;
+  label?: string;
+  taskType?: string;
+  effort?: string;
+  accountLabel?: string;
+}
+
+export interface PaneMeta {
+  paneId: string;
+  label?: string;
+  taskType?: string;
+  effort?: string;
+  accountLabel?: string;
+  handoffStatus?: "done" | "blocked" | "error" | "rejected" | (string & {});
+  evidence?: string;
+  contractStatus?: "none" | "passed" | "failed";
+}
+
+export type HarnessResult<T> = ({ ok: true } & T) | ({ ok: false; error?: string } & Partial<T>);
+
+export type AccountCli = "claude" | "codex";
+
+export interface UsageWindow {
+  id: "5h" | "7d";
+  label: string;
+  usedPct: number | null;
+  tokens: number | null;
+  resetsAt: number | null;
+  source: "medido" | "estimado";
+}
+
+export interface CliAccount {
+  id: string;
+  cli: AccountCli;
+  label: string;
+  configDir: string;
+  isDefault: boolean;
+}
+
+export interface AccountStatus extends CliAccount {
+  locked: boolean;
+  loggedIn: boolean;
+  windows: UsageWindow[];
+  usedPct: number | null;
+}
+
+export interface CatalogItem {
+  kind: "skill" | "agent";
+  name: string;
+  description: string;
+  installedIn: { cli: string; path: string }[];
+  disabled: boolean;
+  category: string | null;
+  builtin: boolean;
+  allowedSkills?: string[];
+}
+
+export type MediaKind = "image" | "video";
+
+export interface MediaItem {
+  name: string;
+  path: string;
+  kind: MediaKind;
+  createdAt: number;
+  url: string;
 }
 
 export interface AgentMessage {
@@ -141,6 +206,31 @@ export interface SkillManifest {
   tags?: string[];
   entrypoint: string;
   tools?: string[];
+}
+
+export interface MarketplaceSkill extends SkillManifest {
+  source: string;
+  sourceId: string;
+  sourceUrl: string;
+  installed: boolean;
+  scope?: string;
+  localId?: string;
+  path?: string;
+}
+
+export interface MarketplaceIndex {
+  ok: boolean;
+  index: { skills: MarketplaceSkill[] };
+  installed: MarketplaceSkill[];
+  sources: Array<{
+    id: string;
+    name: string;
+    url: string;
+    status: "online" | "cached" | "unavailable";
+    fetchedAt?: string;
+    error?: string;
+  }>;
+  error?: string;
 }
 
 export interface Task {
@@ -408,6 +498,38 @@ export interface CodebrainApp {
     onPaneReattached: (callback: (paneId: string) => void) => () => void;
     onPaneSession: (callback: (info: { paneId: string; session?: Session; claudeSessionId?: string }) => void) => () => void;
   };
+  pane: {
+    onMeta: (callback: (meta: PaneMeta) => void) => () => void;
+  };
+  harness: {
+    getTable: () => Promise<HarnessResult<{ table: any }>>;
+    saveTable: (table: any) => Promise<HarnessResult<{ table: any }>>;
+    receipts: (args: { workspace?: string | null }) => Promise<HarnessResult<{ receipts: any[] }>>;
+    deciderProviders: () => Promise<HarnessResult<{ providers: { id: string; label: string; models: string[]; transport?: "cli" | "api"; cli?: string; authentication?: "existing-login" }[] }>>;
+    testDecider: (args: { prompt: string }) => Promise<{ ok: boolean; decision: any | null; reason: string | null; taskName?: string; error?: string }>;
+  };
+  findings: {
+    list: (args: { workspace: string; status?: string }) => Promise<HarnessResult<{ findings: any[] }>>;
+    update: (args: { workspace: string; id: string; status: string; actor?: string; note?: string; commit?: string; evidence?: string }) => Promise<{ ok: boolean; id?: string; status?: string; error?: string }>;
+    stats: (args: { workspace: string }) => Promise<HarnessResult<{ counts: Record<string, number> }>>;
+  };
+  agentCatalog: {
+    scan: (args?: { workspace?: string | null }) => Promise<HarnessResult<{ items: CatalogItem[] }>>;
+    setMeta: (args: { kind: "skill" | "agent"; name: string; disabled?: boolean; category?: string | null; allowedSkills?: string[] | null }) => Promise<{ ok: boolean; error?: string }>;
+    copyTo: (args: { name: string; cli: string; workspace?: string | null; kind?: "skill" | "agent" }) => Promise<{ ok: boolean; copied?: string[]; mode?: "native-skill" | "skill-persona" | "codebrain-files"; error?: string }>;
+  };
+  accounts: {
+    list: () => Promise<HarnessResult<{ accounts: AccountStatus[] }>>;
+    add: (args: { cli: AccountCli; label: string }) => Promise<HarnessResult<{ account: CliAccount }>>;
+    remove: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
+    lock: (args: { cli: AccountCli; id: string | null }) => Promise<{ ok: boolean; error?: string }>;
+    login: (args: { id: string; cwd?: string }) => Promise<HarnessResult<{ paneId: string }>>;
+  };
+  media: {
+    providers: () => Promise<HarnessResult<{ providers: { id: string; label: string; kinds: MediaKind[] }[] }>>;
+    list: (args: { workspace: string }) => Promise<HarnessResult<{ items: MediaItem[] }>>;
+    generate: (args: { kind: MediaKind; prompt: string; provider?: string; size?: string; style?: string; workspace: string }) => Promise<{ ok: boolean; path?: string; relativePath?: string; kind?: MediaKind; provider?: string; model?: string; error?: string }>;
+  };
   conversation: {
     list: (args: { paneId: string; workspace?: string; limit?: number }) => Promise<{ ok: boolean; messages?: AgentMessage[]; count?: number; error?: string }>;
     send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => Promise<{ ok: boolean; id?: string; error?: string }>;
@@ -415,6 +537,7 @@ export interface CodebrainApp {
   };
   operations: {
     snapshot: (args?: { workspace?: string; limit?: number }) => Promise<OperationsSnapshot>;
+    archive: (args: { workspace: string; missionId: string; confirmedActive?: boolean }) => Promise<{ ok: boolean; error?: string; requiresConfirmation?: boolean; activePaneIds?: string[] }>;
     onUpdated: (callback: (info: { workspace?: string; at: number }) => void) => () => void;
   };
   spec: {
@@ -422,6 +545,7 @@ export interface CodebrainApp {
     create: (args: { workspace: string; answers: Record<string, string> }) => Promise<any>;
     open: (args: { workspace: string; id: string; file?: string }) => Promise<any>;
   };
+  accessVault: AccessVaultBridge;
   workspace: {
     open: () => Promise<string | null>;
     set: (dir: string) => Promise<void>;
@@ -460,7 +584,7 @@ export interface CodebrainApp {
     listModels: (args: { baseUrl: string; apiKey: string; type: string }) => Promise<{ ok: boolean; models?: string[]; error?: string }>;
     listOpenRouterModels: () => Promise<{ ok: boolean; models?: Array<{ id: string; name: string; context_length: number; pricing?: { prompt: number; completion: number } }>; error?: string }>;
     listClaudeOAuthModels: () => Promise<{ ok: boolean; models?: string[]; error?: string }>;
-    syncModels: (args?: { providerIds?: string[]; force?: boolean }) => Promise<{ updated: Array<{ providerId: string; count: number; source: string }>; failed: Array<{ providerId: string; error: string }> }>;
+    syncModels: (args?: { providerIds?: string[]; force?: boolean; resetManual?: boolean }) => Promise<{ updated: Array<{ providerId: string; count: number; source: string }>; failed: Array<{ providerId: string; error: string }>; skipped?: Array<{ providerId: string; reason?: string }> }>;
     healthCheck: (args: { baseUrl: string; apiKey: string; type: string; model?: string }) => Promise<{ ok: boolean; status: string; checks: Record<string, unknown>; warnings: string[]; error?: string }>;
     onUpdated: (callback: (providers: Provider[]) => void) => () => void;
   };
@@ -490,10 +614,10 @@ export interface CodebrainApp {
     uninstall: () => Promise<{ ok: boolean; error?: string }>;
     listInstalled: (args?: { type?: string }) => Promise<Array<{ manifest: SkillManifest; path: string }>>;
     get: (args: { id: string }) => Promise<{ ok: boolean; manifest?: SkillManifest; content?: Record<string, string>; error?: string }>;
-    installFromRegistry: (args: { id: string }) => Promise<{ ok: boolean; manifest?: SkillManifest; error?: string }>;
+    installFromRegistry: (args: { id: string }) => Promise<{ ok: boolean; manifest?: SkillManifest; path?: string; error?: string }>;
     uninstallSkill: (args: { id: string }) => Promise<{ ok: boolean; error?: string }>;
     sync: (args: { direction: "pull" | "push" }) => Promise<{ ok: boolean; results?: Array<{ id: string; action: string; version?: string }>; error?: string }>;
-    registryIndex: () => Promise<{ ok: boolean; index?: { skills: SkillManifest[] }; error?: string }>;
+    registryIndex: () => Promise<MarketplaceIndex>;
     claudeConfigStatus: () => Promise<{ installed: boolean }>;
     installClaudeConfig: () => Promise<{ ok: boolean; path?: string; error?: string }>;
     uninstallClaudeConfig: () => Promise<{ ok: boolean; error?: string }>;
@@ -620,6 +744,18 @@ export interface CodebrainApp {
     redetect: () => Promise<{ found: boolean; path?: string }>;
     install: () => Promise<{ ok: boolean; error?: string; info?: object }>;
     installCli: (cli: string) => Promise<{ ok: boolean; error?: string; info?: object }>;
+    registry: () => Promise<Array<{
+      id: string;
+      label: string;
+      found: boolean;
+      path?: string;
+      version?: string;
+      verified: boolean;
+      supportedPlatforms?: string[];
+      capabilities: Record<"model" | "effort" | "systemPrompt" | "mcp" | "resume" | "multiAccount" | "skills" | "skipPermissions", boolean>;
+      loginCommand: string | null;
+      docsUrl: string;
+    }>>;
     ping9Router: (baseUrl?: string) => Promise<{ ok: boolean; baseUrl?: string; modelCount?: number; error?: string }>;
   };
   remoteBridge: {
@@ -635,8 +771,9 @@ export interface CodebrainApp {
     setClientId: (clientId: string) => Promise<{ ok: boolean; error?: string }>;
   };
   tasks: {
-    list: (opts?: { workspace?: string; mission_id?: string }) => Promise<{ tasks: Task[]; activeTaskId?: string | null }>;
-    onUpdated: (cb: (state: TasksState) => void) => () => void;
+    list: (opts: { workspace: string; mission_id?: string }) => Promise<{ ok: boolean; workspace: string | null; tasks: Task[]; activeTaskId: string | null; error?: string }>;
+    clear: (args: { workspace: string; scope: "done" | "all"; ids: string[] }) => Promise<{ ok: boolean; workspace: string | null; deleted: number; error?: string }>;
+    onUpdated: (cb: (state: { workspace?: string | null; at: number }) => void) => () => void;
   };
   squads: {
     list: () => Promise<Squad[]>;

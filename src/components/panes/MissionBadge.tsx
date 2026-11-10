@@ -23,8 +23,8 @@ export function MissionBadge({ missionId, workspacePath }: MissionBadgeProps) {
 
   return (
     <span
-      className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-900/30 text-amber-400 border border-amber-700/30 shrink-0 cursor-default"
-      title={`Mission: ${mission.title ?? missionId}`}
+      className="cb-chip cursor-default"
+      title={`Missão: ${mission.title ?? missionId}`}
     >
       {label}
     </span>
