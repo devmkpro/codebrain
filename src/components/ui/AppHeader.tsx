@@ -41,6 +41,8 @@ import { notify } from '../../lib/notify';
 import { PerfHUD } from './PerfHUD';
 import { LibreWizard } from '../squads/LibreWizard';
 import { resolveSpawnTarget, HOST_LABELS } from '../../lib/resolve-spawn-target';
+import { resumeSavedPane, resumeIdentity } from '../../lib/native-resume';
+import { NativeResumeForm } from '../session/NativeResumeForm';
 
 // ─── Shared modal-state hook ──────────────────────────────────────────────────
 /**
@@ -1003,22 +1005,23 @@ function PaneMenu({
         ><RotateCcw size={11} className="text-slate-600" />{snapshotBusy ? 'Restaurando…' : 'Restaurar Sessão'}</button>
 
         {/* Saved panes */}
+        <NativeResumeForm workspacePath={activeWorkspace} addPane={addPane} onResumed={onClose} />
         {savedPanes.length > 0 && (
           <>
             <p className="px-3 pt-2 pb-0.5 font-mono text-[9px] text-slate-600 uppercase tracking-widest">Restaurar Pane</p>
             <div className="max-h-56 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
               {savedPanes.map((p: any) => {
-                const preview = p.summary || '(sem mensagens)';
+                const preview = p.summary || `${p.agent} · ${p.session?.id ?? 'prévia antiga'}`;
                 const ago = new Date(p.savedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
                 return (
-                  <button key={p.id} onClick={() => { onClose(); onRestorePane(p); }}
+                  <button key={p.id} disabled={!p.session?.id && !p.claudeSessionId} title={!p.session?.id && !p.claudeSessionId ? 'Sem ID nativo: use Retomar por ID.' : 'Retomar a conversa nativa exata'} onClick={() => { onClose(); onRestorePane(p); }}
                     className="w-full text-left px-3 py-1.5 hover:bg-white/5 transition-all border-b border-white/[0.03] cursor-pointer"
                   >
                     <div className="flex justify-between gap-2">
                       <span className="font-mono text-[10px] truncate text-slate-300">{preview}</span>
                       <span className="font-mono text-[9px] text-slate-600 shrink-0">{ago}</span>
                     </div>
-                    <p className="font-mono text-[9px] text-slate-600">{p.agent} · {p.session?.confidence === 'high' ? 'Resume' : 'Reopen'}</p>
+                    <p className="font-mono text-[9px] text-slate-600">{p.agent} · {p.accountLabel ?? 'perfil padrão'} · {p.session?.confidence === 'high' ? 'Retomar' : 'Prévia sem ID'}</p>
                   </button>
                 );
               })}
@@ -1415,7 +1418,7 @@ function WorkspaceHeader() {
       for (const s of saved) for (const p of s.panes) all.push({ ...p, savedAt: s.savedAt });
       for (const s of claude) all.push({ id: s.paneId ?? s.sessionId, agent: 'openclaude', cwd: s.cwd, lastLines: s.summary ? [s.summary] : [], session: s.session ?? { provider: 'claude', id: s.sessionId, capturedAt: s.savedAt ?? s.lastUsedAt ?? s.firstSeenAt, confidence: 'high', source: 'transcript-file' }, claudeSessionId: s.sessionId, providerId: s.providerId, model: s.model, summary: s.summary, savedAt: s.savedAt ?? s.lastUsedAt ?? s.firstSeenAt });
       const byKey = new Map<string, any>();
-      for (const p of all) { const sess = p.session ?? (p.claudeSessionId ? { provider: 'claude', id: p.claudeSessionId } : undefined); const key = sess ? `${sess.provider}:${sess.id}` : `${p.agent}:${p.id}`; const ex = byKey.get(key); if (!ex || p.savedAt > ex.savedAt) byKey.set(key, p); }
+      for (const p of all) { const key = resumeIdentity(p) ?? `${p.agent}:${p.id}`; const ex = byKey.get(key); if (!ex || p.savedAt > ex.savedAt) byKey.set(key, p); }
       setSavedPanes([...byKey.values()].sort((a, b) => b.savedAt - a.savedAt));
     }).catch(() => setSavedPanes([]));
   }, [showPaneMenu, activeWorkspace]);
@@ -1438,6 +1441,7 @@ function WorkspaceHeader() {
       if (!r?.ok || !r.snapshot) return;
       const { deterministicRestore } = await import("../../lib/session-restore");
       const result = await deterministicRestore(r.snapshot, addPane, permMode);
+      if (result.errors.length) notify("Retomada incompleta", result.errors.join(" "), "error");
       if (result.restored > 0) {
         notify(
           "Sessão restaurada",
@@ -1450,13 +1454,12 @@ function WorkspaceHeader() {
   };
 
   const handleRestorePane = async (pane: any) => {
-    const restProv = pane.providerId ? providers.find(p => p.id === pane.providerId) : null;
-    const env: Record<string, string> = { ...(restProv?.env ?? {}), ...(pane.model ? { ANTHROPIC_MODEL: pane.model, MODEL: pane.model } : {}) };
-    const r = await (window as any).codeBrainApp?.pty.spawn({ paneId: pane.id, agent: pane.agent, cwd: pane.cwd, args: pane.args, session: pane.session, claudeSessionId: pane.claudeSessionId, providerId: pane.providerId, model: pane.model, ...(Object.keys(env).length ? { env } : {}) });
-    if (r?.ok && r.paneId) addPane({ id: r.paneId, agent: pane.agent, cwd: pane.cwd, args: pane.args, workspacePath: activeWorkspace, session: pane.session, claudeSessionId: pane.claudeSessionId, lastLines: pane.lastLines, providerId: pane.providerId, model: pane.model, externallySpawned: true });
-    if (usePanesStore.getState().panes.find((p: any) => p.session?.provider === pane.session?.provider && p.session?.id === pane.session?.id)) {
-      usePanesStore.getState().setActive(usePanesStore.getState().panes.find((p: any) => p.session?.id === pane.session?.id)?.id!);
-    }
+    try {
+      const identity = resumeIdentity(pane);
+      const existing = identity ? usePanesStore.getState().panes.find(p => resumeIdentity(p) === identity && p.status !== "exited") : undefined;
+      if (existing) { usePanesStore.getState().setActive(existing.id); return; }
+      await resumeSavedPane(pane, activeWorkspace!, addPane);
+    } catch (error) { notify("Não foi possível retomar", error instanceof Error ? error.message : String(error), "error"); }
   };
 
   const handleToggleAudioMode = async () => {

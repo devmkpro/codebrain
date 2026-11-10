@@ -18,6 +18,8 @@ export interface Pane {
   externallySpawned?: boolean;
   activityId?: string;
   session?: Session;
+  accountId?: string;
+  accountLabel?: string;
   lastLines?: string[];
   claudeSessionId?: string;
   subtaskId?: string;

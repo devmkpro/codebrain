@@ -12,6 +12,8 @@ import { AudioConfigStore } from "./audio-config-store";
 import { HooksManager } from "./services/hooks";
 import { createSessionWatchers, type SessionWatcherManager } from "./services/session-watchers";
 import { ConversationTurnTracker } from "./services/conversation-turns";
+import { NativeSessionStore } from "./services/native-session-store";
+import type { NativeSession } from "../../src/types/native-session";
 
 // Keep this dynamic. electron-vite moves this module into out/main/chunks,
 // where a source-relative require("../../packages/…") no longer points at the
@@ -27,6 +29,9 @@ export interface McpServerInfo {
 }
 
 export interface PaneConfig {
+  session?: NativeSession;
+  nativeSessionScope?: string;
+  permissionMode?: string;
   agent: string;
   cwd: string;
   args: string[];
@@ -151,6 +156,7 @@ export function createAppContext() {
     cliDetector: new CliDetector(),
     audioConfigStore: new AudioConfigStore(AUDIO_CONFIG_FILE),
     memoryStore,
+    nativeSessions: new NativeSessionStore(path.join(DATA_DIR, "native-sessions")),
     conversationTurns: new ConversationTurnTracker(),
     paneTranscriptFiles: new Map<string, string>(),
     hooksManager: new HooksManager(),

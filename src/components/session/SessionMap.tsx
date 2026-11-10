@@ -5,6 +5,7 @@ import { FileLock, FileBraces, FileCode, FileText, FileImage, FileType, File } f
 // SessionMap
 import { usePanesStore } from "../../stores/panes-store";
 import { useNavStore } from "../../stores/nav-store";
+import { resumeIdentity, resumeSavedPane } from "../../lib/native-resume";
 
 const EDGE_STYLE = {
   temporal:    { stroke: "#555",   strokeHover: "#aaa", width: 1.2, dash: "4,3" },
@@ -97,7 +98,7 @@ export function SessionMap({
       for (const item of [...saved, ...synth]) {
         const p = item.panes[0];
         const ps = p ? paneSession(p) : void 0;
-        const key = ps ? `${ps.provider}:${ps.id}` : p ? `${p.agent}:${p.id}` : item.id;
+        const key = p ? resumeIdentity(p) ?? `${p.agent}:${p.id}` : item.id;
         const existing = byKey.get(key);
         if (!existing || item.savedAt > existing.savedAt) byKey.set(key, item);
       }
@@ -213,65 +214,16 @@ export function SessionMap({
     if (resumingId) return;
     setResumingId(node.id);
     setRestoreError(null);
-    const p = node.pane;
-    const ps = paneSession(p);
-    if (ps?.confidence === "high") {
-      const existing = usePanesStore.getState().panes.find(x => x.session?.provider === ps.provider && x.session?.id === ps.id);
-      if (existing) {
-        usePanesStore.getState().setActive(existing.id);
-        navigateInActiveTab({
-          kind: "workspace"
-        });
-        setResumingId(null);
-        return;
-      }
-    }
-    const spawn = window.codeBrainApp?.pty.spawn;
-    if (!spawn) {
-      setRestoreError("Restore indisponivel neste build.");
-      setResumingId(null);
-      return;
-    }
-    let usedFallback = false;
-    let result = await spawn({
-      agent: p.agent,
-      cwd: p.cwd,
-      args: p.args,
-      session: p.session,
-      claudeSessionId: p.claudeSessionId,
-      providerId: p.providerId,
-      model: p.model
-    });
-    if (!result?.ok && p.claudeSessionId && (p.providerId || p.model || p.args?.length)) {
-      usedFallback = true;
-      result = await spawn({
-        agent: p.agent,
-        cwd: p.cwd,
-        claudeSessionId: p.claudeSessionId
-      });
-    }
-    if (result?.ok && result.paneId) {
-      addPane({
-        id: result.paneId,
-        agent: p.agent,
-        cwd: p.cwd,
-        args: usedFallback ? void 0 : p.args,
-        workspacePath,
-        session: usedFallback ? void 0 : p.session,
-        claudeSessionId: p.claudeSessionId,
-        lastLines: p.lastLines,
-        providerId: usedFallback ? void 0 : p.providerId,
-        model: usedFallback ? void 0 : p.model,
-        externallySpawned: true
-      });
-      navigateInActiveTab({
-        kind: "workspace"
-      });
-    } else {
-      setRestoreError(result?.error ?? "Nao foi possivel restaurar a sessao.");
-    }
-    setResumingId(null);
-  }, [resumingId, addPane, navigateInActiveTab]);
+    try {
+      const p = node.pane;
+      const identity = resumeIdentity(p);
+      const existing = identity ? usePanesStore.getState().panes.find(item => resumeIdentity(item) === identity && item.status !== "exited") : undefined;
+      if (existing) usePanesStore.getState().setActive(existing.id);
+      else await resumeSavedPane(p, workspacePath, addPane);
+      navigateInActiveTab({ kind: "workspace" });
+    } catch (error) { setRestoreError(error instanceof Error ? error.message : String(error)); }
+    finally { setResumingId(null); }
+  }, [resumingId, addPane, navigateInActiveTab, workspacePath]);
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
   const hoveredEdgeKinds = new Set();
   if (hoverId) {

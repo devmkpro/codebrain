@@ -8,6 +8,7 @@ import { useCronStore } from "../../stores/cron-store";
 import { useMemoryStore } from "../../stores/memory-store";
 import { useSessionHistoryStore } from "../../stores/session-history-store";
 import { useCostStore } from "../../stores/cost-store";
+import { usePanesStore } from "../../stores/panes-store";
 
 export interface ShellNavState {
   tabs: Array<{ workspacePath: string; view: { kind: string; activityId?: string } }>;
@@ -108,4 +109,17 @@ export function navigateHome(): void {
   dismissShellOverlays();
   shellNavState().goHome();
   navigate("/");
+}
+
+/** Open the selected live terminal in its workspace, leaving landing/overlays. */
+export function navigateToPane(paneId: string): void {
+  const panes = usePanesStore.getState() as any;
+  const pane = panes.panes.find((item: any) => item.id === paneId);
+  const workspace = pane?.workspacePath ?? pane?.cwd;
+  if (!workspace) return;
+  dismissShellOverlays();
+  panes.revealPane(paneId);
+  shellNavState().openWorkspace(workspace);
+  shellNavState().navigateInActiveTab({ kind: "workspace" });
+  navigate("/workspace", { query: { path: workspace } });
 }

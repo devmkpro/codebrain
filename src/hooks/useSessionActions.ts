@@ -1,11 +1,11 @@
 import React from "react";
 import { usePanesStore } from "../stores/panes-store";
-import { useProvidersStore } from "../stores/providers-store";
+import { resumeIdentity, resumeSavedPane } from "../lib/native-resume";
+import { deterministicRestore, type SessionSnapshot } from "../lib/session-restore";
 
 export function useSessionActions(activeWorkspace: string | undefined, permissionMode: string, addPane: (p: any) => void) {
   const [snapshotBusy, setSnapshotBusy] = React.useState(false);
   const [savedPanes, setSavedPanes] = React.useState<any[]>([]);
-  const providers = useProvidersStore(s => s.providers);
 
   const loadSavedPanes = React.useCallback(async () => {
     if (!activeWorkspace) { setSavedPanes([]); return; }
@@ -26,7 +26,7 @@ export function useSessionActions(activeWorkspace: string | undefined, permissio
       const byKey = new Map<string, any>();
       for (const pane of panes) {
         const session = pane.session ?? (pane.claudeSessionId ? { provider: "claude", id: pane.claudeSessionId } : undefined);
-        const key = session ? `${session.provider}:${session.id}` : `${pane.agent}:${pane.id}`;
+        const key = resumeIdentity(pane) ?? `${pane.agent}:${pane.id}`;
         const existing = byKey.get(key);
         if (!existing || pane.savedAt > existing.savedAt) byKey.set(key, pane);
       }
@@ -47,28 +47,21 @@ export function useSessionActions(activeWorkspace: string | undefined, permissio
     if (!activeWorkspace || snapshotBusy) return;
     setSnapshotBusy(true);
     try {
-      const result = await window.codeBrainApp?.session?.loadSnapshot(activeWorkspace);
-      if (!result?.ok || !result.snapshot) return;
-      const snapshot = result.snapshot;
-      const orchResult = await window.codeBrainApp?.pty?.spawn({ agent: "openclaude", cwd: activeWorkspace, role: "orchestrator", permissionMode, sessionContext: snapshot.orchestratorPrompt });
-      if (orchResult?.ok && orchResult.paneId) {
-        addPane({ id: orchResult.paneId, agent: "openclaude", cwd: activeWorkspace, workspacePath: activeWorkspace, externallySpawned: true });
-      }
+      const snapshot = await window.codeBrainApp?.session?.loadSnapshot(activeWorkspace);
+      if (!snapshot?.ok || !snapshot.snapshot) return;
+      const result = await deterministicRestore(snapshot.snapshot as SessionSnapshot, addPane);
+      window.codeBrainApp?.notify("Retomada de conversas", `${result.restored} retomada(s). ${result.errors.join(" ")}`);
     } finally { setSnapshotBusy(false); }
   };
 
   const handleRestorePane = async (pane: any) => {
     if (!activeWorkspace) return;
-    if (pane.session?.confidence === "high") {
-      const existing = usePanesStore.getState().panes.find(p => p.session?.provider === pane.session?.provider && p.session?.id === pane.session?.id);
+    try {
+      const identity = resumeIdentity(pane);
+      const existing = identity ? usePanesStore.getState().panes.find(p => resumeIdentity(p) === identity && p.status !== "exited") : undefined;
       if (existing) { usePanesStore.getState().setActive(existing.id); return; }
-    }
-    const restoreProvider = pane.providerId ? providers.find(p => p.id === pane.providerId) : null;
-    const restoreEnv: Record<string, string> = { ...(restoreProvider?.env ?? {}), ...(pane.model ? { ANTHROPIC_MODEL: pane.model, MODEL: pane.model } : {}) };
-    const result = await window.codeBrainApp?.pty.spawn({ paneId: pane.id, agent: pane.agent, cwd: pane.cwd, args: pane.args, session: pane.session, claudeSessionId: pane.claudeSessionId, providerId: pane.providerId, model: pane.model, ...(Object.keys(restoreEnv).length > 0 ? { env: restoreEnv } : {}) });
-    if (result?.ok && result.paneId) {
-      addPane({ id: result.paneId, agent: pane.agent, cwd: pane.cwd, args: pane.args, workspacePath: activeWorkspace, session: pane.session, claudeSessionId: pane.claudeSessionId, lastLines: pane.lastLines, providerId: pane.providerId, model: pane.model, externallySpawned: true });
-    }
+      await resumeSavedPane(pane, activeWorkspace, addPane);
+    } catch (error) { window.codeBrainApp?.notify("Não foi possível retomar", error instanceof Error ? error.message : String(error)); }
   };
 
   return { snapshotBusy, savedPanes, loadSavedPanes, handleSaveSnapshot, handleRestoreSnapshot, handleRestorePane };

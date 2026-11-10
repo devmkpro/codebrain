@@ -12,6 +12,11 @@ function createRuntime(ctx: AppContext) {
   return {
     active: () => pending > 0 || approvalOpen,
     async approveCommand(request: CommandRequest): Promise<boolean> {
+      if (closed || request.signal?.aborted) return false;
+      // This preference only skips human consent. The runner still validates the
+      // workspace, filters credentials, bounds output and cancels child processes.
+      const config = ctx.configStore?.get();
+      if (config && (config.agentCommandApproval === undefined || config.agentCommandApproval === "always")) return true;
       const parent = ctx.mainWindow;
       if (closed || approvalOpen || !parent || parent.isDestroyed() || request.signal?.aborted) return false;
       approvalOpen = true;

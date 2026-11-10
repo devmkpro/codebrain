@@ -10,6 +10,7 @@ import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
 import { usePanesStore } from "../../stores/panes-store";
 import { useProvidersStore } from "../../stores/providers-store";
 import { navigateHome } from "../shell/shell-navigation";
+import { NativeConversations } from "../session/NativeConversations";
 
 interface ProviderLike {
   id: string;
@@ -38,6 +39,7 @@ export function PaneLauncher() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [paneLabel, setPaneLabel] = useState("");
+  const [mode, setMode] = useState<"new" | "resume">("new");
   const dialogRef = React.useRef<HTMLElement>(null);
   const selectedHost = React.useRef<string | undefined>(undefined);
   const spawnPending = React.useRef(false);
@@ -62,6 +64,7 @@ export function PaneLauncher() {
     setError(null);
     setQuery("");
     setPaneLabel("");
+    setMode("new");
     void loadProviders();
   }, [loadProviders, open]);
 
@@ -75,7 +78,7 @@ export function PaneLauncher() {
         event.stopPropagation();
         close();
       } else if (event.key === "Tab") {
-        const items = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)") ?? []);
+        const items = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), summary") ?? []).filter(item => item.getClientRects().length > 0);
         const first = items[0];
         const last = items.at(-1);
         if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
@@ -174,18 +177,22 @@ export function PaneLauncher() {
     <button type="button" tabIndex={-1} className="absolute inset-0 z-0" onClick={close} aria-label="Fechar seletor"/>
     <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Novo pane" className="relative z-10 w-[min(680px,94vw)] max-h-[min(720px,90vh)] flex flex-col overflow-hidden border border-cb-line-1 rounded-cb-2 bg-cb-bg-1 shadow-cb-modal outline-none">
       <header className="h-14 px-4 flex items-center gap-3 border-b border-cb-line-0">
-        {provider && <button onClick={() => { setProviderId(null); setError(null); setQuery(""); }} className="p-1 text-cb-fg-3 hover:text-cb-fg-0" aria-label="Voltar aos providers"><ArrowLeft size={15}/></button>}
+        {mode === "new" && provider && <button onClick={() => { setProviderId(null); setError(null); setQuery(""); }} className="p-1 text-cb-fg-3 hover:text-cb-fg-0" aria-label="Voltar aos providers"><ArrowLeft size={15}/></button>}
         <button type="button" onClick={navigateHome} className="text-md font-bold text-cb-accent" aria-label="Codebrain — Início" title="Ir para o início">❯</button>
         <div className="flex-1"><h2 className="text-sm text-cb-fg-0">{request?.title ?? "Novo pane de IA"}</h2><p className="text-2xs text-cb-fg-3">{provider ? "2 de 2 · escolha um modelo compatível" : request?.subtitle ?? "1 de 2 · escolha o provider primeiro"}</p></div>
         <button onClick={close} className="p-1 text-cb-fg-3 hover:text-cb-fg-0" aria-label="Fechar"><X size={15}/></button>
       </header>
 
-      <div className="px-4 pt-3 flex items-center gap-2">
+      {!request?.initialPrompt && workspace && <div className="px-4 pt-3 flex gap-2" role="group" aria-label="Modo do pane">
+        <button className="cb-btn cb-btn--sm" aria-pressed={mode === "new"} onClick={() => setMode("new")}>Novo agente</button>
+        <button className="cb-btn cb-btn--sm" aria-pressed={mode === "resume"} onClick={() => setMode("resume")}>Retomar conversa</button>
+      </div>}
+      {mode === "new" && <div className="px-4 pt-3 flex items-center gap-2">
         <div className={`h-0.5 flex-1 ${provider ? "bg-cb-success" : "bg-cb-accent"}`}/>
         <div className={`h-0.5 flex-1 ${provider ? "bg-cb-accent" : "bg-cb-line-1"}`}/>
-      </div>
+      </div>}
 
-      {workspace && <div className="px-4 pt-3 space-y-2">
+      {mode === "new" && workspace && <div className="px-4 pt-3 space-y-2">
         <input
           type="text"
           value={paneLabel}
@@ -208,6 +215,7 @@ export function PaneLauncher() {
       </div>}
 
       <div className="cb-scroll overflow-auto p-4">
+        {mode === "resume" && workspace ? <NativeConversations workspacePath={workspace} addPane={addPane} onResumed={close} /> : <>
         {!workspace ? <div className="py-12 text-center"><p className="text-sm text-cb-fg-1">Abra um workspace antes de criar um pane.</p><p className="mt-1 text-2xs text-cb-fg-3">O agente sempre inicia no projeto ativo.</p></div> : !provider ? <>
           <div className="mb-3"><div className="cb-label">providers disponíveis</div><p className="mt-1 text-2xs text-cb-fg-3">Cada provider abre somente a CLI e os modelos que ele suporta.</p></div>
           {availableProviders.length === 0 ? <div className="py-12 text-center"><Bot size={24} className="mx-auto mb-2 text-cb-fg-3"/><p className="text-xs text-cb-fg-1">Nenhum provider com modelos configurado.</p><p className="mt-1 text-2xs text-cb-fg-3">Configure um provider em Configurações → Providers.</p></div> : visibleProviders.length === 0 ? <div className="py-12 text-center"><Search size={20} className="mx-auto mb-2 text-cb-fg-3"/><p className="text-xs text-cb-fg-1">Nenhum provider ou modelo para “{query}”.</p></div> : <div className="grid grid-cols-2 gap-2">
@@ -224,9 +232,10 @@ export function PaneLauncher() {
           </button>)}</div>
         </>}
         {error && <div className="mt-3 px-3 py-2 border border-cb-danger/30 rounded-cb-1 bg-cb-danger/5 text-2xs text-cb-danger">{error}</div>}
+        </>}
       </div>
 
-      <footer className="px-4 py-3 border-t border-cb-line-0 flex items-center gap-2 text-2xs text-cb-fg-3"><Bot size={12}/><span>provider → CLI correta → modelo compatível</span></footer>
+      <footer className="px-4 py-3 border-t border-cb-line-0 flex items-center gap-2 text-2xs text-cb-fg-3"><Bot size={12}/><span>{mode === "resume" ? "conversa nativa → mesmo harness → mesma conta" : "provider → CLI correta → modelo compatível"}</span></footer>
     </section>
   </div>, document.body);
 }

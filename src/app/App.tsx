@@ -20,6 +20,7 @@ import { WhatsNewModal, LATEST_RELEASE_VERSION } from "../components/navigation/
 import { useWhatsNewStore } from "../stores/whats-new-store";
 import { DetachedPaneView } from "../components/terminal/DetachedPaneView";
 import { ingestMissionPane } from "../components/missions/mission-association";
+import { reconcileStartupMissions } from "../lib/startup-missions";
 
 // Detect detached pane mode from URL search params
 const _urlParams = new URLSearchParams(window.location.search);
@@ -117,12 +118,17 @@ export function App() {
     });
     return () => { off?.(); offExit?.(); };
   }, []);
+  const startupMissionsReconciled = React.useRef(false);
   const reconcileLivePanes = React.useCallback(async () => {
     const result: any = await window.codeBrainApp?.pty.list?.();
     const livePanes = Array.isArray(result) ? result : result?.panes;
-    if (!livePanes?.length) return;
+    if (!Array.isArray(livePanes)) return;
     for (const livePane of livePanes) {
       ingestMissionPane(livePane);
+    }
+    if (!startupMissionsReconciled.current && window.codeBrainApp?.session?.loadSnapshot) {
+      startupMissionsReconciled.current = true;
+      await reconcileStartupMissions(livePanes, ws => window.codeBrainApp!.session.loadSnapshot(ws));
     }
   }, [addPane]);
   React.useEffect(() => {

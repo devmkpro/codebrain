@@ -28,6 +28,9 @@ describe("SSH pane registration", () => {
     await mocks.options.openSshPane({ executable: "ssh", args: ["--", "fixture"], label: "Fixture", hostId: "fixture" });
     expect(ctx.paneRegistry.get("ssh-fixture")).toMatchObject({ paneId: "ssh-fixture", cwd: ctx.currentWorkspacePath });
     expect(ctx.paneConfigs.get("ssh-fixture")).toMatchObject({ workspacePath: ctx.currentWorkspacePath, agent: "shell" });
+    expect(ctx.paneConfigs.get("ssh-fixture").ownerPaneId).toBeUndefined();
+    await mocks.options.openSshPane({ executable: "ssh", args: ["--", "fixture"], label: "Fixture", hostId: "fixture", ownerPaneId: "agent-1" });
+    expect(ctx.paneConfigs.get("ssh-fixture")).toMatchObject({ ownerPaneId: "agent-1" });
     expect(mocks.send).toHaveBeenCalledWith(ctx, "pane:added", expect.objectContaining({ paneId: "ssh-fixture", workspacePath: ctx.currentWorkspacePath }));
   });
 });

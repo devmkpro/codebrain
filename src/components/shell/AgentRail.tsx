@@ -6,6 +6,7 @@ import { statusPresentation } from "./pane-status";
 import { useConversationStore } from "../../stores/conversation-store";
 import { usePaneLauncherStore } from "../../stores/pane-launcher-store";
 import { CODEBRAIN_PANE_DRAG_TYPE } from "../../lib/pane-drag";
+import { navigateToPane } from "./shell-navigation";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RAIL DE AGENTES
@@ -99,7 +100,6 @@ function AgentRow({
 export function AgentRail() {
   const panes = usePanesStore((state) => state.panes) as PaneLike[];
   const activePaneId = usePanesStore((state) => state.activePaneId);
-  const setActive = usePanesStore((state) => state.setActive);
   const removePane = usePanesStore((state) => state.removePane);
 
   const collapsed = useShellStore((state) => state.railCollapsed);
@@ -164,7 +164,7 @@ export function AgentRail() {
               pane={pane}
               active={pane.id === activePaneId}
               collapsed={collapsed}
-              onSelect={() => setActive(pane.id)}
+              onSelect={() => navigateToPane(pane.id)}
               onConversation={() => openConversation(pane.id)}
               onClose={() => closePane(pane.id)}
               onDragStart={(event) => startPaneDrag(event, pane)}

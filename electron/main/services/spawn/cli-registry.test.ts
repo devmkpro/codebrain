@@ -2,6 +2,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
+import { nativeResumeSupport } from "./session-resume";
 import {
   CLI_REGISTRY,
   accountCapableClis,
@@ -58,7 +59,7 @@ describe("registry integrity", () => {
       const spec = item.generic!;
       expect(item.capabilities.model).toBe(Boolean(spec.model));
       expect(item.capabilities.effort).toBe(Boolean(spec.effort));
-      expect(item.capabilities.resume).toBe(Boolean(spec.resume));
+      expect(item.capabilities.resume).toBe(Boolean(nativeResumeSupport(item.id)));
       expect(item.capabilities.mcp).toBe(Boolean(spec.mcp));
       expect(item.capabilities.systemPrompt).toBe(Boolean(spec.instructions));
       expect(item.capabilities.multiAccount).toBe(Boolean(item.accountEnvVar));

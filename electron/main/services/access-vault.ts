@@ -20,6 +20,8 @@ export interface SshLaunchPlan {
   args: string[];
   hostId: string;
   label: string;
+  /** Agent pane that requested the terminal; becomes its shell owner. */
+  ownerPaneId?: string;
 }
 
 export interface AccessVaultOptions {
@@ -340,9 +342,11 @@ export function createAccessVault(options: AccessVaultOptions) {
     });
   }
 
-  async function openSsh(hostId: string, optionsOrigin: Origin = { source: "user" }) {
+  async function openSsh(hostId: string, optionsOrigin: Origin & { ownerPaneId?: string } = { source: "user" }) {
     id(hostId);
     const source = origin(optionsOrigin);
+    const ownerPaneId = typeof optionsOrigin.ownerPaneId === "string" && /^[a-zA-Z0-9_-]{1,160}$/.test(optionsOrigin.ownerPaneId)
+      ? optionsOrigin.ownerPaneId : undefined;
     if (!options.openSshPane) fail("SSH_UNAVAILABLE", "A abertura do terminal SSH não está disponível nesta versão.");
     if (connectionPending) fail("SSH_BUSY", "Já existe uma solicitação SSH aguardando aprovação ou abertura.");
     connectionPending = true;
@@ -359,7 +363,7 @@ export function createAccessVault(options: AccessVaultOptions) {
       const current = await connection(hostId, source);
       if (initial.revision !== current.revision) fail("ACCESS_CHANGED", "O acesso foi alterado durante a confirmação. Solicite uma nova conexão.");
       let result: { paneId: string };
-      try { result = await options.openSshPane(current.plan); }
+      try { result = await options.openSshPane(ownerPaneId ? { ...current.plan, ownerPaneId } : current.plan); }
       catch { fail("SSH_OPEN_FAILED", "Não foi possível abrir o terminal SSH."); }
       if (!result || typeof result.paneId !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(result.paneId)) fail("SSH_OPEN_FAILED", "O terminal SSH não retornou um identificador válido.");
       return { paneId: result.paneId, interactive: current.interactive };

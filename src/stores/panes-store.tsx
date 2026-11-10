@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { findLeaf, removeLeaf, insertNextToLeaf, appendLeafBalanced, insertWorkLeaf } from "../components/auth/AuthLayout";
 import { useMissionsStore } from "./missions-store";
 import { activityClockKey, derivePaneActivity } from "../components/shell/pane-status";
+import { resumeIdentity } from "../lib/native-resume";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ function missionForPane(config: any): string {
 
 /** Campos de identidade que o backend envia por pane:added e pane.onMeta. */
 const PANE_META_KEYS = [
-  "label", "taskType", "effort", "accountLabel", "parentPaneId", "role",
+  "label", "taskType", "effort", "accountLabel", "accountId", "parentPaneId", "role",
   "handoffStatus", "evidence", "contractStatus", "awaitingInput",
 ] as const;
 
@@ -80,7 +81,8 @@ export const usePanesStore = create((set, get) => ({
       source: "transcript-file"
     } : void 0);
     if (session?.confidence === "high") {
-      const sameSession = (get() as any).panes.find((p: any) => p.session?.provider === session.provider && p.session?.id === session.id);
+      const identity = resumeIdentity({ ...config, session });
+      const sameSession = (get() as any).panes.find((p: any) => p.status !== "exited" && p.status !== "error" && resumeIdentity(p) === identity);
       if (sameSession) {
         set({ activePaneId: sameSession.id });
         return sameSession;
@@ -165,6 +167,31 @@ export const usePanesStore = create((set, get) => ({
   }),
 
   setActive: (id: string) => set({ activePaneId: id }),
+  /** Selecting a rail row must reveal its layout, not only recolor the row. */
+  revealPane: (id: string) => {
+    const state = get() as any;
+    const pane = state.panes.find((item: any) => item.id === id);
+    if (!pane) return;
+    const ws = pane.workspacePath ?? pane.cwd;
+    if (!ws) return;
+    const missions = useMissionsStore.getState();
+    const available = missions.getWorkspaceMissions(ws).filter(m => m.status !== "archived");
+    const owner = Object.entries(state.layouts[ws] ?? {}).find(([mid, layout]) =>
+      available.some(m => m.id === mid) && findLeaf(layout, id));
+    const missionId = owner?.[0] ?? (available.some(m => m.id === pane.missionId)
+      ? pane.missionId : missions.ensureMissionForWorkspace(ws));
+    const layout = state.layouts[ws]?.[missionId] ?? null;
+    const cleanLayouts = removePaneFromLayouts(state.layouts, id);
+    missions.setActiveMission(ws, missionId);
+    set({
+      activePaneId: id,
+      panes: state.panes.map((item: any) => item.id === id ? { ...item, missionId } : item),
+      layouts: findLeaf(layout, id) ? state.layouts : {
+        ...cleanLayouts,
+        [ws]: { ...cleanLayouts[ws], [missionId]: appendLeafBalanced(layout, { kind: "leaf", paneId: id }) },
+      },
+    });
+  },
   setPendingActive: (id: string) => set({ pendingActivePaneId: id }),
 
   updatePane: (id: string, patch: any) => set((s: any) => ({

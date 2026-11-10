@@ -17,6 +17,10 @@ import { attachCodebrainContext, prepareCodebrainAdapter, writeSharedCodebrainGu
 import { externalMcpOverrides, mergeMcpFile, readExternalMcpServers } from "./external-mcp";
 import { briefSummary, createSpawnBrief, shellMetadata, type SpawnBrief, type ShellMetadata } from "./spawn/spawn-metadata";
 import { ensureClaudeWorkspaceSettings } from "./claude-metadata";
+import { nativeResumeArgs, resumeHarnessId } from "./spawn/session-resume";
+import { sessionScope } from "./native-session-store";
+import type { NativeSession } from "../../../src/types/native-session";
+import { randomUUID } from "node:crypto";
 
 const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
@@ -37,6 +41,7 @@ export interface SpawnPaneConfig {
   args?: string[];
   permissionMode?: string;
   claudeSessionId?: string;
+  session?: NativeSession;
   squadOrchestratorWorkerId?: string;
   parentPaneId?: string;
   role?: string;
@@ -171,11 +176,32 @@ export function paneMissionMetadata(ctx: AppContext, paneId: string): {
     ...briefSummary(config?.spawnBrief), ...(config?.shell ? { shell: config.shell } : {}) };
 }
 
-export async function spawnPaneInternal(
+const resumeFlights = new WeakMap<AppContext, Map<string, Promise<Awaited<ReturnType<typeof spawnPaneOnce>>>>>();
+
+/** Coalesce concurrent requests for the same conversation before any await. */
+export async function spawnPaneInternal(ctx: AppContext, config: SpawnPaneConfig) {
+  const id = config.session?.id ?? config.claudeSessionId;
+  if (!id) return spawnPaneOnce(ctx, config);
+  const key = JSON.stringify([config.agent, config.accountId ?? "", config.cwd ?? ctx.currentWorkspacePath, config.session?.scopeKey ?? "", id]);
+  let flights = resumeFlights.get(ctx);
+  if (!flights) { flights = new Map(); resumeFlights.set(ctx, flights); }
+  const active = flights.get(key);
+  if (active) return active;
+  const pending = spawnPaneOnce(ctx, config);
+  flights.set(key, pending);
+  try { return await pending; }
+  finally { flights.delete(key); }
+}
+
+async function spawnPaneOnce(
   ctx: AppContext,
   config: SpawnPaneConfig,
 ): Promise<{ ok: boolean; paneId?: string; agent?: string; providerId?: string; model?: string; cwd?: string; workspacePath?: string; missionId?: string; uiMissionId?: string; operationalMissionId?: string; codebrainContext?: string; codebrainCatalogPath?: string; adapterWarnings?: string[]; hasInitialPrompt?: boolean; initialPromptId?: string; promptDeliveryState?: SpawnBrief["delivery"]["state"]; shell?: ShellMetadata; promptSubmitted?: boolean; promptError?: string; error?: string }> {
   try {
+    const requestedSession = config.session ?? (config.claudeSessionId && ["claude", "openclaude"].includes(config.agent ?? "")
+      ? { provider: config.agent!, id: config.claudeSessionId, confidence: "high" as const, capturedAt: Date.now(), source: "legacy-explicit-id" } : undefined);
+    if (requestedSession && requestedSession.confidence !== "high") throw new Error("O ID desta conversa ainda não foi confirmado; informe o ID nativo para retomar.");
+    if (requestedSession && (config.initialPrompt || config.sessionContext)) throw new Error("Retomar não pode reenviar um prompt inicial. Envie uma nova mensagem após a retomada.");
     if (config.agent !== "shell") await ctx.cliDetector?.getAllAsync?.();
     const parent = config.parentPaneId ? ctx.paneConfigs.get(config.parentPaneId) : undefined;
     let parentActor: any;
@@ -184,7 +210,7 @@ export async function spawnPaneInternal(
     }
     // Smart cwd resolution: explicit > most active pane workspace > global > home
     let cwd = config.cwd || parent?.cwd || parentActor?.cwd;
-    if (!cwd || cwd === require("node:os").homedir()) {
+    if (!cwd || (!config.cwd && cwd === require("node:os").homedir())) {
       // Find the workspace with the most active panes (most likely the caller's workspace)
       const wsCounts = new Map<string, number>();
       for (const [, cfg] of ctx.paneConfigs) {
@@ -217,7 +243,9 @@ export async function spawnPaneInternal(
     let agent = resolved.agent;
     let provider = resolved.provider;
     let providerId = resolved.providerId;
-    let model = resolved.model;
+    // An ID-only resume uses the model retained by the harness, not today's
+    // first/default model. Saved conversations may explicitly retain a model.
+    let model = requestedSession && !config.model ? undefined : resolved.model;
     const externalMcpServers = readExternalMcpServers();
 
     // Safety: Claude Code CLI only supports Anthropic-compatible providers.
@@ -242,6 +270,9 @@ export async function spawnPaneInternal(
     const env: Record<string, string> = { ...(provider?.env ?? {}), ...configEnv };
 
     let args = [...(config.args ?? [])];
+    if (requestedSession && resumeHarnessId(requestedSession.harnessId ?? requestedSession.provider) !== resumeHarnessId(agent)) {
+      throw new Error("A conversa pertence a outro harness. Retome com a CLI original.");
+    }
     const isCodex = agent === "codex" || provider?.type === "codex";
     const isGeminiCli = agent === "gemini-cli" || agent === "gemini" || provider?.type === "gemini-cli";
     const isClaudeCompatible = !isCodex && !isGeminiCli && (agent === "openclaude" || agent === "claude");
@@ -249,8 +280,18 @@ export async function spawnPaneInternal(
     // Conta de outra CLI é ignorada: a variável só faz sentido para a CLI dona dela.
     const account = getAccount(config.accountId);
     const paneAccount = account && account.cli === (isCodex ? "codex" : agent) ? account : null;
+    if (requestedSession && config.accountId && !paneAccount) throw new Error("A conta original desta conversa não está disponível para este harness.");
     if (paneAccount) Object.assign(env, accountEnv(paneAccount.id));
     const accountLabel = config.accountLabel ?? paneAccount?.label;
+    const scopeKey = sessionScope(agent, cwd!, paneAccount?.id, { ...process.env, ...env });
+    if (requestedSession?.scopeKey && requestedSession.scopeKey !== scopeKey) throw new Error("A conversa pertence a outro diretório, conta, perfil ou máquina. Use o ambiente original.");
+    let nativeSession: NativeSession | undefined = requestedSession ? { ...requestedSession, scopeKey, provider: agent, harnessId: agent, capturedAt: Date.now() } : undefined;
+    if (requestedSession) {
+      // Validate selection before writing adapter files or spawning a process.
+      nativeResumeArgs(agent, args, requestedSession.id);
+      const existing = [...ctx.paneConfigs].find(([, cfg]) => cfg.session?.id === requestedSession.id && cfg.session?.scopeKey === scopeKey && resumeHarnessId(cfg.agent) === resumeHarnessId(agent));
+      if (existing) return { ok: true, paneId: existing[0], agent, cwd, workspacePath, providerId, model };
+    }
 
     const { nanoid } = await import("nanoid");
     const paneId = config.paneId ?? nanoid();
@@ -284,8 +325,12 @@ export async function spawnPaneInternal(
       args.push("--permission-mode", config.permissionMode ?? "bypassPermissions");
     }
 
-    if (isClaudeCompatible && config.claudeSessionId && !args.includes("--resume")) {
-      args.push("--resume", config.claudeSessionId);
+    // Claude/OpenClaude document choosing a UUID for a NEW conversation.
+    // Do not use this flag to resume: an absent ID would create an empty session.
+    if (isClaudeCompatible && !nativeSession && !args.some(arg => /^(--resume|--continue|--session-id|-r|-c)(=|$)/.test(arg))) {
+      const id = randomUUID();
+      args.push("--session-id", id);
+      nativeSession = { provider: agent, harnessId: agent, id, scopeKey, capturedAt: Date.now(), confidence: "high", source: "assigned-native-id" };
     }
 
 
@@ -1042,7 +1087,6 @@ export async function spawnPaneInternal(
         model,
         effort: config.effort,
         permissionMode: config.permissionMode,
-        resumeSessionId: config.claudeSessionId,
         mcpUrl: ctx.mcpServerInfo?.streamableHttpUrl,
         externalMcpServers,
         buildPromptFile: () => buildSystemPrompt(ctx, {
@@ -1057,6 +1101,7 @@ export async function spawnPaneInternal(
 
     // A provider selection is a strict CLI contract. Never replace Claude Code
     // with OpenClaude (or any other shell) when the intended binary is absent.
+    if (requestedSession) args = nativeResumeArgs(agent, args, requestedSession.id);
     const cmdCheck = resolveCommand(agent as any, args);
     if (cmdCheck.unavailable) {
       const install = agent === "claude"
@@ -1066,6 +1111,15 @@ export async function spawnPaneInternal(
       log.error(`[spawnPaneInternal] ${error}`);
       return { ok: false, error };
     }
+
+    // Persist before opening a process. A full/read-only disk must not leave
+    // an opened PTY reported as a failed spawn with its identity unregistered.
+    if (nativeSession) nativeSession = ctx.nativeSessions.save({
+      id: paneId, agent, cwd: cwd!, workspacePath: workspacePath!,
+      providerId: providerId ?? undefined, model, role: config.role,
+      accountId: paneAccount?.id, accountLabel, permissionMode: config.permissionMode,
+      allowedSkills: config.allowedSkills, agentName: config.agentName, session: nativeSession,
+    }).session;
 
     if (isMimo) {
       log.info("[spawnPaneInternal] MIMO ANTHROPIC_AUTH_TOKEN:", env["ANTHROPIC_AUTH_TOKEN"] ? "SET" : "MISSING");
@@ -1102,6 +1156,7 @@ export async function spawnPaneInternal(
       model,
       permissionMode: config.permissionMode,
       claudeSessionId: config.claudeSessionId,
+      session: nativeSession ? { ...nativeSession } : undefined,
       role: config.role,
       spawnBrief,
     }, cmdCheck);
@@ -1124,6 +1179,9 @@ export async function spawnPaneInternal(
       effort: config.effort,
       accountLabel,
       accountId: paneAccount?.id,
+      session: nativeSession,
+      nativeSessionScope: scopeKey,
+      permissionMode: config.permissionMode,
       allowedSkills: config.allowedSkills,
       ...(config.agentName ? { agentName: config.agentName } : {}),
       ...(adapter ? { codebrainContext: adapter.codebrainContext, codebrainCatalogPath: adapter.codebrainCatalogPath } : {}),
@@ -1161,6 +1219,8 @@ export async function spawnPaneInternal(
       taskType: config.taskType,
       effort: config.effort,
       accountLabel,
+      accountId: paneAccount?.id,
+      session: nativeSession,
       missionId: uiMissionId ?? operationalMissionId,
       uiMissionId,
       operationalMissionId,

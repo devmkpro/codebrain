@@ -49,6 +49,7 @@ export function sortModelIds(
     id,
     index,
     at: release(byId.get(id), id),
+    sourceAt: release(byId.get(id), ""),
     alias: /(?:^|\/)(?:auto|default|latest|best|fast|balanced|deep|opus|sonnet|haiku|fable)$/i.test(
       id
     ),
@@ -61,7 +62,10 @@ export function sortModelIds(
     const undatedB = b.alias || (b.at === null && !b.version.length);
     if (undatedA !== undatedB) return undatedA ? 1 : -1;
     if (undatedA && undatedB) return a.index - b.index;
-    if (a.at !== null || b.at !== null) {
+    // An old timestamp suffix is not proof that it is newer than a versioned
+    // sibling which has no date suffix. Actual source metadata still wins.
+    const useVersions = a.sourceAt === null && b.sourceAt === null && a.version.length && b.version.length && (a.at === null || b.at === null);
+    if ((a.at !== null || b.at !== null) && !useVersions) {
       if (a.at === null) return 1;
       if (b.at === null) return -1;
       if (a.at !== b.at) return b.at - a.at;

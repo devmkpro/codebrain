@@ -1,4 +1,4 @@
-const ANSI_REGEX = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+import { stripVTControlCharacters } from "node:util";
 
 export class OutputBuffer {
   private rawChunks: string[] = [];
@@ -45,7 +45,10 @@ export class OutputBuffer {
   }
 
   readPlain(n = 50): string[] {
-    return this.plainLines.slice(-n);
+    // A shell prompt normally has no trailing newline. Excluding the current
+    // line makes MCP see stale output and prevents idle SSH shells from writing.
+    const tail = this.partial ? [...this.plainLines, this.stripAnsi(this.partial)] : this.plainLines;
+    return tail.slice(-n);
   }
 
   get lineCount(): number {
@@ -61,6 +64,6 @@ export class OutputBuffer {
   }
 
   private stripAnsi(text: string): string {
-    return text.replace(ANSI_REGEX, "");
+    return stripVTControlCharacters(text);
   }
 }

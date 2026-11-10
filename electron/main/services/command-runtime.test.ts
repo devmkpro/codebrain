@@ -5,9 +5,35 @@ vi.mock("electron", () => ({ dialog: { showMessageBox: mocks.show } }));
 vi.mock("./command-runner", () => ({ createCommandRunner: () => ({ runCommand: mocks.run, dispose: mocks.dispose }) }));
 import { commandRuntime, disposeCommands, hasRunningCommands } from "./command-runtime";
 beforeEach(() => { vi.clearAllMocks(); mocks.show.mockResolvedValue({ response: 0 }); mocks.dispose.mockResolvedValue(undefined); });
-const context = () => ({ mainWindow: { isDestroyed: () => false } }) as any;
+const context = (mode: unknown = "ask") => ({ mainWindow: { isDestroyed: () => false }, configStore: { get: () => ({ agentCommandApproval: mode }), set: vi.fn() } }) as any;
 const request = { command: "node --version", cwd: "C:/fixture", workspacePath: "C:/fixture" };
 describe("native command consent and shutdown", () => {
+  it("always permits commands without opening a dialog, including concurrent approvals", async () => {
+    const runtime = commandRuntime(context("always"));
+    expect(await Promise.all([runtime.approveCommand(request), runtime.approveCommand(request)])).toEqual([true, true]);
+    expect(mocks.show).not.toHaveBeenCalled();
+  });
+  it("defaults to always allow as requested, but malformed saved modes fail closed", async () => {
+    expect(await commandRuntime(context(undefined)).approveCommand(request)).toBe(false);
+    const ctx = context(); ctx.configStore.get = () => ({});
+    expect(await commandRuntime(ctx).approveCommand(request)).toBe(true);
+    expect(await commandRuntime(context("invalid")).approveCommand(request)).toBe(false);
+  });
+  it("does not bypass cancellation or shutdown in always mode", async () => {
+    const runtime = commandRuntime(context("always"));
+    const controller = new AbortController(); controller.abort();
+    expect(await runtime.approveCommand({ ...request, signal: controller.signal })).toBe(false);
+    await runtime.dispose();
+    expect(await runtime.approveCommand(request)).toBe(false);
+    expect(mocks.show).not.toHaveBeenCalled();
+  });
+  it("reads the setting again so revoking always mode applies to the next command", async () => {
+    const ctx = context("always"); const runtime = commandRuntime(ctx);
+    expect(await runtime.approveCommand(request)).toBe(true);
+    ctx.configStore.get = () => ({ agentCommandApproval: "ask" });
+    expect(await runtime.approveCommand(request)).toBe(false);
+    expect(mocks.show).toHaveBeenCalledOnce();
+  });
   it("defaults to cancel and never treats dialog failure as permission", async () => {
     const runtime = commandRuntime(context());
     expect(await runtime.approveCommand(request)).toBe(false);

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { sortModelIds } from "./model-catalog-order";
 
 describe("model catalog recency", () => {
+  it("does not promote a dated old Claude release above newer versioned models", () => {
+    expect(sortModelIds(["claude-haiku-4-5-20251001", "claude-opus-5-5", "claude-sonnet-5", "claude-opus-4-8"]))
+      .toEqual(["claude-opus-5-5", "claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5-20251001"]);
+  });
   it("compares semantic numbers, not strings", () => {
     expect(sortModelIds(["gpt-5.9", "gpt-5.10", "gpt-6", "gpt-5.10.2"])).toEqual([
       "gpt-6",

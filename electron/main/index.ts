@@ -235,7 +235,7 @@ app.whenReady().then(async () => {
         agent: cfg?.agent,
         model: cfg?.model,
         provider_id: cfg?.providerId,
-        workspace: ctx.currentWorkspacePath,
+        workspace: cfg?.workspacePath ?? cfg?.cwd ?? ctx.currentWorkspacePath,
         started_at: registry?.spawnedAt,
         ended_at: now,
         duration_ms: registry?.spawnedAt ? now - registry.spawnedAt : undefined,
@@ -266,6 +266,7 @@ app.whenReady().then(async () => {
       paneId,
       agent: data.agent || "unknown",
       cwd: data.cwd || ctx.currentWorkspacePath,
+      workspacePath: ctx.paneConfigs.get(paneId)?.workspacePath,
       spawnedAt: Date.now(),
     });
   });

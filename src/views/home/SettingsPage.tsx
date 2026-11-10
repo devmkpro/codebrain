@@ -18,6 +18,7 @@ import {
 } from '../../stores/terminal-settings-store';
 import { useProvidersStore } from '../../stores/providers-store';
 import { LabSection } from '../../components/settings/LabSection';
+import { CommandApprovalSetting } from '../../components/settings/CommandApprovalSetting';
 import { MarketplaceSection, type MarketplaceSummary } from '../../components/settings/MarketplaceSection';
 import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/tasks-store';
 import { HOST_LABELS } from '../../lib/resolve-spawn-target';
@@ -1440,6 +1441,7 @@ export function SettingsPage() {
 
           {/* ── Avançado ─────────────────────────────────────────────── */}
           <SectionCard id="advanced" icon={<Shield size={13} />} title="Avançado" badge="Cuidado" active={open.includes('advanced')} onToggle={toggleSection}>
+            <CommandApprovalSetting />
             <div className="cb-note" style={{ '--cb-rail-color': 'var(--cb-danger)' } as React.CSSProperties}>
               <AlertTriangle size={13} className="text-cb-danger shrink-0 mt-0.5" />
               <p className="cb-help">Ações irreversíveis. Confirme antes de prosseguir.</p>

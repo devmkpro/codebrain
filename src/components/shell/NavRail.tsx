@@ -28,7 +28,7 @@ import { useSessionHistoryStore } from "../../stores/session-history-store";
 import { useTasksStore } from "../../stores/tasks-store";
 import { useCostStore } from "../../stores/cost-store";
 import { useRouter } from "../../lib/router";
-import { navigateHome } from "./shell-navigation";
+import { navigateHome, navigateToPane } from "./shell-navigation";
 import { CODEBRAIN_PANE_DRAG_TYPE } from "../../lib/pane-drag";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -281,7 +281,6 @@ export function NavRail() {
 
   const panes = usePanesStore((state) => state.panes) as PaneLike[];
   const activePaneId = usePanesStore((state) => state.activePaneId);
-  const setActive = usePanesStore((state) => state.setActive);
   const removePane = usePanesStore((state) => state.removePane);
 
   const panelCollapsed = useShellStore((state) => state.railCollapsed);
@@ -360,7 +359,11 @@ export function NavRail() {
             active={!panelCollapsed}
             badge={waitingCount > 0 ? waitingCount : workingCount > 0 ? workingCount : undefined}
             badgeVariant={waitingCount > 0 ? "warn" : "accent"}
-            onClick={toggleRail}
+            onClick={() => {
+              const pane = panes.find(p => p.id === activePaneId) ?? panes[0];
+              if (panelCollapsed) toggleRail();
+              if (pane) navigateToPane(pane.id);
+            }}
           />
 
           <NavIconButton
@@ -479,7 +482,7 @@ export function NavRail() {
                   active={pane.id === activePaneId}
                   depth={depth}
                   last={last}
-                  onSelect={() => setActive(pane.id)}
+                  onSelect={() => navigateToPane(pane.id)}
                   onConversation={() => openConversation(pane.id)}
                   onClose={() => closePane(pane.id)}
                   onDragStart={(e) => startPaneDrag(e, pane)}

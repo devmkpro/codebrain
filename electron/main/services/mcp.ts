@@ -37,7 +37,7 @@ function buildMcpBridge(ctx: AppContext) {
     disposeCommands: () => disposeCommands(ctx),
     accessHostList: () => accessVaultResult(() => getAccessVault(ctx).list({ source: "agent" })),
     accessHostSave: (input: AccessHostInput) => accessVaultResult(async () => ({ host: await getAccessVault(ctx).upsertHost(input, { source: "agent" }) })),
-    accessSshOpen: (input: { hostId: string }) => accessVaultResult(() => getAccessVault(ctx).openSsh(input.hostId, { source: "agent" })),
+    accessSshOpen: (input: { hostId: string; callerPaneId?: string }) => accessVaultResult(() => getAccessVault(ctx).openSsh(input.hostId, { source: "agent", ownerPaneId: input.callerPaneId })),
     spawnPaneFn: (req: SpawnPaneConfig) => spawnPaneInternal(ctx, req),
     onPaneCreated: (info: { paneId: string; agent: string; cwd?: string; providerId?: string; model?: string; label?: string; taskType?: string; effort?: string; accountLabel?: string }) => {
       safeSend(ctx, "pane:added", info);

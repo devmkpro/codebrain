@@ -27,6 +27,26 @@ const codex = {
 };
 
 describe("PaneLauncher search", () => {
+  it("resumes a saved native conversation in the standard launcher without replaying previews", async () => {
+    const previous = window.codeBrainApp;
+    const spawn = vi.fn().mockResolvedValue({ ok: true, paneId: "resumed" });
+    const session = { provider: "kiro", id: "exact-conversation", confidence: "high", source: "fixture", capturedAt: 1 };
+    window.codeBrainApp = { session: {
+      loadAll: async () => [{ id: "saved", savedAt: 1, panes: [{ id: "old", agent: "kiro", cwd: "C:/repo", accountId: "account-one", session, lastLines: ["not full context"] }] }],
+      resumeHarnesses: async () => [{ id: "kiro", evidence: "fixture" }],
+    }, accounts: { list: async () => ({ accounts: [] }) }, pty: { spawn } } as any;
+    try {
+      render(<PaneLauncher />);
+      fireEvent.click(screen.getByRole("button", { name: "Retomar conversa" }));
+      const saved = await screen.findByRole("button", { name: /exact-conversation/ });
+      fireEvent.click(saved);
+      await waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+      expect(spawn.mock.calls[0][0]).toMatchObject({ agent: "kiro", accountId: "account-one", session });
+      expect(spawn.mock.calls[0][0]).not.toHaveProperty("sessionContext");
+      expect(spawn.mock.calls[0][0]).not.toHaveProperty("initialPrompt");
+      expect(spawn.mock.calls[0][0]).not.toHaveProperty("args");
+    } finally { cleanup(); window.codeBrainApp = previous; }
+  });
   beforeEach(() => {
     useProvidersStore.setState({ providers: [openRouter, codex], load: async () => {} } as any);
     useNavStore.setState({ tabs: [{ workspacePath: "C:/repo" }], activeTabIndex: 0 } as any);

@@ -5,6 +5,8 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as crypto from "node:crypto";
 import type { AppContext } from "../context";
+import { captureNativeSession } from "./native-session-capture";
+import { accountEnv } from "./accounts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -108,6 +110,8 @@ class BaseSessionWatcher {
     this.panes.delete(paneId);
   }
 
+  hasPanes() { return this.panes.size > 0; }
+
   protected newestSpawn(): number {
     return Math.max(0, ...[...this.panes.values()].map((p) => p.spawnedAt));
   }
@@ -129,10 +133,8 @@ class BaseSessionWatcher {
 
 // ── CodexSessionWatcher ────────────────────────────────────────────────────
 
-class CodexSessionWatcher extends BaseSessionWatcher {
-  private root = path.join(os.homedir(), ".codex", "sessions");
-
-  constructor(onCapture: (c: CapturedSession) => void) {
+export class CodexSessionWatcher extends BaseSessionWatcher {
+  constructor(onCapture: (c: CapturedSession) => void, private root = path.join(os.homedir(), ".codex", "sessions")) {
     super("codex", onCapture);
   }
 
@@ -167,7 +169,32 @@ class CodexSessionWatcher extends BaseSessionWatcher {
     if (!Number.isFinite(parsedTime)) return null;
     const st = await fsp.stat(file).catch(() => null);
     if (!st) return null;
-    return { id: p.id, cwd: p.cwd, timestamp: parsedTime, file, mtimeMs: st.mtimeMs };
+    const paneIds = await this.instructionPaneIds(file);
+    return { id: p.id, cwd: p.cwd, timestamp: parsedTime, file, mtimeMs: st.mtimeMs, paneIds };
+  }
+
+  private async instructionPaneIds(file: string): Promise<string[]> {
+    const handle = await fsp.open(file, "r").catch(() => null);
+    if (!handle) return [];
+    try {
+      // Bound reads; never scan an entire conversation or match user/tool text.
+      const buffer = Buffer.alloc(256 * 1024);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      const ids = new Set<string>();
+      for (const line of buffer.subarray(0, bytesRead).toString("utf8").split("\n")) {
+        try {
+          const record = JSON.parse(line);
+          const payload = record.payload;
+          const instructions = record.type === "session_meta" ? [payload?.developer_instructions, payload?.base_instructions?.text] :
+            record.type === "turn_context" ? [payload?.developer_instructions] :
+            record.type === "response_item" && payload?.role === "developer" ? (payload.content ?? []).map((item: any) => item.text) : [];
+          for (const text of instructions) if (typeof text === "string") {
+            for (const match of text.matchAll(/^Pane: `([A-Za-z0-9_-]+)`\s*$/gm)) ids.add(match[1]);
+          }
+        } catch { /* Partial JSON records are retried on a later scan. */ }
+      }
+      return [...ids];
+    } finally { await handle.close(); }
   }
 
   protected async scanOnce() {
@@ -180,6 +207,7 @@ class CodexSessionWatcher extends BaseSessionWatcher {
       const matches = candidates.filter((c) => {
         if (!c) return false;
         if (!samePath(c.cwd, pane.cwd)) return false;
+        if (c.paneIds.length && !c.paneIds.includes(pane.paneId)) return false;
         if (c.timestamp < pane.spawnedAt - 5000) return false;
         if (c.timestamp - pane.spawnedAt > MATCH_WINDOW_MS) return false;
         return true;
@@ -187,7 +215,7 @@ class CodexSessionWatcher extends BaseSessionWatcher {
       if (matches.length !== 1) continue;
       const match = matches[0]!;
       const matchingPanes = [...this.panes.values()].filter(
-        (other) => samePath(other.cwd, match.cwd) && match.timestamp >= other.spawnedAt - 5000 && match.timestamp - other.spawnedAt <= MATCH_WINDOW_MS
+        (other) => samePath(other.cwd, match.cwd) && (!match.paneIds.length || match.paneIds.includes(other.paneId)) && match.timestamp >= other.spawnedAt - 5000 && match.timestamp - other.spawnedAt <= MATCH_WINDOW_MS
       );
       if (matchingPanes.length !== 1) continue;
       this.captured.add(match.id);
@@ -199,9 +227,7 @@ class CodexSessionWatcher extends BaseSessionWatcher {
 // ── GeminiSessionWatcher ───────────────────────────────────────────────────
 
 class GeminiSessionWatcher extends BaseSessionWatcher {
-  private root = path.join(os.homedir(), ".gemini", "tmp");
-
-  constructor(onCapture: (c: CapturedSession) => void) {
+  constructor(onCapture: (c: CapturedSession) => void, private root = path.join(os.homedir(), ".gemini", "tmp")) {
     super("gemini", onCapture);
   }
 
@@ -277,9 +303,7 @@ function kimiProjectHash(workDir: string): string {
 }
 
 class KimiSessionWatcher extends BaseSessionWatcher {
-  private root = path.join(os.homedir(), ".kimi-code", "sessions");
-
-  constructor(onCapture: (c: CapturedSession) => void) {
+  constructor(onCapture: (c: CapturedSession) => void, private root = path.join(os.homedir(), ".kimi-code", "sessions")) {
     super("kimi", onCapture);
   }
 
@@ -339,9 +363,7 @@ function encodeCursorProjectKey(cwd: string): string {
 }
 
 class CursorSessionWatcher extends BaseSessionWatcher {
-  private projectsRoot = path.join(os.homedir(), ".cursor", "projects");
-
-  constructor(onCapture: (c: CapturedSession) => void) {
+  constructor(onCapture: (c: CapturedSession) => void, private projectsRoot = path.join(os.homedir(), ".cursor", "projects")) {
     super("cursor", onCapture);
   }
 
@@ -371,6 +393,7 @@ class CursorSessionWatcher extends BaseSessionWatcher {
       );
       if (matches.length !== 1) continue;
       const match = matches[0];
+      if ([...this.panes.values()].filter(other => samePath(other.cwd, pane.cwd)).length !== 1) continue;
       this.captured.add(match.id);
       this.emitCapture({ paneId: pane.paneId, session: { provider: "cursor", id: match.id, capturedAt: Date.now(), confidence: "high", source: "session-file" } });
     }
@@ -380,9 +403,7 @@ class CursorSessionWatcher extends BaseSessionWatcher {
 // ── CopilotSessionWatcher ──────────────────────────────────────────────────
 
 class CopilotSessionWatcher extends BaseSessionWatcher {
-  private dbPath = path.join(os.homedir(), ".copilot", "session-store.db");
-
-  constructor(onCapture: (c: CapturedSession) => void) {
+  constructor(onCapture: (c: CapturedSession) => void, private dbPath = path.join(os.homedir(), ".copilot", "session-store.db")) {
     super("copilot", onCapture);
   }
 
@@ -416,6 +437,7 @@ class CopilotSessionWatcher extends BaseSessionWatcher {
       );
       if (matches.length !== 1) continue;
       const match = matches[0];
+      if ([...this.panes.values()].filter(other => samePath(other.cwd, pane.cwd)).length !== 1) continue;
       this.captured.add(match.id);
       this.emitCapture({ paneId: pane.paneId, session: { provider: "copilot", id: match.id, capturedAt: Date.now(), confidence: "high", source: "session-file" } });
     }
@@ -436,7 +458,7 @@ export interface SessionWatcherManager {
  * captures transcripts into Codebrain's shared memory.
  */
 export function createSessionWatchers(ctx: AppContext): SessionWatcherManager {
-  const watchers: BaseSessionWatcher[] = [];
+  const watchers = new Map<string, BaseSessionWatcher>();
   // Do not keep five filesystem polling timers alive while the app has no
   // agent panes. The manager starts them on the first matching pane and stops
   // them again after the last pane exits.
@@ -445,9 +467,10 @@ export function createSessionWatchers(ctx: AppContext): SessionWatcherManager {
   function onCapture(capture: CapturedSession) {
     try {
       const store = ctx.memoryStore;
-      if (!store) return;
+      if (!captureNativeSession(ctx, capture.paneId, capture.session)) return;
       if (capture.transcriptFile) ctx.paneTranscriptFiles.set(capture.paneId, capture.transcriptFile);
-      const workspace = ctx.currentWorkspacePath || capture.session.id;
+      if (!store) return;
+      const workspace = ctx.paneConfigs.get(capture.paneId)?.workspacePath || ctx.paneConfigs.get(capture.paneId)?.cwd || capture.session.id;
       store.write({
         type: "episodic",
         key: `session-capture-${capture.session.provider}-${capture.session.id}`,
@@ -462,37 +485,43 @@ export function createSessionWatchers(ctx: AppContext): SessionWatcherManager {
     }
   }
 
-  watchers.push(
-    new CodexSessionWatcher(onCapture),
-    new GeminiSessionWatcher(onCapture),
-    new KimiSessionWatcher(onCapture),
-    new CursorSessionWatcher(onCapture),
-    new CopilotSessionWatcher(onCapture),
-  );
-
   return {
     registerPane(pane: PaneInfo) {
+      const cfg = ctx.paneConfigs.get(pane.paneId);
+      if (cfg?.session) return; // Explicit identity already known; no timing guesses.
+      const env = { ...process.env, ...(cfg?.accountId ? accountEnv(cfg.accountId) : {}) };
+      const specs: Record<string, { root: string; create: (root: string) => BaseSessionWatcher }> = {
+        codex: { root: path.join(env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions"), create: root => new CodexSessionWatcher(onCapture, root) },
+        gemini: { root: path.join(env.GEMINI_CLI_HOME || os.homedir(), ".gemini", "tmp"), create: root => new GeminiSessionWatcher(onCapture, root) },
+        kimi: { root: path.join(env.KIMI_CODE_HOME || path.join(os.homedir(), ".kimi-code"), "sessions"), create: root => new KimiSessionWatcher(onCapture, root) },
+        cursor: { root: path.join(os.homedir(), ".cursor", "projects"), create: root => new CursorSessionWatcher(onCapture, root) },
+        copilot: { root: path.join(env.COPILOT_HOME || path.join(os.homedir(), ".copilot"), "session-store.db"), create: root => new CopilotSessionWatcher(onCapture, root) },
+      };
+      const spec = specs[pane.agent === "gemini-cli" ? "gemini" : pane.agent];
+      if (!spec) return;
+      const key = `${pane.agent}:${spec.root}`;
+      let watcher = watchers.get(key);
+      if (!watcher) { watcher = spec.create(spec.root); watchers.set(key, watcher); }
       activePanes.add(pane.paneId);
-      for (const w of watchers) w.registerPane(pane);
-      if (activePanes.size === 1) {
-        for (const w of watchers) w.start();
-      }
+      watcher.registerPane({ ...pane, agent: pane.agent === "gemini-cli" ? "gemini" : pane.agent });
+      watcher.start();
     },
     unregisterPane(paneId: string) {
       activePanes.delete(paneId);
       ctx.paneTranscriptFiles.delete(paneId);
-      for (const w of watchers) w.unregisterPane(paneId);
-      if (activePanes.size === 0) {
-        for (const w of watchers) w.stop();
+      for (const [key, watcher] of watchers) {
+        watcher.unregisterPane(paneId);
+        if (!watcher.hasPanes()) { watcher.stop(); watchers.delete(key); }
       }
     },
     start() {
       if (activePanes.size > 0) {
-        for (const w of watchers) w.start();
+        for (const w of watchers.values()) w.start();
       }
     },
     stop() {
-      for (const w of watchers) w.stop();
+      for (const w of watchers.values()) w.stop();
+      watchers.clear();
       activePanes.clear();
     },
   };

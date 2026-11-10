@@ -4,12 +4,14 @@ import * as path from "node:path";
 import log from "electron-log/main.js";
 import type { AppContext } from "../context";
 import { clearTasks, listTasks, watchTaskMutations, type TaskClearRequest } from "../services/todo-manager";
+import { nativeResumeHarnesses } from "../services/spawn/session-resume";
 
 export function registerSessionHandlers(ctx: AppContext): void {
+  ipcMain.handle("session:resumeHarnesses", () => nativeResumeHarnesses());
   watchTaskMutations(ctx);
   ipcMain.handle("session:saveSnapshot", async (_event, workspacePath: string) => {
     try {
-      const panes = ctx.ptyManager.list();
+      const panes = ctx.ptyManager.list().filter(p => path.resolve(p.workspacePath ?? p.cwd) === path.resolve(workspacePath));
       const snapshotPanes = panes.map((p) => {
         const cfg = ctx.paneConfigs.get(p.paneId);
         const lastLines = ctx.ptyManager.read(p.paneId, 50);
@@ -20,6 +22,12 @@ export function registerSessionHandlers(ctx: AppContext): void {
           model: cfg?.model,
           role: cfg?.role,
           cwd: p.cwd,
+          session: cfg?.session ?? p.session,
+          accountId: cfg?.accountId,
+          accountLabel: cfg?.accountLabel,
+          permissionMode: cfg?.permissionMode,
+          allowedSkills: cfg?.allowedSkills,
+          agentName: cfg?.agentName,
           lastLines,
         };
       });
@@ -179,15 +187,30 @@ ${panesSummary}
   ipcMain.handle("session:loadAll", async (_event, workspacePath?: string) => {
     try {
       const result = ctx.memoryStore.listSessionHistory({ workspace: workspacePath || undefined });
-      return result.sessions || [];
+      const native = ctx.nativeSessions.list(workspacePath).map(row => ({
+        ...row, agent: row.panes[0].agent, model: row.panes[0].model,
+        label: `${row.panes[0].agent} · ${row.panes[0].accountLabel ?? "perfil padrão"}`,
+        workspace: row.workspacePath, ended_at: row.savedAt,
+        output_preview: `Histórico completo mantido pela CLI. ID nativo: ${row.panes[0].session.id}`,
+      }));
+      // Legacy rows contain a preview, not a native conversation. Keep them
+      // readable, but never manufacture an identity from their pane IDs.
+      const legacy = (result.sessions || []).map((row: any) => ({
+        ...row, workspacePath: row.workspace, savedAt: row.ended_at ?? row.started_at ?? 0,
+        panes: [{ id: row.pane_id ?? row.id, agent: row.agent, cwd: row.workspace,
+          providerId: row.provider_id, model: row.model, summary: row.label,
+          lastLines: row.output_preview ? [row.output_preview] : [] }],
+      }));
+      return [...native, ...legacy].sort((a, b) => b.savedAt - a.savedAt);
     } catch (err) {
       log.error("[session] loadAll error:", err);
       return [];
     }
   });
 
-  ipcMain.handle("session:deleteOne", async (_event, _workspacePath: string, sessionId: string) => {
+  ipcMain.handle("session:deleteOne", async (_event, workspacePath: string, sessionId: string) => {
     try {
+      ctx.nativeSessions.delete(sessionId, workspacePath);
       ctx.memoryStore.deleteSessionHistory({ id: sessionId });
       return { ok: true };
     } catch (err) {
@@ -198,6 +221,7 @@ ${panesSummary}
 
   ipcMain.handle("session:clear", async (_event, workspacePath?: string) => {
     try {
+      ctx.nativeSessions.clear(workspacePath);
       ctx.memoryStore.clearSessionHistory({ workspace: workspacePath || undefined });
     } catch (err) {
       log.error("[session] clear error:", err);

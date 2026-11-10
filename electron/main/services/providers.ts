@@ -70,6 +70,14 @@ function virtualProviderModels(saved: any, canonical: string[]): string[] {
   );
 }
 
+function claudeProviderModels(saved: any, canonical: string[]): string[] {
+  if (saved?.modelsMode === "manual") return virtualProviderModels(saved, canonical);
+  // Migrate the old --help discovery: those are alias examples, not the
+  // resolved IDs exposed by this installed CLI/account.
+  const resolved = virtualProviderModels(saved, canonical).filter(id => !/^(default|best|opus|sonnet|haiku|fable)(\[1m\])?$/.test(id));
+  return resolved.length ? resolved : sortModelIds(canonical);
+}
+
 export function getEnhancedProviders(ctx: AppContext) {
   const list = ctx.providerStore.listFull();
   const claudeDetected = ctx.cliDetector?.getAll()?.claude?.found ?? false;
@@ -86,7 +94,7 @@ export function getEnhancedProviders(ctx: AppContext) {
             label: claudeOAuthSaved?.label?.trim() || claudeOAuthTemplate.label,
             type: claudeOAuthTemplate.type as "oauth",
             host: claudeOAuthTemplate.host,
-            models: virtualProviderModels(claudeOAuthSaved, claudeOAuthTemplate.models),
+            models: claudeProviderModels(claudeOAuthSaved, claudeOAuthTemplate.models),
             modelsMode: claudeOAuthSaved?.modelsMode ?? "auto",
             env: {},
             isVirtual: true,
@@ -597,7 +605,7 @@ async function performProviderModelSync(
           return;
         }
         if (
-          !options.force &&
+          !options.force && provider.modelsSyncSource !== "claude-help-aliases" &&
           provider.modelsAttemptedAt &&
           Date.now() - provider.modelsAttemptedAt <
             (provider.modelsStale ? 30_000 : MODEL_CATALOG_TTL_MS)

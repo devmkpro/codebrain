@@ -35,18 +35,31 @@ function constrainToWorkArea(win: BrowserWindow): void {
   }
 }
 
-function keepWindowInWorkArea(win: BrowserWindow): void {
+export function keepWindowInWorkArea(win: BrowserWindow): void {
   let queued = false;
+  let interacting = false;
+  let closed = false;
   const schedule = () => {
     if (queued) return;
     queued = true;
     setTimeout(() => {
       queued = false;
+      // A callback queued before the gesture may run late under PTY load.
+      // Calling setBounds inside Windows' native move/size loop releases it.
+      if (closed || interacting) return;
       constrainToWorkArea(win);
     }, 0);
   };
-  win.on("move", schedule);
-  win.on("resize", schedule);
+  if (process.platform === "win32") {
+    win.on("will-move", () => { interacting = true; });
+    win.on("will-resize", () => { interacting = true; });
+    const finishInteraction = () => { interacting = false; schedule(); };
+    win.on("moved", finishInteraction);
+    win.on("resized", finishInteraction);
+  } else {
+    win.on("move", schedule);
+    win.on("resize", schedule);
+  }
   win.on("maximize", schedule);
   win.on("unmaximize", schedule);
   win.once("ready-to-show", schedule);
@@ -56,7 +69,10 @@ function keepWindowInWorkArea(win: BrowserWindow): void {
   // uma janela já maximizada continue sobre a barra.
   const onDisplayMetricsChanged = () => schedule();
   screen.on("display-metrics-changed", onDisplayMetricsChanged);
-  win.once("closed", () => screen.removeListener("display-metrics-changed", onDisplayMetricsChanged));
+  win.once("closed", () => {
+    closed = true;
+    screen.removeListener("display-metrics-changed", onDisplayMetricsChanged);
+  });
 }
 
 export function createWindow(): BrowserWindow {

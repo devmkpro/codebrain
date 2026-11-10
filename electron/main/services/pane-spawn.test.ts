@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureClaudeSettings, paneMissionMetadata, paneSpawnBrief, spawnPaneInternal } from "./pane-spawn";
 import { ensureClaudeWorkspaceSettings } from "./claude-metadata";
+import { nativeResumeArgs } from "./spawn/session-resume";
 vi.mock("./claude-metadata", () => ({ ensureClaudeWorkspaceSettings: vi.fn() }));
 
 vi.mock("../context", () => ({ safeSend: vi.fn() }));
@@ -25,12 +26,46 @@ beforeEach(() => {
     currentWorkspacePath: process.cwd(), paneConfigs: new Map(), paneRegistry: new Map(), providerHealth: new Map(),
     memoryStore: { createMission: vi.fn(() => ({ ok: true, id: "mission_fixture" })), actorRegister: vi.fn(() => ({ ok: true })) },
     configStore: { get: () => ({}) }, cliDetector: { getAllAsync: vi.fn().mockResolvedValue({}) },
+    nativeSessions: { save: vi.fn((pane: any) => pane) },
     hooksManager: { runPreSpawnHooks: vi.fn().mockResolvedValue(undefined), fire: vi.fn() },
-    ptyManager: { spawn: vi.fn().mockResolvedValue("fixture"), submitWhenReady: vi.fn().mockResolvedValue({ ok: false, promptSubmitted: false, waitedMs: 60_000, error: "Not ready" }) },
+    ptyManager: { setSession: vi.fn(), spawn: vi.fn().mockResolvedValue("fixture"), submitWhenReady: vi.fn().mockResolvedValue({ ok: false, promptSubmitted: false, waitedMs: 60_000, error: "Not ready" }) },
   };
 });
 
 describe("spawn orchestration offline", () => {
+  it("does not open a PTY if native conversation metadata cannot be persisted", async () => {
+    ctx.nativeSessions.save.mockImplementation(() => { throw new Error("disk unavailable"); });
+    const result = await spawnPaneInternal(ctx, { agent: "kiro", cwd: process.cwd(), session: { provider: "kiro", id: "native-id", capturedAt: 1, confidence: "high", source: "fixture" } });
+    expect(result).toMatchObject({ ok: false, error: "disk unavailable" });
+    expect(ctx.ptyManager.spawn).not.toHaveBeenCalled();
+  });
+  it("coalesces simultaneous resume requests before a PTY can be duplicated", async () => {
+    const session = { provider: "kiro", id: "one-session", confidence: "high" as const, capturedAt: 1, source: "fixture" };
+    const results = await Promise.all([1, 2, 3].map(() => spawnPaneInternal(ctx, { paneId: "fixture", agent: "kiro", cwd: process.cwd(), session })));
+    expect(results.every(result => result.ok && result.paneId === "fixture")).toBe(true);
+    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(1);
+  });
+  it.each(["kiro", "opencode", "grok", "antigravity", "hermes", "muse", "commandcode"])("passes %s's exact resume to command resolution and persists it", async agent => {
+    const session = { provider: agent, id: "exact-native-id", confidence: "high" as const, capturedAt: 1, source: "fixture" };
+    const result = await spawnPaneInternal(ctx, { paneId: "fixture", agent, cwd: process.cwd(), session });
+    expect(result.ok).toBe(true);
+    expect(ctx.ptyManager.spawn.mock.calls[0][1].args).toEqual(nativeResumeArgs(agent, [], session.id));
+    expect(ctx.paneConfigs.get("fixture").session.id).toBe(session.id);
+    expect(ctx.nativeSessions.save).toHaveBeenCalledTimes(1);
+    expect(ctx.ptyManager.submitWhenReady).not.toHaveBeenCalled();
+    const duplicate = await spawnPaneInternal(ctx, { agent, cwd: process.cwd(), session });
+    expect(duplicate.paneId).toBe("fixture");
+    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(1);
+  });
+  it("refuses changing harness, account or context when resuming", async () => {
+    const session = { provider: "kiro", id: "native-id", confidence: "high" as const, capturedAt: 1, source: "fixture" };
+    for (const request of [
+      { agent: "muse", session }, { agent: "kiro", accountId: "missing", session },
+      { agent: "kiro", initialPrompt: "do again", session },
+      { agent: "kiro", session: { ...session, scopeKey: "different-profile" } },
+    ]) expect((await spawnPaneInternal(ctx, { ...request, cwd: process.cwd() })).ok).toBe(false);
+    expect(ctx.ptyManager.spawn).not.toHaveBeenCalled();
+  });
   it("delegates workspace metadata to the shared installed-app resolver", () => {
     ensureClaudeSettings("fixture-workspace");
     expect(ensureClaudeWorkspaceSettings).toHaveBeenCalledWith("fixture-workspace");

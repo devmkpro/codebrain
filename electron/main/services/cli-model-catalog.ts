@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { sortModelIds, type ModelReleaseInfo } from "../../../src/lib/model-catalog-order";
+import { readClaudeModelCatalog } from "./claude-model-catalog";
 
 // Read-only discovery references (every command is also gated by installed help):
 // Codex: https://learn.chatgpt.com/docs/cli/reference#codex-debug-models
@@ -10,7 +11,7 @@ import { sortModelIds, type ModelReleaseInfo } from "../../../src/lib/model-cata
 // OpenCode: https://docs.opencode.ai/docs/cli/#models
 // Grok: https://docs.x.ai/build/cli/reference
 // Kiro: `kiro-cli chat --help` documents --list-models --format json.
-// Claude/Copilot: consume only aliases/choices printed by installed --help.
+// Claude: SDK initialize metadata only (resolvedModel). Copilot: installed choices.
 
 export const MODEL_CATALOG_TTL_MS = 5 * 60_000;
 const FAILURE_BACKOFF_MS = 30_000;
@@ -120,6 +121,7 @@ export function createCliModelCatalog(
     now?: () => number;
     cacheFile?: string | null;
     codexHome?: () => string;
+    claudeModels?: typeof readClaudeModelCatalog;
   } = {}
 ) {
   const run = options.run ?? runModelCommand;
@@ -139,7 +141,7 @@ export function createCliModelCatalog(
         entry.models.every((id) => typeof id === "string") &&
         typeof entry.attemptedAt === "number"
       )
-        cache.set(key, entry);
+        if (entry.source !== "claude-help-aliases") cache.set(key, entry);
     }
   } catch {
     /* First use or corrupt cache. */
@@ -201,11 +203,8 @@ export function createCliModelCatalog(
       if (cli === "opencode" && (await run(binary, ["models", "--help"])).includes("--refresh"))
         args.push("--refresh");
     } else if (cli === "claude") {
-      // The installed CLI documents rolling aliases; no inference or OAuth
-      // credential-file scraping is needed to discover those aliases.
-      const modelHelp = help.match(/--model\b[\s\S]*?(?=\n\s*--[a-z]|\n\s*-[a-z],|$)/)?.[0] ?? "";
-      const aliases = [...modelHelp.matchAll(/['`]([a-z][a-z-]*)['`]/g)].map((match) => match[1]);
-      if (aliases.length) return { models: sortModelIds(aliases), source: "claude-help-aliases" };
+      const models = await (options.claudeModels ?? readClaudeModelCatalog)(binary, help);
+      if (models.length) return { models, source: "claude-sdk-resolved-models" };
     } else if (cli === "copilot") {
       const choices = help.match(/--model\b[\s\S]*?\(choices:\s*([^)]+)\)/)?.[1];
       if (choices)
@@ -235,7 +234,7 @@ export function createCliModelCatalog(
         version,
         cli === "codex"
           ? (options.codexHome?.() ?? process.env.CODEX_HOME ?? "default")
-          : "default",
+          : cli === "claude" ? process.env.CLAUDE_CONFIG_DIR ?? "default" : "default",
       ]);
       if (pending.has(key)) return pending.get(key)!;
       const previous = cache.get(key);

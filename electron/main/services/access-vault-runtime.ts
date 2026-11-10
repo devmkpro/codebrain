@@ -36,7 +36,7 @@ export function getAccessVault(ctx: AppContext): AccessVault {
         { binary: systemSsh(), args: plan.args },
       );
       const label = `SSH · ${plan.label}`;
-      ctx.paneConfigs.set(paneId, { agent: "shell", cwd, workspacePath: cwd, label, args: [] });
+      ctx.paneConfigs.set(paneId, { agent: "shell", cwd, workspacePath: cwd, label, args: [], ...(plan.ownerPaneId ? { ownerPaneId: plan.ownerPaneId } : {}) } as any);
       ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
       safeSend(ctx, "pane:added", { paneId, agent: "shell", cwd, workspacePath: cwd, label });
       return { paneId };

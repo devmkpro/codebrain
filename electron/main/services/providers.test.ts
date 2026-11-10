@@ -38,6 +38,13 @@ afterEach(() => {
 });
 
 describe("provider model discovery", () => {
+  it("does not expose obsolete help aliases as the automatic Claude model catalog", () => {
+    const ctx = { providerStore: { listFull: () => [{ id: "claude-oauth", models: ["fable", "opus", "sonnet"], modelsMode: "auto" }] }, cliDetector: { getAll: () => ({ claude: { found: true } }) } } as any;
+    const models = getEnhancedProviders(ctx).find(provider => provider.id === "claude-oauth")!.models;
+    expect(models.length).toBeGreaterThan(0);
+    expect(models.every(model => model.startsWith("claude-"))).toBe(true);
+    expect(models).not.toContain("sonnet");
+  });
   it("limits simultaneous automatic catalog requests to two", async () => {
     let concurrent = 0;
     let peak = 0;

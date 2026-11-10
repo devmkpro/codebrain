@@ -13,6 +13,8 @@ export interface SpawnPaneConfig {
   env?: Record<string, string>;
   activityId?: string;
   session?: PaneSession;
+  accountId?: string;
+  workspacePath?: string;
 }
 
 export interface SpawnPaneResult {
@@ -26,8 +28,10 @@ export interface PaneSession {
   provider: string;
   id: string;
   capturedAt?: number;
-  confidence?: "high" | "low";
+  confidence?: "high" | "medium" | "low";
   source?: string;
+  scopeKey?: string;
+  harnessId?: string;
 }
 
 export interface PaneInfo {

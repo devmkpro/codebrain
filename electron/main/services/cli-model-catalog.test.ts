@@ -60,13 +60,13 @@ describe("CLI model discovery", () => {
     expect(run).toHaveBeenLastCalledWith("binary", command);
     expect(result.models[0]).toContain("10");
   });
-  it("Claude discovers rolling aliases from help without reading OAuth credentials", async () => {
+  it("Claude uses resolved native model metadata, not help aliases", async () => {
     const run = vi.fn(
       async () => " --model <model>  alias (e.g. 'fable', 'opus', or 'sonnet')\n --tools <tools>"
     );
     expect(
-      (await createCliModelCatalog({ run, cacheFile: null }).refresh("claude", "claude")).models
-    ).toEqual(["fable", "opus", "sonnet"]);
+      (await createCliModelCatalog({ run, cacheFile: null, claudeModels: async () => ["claude-sonnet-5", "claude-opus-5"] }).refresh("claude", "claude")).models
+    ).toEqual(["claude-sonnet-5", "claude-opus-5"]);
     expect(run).toHaveBeenCalledOnce();
   });
   it("Copilot uses installed --model choices when advertised", async () => {

@@ -5269,7 +5269,10 @@ function createCodebrainMCPServer(bridge) {
   server.tool(
     "access_ssh_open",
     "Open a visible SSH terminal for a machine and credential already authorized by the user. Bypass mode does not ask again for each connection. New/revoked hosts remain blocked; host-key verification stays strict. Returns paneId, never credentials. Password authentication requires the user to open the terminal.",
-    { hostId: z.string().uuid() },
+    {
+      hostId: z.string().uuid(),
+      callerPaneId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/).optional().describe("Your pane ID. Makes you the terminal's owner so pane_write (with fromPaneId) can type in the visible SSH terminal."),
+    },
     async (args) => accessResponse(await accessCall("accessSshOpen", args)),
   );
 

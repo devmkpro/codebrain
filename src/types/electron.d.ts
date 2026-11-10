@@ -2,6 +2,7 @@
 
 import type { OperationsSnapshot } from "./operations";
 import type { AccessVaultBridge } from "./access-vault";
+import type { NativeSession, NativeResumePane } from "./native-session";
 
 export interface AuthStatus {
   authenticated: boolean;
@@ -10,6 +11,8 @@ export interface AuthStatus {
 }
 
 export interface PtyConfig {
+  accountId?: string;
+  accountLabel?: string;
   paneId?: string;
   agent: string;
   cwd?: string;
@@ -114,13 +117,7 @@ export interface AgentMessage {
   created_at: number;
 }
 
-export interface Session {
-  provider: string;
-  id: string;
-  capturedAt: number;
-  confidence: "high" | "medium" | "low";
-  source: string;
-}
+export interface Session extends NativeSession {}
 
 export interface Provider {
   id: string;
@@ -149,6 +146,9 @@ export interface ProviderTemplateField {
 
 export interface SessionHistoryEntry {
   id: string;
+  workspacePath: string;
+  savedAt: number;
+  panes: NativeResumePane[];
   pane_id?: string;
   label?: string;
   agent?: string;
@@ -262,6 +262,7 @@ export interface WorkspaceConfig {
 export interface AppConfig {
   theme?: "dark" | "light";
   autoRestore?: boolean;
+  agentCommandApproval?: "always" | "ask";
   preferredAgent?: string;
   notifications?: {
     onTaskComplete?: boolean;
@@ -556,6 +557,7 @@ export interface CodebrainApp {
     detect: (dir?: string) => Promise<{ path: string; autoDetected: boolean; fromRecent?: boolean; fallback?: boolean } | null>;
   };
   session: {
+    resumeHarnesses: () => Promise<{ id: string; evidence: string }[]>;
     load: (workspacePath: string) => Promise<unknown>;
     loadAll: (workspacePath: string) => Promise<SessionHistoryEntry[]>;
     clear: (workspacePath: string) => Promise<void>;

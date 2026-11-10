@@ -43,6 +43,7 @@ interface MissionsState {
   createMission: (workspacePath: string, mission: Partial<Mission>) => string;
   updateMission: (workspacePath: string, missionId: string, patch: Partial<Mission>) => void;
   archiveMission: (workspacePath: string, missionId: string) => void;
+  pruneStartupMissions: (workspacePath: string, candidates: string[], retained: string[]) => void;
 }
 
 const EMPTY_MISSIONS: Mission[] = [];
@@ -76,6 +77,24 @@ export const useMissionsStore = create<MissionsState>()(
     (set, get) => ({
       missionsByWorkspace: {},
       activeMissionByWorkspace: {},
+
+      // Only boot-time candidates are eligible: a mission created while IPC
+      // restoration is pending must remain available for its first spawn.
+      pruneStartupMissions: (workspacePath, candidates, retained) => set(s => {
+        const eligible = new Set(candidates);
+        const keep = new Set(retained);
+        const before = s.missionsByWorkspace[workspacePath] ?? [];
+        const after = before.filter(m => m.status === 'archived' || !eligible.has(m.id) || keep.has(m.id));
+        if (after.length === before.length) return s;
+        const activeMissionByWorkspace = { ...s.activeMissionByWorkspace };
+        const active = activeMissionByWorkspace[workspacePath];
+        if (!after.some(m => m.id === active && m.status !== 'archived')) {
+          const fallback = after.find(m => m.status !== 'archived');
+          if (fallback) activeMissionByWorkspace[workspacePath] = fallback.id;
+          else delete activeMissionByWorkspace[workspacePath];
+        }
+        return { missionsByWorkspace: { ...s.missionsByWorkspace, [workspacePath]: after }, activeMissionByWorkspace };
+      }),
 
       ensureMissionForWorkspace: (workspacePath) => {
         const state = get();

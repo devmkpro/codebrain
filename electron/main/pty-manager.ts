@@ -801,6 +801,11 @@ export class PtyManager extends EventEmitter {
     }));
   }
 
+  setSession(paneId: string, session: Record<string, unknown>): void {
+    const state = this.panes.get(paneId);
+    if (state) state.config.session = session;
+  }
+
   /** Explicit bounded read-back; never included in list(). */
   getSpawnBrief(paneId: string): SpawnBrief | undefined {
     const brief = this.panes.get(paneId)?.config.spawnBrief;

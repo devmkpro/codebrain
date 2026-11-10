@@ -258,6 +258,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
   },
 
   session: {
+    resumeHarnesses: () => ipcRenderer.invoke("session:resumeHarnesses"),
     load: (workspacePath: string) => ipcRenderer.invoke("session:load", workspacePath),
     loadAll: (workspacePath: string) => ipcRenderer.invoke("session:loadAll", workspacePath),
     clear: (workspacePath: string) => ipcRenderer.invoke("session:clear", workspacePath),

@@ -11,6 +11,8 @@ export interface NotificationSettings {
 export interface AppConfig {
   theme?: "dark" | "light";
   autoRestore?: boolean;
+  /** Local command consent. Missing means always allow; "ask" restores per-command confirmation. */
+  agentCommandApproval?: "always" | "ask";
   /** Custom env vars applied to ALL spawned agents. */
   globalEnv?: Record<string, string>;
   /** Notification preferences. */
