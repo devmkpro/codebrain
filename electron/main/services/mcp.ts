@@ -13,6 +13,7 @@ import { refreshAllWorkspaces, writeContextFiles } from "./workspace";
 import { PROVIDER_REGISTRY } from "./constants";
 import { stopDaemon } from "./mcp-runtime";
 import { accessVaultResult, getAccessVault } from "./access-vault-runtime";
+import { loginAwsSso } from "./ssm-tunnel";
 import type { AccessHostInput } from "../../../src/types/access-vault";
 
 // CDP Client for native Chrome browser control
@@ -38,6 +39,7 @@ function buildMcpBridge(ctx: AppContext) {
     accessHostList: () => accessVaultResult(() => getAccessVault(ctx).list({ source: "agent" })),
     accessHostSave: (input: AccessHostInput) => accessVaultResult(async () => ({ host: await getAccessVault(ctx).upsertHost(input, { source: "agent" }) })),
     accessSshOpen: (input: { hostId: string; callerPaneId?: string }) => accessVaultResult(() => getAccessVault(ctx).openSsh(input.hostId, { source: "agent", ownerPaneId: input.callerPaneId })),
+    accessAwsSsoLogin: (input: { profile: string }) => accessVaultResult(async () => { await loginAwsSso(input.profile); return {}; }),
     spawnPaneFn: (req: SpawnPaneConfig) => spawnPaneInternal(ctx, req),
     onPaneCreated: (info: { paneId: string; agent: string; cwd?: string; providerId?: string; model?: string; label?: string; taskType?: string; effort?: string; accountLabel?: string }) => {
       safeSend(ctx, "pane:added", info);

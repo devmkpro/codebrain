@@ -249,7 +249,9 @@ app.whenReady().then(async () => {
     ctx.sessionWatchers?.unregisterPane(paneId);
     ctx.conversationTurns.discard(paneId);
     lastPaneUsage.delete(paneId);
-    ctx.paneConfigs.delete(paneId);
+    // An exited SSH process may still have a visible terminal that the user or
+    // an agent must be able to find and close explicitly.
+    if (!(ctx.paneConfigs.get(paneId) as any)?.sshHostId) ctx.paneConfigs.delete(paneId);
     ctx.paneRegistry.delete(paneId);
   });
 

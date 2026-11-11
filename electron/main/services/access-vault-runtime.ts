@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { safeSend, type AppContext } from "../context";
 import { AccessVaultError, createAccessVault, type AccessVault, type SshLaunchPlan } from "./access-vault";
+import { startSsmTunnel, stopSsmTunnel } from "./ssm-tunnel";
 
 const instances = new WeakMap<AppContext, AccessVault>();
 
@@ -30,13 +31,37 @@ export function getAccessVault(ctx: AppContext): AccessVault {
       host.allowAgentAccess && (!credential || credential.allowAgentAccess),
     openSshPane: async (plan: SshLaunchPlan) => {
       if (!ctx.mainWindow || ctx.mainWindow.isDestroyed()) throw new AccessVaultError("SSH_UNAVAILABLE", "Abra a janela principal para usar o terminal SSH.");
+      const signature = JSON.stringify([plan.args, plan.ssmTunnel, plan.ssmRemotePort]);
+      for (const [existingId, config] of ctx.paneConfigs) {
+        const ssh = config as typeof config & { sshHostId?: string; sshSignature?: string; ownerPaneId?: string };
+        if (ssh.sshHostId !== plan.hostId || !ctx.ptyManager.hasPane(existingId)) continue;
+        if (ssh.sshSignature !== signature || ssh.ownerPaneId !== plan.ownerPaneId) {
+          throw new AccessVaultError("SSH_IN_USE", "Já existe uma sessão SSH para esta máquina com outro acesso ou responsável. Feche-a antes de abrir outra.");
+        }
+        return { paneId: existingId, reused: true };
+      }
       const cwd = ctx.currentWorkspacePath || os.homedir();
-      const paneId = await ctx.ptyManager.spawn(
-        { agent: "shell", cwd, workspacePath: cwd },
-        { binary: systemSsh(), args: plan.args },
-      );
+      const tunnel = plan.ssmTunnel ? await startSsmTunnel(plan.ssmTunnel, plan.ssmRemotePort ?? 22) : undefined;
+      let paneId: string;
+      try {
+        paneId = await ctx.ptyManager.spawn(
+          { agent: "shell", cwd, workspacePath: cwd },
+          { binary: systemSsh(), args: plan.args },
+        );
+      } catch (error) { if (tunnel) stopSsmTunnel(tunnel); throw error; }
+      if (tunnel) {
+        const shutdown = () => stopSsmTunnel(tunnel);
+        const closeTunnel = (id: string) => {
+          if (id !== paneId) return;
+          ctx.ptyManager.off("exit", closeTunnel);
+          app.off("before-quit", shutdown);
+          shutdown();
+        };
+        ctx.ptyManager.on("exit", closeTunnel);
+        app.once("before-quit", shutdown);
+      }
       const label = `SSH · ${plan.label}`;
-      ctx.paneConfigs.set(paneId, { agent: "shell", cwd, workspacePath: cwd, label, args: [], ...(plan.ownerPaneId ? { ownerPaneId: plan.ownerPaneId } : {}) } as any);
+      ctx.paneConfigs.set(paneId, { agent: "shell", cwd, workspacePath: cwd, label, args: [], sshHostId: plan.hostId, sshSignature: signature, ...(plan.ownerPaneId ? { ownerPaneId: plan.ownerPaneId } : {}) } as any);
       ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
       safeSend(ctx, "pane:added", { paneId, agent: "shell", cwd, workspacePath: cwd, label });
       return { paneId };

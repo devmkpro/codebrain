@@ -31,6 +31,7 @@ describe("AccessVaultSection", () => {
       saveHost: vi.fn().mockResolvedValue({ ok: true, host }),
       deleteHost: vi.fn().mockResolvedValue({ ok: true }), deleteCredential: vi.fn().mockResolvedValue({ ok: true }),
       openSsh: vi.fn().mockResolvedValue({ ok: true, paneId: "ssh-fixture", interactive: false }),
+      loginSso: vi.fn().mockResolvedValue({ ok: true }),
     };
     vi.stubGlobal("codeBrainApp", { accessVault: bridge });
   });
@@ -85,6 +86,25 @@ describe("AccessVaultSection", () => {
     await screen.findByText("Cadastro salvo no cofre.");
     expect(bridge.saveHost).toHaveBeenCalledExactlyOnceWith({ label: "My test host", hostname: "test.example.invalid", username: "tester", port: 22, credentialId: null, useSshConfig: false, allowAgentAccess: false });
     expect(bridge.openSsh).not.toHaveBeenCalled();
+  });
+
+  it("configures an SSM tunnel and can start SSO login without saving or connecting", async () => {
+    render(<AccessVaultSection />);
+    fireEvent.click(await screen.findByRole("button", { name: "Novo host SSH" }));
+    fireEvent.change(screen.getByLabelText("Nome do host"), { target: { value: "SSM" } });
+    fireEvent.change(screen.getByLabelText("Hostname ou IP"), { target: { value: "127.0.0.1" } });
+    fireEvent.change(screen.getByLabelText("Usuário SSH"), { target: { value: "admin" } });
+    fireEvent.click(screen.getByLabelText("Abrir túnel AWS SSM automaticamente"));
+    fireEvent.change(screen.getByLabelText("ID da instância EC2"), { target: { value: "i-0123456789abcdef0" } });
+    fireEvent.change(screen.getByLabelText("Região AWS"), { target: { value: "sa-east-1" } });
+    fireEvent.change(screen.getByLabelText("Perfil AWS CLI"), { target: { value: "hubbiparts" } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar no AWS SSO" }));
+    await waitFor(() => expect(bridge.loginSso).toHaveBeenCalledWith({ profile: "hubbiparts" }));
+    expect(bridge.openSsh).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar host" }));
+    await waitFor(() => expect(bridge.saveHost).toHaveBeenCalledWith(expect.objectContaining({
+      ssmTunnel: { instanceId: "i-0123456789abcdef0", region: "sa-east-1", profile: "hubbiparts", localPort: 2222 },
+    })));
   });
 
   it("lets the user select a local SSH alias without granting agent access automatically", async () => {

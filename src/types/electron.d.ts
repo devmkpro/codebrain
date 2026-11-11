@@ -496,6 +496,7 @@ export interface CodebrainApp {
     onOutput: (callback: (paneId: string, data: string, echo?: boolean) => void) => () => void;
     onExit: (callback: (paneId: string, exitCode: number) => void) => () => void;
     onPaneAdded: (callback: (info: PtyInfo) => void) => () => void;
+    onPaneRemoved: (callback: (info: { paneId: string }) => void) => () => void;
     onPaneReattached: (callback: (paneId: string) => void) => () => void;
     onPaneSession: (callback: (info: { paneId: string; session?: Session; claudeSessionId?: string }) => void) => () => void;
   };

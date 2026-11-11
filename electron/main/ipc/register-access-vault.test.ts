@@ -38,7 +38,7 @@ describe("access vault IPC boundary", () => {
   const invoke = (name: string, args?: unknown) => handlers.get(`accessVault:${name}`)!(event, args);
 
   it("registers only metadata CRUD and terminal operations, without reveal/getSecret", async () => {
-    expect([...handlers.keys()].sort()).toEqual(["accessVault:deleteCredential", "accessVault:deleteHost", "accessVault:list", "accessVault:openSsh", "accessVault:saveCredential", "accessVault:saveHost", "accessVault:status"]);
+    expect([...handlers.keys()].sort()).toEqual(["accessVault:deleteCredential", "accessVault:deleteHost", "accessVault:list", "accessVault:loginSso", "accessVault:openSsh", "accessVault:saveCredential", "accessVault:saveHost", "accessVault:status"]);
     expect(await invoke("list")).toEqual({ ok: true, hosts: [], credentials: [] });
     expect(vault.list).toHaveBeenCalledWith({ source: "user" });
     const response = await invoke("saveCredential", { label: "Fixture", kind: "password", secret: "TEST-ONLY-SECRET" });

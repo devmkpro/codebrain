@@ -325,8 +325,21 @@ function createCodebrainMCPServer(bridge) {
 
   // ── mcp__codebrain__pane_kill_cascade ─────────────────────────────────────
   server.tool(
+    "pane_close",
+    "Close a terminal and remove its visible pane, including any registered children. Does not close SSH tunnels in other terminals.",
+    { paneId: z.string().describe("ID of the pane to close.") },
+    async ({ paneId }) => {
+      try {
+        await bridge.killPaneCascade(paneId);
+        return { content: [{ type: "text", text: JSON.stringify({ ok: true, paneId }) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `error: ${String(err)}` }], isError: true };
+      }
+    },
+  );
+  server.tool(
     "pane_kill_cascade",
-    "Kill a pane and ALL its registered children recursively (cancel cascade). Use when you want to terminate an orchestrator and all workers it spawned. Safe to call on leaf panes (no children) — just kills that one pane.",
+    "Close a terminal pane and remove it from the UI, including registered children recursively. Reports errors when the pane cannot be closed.",
     {
       paneId: z.string().describe("The pane to kill (with all its children)."),
     },
@@ -5263,12 +5276,19 @@ function createCodebrainMCPServer(bridge) {
       port: z.number().int().min(1).max(65535).optional(),
       credentialId: z.string().uuid().nullable().optional(),
       useSshConfig: z.boolean().optional().describe("Use local SSH identities and ProxyJump. Explicit username and port remain authoritative. Changing a connection route revokes agent permission until the user authorizes it again."),
+      ssmTunnel: z.object({ instanceId: z.string(), region: z.string(), profile: z.string(), localPort: z.number().int().min(1).max(65535) }).nullable().optional().describe("Optional AWS SSM tunnel managed by Codebrain; changing it revokes agent access until reauthorized."),
     },
     async (args) => accessResponse(await accessCall("accessHostSave", args)),
   );
   server.tool(
+    "access_aws_sso_login",
+    "Start AWS SSO login in the user's browser for an explicitly requested AWS profile; the user must complete authentication.",
+    { profile: z.string().regex(/^[a-zA-Z0-9_.@+-]{1,128}$/) },
+    async (args) => accessResponse(await accessCall("accessAwsSsoLogin", args)),
+  );
+  server.tool(
     "access_ssh_open",
-    "Open a visible SSH terminal for a machine and credential already authorized by the user. Bypass mode does not ask again for each connection. New/revoked hosts remain blocked; host-key verification stays strict. Returns paneId, never credentials. Password authentication requires the user to open the terminal.",
+    "Open or reuse a visible SSH terminal for an authorized machine. A successful result means the terminal started, not that SSH authenticated: inspect pane_read for the prompt or errors. Returns paneId and reused, never credentials. Password authentication requires the user to open the terminal.",
     {
       hostId: z.string().uuid(),
       callerPaneId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/).optional().describe("Your pane ID. Makes you the terminal's owner so pane_write (with fromPaneId) can type in the visible SSH terminal."),

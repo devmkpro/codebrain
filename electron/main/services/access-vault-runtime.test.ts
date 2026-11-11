@@ -21,7 +21,7 @@ describe("SSH pane registration", () => {
   it("registers the SSH terminal in the same workspace for UI and agent discovery", async () => {
     const ctx = {
       mainWindow: { isDestroyed: () => false }, currentWorkspacePath: "D:/fixture-project",
-      ptyManager: { spawn: vi.fn().mockResolvedValue("ssh-fixture") },
+      ptyManager: { spawn: vi.fn().mockResolvedValue("ssh-fixture"), hasPane: vi.fn().mockReturnValue(false) },
       paneConfigs: new Map(), paneRegistry: new Map(),
     } as any;
     getAccessVault(ctx);
@@ -32,5 +32,22 @@ describe("SSH pane registration", () => {
     await mocks.options.openSshPane({ executable: "ssh", args: ["--", "fixture"], label: "Fixture", hostId: "fixture", ownerPaneId: "agent-1" });
     expect(ctx.paneConfigs.get("ssh-fixture")).toMatchObject({ ownerPaneId: "agent-1" });
     expect(mocks.send).toHaveBeenCalledWith(ctx, "pane:added", expect.objectContaining({ paneId: "ssh-fixture", workspacePath: ctx.currentWorkspacePath }));
+  });
+  it("reuses the same live SSH pane for its owner and does not steal another owner's pane", async () => {
+    const ctx = {
+      mainWindow: { isDestroyed: () => false }, currentWorkspacePath: "D:/fixture-project",
+      ptyManager: { spawn: vi.fn().mockResolvedValue("ssh-live"), hasPane: vi.fn().mockReturnValue(true) },
+      paneConfigs: new Map(), paneRegistry: new Map(),
+    } as any;
+    getAccessVault(ctx);
+    const plan = { executable: "ssh", args: ["--", "fixture"], label: "Fixture", hostId: "host-1", ownerPaneId: "owner" };
+    await mocks.options.openSshPane(plan);
+    expect(await mocks.options.openSshPane(plan)).toEqual({ paneId: "ssh-live", reused: true });
+    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(1);
+    await expect(mocks.options.openSshPane({ ...plan, ownerPaneId: "other" })).rejects.toThrow();
+    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(1);
+    ctx.ptyManager.hasPane.mockReturnValue(false);
+    await mocks.options.openSshPane(plan);
+    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(2);
   });
 });

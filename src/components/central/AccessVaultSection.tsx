@@ -105,6 +105,12 @@ function HostForm({ host, credentials, onSaved, onCancel }: {
   const [username, setUsername] = React.useState(host?.username ?? "");
   const [port, setPort] = React.useState(String(host?.port ?? 22));
   const [useSshConfig, setUseSshConfig] = React.useState(host?.useSshConfig ?? false);
+  const [useSsm, setUseSsm] = React.useState(Boolean(host?.ssmTunnel));
+  const [instanceId, setInstanceId] = React.useState(host?.ssmTunnel?.instanceId ?? "");
+  const [region, setRegion] = React.useState(host?.ssmTunnel?.region ?? "");
+  const [profile, setProfile] = React.useState(host?.ssmTunnel?.profile ?? "default");
+  const [localPort, setLocalPort] = React.useState(String(host?.ssmTunnel?.localPort ?? 2222));
+  const [ssoNotice, setSsoNotice] = React.useState("");
   const [credentialId, setCredentialId] = React.useState(host?.credentialId ?? "");
   const [allow, setAllow] = React.useState(host?.allowAgentAccess ?? false);
   const submitting = React.useRef(false);
@@ -113,7 +119,8 @@ function HostForm({ host, credentials, onSaved, onCancel }: {
     event.preventDefault();
     if (submitting.current) return;
     submitting.current = true;
-    const input: AccessHostInput = { ...(host ? { id: host.id } : {}), label, hostname, username, port: Number(port), credentialId: credentialId || null, useSshConfig, allowAgentAccess: allow };
+    const input: AccessHostInput = { ...(host ? { id: host.id } : {}), label, hostname, username, port: Number(port), credentialId: credentialId || null, useSshConfig, allowAgentAccess: allow,
+      ...(useSsm ? { ssmTunnel: { instanceId, region, profile, localPort: Number(localPort) } } : host?.ssmTunnel ? { ssmTunnel: null } : {}) };
     const result = await action.run(async () => {
       const response = checked(await api().saveHost(input));
       if (!response.host) throw new Error("O cofre não confirmou o host salvo.");
@@ -131,6 +138,16 @@ function HostForm({ host, credentials, onSaved, onCancel }: {
       <Field label="Porta SSH" htmlFor="access-port"><input id="access-port" type="number" min={1} max={65535} step={1} required className="cbc-control" value={port} onChange={event => setPort(event.target.value)} /></Field>
       <Field label="Autenticação" htmlFor="access-host-credential" wide><Select id="access-host-credential" value={credentialId} onChange={setCredentialId} options={[{ value: "", label: "ssh-agent — identidades já carregadas" }, ...credentials.filter(item => item.kind !== "api-key").map(item => ({ value: item.id, label: `${item.label} · ${kindLabels[item.kind]}${item.kind === "password" ? " (digitação manual)" : ""}` }))]} /></Field>
     </div>
+    <label className="cbc-check"><input type="checkbox" checked={useSsm} onChange={event => setUseSsm(event.target.checked)} /> Abrir túnel AWS SSM automaticamente</label>
+    {useSsm && <div className="cbc-grid">
+      <Field label="ID da instância EC2" htmlFor="access-ssm-instance"><input id="access-ssm-instance" required className="cbc-control" value={instanceId} onChange={event => setInstanceId(event.target.value)} placeholder="i-0123456789abcdef0" /></Field>
+      <Field label="Região AWS" htmlFor="access-ssm-region"><input id="access-ssm-region" required className="cbc-control" value={region} onChange={event => setRegion(event.target.value)} placeholder="sa-east-1" /></Field>
+      <Field label="Perfil AWS CLI" htmlFor="access-ssm-profile"><input id="access-ssm-profile" required className="cbc-control" value={profile} onChange={event => setProfile(event.target.value)} /></Field>
+      <Field label="Porta local do túnel" htmlFor="access-ssm-port"><input id="access-ssm-port" type="number" min={1} max={65535} required className="cbc-control" value={localPort} onChange={event => setLocalPort(event.target.value)} /></Field>
+      <p className="cbc-tradeoff">Requer AWS CLI, Session Manager Plugin e perfil autenticado. A porta SSH acima é a porta remota; a chave do servidor continua sendo verificada.</p>
+      <Btn disabled={action.busy} onClick={() => { setSsoNotice("Conclua o login no navegador."); void action.run(async () => { checked(await api().loginSso({ profile })); setSsoNotice("Login AWS SSO concluído."); return true; }); }}>Entrar no AWS SSO</Btn>
+      {ssoNotice && <p role="status" className="cbc-tradeoff">{ssoNotice}</p>}
+    </div>}
     <label className="cbc-check"><input type="checkbox" checked={useSshConfig} onChange={event => setUseSshConfig(event.target.checked)} /> Usar configuração SSH local (alias, chave e ProxyJump)</label>
     {useSshConfig ? <p className="cbc-tradeoff">Informe o alias configurado neste PC ou o IP. Chave e túnel vêm de ~/.ssh/config; usuário e porta são os preenchidos acima. Para túneis reversos, use a porta acessível na VM de passagem. Revise o arquivo local antes de autorizar agentes. A verificação da chave do servidor continua obrigatória.</p> : !credentialId && <p className="cbc-tradeoff">Sem credencial vinculada, somente identidades já carregadas no ssh-agent são usadas. Se não houver agente disponível, crie uma credencial do tipo Referência de chave SSH com o caminho absoluto do arquivo existente e depois vincule-a aqui. Uma chave usada pelo comando ssh manual não é selecionada automaticamente pelo cofre.</p>}
     <label className="cbc-check"><input type="checkbox" checked={allow} onChange={event => setAllow(event.target.checked)} /> Permitir solicitações SSH de agentes para este host</label>
@@ -207,7 +224,7 @@ export function AccessVaultSection() {
         {data.hosts.map(host => <article key={host.id} className="border-b border-cb-line-0 py-3 space-y-2">
           <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm text-cb-fg-0">{host.label}</h4><Tag>{host.allowAgentAccess ? "Agentes: solicitações permitidas" : "Agentes: bloqueado"}</Tag></div>
           <p className="text-xs text-cb-fg-2 break-all">{host.username}@{host.hostname} · porta {host.port}</p>
-          <p className="text-xs text-cb-fg-2">{host.useSshConfig ? "Alias e rota de ~/.ssh/config · " : ""}{host.credentialId ? data.credentials.find(item => item.id === host.credentialId)?.label ?? "Credencial vinculada" : host.useSshConfig ? "identidade do alias" : "ssh-agent"}</p>
+          <p className="text-xs text-cb-fg-2">{host.ssmTunnel ? `AWS SSM ${host.ssmTunnel.instanceId} · ${host.ssmTunnel.region} · porta local ${host.ssmTunnel.localPort} · ` : ""}{host.useSshConfig ? "Alias e rota de ~/.ssh/config · " : ""}{host.credentialId ? data.credentials.find(item => item.id === host.credentialId)?.label ?? "Credencial vinculada" : host.useSshConfig ? "identidade do alias" : "ssh-agent"}</p>
           <div className="flex flex-wrap gap-2"><Btn disabled={action.busy || editor !== null} onClick={() => void connect(host)} aria-label={`Abrir SSH ${host.label}`}>Abrir SSH</Btn><Btn disabled={action.busy || editor !== null} onClick={() => setEditor({ kind: "host", item: host })} aria-label={`Editar host ${host.label}`}>Editar</Btn><Btn tone="danger" disabled={action.busy || editor !== null} onClick={() => setConfirm({ kind: "host", id: host.id, label: host.label })} aria-label={`Excluir host ${host.label}`}>Excluir</Btn></div>
         </article>)}
       </section>

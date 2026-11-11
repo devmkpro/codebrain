@@ -599,11 +599,18 @@ function createPaneHandlers(ptyManager, opts) {
     },
 
     async listPanes(paneLabels) {
-      return ptyManager.list().map((p) => {
+      const livePanes = ptyManager.list();
+      const liveIds = new Set(livePanes.map((p) => p.paneId));
+      for (const [paneId, config] of opts.paneConfigs || []) {
+        if (config.sshHostId && !liveIds.has(paneId)) {
+          livePanes.push({ paneId, agent: "shell", cwd: config.cwd, status: "exited" });
+        }
+      }
+      return livePanes.map((p) => {
         const base = {
           ...p,
           role: roleMap.get(p.paneId) || "worker",
-          label: paneLabels.get(p.paneId) || p.agent,
+          label: paneLabels.get(p.paneId) || opts.paneConfigs?.get?.(p.paneId)?.label || p.agent,
         };
         const paneConfig = opts.paneConfigs?.get?.(p.paneId);
         const safety = paneSafety(ptyManager, opts, p.paneId);
@@ -614,6 +621,7 @@ function createPaneHandlers(ptyManager, opts) {
           base.readOnly = safety.readOnly;
         }
         if (paneConfig) {
+          if (paneConfig.sshHostId) base.sshHostId = paneConfig.sshHostId;
           base.taskType = paneConfig.taskType;
           base.effort = paneConfig.effort;
           base.accountLabel = paneConfig.accountLabel;
@@ -817,8 +825,7 @@ function createPaneHandlers(ptyManager, opts) {
      * Inspired by MiMo's actor.cancel() which calls listByParent + cancel recursively.
      */
     async killPaneCascade(paneId, _depth = 0) {
-      if (_depth > 20) return; // safety limit
-      try {
+      if (_depth > 20) throw new Error("pane cascade depth limit exceeded");
         const store = opts.memoryStore;
         // 1. Recursively kill children first
         if (store?.actorListChildren) {
@@ -828,14 +835,16 @@ function createPaneHandlers(ptyManager, opts) {
           }
         }
         // 2. Kill the pane itself
-        if (ptyManager.hasPane(paneId)) {
-          ptyManager.kill(paneId);
-        }
+        if (!ptyManager.hasPane(paneId) && !opts.paneConfigs?.has?.(paneId)) throw new Error("pane not found or already closed");
+        if (ptyManager.hasPane(paneId)) ptyManager.kill(paneId);
+        if (ptyManager.hasPane(paneId)) throw new Error("pane process did not close");
+        opts.emitToRenderer?.("pane:removed", { paneId });
+        opts.paneConfigs?.delete?.(paneId);
+        roleMap.delete(paneId);
         // 3. Update actor registry
         if (store?.actorUpdateStatus) {
           store.actorUpdateStatus({ paneId, status: 'idle', lastOutcome: 'cancelled' });
         }
-      } catch {}
     },
 
     /**

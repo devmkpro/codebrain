@@ -157,6 +157,11 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
       ipcRenderer.on("pane:added", handler);
       return () => ipcRenderer.off("pane:added", handler);
     },
+    onPaneRemoved: (callback: (info: { paneId: string }) => void) => {
+      const handler = (_evt: unknown, info: { paneId: string }) => callback(info);
+      ipcRenderer.on("pane:removed", handler);
+      return () => ipcRenderer.off("pane:removed", handler);
+    },
     onPaneReattached: (callback: (paneId: string) => void) => {
       const handler = (_evt: unknown, paneId: string) => callback(paneId);
       ipcRenderer.on("pane:reattached", handler);
@@ -245,6 +250,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     saveHost: (input: unknown) => ipcRenderer.invoke("accessVault:saveHost", input),
     deleteHost: (input: { id: string; confirmed: true }) => ipcRenderer.invoke("accessVault:deleteHost", input),
     openSsh: (input: { hostId: string }) => ipcRenderer.invoke("accessVault:openSsh", input),
+    loginSso: (input: { profile: string }) => ipcRenderer.invoke("accessVault:loginSso", input),
   },
 
   workspace: {

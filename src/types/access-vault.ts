@@ -2,6 +2,13 @@
 export type AccessCredentialKind = "api-key" | "password" | "ssh-key-path";
 export type AccessSource = "user" | "agent";
 
+export interface SsmTunnelConfig {
+  instanceId: string;
+  region: string;
+  profile: string;
+  localPort: number;
+}
+
 export interface AccessCredential {
   id: string;
   label: string;
@@ -21,6 +28,7 @@ export interface AccessHost {
   credentialId: string | null;
   /** Explicit opt-in: hostname is an alias in the user's trusted SSH config. */
   useSshConfig?: boolean;
+  ssmTunnel?: SsmTunnelConfig;
   allowAgentAccess: boolean;
   createdAt: string;
   updatedAt: string;
@@ -43,6 +51,7 @@ export interface AccessHostInput {
   username: string;
   credentialId?: string | null;
   useSshConfig?: boolean;
+  ssmTunnel?: SsmTunnelConfig | null;
   /** Only user-origin operations may supply this field. */
   allowAgentAccess?: boolean;
 }
@@ -72,4 +81,5 @@ export interface AccessVaultBridge {
   saveHost(input: AccessHostInput): Promise<AccessVaultResult<{ host: AccessHost }>>;
   deleteHost(input: { id: string; confirmed: true }): Promise<AccessVaultResult>;
   openSsh(input: { hostId: string }): Promise<AccessVaultResult<{ paneId: string; interactive: boolean }>>;
+  loginSso(input: { profile: string }): Promise<AccessVaultResult>;
 }

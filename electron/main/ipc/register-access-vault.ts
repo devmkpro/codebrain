@@ -5,6 +5,7 @@ import type { AppContext } from "../context";
 import {
   AccessVaultError, createAccessVault, type AccessVault, type AccessVaultOptions,
 } from "../services/access-vault";
+import { loginAwsSso } from "../services/ssm-tunnel";
 
 export type AccessVaultRegistrationOptions = Partial<AccessVaultOptions> & {
   vault?: AccessVault;
@@ -85,6 +86,11 @@ export function registerAccessVaultHandlers(ctx: AppContext, options: AccessVaul
   handle("openSsh", async args => {
     validArgs(args, ["hostId"]);
     return { ok: true, ...await vault.openSsh(args.hostId as string, { source: "user" }) };
+  });
+  handle("loginSso", async args => {
+    validArgs(args, ["profile"]);
+    await loginAwsSso(args.profile as string);
+    return { ok: true };
   });
   return vault;
 }

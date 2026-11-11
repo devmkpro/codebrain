@@ -162,6 +162,12 @@ export function App() {
     return () => off?.();
   }, [addPane]);
   React.useEffect(() => {
+    const off = window.codeBrainApp?.pty.onPaneRemoved?.(({ paneId }) => {
+      usePanesStore.getState().removePane(paneId);
+    });
+    return () => off?.();
+  }, []);
+  React.useEffect(() => {
     const off = window.codeBrainApp?.pty.onPaneSession?.(info => {
       usePanesStore.getState().updatePane(info.paneId, {
         session: info.session,

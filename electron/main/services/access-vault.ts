@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 import type {
-  AccessCredential, AccessCredentialInput, AccessHost, AccessHostInput, AccessSource,
+  AccessCredential, AccessCredentialInput, AccessHost, AccessHostInput, AccessSource, SsmTunnelConfig,
   AccessVaultInventory, AccessVaultStatus,
 } from "../../../src/types/access-vault";
 
@@ -22,6 +22,8 @@ export interface SshLaunchPlan {
   label: string;
   /** Agent pane that requested the terminal; becomes its shell owner. */
   ownerPaneId?: string;
+  ssmTunnel?: SsmTunnelConfig;
+  ssmRemotePort?: number;
 }
 
 export interface AccessVaultOptions {
@@ -29,7 +31,7 @@ export interface AccessVaultOptions {
   safeStorage: VaultSafeStorage;
   platform?: NodeJS.Platform;
   /** Trusted main-process callback. Execute argv directly, never via a shell string. */
-  openSshPane?: (plan: SshLaunchPlan) => Promise<{ paneId: string }>;
+  openSshPane?: (plan: SshLaunchPlan) => Promise<{ paneId: string; reused?: boolean }>;
   /** Trusted authorization policy, re-evaluated for EVERY agent connection. */
   approveAgentConnection?: (host: AccessHost, credential: AccessCredential | null) => Promise<boolean>;
 }
@@ -91,7 +93,24 @@ function credentialMetadata(value: StoredCredential): AccessCredential {
 function hostMetadata(value: AccessHost): AccessHost {
   return { id: value.id, label: value.label, hostname: value.hostname, port: value.port, username: value.username,
     ...(value.useSshConfig ? { useSshConfig: true } : {}),
+    ...(value.ssmTunnel ? { ssmTunnel: value.ssmTunnel } : {}),
     credentialId: value.credentialId, allowAgentAccess: value.allowAgentAccess, createdAt: value.createdAt, updatedAt: value.updatedAt };
+}
+
+function validateSsmTunnel(input: unknown): SsmTunnelConfig | undefined {
+  if (input == null) return undefined;
+  record(input);
+  fields(input, ["instanceId", "region", "profile", "localPort"]);
+  const instanceId = text(input.instanceId, 32);
+  const region = text(input.region, 32);
+  const profile = text(input.profile, 128);
+  const localPort = input.localPort;
+  if (!/^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$/.test(instanceId) ||
+      !/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(region) ||
+      !/^[a-zA-Z0-9_.@+-]+$/.test(profile) ||
+      !Number.isInteger(localPort) || (localPort as number) < 1 || (localPort as number) > 65535)
+    fail("INVALID_SSM", "Informe instância, região, perfil AWS e porta local válidos.");
+  return { instanceId, region, profile, localPort: localPort as number };
 }
 
 export function createAccessVault(options: AccessVaultOptions) {
@@ -144,6 +163,7 @@ export function createAccessVault(options: AccessVaultOptions) {
       hostIds.add(host.id);
       text(host.label, 120);
       validateSshEndpoint(host);
+      if (host.ssmTunnel !== undefined) validateSsmTunnel(host.ssmTunnel);
       if (host.useSshConfig !== undefined && typeof host.useSshConfig !== "boolean") throw new Error("host config mode");
       if (host.credentialId !== null && !ids.has(host.credentialId)) throw new Error("missing credential");
     }
@@ -265,7 +285,7 @@ export function createAccessVault(options: AccessVaultOptions) {
   async function upsertHost(input: AccessHostInput, options: Origin = { source: "user" }): Promise<AccessHost> {
     const source = origin(options);
     record(input);
-    fields(input, source === "agent" ? ["id", "label", "hostname", "port", "username", "credentialId", "useSshConfig"] : ["id", "label", "hostname", "port", "username", "credentialId", "useSshConfig", "allowAgentAccess"]);
+    fields(input, source === "agent" ? ["id", "label", "hostname", "port", "username", "credentialId", "useSshConfig", "ssmTunnel"] : ["id", "label", "hostname", "port", "username", "credentialId", "useSshConfig", "ssmTunnel", "allowAgentAccess"]);
     const endpoint = validateSshEndpoint(input);
     const label = text(input.label, 120);
     if (input.id !== undefined) id(input.id);
@@ -277,9 +297,11 @@ export function createAccessVault(options: AccessVaultOptions) {
       // Bypass is scoped to the endpoint the user authorized. An agent changing
       // its route must not inherit that permission for a different destination.
       const useSshConfig = permission(input.useSshConfig, existing?.useSshConfig ?? false);
+      const ssmTunnel = input.ssmTunnel === undefined ? existing?.ssmTunnel : validateSsmTunnel(input.ssmTunnel);
       const routeUnchanged = existing && existing.hostname === endpoint.hostname &&
         existing.username === endpoint.username && existing.port === endpoint.port &&
-        existing.credentialId === credentialId && Boolean(existing.useSshConfig) === useSshConfig;
+        existing.credentialId === credentialId && Boolean(existing.useSshConfig) === useSshConfig &&
+        JSON.stringify(existing.ssmTunnel ?? null) === JSON.stringify(ssmTunnel ?? null);
       if (!existing && doc.hosts.length >= MAX_ITEMS) fail("VAULT_LIMIT", "Limite de hosts atingido.");
       const credential = credentialId ? doc.credentials.find(item => item.id === credentialId) : null;
       if (credentialId && !credential) fail("NOT_FOUND", "Credencial não encontrada.");
@@ -288,6 +310,7 @@ export function createAccessVault(options: AccessVaultOptions) {
       const now = new Date().toISOString();
       const host: AccessHost = { id: existing?.id ?? randomUUID(), label, ...endpoint, credentialId,
         ...(useSshConfig ? { useSshConfig: true } : {}),
+        ...(ssmTunnel ? { ssmTunnel } : {}),
         allowAgentAccess: source === "agent" ? Boolean(routeUnchanged && existing?.allowAgentAccess) : permission(input.allowAgentAccess, existing?.allowAgentAccess ?? false),
         createdAt: existing?.createdAt ?? now, updatedAt: now };
       doc.hosts = [...doc.hosts.filter(item => item.id !== host.id), host];
@@ -334,11 +357,11 @@ export function createAccessVault(options: AccessVaultOptions) {
       }
       args.push("-o", interactive ? "PreferredAuthentications=password,keyboard-interactive" : "PreferredAuthentications=publickey");
       if (!interactive) args.push("-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no");
-      args.push("-l", host.username, "-p", String(host.port));
-      args.push("--", host.hostname);
+      args.push("-l", host.username, "-p", String(host.ssmTunnel?.localPort ?? host.port));
+      args.push("--", host.ssmTunnel ? "127.0.0.1" : host.hostname);
       return { host: hostMetadata(host), credential: credential ? credentialMetadata(credential) : null, interactive,
         revision: createHash("sha256").update(JSON.stringify([host, credential])).digest("hex"),
-        plan: { executable: "ssh" as const, args, hostId: host.id, label: host.label } };
+        plan: { executable: "ssh" as const, args, hostId: host.id, label: host.label, ...(host.ssmTunnel ? { ssmTunnel: host.ssmTunnel, ssmRemotePort: host.port } : {}) } };
     });
   }
 
@@ -362,11 +385,11 @@ export function createAccessVault(options: AccessVaultOptions) {
       // Revalidate after the native dialog: edits/revocations during approval must win.
       const current = await connection(hostId, source);
       if (initial.revision !== current.revision) fail("ACCESS_CHANGED", "O acesso foi alterado durante a confirmação. Solicite uma nova conexão.");
-      let result: { paneId: string };
+      let result: { paneId: string; reused?: boolean };
       try { result = await options.openSshPane(ownerPaneId ? { ...current.plan, ownerPaneId } : current.plan); }
-      catch { fail("SSH_OPEN_FAILED", "Não foi possível abrir o terminal SSH."); }
+      catch (error) { if (error instanceof AccessVaultError) throw error; fail("SSH_OPEN_FAILED", "Não foi possível abrir o terminal SSH."); }
       if (!result || typeof result.paneId !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(result.paneId)) fail("SSH_OPEN_FAILED", "O terminal SSH não retornou um identificador válido.");
-      return { paneId: result.paneId, interactive: current.interactive };
+      return { paneId: result.paneId, interactive: current.interactive, reused: result.reused === true, connectionState: "starting" as const };
     } finally { connectionPending = false; }
   }
 

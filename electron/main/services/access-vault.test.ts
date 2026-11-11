@@ -38,6 +38,21 @@ describe("access vault", () => {
   });
   afterEach(async () => { vi.restoreAllMocks(); await fs.rm(fixture, { recursive: true, force: true }); });
 
+  it("stores SSM routing and revokes agent access when its route changes", async () => {
+    const vault = createAccessVault(options);
+    const ssmTunnel = { instanceId: "i-0123456789abcdef0", region: "sa-east-1", profile: "fixture", localPort: 2221 };
+    const host = await vault.upsertHost({ ...hostInput, ssmTunnel, allowAgentAccess: true });
+    expect((await vault.list()).hosts[0].ssmTunnel).toEqual(ssmTunnel);
+    await vault.openSsh(host.id, { source: "agent" });
+    const plan = (options.openSshPane as any).mock.calls[0][0];
+    expect(plan.ssmTunnel).toEqual(ssmTunnel);
+    expect(plan.ssmRemotePort).toBe(2222);
+    expect(plan.args.slice(-5)).toEqual(["tester", "-p", "2221", "--", "127.0.0.1"]);
+    const changed = await vault.upsertHost({ ...hostInput, id: host.id, ssmTunnel: { ...ssmTunnel, localPort: 2223 } }, { source: "agent" });
+    expect(changed.allowAgentAccess).toBe(false);
+    await expect(vault.upsertHost({ ...hostInput, ssmTunnel: { ...ssmTunnel, instanceId: "i-evil;echo" } })).rejects.toMatchObject({ code: "INVALID_SSM" });
+  });
+
   it("roundtrips encrypted data and never serializes secrets in public CRUD/list results", async () => {
     const secret = "TEST-ONLY-API-SECRET-852b";
     const vault = createAccessVault(options);
@@ -136,7 +151,7 @@ describe("access vault", () => {
     expect(options.openSshPane).not.toHaveBeenCalled();
     await expect(vault.openSsh(host.id, { source: "agent" })).rejects.toMatchObject({ code: "AGENT_ACCESS_DENIED" });
     await vault.upsertHost({ ...hostInput, id: host.id, hostname: changed.hostname, allowAgentAccess: true });
-    await expect(vault.openSsh(host.id, { source: "agent" })).resolves.toEqual({ paneId: "ssh-fixture-1", interactive: false });
+    await expect(vault.openSsh(host.id, { source: "agent" })).resolves.toMatchObject({ paneId: "ssh-fixture-1", interactive: false, connectionState: "starting" });
     expect(options.approveAgentConnection).toHaveBeenCalledWith(expect.objectContaining({ hostname: "redirect.example.invalid" }), null);
   });
 
@@ -262,7 +277,7 @@ describe("access vault", () => {
     const credential = await vault.upsertCredential({ label: "Password", kind: "password", secret, allowAgentAccess: true });
     const host = await vault.upsertHost({ ...hostInput, credentialId: credential.id, allowAgentAccess: true });
     await expect(vault.openSsh(host.id, { source: "agent" })).rejects.toMatchObject({ code: "INTERACTIVE_AUTH_REQUIRED" });
-    expect(await vault.openSsh(host.id)).toEqual({ paneId: "ssh-fixture-1", interactive: true });
+    expect(await vault.openSsh(host.id)).toMatchObject({ paneId: "ssh-fixture-1", interactive: true, connectionState: "starting" });
     const plan = (options.openSshPane as any).mock.calls[0][0];
     expect(plan.args).toContain("BatchMode=no");
     expect(plan.args).toContain("PubkeyAuthentication=no");

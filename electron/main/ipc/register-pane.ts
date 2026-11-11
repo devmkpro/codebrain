@@ -43,6 +43,7 @@ export function registerPaneHandlers(ctx: AppContext): void {
       });
       ctx.memoryStore?.updateAgentStatus?.({ paneId, status: "exited" });
       ctx.hooksManager.fire("worker_stopped", { agent: actor?.agent || config?.agent, reason: "user_closed" }, paneId);
+      ctx.paneConfigs.delete(paneId);
       safeSend(ctx, "operations:updated", { workspace: actor?.workspace || config?.cwd || ctx.currentWorkspacePath, at: Date.now() });
       return { ok: true };
     }

@@ -24,6 +24,7 @@ Spawn a pane and BLOCK until it goes idle (like MiMo's `action:"run"`). Returns 
 - `reportedStatus`: 'success'|'partial'|'failed'|'blocked' — parsed from worker's **Status**: header
 
 ### mcp__codebrain__pane_kill_cascade
+`pane_close` fecha um terminal e remove seu painel visível, incluindo filhos registrados; use-o para sessões SSH encerradas.
 Kill a pane AND all its registered children recursively (cancel cascade). Safe on leaf panes.
 - `paneId` — Pane to kill (with all its children)
 

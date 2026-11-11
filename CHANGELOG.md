@@ -2,6 +2,13 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.4] — 2026-11-11
+
+### Melhorias e correções
+- Fecha terminais solicitados por MCP também na interface e informa falhas de encerramento.
+- Reutiliza sessões SSH existentes e distingue abertura do terminal de autenticação concluída.
+- Permite configurar túneis AWS SSM automáticos por host e iniciar o login SSO pela Central ou MCP.
+
 ## [1.15.5] — 2026-07-22
 
 ### Fixes
