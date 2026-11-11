@@ -28,6 +28,19 @@ function inferShellBusyFromPrompt(ptyManager, paneId) {
   return null;
 }
 
+// Only recognize the visible git diff pager, not arbitrary interactive prompts.
+function isGitDiffPager(ptyManager, paneId) {
+  if (typeof ptyManager?.read !== "function") return false;
+  let lines;
+  try { lines = ptyManager.read(paneId, 200); } catch { return false; }
+  if (!Array.isArray(lines)) return false;
+  const clean = lines.map((line) => String(line ?? "").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").trim());
+  const last = clean.findLastIndex((line) => line.length > 0);
+  if (last < 0 || !/^(?::|\(END\))$/.test(clean[last])) return false;
+  const command = clean.findLastIndex((line, index) => index < last && /(?:^|\s)git\s+(?:--no-pager\s+)?diff(?:\s|$)/.test(line));
+  return command >= 0 && clean.slice(command + 1, last).some((line) => line.startsWith("diff --git "));
+}
+
 function paneSafety(ptyManager, opts, paneId) {
   const live = ptyManager.list?.().find((pane) => pane.paneId === paneId);
   const config = opts.paneConfigs?.get?.(paneId);
@@ -98,4 +111,4 @@ function shellWriteGuard(info, fromPaneId) {
   return { ok: true };
 }
 
-module.exports = { paneSafety, shellWriteGuard, inferShellBusyFromPrompt };
+module.exports = { paneSafety, shellWriteGuard, inferShellBusyFromPrompt, isGitDiffPager };

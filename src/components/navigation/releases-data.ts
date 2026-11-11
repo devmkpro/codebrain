@@ -14,9 +14,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "2.0.4",
+    "version": "2.0.5",
     "date": "em desenvolvimento",
     "highlights": []
+  },
+  {
+    "version": "2.0.4",
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "stabilize SSH terminals and add AWS SSM tunnels"
+      }
+    ]
   },
   {
     "version": "2.0.3",

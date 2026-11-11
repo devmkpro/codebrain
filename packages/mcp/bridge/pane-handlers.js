@@ -5,7 +5,7 @@ const { clarifyBroadcastPayload } = require("./clarify-broadcast.js");
 const { describeEvidence, evaluateHandoff } = require("./contract.js");
 const { createSessionHandlers, paneIdentity } = require("./session-handlers.js");
 const { deliverHandoff } = require("./handoff-handlers.js");
-const { paneSafety, shellWriteGuard } = require("./coordination/pane-safety.js");
+const { paneSafety, shellWriteGuard, isGitDiffPager } = require("./coordination/pane-safety.js");
 
 /**
  * Memory protocol injected into pane_write so the AI agent is
@@ -496,7 +496,10 @@ function createPaneHandlers(ptyManager, opts) {
       if (typeof text !== "string") return { ok: false, error: "text must be a string" };
       const safety = paneSafety(ptyManager, opts, paneId);
       const guarded = shellWriteGuard(safety, context.fromPaneId || context.callerPaneId || opts.getCallerPaneId?.());
-      if (!guarded.ok) return guarded;
+      const pagerQuit = !guarded.ok && guarded.code === "shell_state_unknown" &&
+        !safety.readOnly && text === "q" && submit === false &&
+        isGitDiffPager(ptyManager, paneId);
+      if (!guarded.ok && !pagerQuit) return guarded;
       if (safety.agent === "shell" && shellWrites.has(paneId)) return { ok: false, code: "shell_write_pending", error: "Shell já tem uma escrita em andamento" };
       // SSH panes are shells, not AI workers. Roles can be stale; only a
       // known agent runtime may receive natural-language task decorations.
@@ -570,7 +573,8 @@ function createPaneHandlers(ptyManager, opts) {
       // writeSilent with useBracketedPaste=true — suppresses echo + uses paste mode
       if (agent === "shell") shellWrites.add(paneId);
       try {
-        ptyManager.writeSilent(paneId, pasteText, true);
+        if (pagerQuit) ptyManager.write(paneId, "q");
+        else ptyManager.writeSilent(paneId, pasteText, true);
         if (submit) {
           // Delay scales with text length so readline can finish the paste.
           const delay = Math.min(3000, Math.max(150, 150 + pasteText.length * 0.3));

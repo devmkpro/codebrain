@@ -2,6 +2,11 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.5] — 2026-11-11
+
+### Correções
+- Permite encerrar com `q` o paginador de `git diff` em terminal SSH próprio, preservando as proteções de escrita.
+
 ## [2.0.4] — 2026-11-11
 
 ### Melhorias e correções

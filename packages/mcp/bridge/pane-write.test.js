@@ -16,6 +16,36 @@ function setup(agent, role = "worker", withMemory = true) {
 }
 
 describe("pane_write transport", () => {
+  it("allows raw q in an owned git diff pager", async () => {
+    const { api, pty, opts } = setup("shell");
+    opts.paneConfigs.get("p").shellBusy = null;
+    pty.read = () => ["user@host:~$ git diff -- file", "diff --git a/file b/file", "@@ -1 +1 @@", "+new", ":"];
+    expect(await api.writePane("p", "q", false, { fromPaneId: "owner" })).toEqual({ ok: true });
+    expect(pty.write).toHaveBeenCalledExactlyOnceWith("p", "q");
+    expect(pty.writeSilent).not.toHaveBeenCalled();
+  });
+
+  it("keeps ownership, read-only and command guards for pager input", async () => {
+    const { api, pty, opts } = setup("shell");
+    opts.paneConfigs.get("p").shellBusy = null;
+    pty.read = () => ["user@host:~$ git diff", "diff --git a/file b/file", ":"];
+    expect((await api.writePane("p", "q", false, { fromPaneId: "other" })).code).toBe("shell_owner_mismatch");
+    expect((await api.writePane("p", "q", true, { fromPaneId: "owner" })).code).toBe("shell_state_unknown");
+    expect((await api.writePane("p", "q; whoami", false, { fromPaneId: "owner" })).code).toBe("shell_state_unknown");
+    opts.paneConfigs.get("p").readOnly = true;
+    expect((await api.writePane("p", "q", false, { fromPaneId: "owner" })).ok).toBe(false);
+    expect(pty.write).not.toHaveBeenCalled();
+    expect(pty.writeSilent).not.toHaveBeenCalled();
+  });
+
+  it("does not send q to other unknown processes", async () => {
+    const { api, pty, opts } = setup("shell");
+    opts.paneConfigs.get("p").shellBusy = null;
+    pty.read = () => ["user@host:~$ tail -f app.log", "waiting:"];
+    expect((await api.writePane("p", "q", false, { fromPaneId: "owner" })).code).toBe("shell_state_unknown");
+    expect(pty.write).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["shell", "worker", true], ["shell", "orchestrator", true],
     ["shell", "worker", false], ["browser", "worker", true],
