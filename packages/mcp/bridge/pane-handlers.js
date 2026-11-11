@@ -5,7 +5,7 @@ const { clarifyBroadcastPayload } = require("./clarify-broadcast.js");
 const { describeEvidence, evaluateHandoff } = require("./contract.js");
 const { createSessionHandlers, paneIdentity } = require("./session-handlers.js");
 const { deliverHandoff } = require("./handoff-handlers.js");
-const { paneSafety, shellWriteGuard, isGitDiffPager } = require("./coordination/pane-safety.js");
+const { paneSafety, shellWriteGuard, isGitDiffPager, isSystemctlPager } = require("./coordination/pane-safety.js");
 
 /**
  * Memory protocol injected into pane_write so the AI agent is
@@ -498,7 +498,7 @@ function createPaneHandlers(ptyManager, opts) {
       const guarded = shellWriteGuard(safety, context.fromPaneId || context.callerPaneId || opts.getCallerPaneId?.());
       const pagerQuit = !guarded.ok && guarded.code === "shell_state_unknown" &&
         !safety.readOnly && text === "q" && submit === false &&
-        isGitDiffPager(ptyManager, paneId);
+        (isGitDiffPager(ptyManager, paneId) || isSystemctlPager(ptyManager, paneId));
       if (!guarded.ok && !pagerQuit) return guarded;
       if (safety.agent === "shell" && shellWrites.has(paneId)) return { ok: false, code: "shell_write_pending", error: "Shell já tem uma escrita em andamento" };
       // SSH panes are shells, not AI workers. Roles can be stale; only a

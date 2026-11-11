@@ -14,9 +14,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    "version": "2.0.5",
+    "version": "2.0.6",
     "date": "em desenvolvimento",
     "highlights": []
+  },
+  {
+    "version": "2.0.5",
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "allow quitting SSH git diff pager"
+      }
+    ]
   },
   {
     "version": "2.0.4",

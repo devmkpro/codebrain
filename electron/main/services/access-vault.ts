@@ -24,6 +24,14 @@ export interface SshLaunchPlan {
   ownerPaneId?: string;
   ssmTunnel?: SsmTunnelConfig;
   ssmRemotePort?: number;
+  tunnel?: boolean;
+  forceNew?: boolean;
+}
+
+export interface SshForward {
+  direction: "local" | "remote";
+  listenPort: number;
+  targetPort: number;
 }
 
 export interface AccessVaultOptions {
@@ -365,9 +373,15 @@ export function createAccessVault(options: AccessVaultOptions) {
     });
   }
 
-  async function openSsh(hostId: string, optionsOrigin: Origin & { ownerPaneId?: string } = { source: "user" }) {
+  async function openSsh(hostId: string, optionsOrigin: Origin & { ownerPaneId?: string; forward?: SshForward; forceNew?: boolean } = { source: "user" }) {
     id(hostId);
     const source = origin(optionsOrigin);
+    const forward = optionsOrigin.forward;
+    if (forward && (!['local', 'remote'].includes(forward.direction) ||
+      !Number.isInteger(forward.listenPort) || forward.listenPort < 1 || forward.listenPort > 65535 ||
+      !Number.isInteger(forward.targetPort) || forward.targetPort < 1 || forward.targetPort > 65535)) {
+      fail("INVALID_FORWARD", "Encaminhamento SSH inválido.");
+    }
     const ownerPaneId = typeof optionsOrigin.ownerPaneId === "string" && /^[a-zA-Z0-9_-]{1,160}$/.test(optionsOrigin.ownerPaneId)
       ? optionsOrigin.ownerPaneId : undefined;
     if (!options.openSshPane) fail("SSH_UNAVAILABLE", "A abertura do terminal SSH não está disponível nesta versão.");
@@ -385,8 +399,16 @@ export function createAccessVault(options: AccessVaultOptions) {
       // Revalidate after the native dialog: edits/revocations during approval must win.
       const current = await connection(hostId, source);
       if (initial.revision !== current.revision) fail("ACCESS_CHANGED", "O acesso foi alterado durante a confirmação. Solicite uma nova conexão.");
+      if (forward && current.interactive) fail("INTERACTIVE_AUTH_REQUIRED", "O túnel exige autenticação SSH não interativa.");
+      const plan: SshLaunchPlan = forward ? { ...current.plan, tunnel: true, args: [
+        ...current.plan.args.slice(0, -2), "-N", "-T", "-o", "ExitOnForwardFailure=yes",
+        forward.direction === "local" ? "-L" : "-R",
+        `127.0.0.1:${forward.listenPort}:127.0.0.1:${forward.targetPort}`,
+        ...current.plan.args.slice(-2),
+      ] } : current.plan;
+      if (optionsOrigin.forceNew === true) plan.forceNew = true;
       let result: { paneId: string; reused?: boolean };
-      try { result = await options.openSshPane(ownerPaneId ? { ...current.plan, ownerPaneId } : current.plan); }
+      try { result = await options.openSshPane(ownerPaneId ? { ...plan, ownerPaneId } : plan); }
       catch (error) { if (error instanceof AccessVaultError) throw error; fail("SSH_OPEN_FAILED", "Não foi possível abrir o terminal SSH."); }
       if (!result || typeof result.paneId !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(result.paneId)) fail("SSH_OPEN_FAILED", "O terminal SSH não retornou um identificador válido.");
       return { paneId: result.paneId, interactive: current.interactive, reused: result.reused === true, connectionState: "starting" as const };

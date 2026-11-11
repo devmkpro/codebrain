@@ -33,8 +33,13 @@ export function getAccessVault(ctx: AppContext): AccessVault {
       if (!ctx.mainWindow || ctx.mainWindow.isDestroyed()) throw new AccessVaultError("SSH_UNAVAILABLE", "Abra a janela principal para usar o terminal SSH.");
       const signature = JSON.stringify([plan.args, plan.ssmTunnel, plan.ssmRemotePort]);
       for (const [existingId, config] of ctx.paneConfigs) {
-        const ssh = config as typeof config & { sshHostId?: string; sshSignature?: string; ownerPaneId?: string };
+        const ssh = config as typeof config & { sshHostId?: string; sshSignature?: string; ownerPaneId?: string; sshTunnel?: boolean };
         if (ssh.sshHostId !== plan.hostId || !ctx.ptyManager.hasPane(existingId)) continue;
+        if (plan.forceNew) {
+          if (plan.ssmTunnel) throw new AccessVaultError("SSH_IN_USE", "A porta do túnel SSM já está em uso por uma sessão SSH ativa.");
+          continue;
+        }
+        if (ssh.sshSignature !== signature && (plan.tunnel || ssh.sshTunnel)) continue;
         if (ssh.sshSignature !== signature || ssh.ownerPaneId !== plan.ownerPaneId) {
           throw new AccessVaultError("SSH_IN_USE", "Já existe uma sessão SSH para esta máquina com outro acesso ou responsável. Feche-a antes de abrir outra.");
         }
@@ -60,8 +65,8 @@ export function getAccessVault(ctx: AppContext): AccessVault {
         ctx.ptyManager.on("exit", closeTunnel);
         app.once("before-quit", shutdown);
       }
-      const label = `SSH · ${plan.label}`;
-      ctx.paneConfigs.set(paneId, { agent: "shell", cwd, workspacePath: cwd, label, args: [], sshHostId: plan.hostId, sshSignature: signature, ...(plan.ownerPaneId ? { ownerPaneId: plan.ownerPaneId } : {}) } as any);
+      const label = `${plan.tunnel ? "Túnel SSH" : "SSH"} · ${plan.label}`;
+      ctx.paneConfigs.set(paneId, { agent: "shell", cwd, workspacePath: cwd, label, args: [], sshHostId: plan.hostId, sshSignature: signature, ...(plan.tunnel ? { sshTunnel: true } : {}), ...(plan.ownerPaneId ? { ownerPaneId: plan.ownerPaneId } : {}) } as any);
       ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
       safeSend(ctx, "pane:added", { paneId, agent: "shell", cwd, workspacePath: cwd, label });
       return { paneId };

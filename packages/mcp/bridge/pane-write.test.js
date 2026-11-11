@@ -25,6 +25,15 @@ describe("pane_write transport", () => {
     expect(pty.writeSilent).not.toHaveBeenCalled();
   });
 
+  it("allows the owner to exit a systemctl pager without submitting a command", async () => {
+    const { api, pty, opts } = setup("shell");
+    opts.paneConfigs.get("p").shellBusy = null;
+    pty.read = () => ["user@host:~$ systemctl --user cat tunnel.service", "# /home/user/.config/systemd/user/tunnel.service", "[Unit]", "lines 1-15/15 (END)"];
+    expect(await api.writePane("p", "q", false, { fromPaneId: "owner" })).toEqual({ ok: true });
+    expect(pty.write).toHaveBeenCalledExactlyOnceWith("p", "q");
+    expect((await api.writePane("p", "q", false, { fromPaneId: "other" })).code).toBe("shell_owner_mismatch");
+  });
+
   it("keeps ownership, read-only and command guards for pager input", async () => {
     const { api, pty, opts } = setup("shell");
     opts.paneConfigs.get("p").shellBusy = null;

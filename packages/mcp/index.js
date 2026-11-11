@@ -5292,8 +5292,22 @@ function createCodebrainMCPServer(bridge) {
     {
       hostId: z.string().uuid(),
       callerPaneId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/).optional().describe("Your pane ID. Makes you the terminal's owner so pane_write (with fromPaneId) can type in the visible SSH terminal."),
+      newSession: z.boolean().optional().describe("Open a separate SSH terminal instead of reusing an existing one. Do not use while an existing SSM local-port tunnel is active."),
     },
     async (args) => accessResponse(await accessCall("accessSshOpen", args)),
+  );
+
+  server.tool(
+    "access_ssh_tunnel_open",
+    "Open an SSH port forward using an authorized vault host. Both endpoints bind to loopback; local forwards listen on Codebrain, remote forwards listen on the SSH host. Returns a pane ID; inspect it to confirm the connection. The tunnel ends when its pane or Codebrain closes.",
+    {
+      hostId: z.string().uuid(),
+      callerPaneId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/).optional(),
+      direction: z.enum(["local", "remote"]),
+      listenPort: z.number().int().min(1).max(65535),
+      targetPort: z.number().int().min(1).max(65535),
+    },
+    async (args) => accessResponse(await accessCall("accessSshTunnelOpen", args)),
   );
 
   // ── Minimal default surface ───────────────────────────────────────────────

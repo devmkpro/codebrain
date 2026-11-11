@@ -31,6 +31,11 @@ describe("inferShellBusyFromPrompt", () => {
     expect(inferShellBusyFromPrompt(ptyWith(["\x1b[01;32muser@host\x1b[00m:\x1b[01;34m~\x1b[00m$ "]), "ssh")).toBe(false);
   });
 
+  it("reconhece um prompt repetido por redraw, mas não saída arbitrária", () => {
+    expect(inferShellBusyFromPrompt(ptyWith(["user@host:~$\ruser@host:~$"]), "ssh")).toBe(false);
+    expect(inferShellBusyFromPrompt(ptyWith(["program output\ruser@host:~$"]), "ssh")).toBeNull();
+  });
+
   it("sem buffer legível o estado continua desconhecido", () => {
     expect(inferShellBusyFromPrompt({}, "ssh")).toBeNull();
     expect(inferShellBusyFromPrompt(ptyWith([]), "ssh")).toBeNull();

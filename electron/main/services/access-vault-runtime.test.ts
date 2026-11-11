@@ -44,10 +44,14 @@ describe("SSH pane registration", () => {
     await mocks.options.openSshPane(plan);
     expect(await mocks.options.openSshPane(plan)).toEqual({ paneId: "ssh-live", reused: true });
     expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(1);
+    ctx.ptyManager.spawn.mockResolvedValueOnce("ssh-second");
+    expect(await mocks.options.openSshPane({ ...plan, forceNew: true })).toEqual({ paneId: "ssh-second" });
+    expect(ctx.ptyManager.hasPane("ssh-live")).toBe(true);
+    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(2);
     await expect(mocks.options.openSshPane({ ...plan, ownerPaneId: "other" })).rejects.toThrow();
-    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(1);
+    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(2);
     ctx.ptyManager.hasPane.mockReturnValue(false);
     await mocks.options.openSshPane(plan);
-    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(2);
+    expect(ctx.ptyManager.spawn).toHaveBeenCalledTimes(3);
   });
 });

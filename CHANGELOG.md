@@ -2,6 +2,13 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.6] — 2026-11-11
+
+### Melhorias e correções
+- Adiciona ferramenta de encaminhamento SSH com hosts autorizados no cofre e portas restritas ao loopback.
+- Permite abrir outra sessão SSH quando solicitada, sem encerrar a sessão existente.
+- Reconhece prompts repetidos e permite sair de paginadores conhecidos do systemctl sem liberar terminais ocupados.
+
 ## [2.0.5] — 2026-11-11
 
 ### Correções

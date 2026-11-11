@@ -38,6 +38,22 @@ describe("access vault", () => {
   });
   afterEach(async () => { vi.restoreAllMocks(); await fs.rm(fixture, { recursive: true, force: true }); });
 
+  it("opens loopback-only forwards through an authorized host and rejects invalid ports", async () => {
+    const vault = createAccessVault(options);
+    const host = await vault.upsertHost({ ...hostInput, allowAgentAccess: true });
+    await vault.openSsh(host.id, { source: "agent", forward: { direction: "remote", listenPort: 11435, targetPort: 11434 } });
+    const plan = (options.openSshPane as any).mock.calls[0][0];
+    expect(plan.tunnel).toBe(true);
+    expect(plan.args).toContain("ExitOnForwardFailure=yes");
+    expect(plan.args).toContain("-N");
+    expect(plan.args).toContain("-R");
+    expect(plan.args).toContain("127.0.0.1:11435:127.0.0.1:11434");
+    expect(plan.args.slice(-2)).toEqual(["--", hostInput.hostname]);
+    await expect(vault.openSsh(host.id, { source: "agent", forward: { direction: "local", listenPort: 0, targetPort: 11434 } })).rejects.toMatchObject({ code: "INVALID_FORWARD" });
+    const denied = await vault.upsertHost({ ...hostInput, label: "denied", allowAgentAccess: false });
+    await expect(vault.openSsh(denied.id, { source: "agent", forward: { direction: "local", listenPort: 11435, targetPort: 11434 } })).rejects.toMatchObject({ code: "AGENT_ACCESS_DENIED" });
+  });
+
   it("stores SSM routing and revokes agent access when its route changes", async () => {
     const vault = createAccessVault(options);
     const ssmTunnel = { instanceId: "i-0123456789abcdef0", region: "sa-east-1", profile: "fixture", localPort: 2221 };

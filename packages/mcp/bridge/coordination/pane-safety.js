@@ -21,8 +21,15 @@ function inferShellBusyFromPrompt(ptyManager, paneId) {
   try { lines = ptyManager.read(paneId, 20); } catch { return null; }
   if (!Array.isArray(lines)) return null;
   for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = String(lines[index] ?? "").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").trimEnd();
+    let line = String(lines[index] ?? "").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").trimEnd();
     if (!line.trim()) continue;
+    // Some PTYs preserve a carriage-return redraw as two identical prompts.
+    // Accept only repeated copies of the same complete prompt, never arbitrary
+    // output before a prompt-shaped suffix.
+    if (line.includes("\r")) {
+      const redraws = line.split("\r").map((part) => part.trim()).filter(Boolean);
+      if (redraws.length && redraws.every((part) => part === redraws[0])) line = redraws[0];
+    }
     return IDLE_PROMPT_PATTERNS.some((pattern) => pattern.test(line.trimStart())) ? false : null;
   }
   return null;
@@ -39,6 +46,20 @@ function isGitDiffPager(ptyManager, paneId) {
   if (last < 0 || !/^(?::|\(END\))$/.test(clean[last])) return false;
   const command = clean.findLastIndex((line, index) => index < last && /(?:^|\s)git\s+(?:--no-pager\s+)?diff(?:\s|$)/.test(line));
   return command >= 0 && clean.slice(command + 1, last).some((line) => line.startsWith("diff --git "));
+}
+
+// systemctl status/cat frequently launches less even when --no-pager is
+// intended. Only permit a raw q for its recognizable completed pager screen.
+function isSystemctlPager(ptyManager, paneId) {
+  if (typeof ptyManager?.read !== "function") return false;
+  let lines;
+  try { lines = ptyManager.read(paneId, 200); } catch { return false; }
+  if (!Array.isArray(lines)) return false;
+  const clean = lines.map((line) => String(line ?? "").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").trim());
+  const last = clean.findLastIndex(Boolean);
+  if (last < 0 || !/^(?:\(END\)|lines \d+(?:-\d+)?\/\d+ \(END\))$/.test(clean[last])) return false;
+  const command = clean.findLastIndex((line, index) => index < last && /(?:^|\s)systemctl\s+(?:(?:--user|--system|--no-pager|--full)\s+)*(?:cat|status|list-units|list-unit-files)(?:\s|$)/.test(line));
+  return command >= 0 && clean.slice(command + 1, last).some((line) => /^(?:# \/|\[Unit\]|[●*] |Loaded:|UNIT\s)/.test(line));
 }
 
 function paneSafety(ptyManager, opts, paneId) {
@@ -111,4 +132,4 @@ function shellWriteGuard(info, fromPaneId) {
   return { ok: true };
 }
 
-module.exports = { paneSafety, shellWriteGuard, inferShellBusyFromPrompt, isGitDiffPager };
+module.exports = { paneSafety, shellWriteGuard, inferShellBusyFromPrompt, isGitDiffPager, isSystemctlPager };

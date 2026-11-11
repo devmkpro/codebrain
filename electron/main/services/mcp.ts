@@ -38,7 +38,8 @@ function buildMcpBridge(ctx: AppContext) {
     disposeCommands: () => disposeCommands(ctx),
     accessHostList: () => accessVaultResult(() => getAccessVault(ctx).list({ source: "agent" })),
     accessHostSave: (input: AccessHostInput) => accessVaultResult(async () => ({ host: await getAccessVault(ctx).upsertHost(input, { source: "agent" }) })),
-    accessSshOpen: (input: { hostId: string; callerPaneId?: string }) => accessVaultResult(() => getAccessVault(ctx).openSsh(input.hostId, { source: "agent", ownerPaneId: input.callerPaneId })),
+    accessSshOpen: (input: { hostId: string; callerPaneId?: string; newSession?: boolean }) => accessVaultResult(() => getAccessVault(ctx).openSsh(input.hostId, { source: "agent", ownerPaneId: input.callerPaneId, forceNew: input.newSession })),
+    accessSshTunnelOpen: (input: { hostId: string; callerPaneId?: string; direction: "local" | "remote"; listenPort: number; targetPort: number }) => accessVaultResult(() => getAccessVault(ctx).openSsh(input.hostId, { source: "agent", ownerPaneId: input.callerPaneId, forward: { direction: input.direction, listenPort: input.listenPort, targetPort: input.targetPort } })),
     accessAwsSsoLogin: (input: { profile: string }) => accessVaultResult(async () => { await loginAwsSso(input.profile); return {}; }),
     spawnPaneFn: (req: SpawnPaneConfig) => spawnPaneInternal(ctx, req),
     onPaneCreated: (info: { paneId: string; agent: string; cwd?: string; providerId?: string; model?: string; label?: string; taskType?: string; effort?: string; accountLabel?: string }) => {

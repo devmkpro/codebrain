@@ -12,6 +12,7 @@ function createAccessHandlers(opts = {}) {
     accessHostList: () => invoke("accessHostList"),
     accessHostSave: (input) => invoke("accessHostSave", input),
     accessSshOpen: (input) => invoke("accessSshOpen", input),
+    accessSshTunnelOpen: (input) => invoke("accessSshTunnelOpen", input),
     accessAwsSsoLogin: (input) => invoke("accessAwsSsoLogin", input),
   };
 }
