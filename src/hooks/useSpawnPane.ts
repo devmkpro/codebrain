@@ -96,6 +96,13 @@ export function useSpawnPane(activeWorkspace: string | undefined) {
     addPane({ kind: "browser", cwd: activeWorkspace, url: detectedUrl ?? "about:blank" } as any);
   };
 
+  // Escritório: os agentes de todos os workspaces abertos, em pixel art.
+  const handleAddOffice = (isFilesView: boolean, isMapView: boolean) => {
+    if (!activeWorkspace) return;
+    if (isFilesView || isMapView) navigateInActiveTab({ kind: "workspace" });
+    addPane({ kind: "office", agent: "office", cwd: activeWorkspace, workspacePath: activeWorkspace } as any);
+  };
+
   const handleSpawnSquad = async (squad: any) => {
     if (!activeWorkspace) return;
     const { nanoid } = await import("nanoid");
@@ -205,5 +212,5 @@ ${JSON.stringify(workerConfig, null, 2)}
     }
   };
 
-  return { permissionMode, setPermissionMode, favoritePane, resolveValidModel, handleAddPane, handleAddTerminal, handleAddBrowser, handleSpawnSquad, handleSpawnFromConfig, detectedUrl };
+  return { permissionMode, setPermissionMode, favoritePane, resolveValidModel, handleAddPane, handleAddTerminal, handleAddBrowser, handleAddOffice, handleSpawnSquad, handleSpawnFromConfig, detectedUrl };
 }

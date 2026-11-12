@@ -418,6 +418,14 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     setClientId: (clientId: string) => ipcRenderer.invoke("discord:setClientId", clientId),
   },
 
+  office: {
+    onMessage: (callback: (event: { id: string; from: string; to: string; type: string; timestamp: number }) => void) => {
+      const handler = (_evt: unknown, event: { id: string; from: string; to: string; type: string; timestamp: number }) => callback(event);
+      ipcRenderer.on("office:message", handler);
+      return () => ipcRenderer.off("office:message", handler);
+    },
+  },
+
   tasks: {
     list: (opts: { workspace: string; mission_id?: string }) => ipcRenderer.invoke("tasks:list", opts),
     clear: (args: { workspace: string; scope: "done" | "all"; ids: string[] }) => ipcRenderer.invoke("tasks:clear", args),

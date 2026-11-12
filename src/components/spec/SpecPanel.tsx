@@ -53,7 +53,7 @@ export function SpecPanel() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const agentPane = useMemo(() => {
-    const candidates = panes.filter((pane) => samePath(pane.workspacePath ?? pane.cwd, workspace) && pane.kind !== "browser" && pane.agent !== "shell");
+    const candidates = panes.filter((pane) => samePath(pane.workspacePath ?? pane.cwd, workspace) && pane.kind !== "browser" && pane.kind !== "office" && pane.agent !== "shell");
     return candidates.find((pane) => pane.id === activePaneId) ?? candidates[0] ?? null;
   }, [activePaneId, panes, workspace]);
 

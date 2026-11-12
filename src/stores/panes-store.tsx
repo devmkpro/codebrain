@@ -99,9 +99,9 @@ export const usePanesStore = create((set, get) => ({
       args: config.args,
       kind,
       url: config.url,
-      status: kind === "browser" ? "running" : "booting",
+      status: kind === "browser" || kind === "office" ? "running" : "booting",
       collapsed: false,
-      title: kind === "browser" ? "browser" : config.agent ?? "shell",
+      title: kind === "browser" ? "browser" : kind === "office" ? "escritório" : config.agent ?? "shell",
       externallySpawned: config.externallySpawned,
       activityId: config.activityId,
       session,
@@ -128,7 +128,7 @@ export const usePanesStore = create((set, get) => ({
       const newLeaf = { kind: "leaf", paneId: pane.id };
       const nextLayout = findLeaf(existingLayout, pane.id)
         ? existingLayout
-        : kind === "browser"
+        : kind === "browser" || kind === "office"
           ? appendLeafBalanced(existingLayout, newLeaf)
           : insertWorkLeaf(existingLayout, missionPanes, newLeaf);
       return {

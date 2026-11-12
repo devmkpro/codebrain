@@ -77,6 +77,7 @@ electron.vite.config.*.mjs
 500)
 
 # ── Codebrain workspace data ─────────────────────────────────────────────────
+.codebrain/adapters/
 .codebrain/worktrees/*
 .codebrain/tmp/*
 .codebrain/config.json
@@ -93,6 +94,7 @@ electron.vite.config.*.mjs
 .playwright-cli/
 *.screenshot.*
 *.png
+!src/public/office/**/*.png
 
 # ── Prebuild native binaries (copied by prebuild-native.mjs) ────────────────
 resources/native/

@@ -104,7 +104,7 @@ export function DiagnosticsModal({
     const renderer = new Map(rendererPanes.map(pane => [pane.id, pane]));
     return {
       backendOnly: [...backend.values()].filter(pane => !renderer.has(pane.paneId)),
-      rendererOnly: [...renderer.values()].filter(pane => pane.kind !== "browser" && !backend.has(pane.id))
+      rendererOnly: [...renderer.values()].filter(pane => pane.kind !== "browser" && pane.kind !== "office" && !backend.has(pane.id))
     };
   }, [rendererPanes, snapshot?.backendPanes]);
   if (!open) return null;

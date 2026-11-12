@@ -15,8 +15,13 @@ export interface Release {
 export const RELEASES: Release[] = [
   {
     "version": "2.0.6",
-    "date": "em desenvolvimento",
-    "highlights": []
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "improve SSH tunnels and terminal recovery"
+      }
+    ]
   },
   {
     "version": "2.0.5",

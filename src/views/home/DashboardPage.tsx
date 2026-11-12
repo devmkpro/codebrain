@@ -9,6 +9,7 @@ import { usePanesStore }     from '../../stores/panes-store';
 import { usePaletteStore }   from '../../stores/palette-store';
 import { usePaneLauncherStore } from '../../stores/pane-launcher-store';
 import { OperationsBoard } from '../../components/operations/OperationsBoard';
+import { OfficeView } from '../../components/office/OfficeView';
 import { useWorkspaceRegistry } from '../../components/operations/useWorkspaceRegistry';
 import { operationWorkspacePaths } from '../../components/operations/workspace-paths';
 import { derivePaneActivity, activityPresentation, type PaneActivity } from '../../components/shell/pane-status';
@@ -196,13 +197,13 @@ function FirstRun({ launching, onOpen, onPalette, onProviders }: {
 }
 
 // ─── Página ───────────────────────────────────────────────────────────────────
-type HomeView = 'panes' | 'board' | 'tasks';
+type HomeView = 'office' | 'panes' | 'board' | 'tasks';
 
 export function DashboardPage() {
   const { navigate } = useRouter();
   const { recents, loaded: recentsLoaded, refresh: refreshWorkspaces } = useWorkspaceRegistry();
   const [launching,     setLaunching]     = useState(false);
-  const [activeView,    setView]          = useState<HomeView>('panes');
+  const [activeView,    setView]          = useState<HomeView>('office');
 
   const openWorkspace    = useNavStore(s => s.openWorkspace);
   const setWorkspacePath = useWorkspaceStore(s => s.setPath);
@@ -357,6 +358,7 @@ export function DashboardPage() {
   ].filter(Boolean).join(' · ');
 
   const VIEWS: { id: HomeView; label: string; count: number }[] = [
+    { id: 'office', label: 'escritório', count: workspaceCount },
     { id: 'panes', label: 'agentes', count: panes.length },
     { id: 'board', label: 'operações', count: boardWorkspaces.length },
     { id: 'tasks', label: 'tasks', count: tasks.length },
@@ -429,7 +431,22 @@ export function DashboardPage() {
               </div>
 
               <div className="mt-3">
-                {activeView === 'board' ? (
+                {activeView === 'office' ? (
+                  panes.length === 0
+                    ? <Note>Nenhum agente aberto. Abra um workspace e inicie o primeiro: ele aparece aqui, numa sala com o nome do projeto.</Note>
+                    : (
+                      <OfficeView
+                        className="w-full rounded-cb-1 border border-cb-line-1"
+                        style={{ height: 'min(68vh, 640px)', minHeight: 360 }}
+                        onFocusPane={(paneId) => {
+                          const pane = panes.find((p: any) => p.id === paneId);
+                          if (!pane) return;
+                          goToWorkspace(paneWorkspace(pane));
+                          usePanesStore.getState().setActive(paneId);
+                        }}
+                      />
+                    )
+                ) : activeView === 'board' ? (
                   <OperationsBoard
                     workspacePaths={boardWorkspaces}
                     onOpenWorkspace={(path) => void activateWorkspace(path)}

@@ -4,6 +4,7 @@ import { usePanesStore } from "../../stores/panes-store";
 import { useMissionsStore } from "../../stores/missions-store";
 import { DropTarget } from "./DropTarget";
 import { BrowserPane } from "../panes/BrowserPane";
+import { OfficePane } from "../office/OfficePane";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { RenderNode } from "./RenderNode";
 import { MissionSidebar } from "../missions/MissionSidebar";
@@ -38,7 +39,9 @@ export function Grid({ workspacePath } = {} as any) {
       <DropTarget pane={pane} workspacePath={ws} movePaneTo={movePaneTo}>
         {pane.kind === "browser"
           ? <BrowserPane pane={pane} isActive={pane.id === activePaneId} onClick={() => setActive(pane.id)} />
-          : <TerminalPane pane={pane} isActive={pane.id === activePaneId} onClick={() => setActive(pane.id)} />}
+          : pane.kind === "office"
+            ? <OfficePane pane={pane} isActive={pane.id === activePaneId} onClick={() => setActive(pane.id)} />
+            : <TerminalPane pane={pane} isActive={pane.id === activePaneId} onClick={() => setActive(pane.id)} />}
       </DropTarget>
     );
   };

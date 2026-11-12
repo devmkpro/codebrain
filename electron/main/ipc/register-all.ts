@@ -21,6 +21,7 @@ import { registerSpecHandlers } from "./register-spec";
 import { registerOperationsHandlers } from "./register-operations";
 import { registerHarnessHandlers } from "./register-harness";
 import { registerAccessVaultHandlers } from "./register-access-vault";
+import { registerOfficeHandlers } from "./register-office";
 import { getAccessVault } from "../services/access-vault-runtime";
 
 export function registerAllIpcHandlers(ctx: AppContext): void {
@@ -49,6 +50,7 @@ export function registerAllIpcHandlers(ctx: AppContext): void {
     ["spec", registerSpecHandlers],
     ["operations", registerOperationsHandlers],
     ["harness", registerHarnessHandlers],
+    ["office", registerOfficeHandlers],
     ["access-vault", (context) => { registerAccessVaultHandlers(context, { vault: getAccessVault(context) }); }],
   ];
   for (const [name, fn] of groups) {

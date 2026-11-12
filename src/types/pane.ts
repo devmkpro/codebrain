@@ -1,6 +1,6 @@
 import type { Session } from "./electron";
 
-export type PaneKind = "terminal" | "browser";
+export type PaneKind = "terminal" | "browser" | "office";
 export type PaneStatus = "booting" | "running" | "idle" | "error" | "exited";
 export type PaneAgent = "claude" | "shell" | string;
 

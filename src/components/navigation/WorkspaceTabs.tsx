@@ -56,7 +56,7 @@ export function WorkspaceTabs() {
   const voiceCancelable = voiceStats.visible || voiceStats.phase !== "idle" || voiceStats.chunksPending > 0;
 
   // Hooks
-  const { permissionMode, setPermissionMode, handleAddPane, handleAddTerminal, handleAddBrowser, handleSpawnSquad, detectedUrl } = useSpawnPane(activeWorkspace);
+  const { permissionMode, setPermissionMode, handleAddPane, handleAddTerminal, handleAddBrowser, handleAddOffice, handleSpawnSquad, detectedUrl } = useSpawnPane(activeWorkspace);
   const { snapshotBusy, savedPanes, loadSavedPanes, handleSaveSnapshot, handleRestoreSnapshot, handleRestorePane } = useSessionActions(activeWorkspace, permissionMode, addPane);
   const { audioConfig, audioModeBusy, toggleVoiceInteractionMode } = useAudioConfig();
 
@@ -162,6 +162,9 @@ export function WorkspaceTabs() {
           <button className="cb-btn w-full" onClick={() => { setShowPaneMenu(false); handleAddTerminal(isFilesView, isMapView); }}>Terminal</button>
           <button className={`w-full text-left px-3 py-1.5 font-mono text-xs transition-all border-b border-cb-line-0 ${detectedUrl ? "text-cb-accent hover:text-cb-accent hover:bg-cb-accent-wash" : "text-cb-fg-1 hover:text-cb-fg-0 hover:bg-cb-bg-2"}`} onClick={() => { setShowPaneMenu(false); handleAddBrowser(isFilesView, isMapView); }}>
             Browser {detectedUrl && <span className="text-xs text-cb-accent ml-1 truncate">{detectedUrl}</span>}
+          </button>
+          <button className="w-full text-left px-3 py-1.5 font-mono text-xs transition-all border-b border-cb-line-0 text-cb-fg-1 hover:text-cb-fg-0 hover:bg-cb-bg-2" onClick={() => { setShowPaneMenu(false); handleAddOffice(isFilesView, isMapView); }} title="Agentes de todos os workspaces em pixel art">
+            Escritório
           </button>
           <p className="px-3 pt-1.5 pb-0.5 font-mono text-xs text-cb-fg-2 ">Novo pane</p>
           {providers.map(p => {

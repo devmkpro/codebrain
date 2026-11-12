@@ -54,7 +54,7 @@ function tickActivity() {
   const { panes, setPaneLive } = panesState();
   const now = Date.now();
   for (const pane of panes) {
-    if (pane.kind === "browser") continue;
+    if (pane.kind === "browser" || pane.kind === "office") continue;
     const item = tracked.get(pane.id);
     if (!item || pane.status !== "running") {
       if (pane.live) setPaneLive(pane.id, null);
@@ -72,7 +72,7 @@ async function pollRoles() {
   const api = (window as any).codeBrainApp;
   const { panes, updatePane } = panesState();
   await Promise.all(panes.map(async (pane: any) => {
-    if (pane.kind === "browser" || pane.agent === "shell") return;
+    if (pane.kind === "browser" || pane.kind === "office" || pane.agent === "shell") return;
     try {
       const result = await api?.pty?.getRole?.(pane.id);
       if (!result?.ok || !result.role) return;

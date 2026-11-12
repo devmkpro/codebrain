@@ -773,6 +773,10 @@ export interface CodebrainApp {
     status: () => Promise<{ connected: boolean; clientId: string }>;
     setClientId: (clientId: string) => Promise<{ ok: boolean; error?: string }>;
   };
+  office?: {
+    /** pane_send_message entre dois panes (só from/to/type, sem o conteúdo). */
+    onMessage: (callback: (event: { id: string; from: string; to: string; type: string; timestamp: number }) => void) => () => void;
+  };
   tasks: {
     list: (opts: { workspace: string; mission_id?: string }) => Promise<{ ok: boolean; workspace: string | null; tasks: Task[]; activeTaskId: string | null; error?: string }>;
     clear: (args: { workspace: string; scope: "done" | "all"; ids: string[] }) => Promise<{ ok: boolean; workspace: string | null; deleted: number; error?: string }>;
