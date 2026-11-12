@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "2.0.8",
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "encerra processos dos terminais antes de instalar atualizacoes"
+      }
+    ]
+  },
+  {
     "version": "2.0.7",
     "date": "novembro 2026",
     "highlights": [
