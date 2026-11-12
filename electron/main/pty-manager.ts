@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import * as nodefs from "node:fs";
 import * as nodeos from "node:os";
 import * as nodepath from "node:path";
@@ -825,6 +825,24 @@ export class PtyManager extends EventEmitter {
     if (!state) return null;
     const pid = (state.pty as { pid?: number }).pid;
     return typeof pid === "number" ? pid : null;
+  }
+
+  /** Stop Windows CLI descendants before closing their ConPTY handles. */
+  async killAllForUpdate(): Promise<void> {
+    if (IS_WIN) {
+      const taskkill = nodepath.join(process.env.SystemRoot || "C:\\Windows", "System32", "taskkill.exe");
+      const pids = [...this.panes.keys()].map(id => this.getPid(id))
+        .filter((pid): pid is number => pid !== null && Number.isInteger(pid) && pid > 0 && pid !== process.pid);
+      await Promise.all(pids.map(pid => new Promise<void>(resolve => {
+        execFile(taskkill, ["/PID", String(pid), "/T", "/F"],
+          { windowsHide: true, timeout: KILL_GRACE_MS }, error => {
+            // The PTY may already have exited. Always close its native handle too.
+            if (error) log.warn("[update] terminal tree termination:", pid, error.message);
+            resolve();
+          });
+      })));
+    }
+    this.killAll();
   }
 
   killAll(): void {

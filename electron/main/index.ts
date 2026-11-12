@@ -93,7 +93,12 @@ app.whenReady().then(async () => {
   void syncProviderModels(ctx)
     .then(summary => log.info(`[models] Startup sync: ${summary.updated.length} updated, ${summary.failed.length} preserved`))
     .catch(err => log.warn("[models] Startup sync failed:", err));
-  setupAutoUpdater(ctx.mainWindow);
+  setupAutoUpdater(ctx.mainWindow, async () => {
+    // NSIS starts before Electron emits before-quit. Release terminal process
+    // trees first so the installer cannot race CLI children holding app files.
+    await disposeCommands(ctx);
+    await ctx.ptyManager.killAllForUpdate();
+  });
 
   // Discord Rich Presence (fire-and-forget, silent if Discord not running)
   const discordClientId = ctx.configStore.get().discordClientId as string | undefined;

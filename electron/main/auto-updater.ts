@@ -1,5 +1,5 @@
 /**
- * Auto-update module (Disabled)
+ * Auto-update module
  */
 import type { BrowserWindow } from "electron";
 import { app, ipcMain } from "electron";
@@ -60,7 +60,7 @@ export function repairWindowsRegistryIfNeeded(): void {
 
 export function setupAutoUpdater(
   window: BrowserWindow,
-  _onBeforeInstall?: () => Promise<void>,
+  onBeforeInstall?: () => Promise<void>,
 ): void {
   windowRef = window;
 
@@ -83,6 +83,7 @@ export function setupAutoUpdater(
   });
 
   autoUpdater.on("error", (err) => {
+    updateRequested = false;
     windowRef?.webContents.send("update:error", { message: err.message });
   });
 
@@ -107,15 +108,22 @@ export function setupAutoUpdater(
     });
 
     ipcMain.handle("update:install", async () => {
+      if (updateRequested) return { ok: true };
       try {
         updateRequested = true;
         // Notify renderer that install is starting (for UI feedback)
         windowRef?.webContents.send("update:installing");
-        if (_onBeforeInstall) {
-          await _onBeforeInstall();
+        if (onBeforeInstall) {
+          await onBeforeInstall();
         }
         setTimeout(() => {
-          autoUpdater.quitAndInstall(true, true);
+          try {
+            autoUpdater.quitAndInstall(true, true);
+          } catch (err: any) {
+            updateRequested = false;
+            log.error("[auto-updater] quitAndInstall failed:", err);
+            windowRef?.webContents.send("update:error", { message: err.message ?? "Falha ao instalar atualização" });
+          }
         }, 200);
         return { ok: true };
       } catch (err: any) {
