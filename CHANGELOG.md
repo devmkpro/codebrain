@@ -2,6 +2,12 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.8] — 2026-11-12
+
+### Fixes
+- Encerra as árvores de processos dos terminais antes de iniciar a instalação da atualização no Windows.
+- Evita instalações duplicadas e trata falhas do instalador sem deixar o reinício travado.
+
 ## [2.0.7] — 2026-11-12
 
 ### Features
