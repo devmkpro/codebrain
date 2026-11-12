@@ -2,6 +2,16 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.7] — 2026-11-12
+
+### Features
+- Adiciona escritório em pixel art na página inicial e como pane, com uma sala por workspace e agentes interativos.
+- Mostra atividades dos agentes e anima encontros ao trocar mensagens entre panes.
+
+### Fixes
+- Integra panes de escritório ao ciclo de vida, diagnósticos e seleção de agentes.
+- Inclui os assets e créditos do escritório na distribuição.
+
 ## [2.0.6] — 2026-11-11
 
 ### Melhorias e correções

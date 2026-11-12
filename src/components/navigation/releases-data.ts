@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "2.0.7",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "add pixel art office with workspace rooms and agent messaging"
+      }
+    ]
+  },
+  {
     "version": "2.0.6",
     "date": "novembro 2026",
     "highlights": [
