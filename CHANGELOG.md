@@ -2,6 +2,12 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.9] — 2026-11-13
+
+### Fixes
+- Reconhece prompts SSH após saída sem quebra de linha, preservando a identificação do dono do terminal.
+- Permite ao dono do pane cancelar heredocs incompletos com Ctrl+C e limpar texto pendente com Ctrl+U, sem liberar escrita em processos ocupados ou terminais somente leitura.
+
 ## [2.0.8] — 2026-11-12
 
 ### Fixes
