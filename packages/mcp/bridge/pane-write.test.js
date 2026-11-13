@@ -16,6 +16,67 @@ function setup(agent, role = "worker", withMemory = true) {
 }
 
 describe("pane_write transport", () => {
+  it.each(["\x03", "\x15"])("lets the SSH owner clear pending input with raw %j", async (control) => {
+    const { api, pty, opts } = setup("shell");
+    opts.paneConfigs.get("p").shellBusy = null;
+    pty.read = () => ["maikeofc18@aiparts:~$ ocker "];
+    expect(await api.writePane("p", control, false, { fromPaneId: "owner" })).toEqual({ ok: true });
+    expect(pty.write).toHaveBeenCalledExactlyOnceWith("p", control);
+    expect(pty.writeSilent).not.toHaveBeenCalled();
+  });
+
+  it.each(["user@host:~$ python3 - <<'PY'", "user@host:~$python3 - <<'PY'"])("lets the SSH owner cancel an unfinished heredoc after %s", async (command) => {
+    const { api, pty, opts } = setup("shell");
+    opts.paneConfigs.get("p").shellBusy = null;
+    pty.read = () => [command, ...Array(30).fill("print('pending paste')"), "> "];
+    expect(await api.writePane("p", "\x03", false, { fromPaneId: "owner" })).toEqual({ ok: true });
+    expect(pty.write).toHaveBeenCalledExactlyOnceWith("p", "\x03");
+    expect(pty.writeSilent).not.toHaveBeenCalled();
+  });
+
+  it("keeps ownership, read-only, busy and literal-input guards during SSH recovery", async () => {
+    const { api, pty, opts } = setup("shell");
+    const config = opts.paneConfigs.get("p");
+    config.shellBusy = null;
+    pty.read = () => ["user@host:~$ python3 - <<'PY'", "> "];
+    expect((await api.writePane("p", "\x03", false, { fromPaneId: "other" })).code).toBe("shell_owner_mismatch");
+    expect((await api.writePane("p", "\x03", true, { fromPaneId: "owner" })).ok).toBe(false);
+    expect((await api.writePane("p", "\x03whoami", false, { fromPaneId: "owner" })).ok).toBe(false);
+    expect((await api.writePane("p", "\x15", false, { fromPaneId: "owner" })).ok).toBe(false);
+    config.readOnly = true;
+    expect((await api.writePane("p", "\x03", false, { fromPaneId: "owner" })).ok).toBe(false);
+    config.readOnly = false;
+    config.shellBusy = true;
+    expect((await api.writePane("p", "\x03", false, { fromPaneId: "owner" })).code).toBe("shell_busy");
+    expect(pty.write).not.toHaveBeenCalled();
+    expect(pty.writeSilent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["user@host:~$ tail -f app.log", "> "],
+    ["user@host:~$ python3", ">>> "],
+    ["user@host:~$ sudo whoami", "Password:"],
+    ["unrecognized output", "> "],
+    ["user@host:~$ echo '<<PY'", "> "],
+    ["user@host:~$ cat <<< word", "> "],
+    ["user@host:~$ echo ok # <<PY", "> "],
+    ["user@host:~$ python3 - <<'OLD'", "user@host:~$ tail -f app.log", "> "],
+  ])("does not interrupt an unrecognized interactive process: %j", async (...lines) => {
+    const { api, pty, opts } = setup("shell");
+    opts.paneConfigs.get("p").shellBusy = null;
+    pty.read = () => lines;
+    expect((await api.writePane("p", "\x03", false, { fromPaneId: "owner" })).code).toBe("shell_state_unknown");
+    expect(pty.write).not.toHaveBeenCalled();
+    expect(pty.writeSilent).not.toHaveBeenCalled();
+  });
+
+  it("sends a control key raw when the owned shell is already idle", async () => {
+    const { api, pty } = setup("shell");
+    expect(await api.writePane("p", "\x03", false, { fromPaneId: "owner" })).toEqual({ ok: true });
+    expect(pty.write).toHaveBeenCalledExactlyOnceWith("p", "\x03");
+    expect(pty.writeSilent).not.toHaveBeenCalled();
+  });
+
   it("accepts the SSH owner after output without a newline and rejects another pane", async () => {
     const { api, pty, opts } = setup("shell");
     opts.paneConfigs.set("p", { agent: "shell", ownerPaneId: "owner" });

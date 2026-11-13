@@ -5,7 +5,7 @@ const { clarifyBroadcastPayload } = require("./clarify-broadcast.js");
 const { describeEvidence, evaluateHandoff } = require("./contract.js");
 const { createSessionHandlers, paneIdentity } = require("./session-handlers.js");
 const { deliverHandoff } = require("./handoff-handlers.js");
-const { paneSafety, shellWriteGuard, isGitDiffPager, isSystemctlPager } = require("./coordination/pane-safety.js");
+const { paneSafety, shellWriteGuard, isGitDiffPager, isSystemctlPager, isShellInputRecovery } = require("./coordination/pane-safety.js");
 
 /**
  * Memory protocol injected into pane_write so the AI agent is
@@ -499,7 +499,10 @@ function createPaneHandlers(ptyManager, opts) {
       const pagerQuit = !guarded.ok && guarded.code === "shell_state_unknown" &&
         !safety.readOnly && text === "q" && submit === false &&
         (isGitDiffPager(ptyManager, paneId) || isSystemctlPager(ptyManager, paneId));
-      if (!guarded.ok && !pagerQuit) return guarded;
+      const controlInput = safety.agent === "shell" && submit === false && (text === "\x03" || text === "\x15");
+      const recoverInput = controlInput && !guarded.ok && guarded.code === "shell_state_unknown" &&
+        !safety.readOnly && isShellInputRecovery(ptyManager, paneId, text);
+      if (!guarded.ok && !pagerQuit && !recoverInput) return guarded;
       if (safety.agent === "shell" && shellWrites.has(paneId)) return { ok: false, code: "shell_write_pending", error: "Shell já tem uma escrita em andamento" };
       // SSH panes are shells, not AI workers. Roles can be stale; only a
       // known agent runtime may receive natural-language task decorations.
@@ -573,7 +576,7 @@ function createPaneHandlers(ptyManager, opts) {
       // writeSilent with useBracketedPaste=true — suppresses echo + uses paste mode
       if (agent === "shell") shellWrites.add(paneId);
       try {
-        if (pagerQuit) ptyManager.write(paneId, "q");
+        if (pagerQuit || controlInput) ptyManager.write(paneId, text);
         else ptyManager.writeSilent(paneId, pasteText, true);
         if (submit) {
           // Delay scales with text length so readline can finish the paste.

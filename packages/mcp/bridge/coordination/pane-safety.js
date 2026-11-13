@@ -15,6 +15,42 @@ const IDLE_PROMPT_PATTERNS = [
 // echoed with a command in the same buffer. A prompt-shaped suffix by itself
 // is not enough evidence.
 const POSIX_COMMAND_PROMPT = /^((?:\([^()]{1,64}\)\s*)?[\w.-]{1,64}@[\w.-]{1,253}(?::[^\s$#]{0,1024})?\s?[$#])\s+\S/;
+const POSIX_PENDING_INPUT = /^(?:\([^()]{1,64}\)\s*)?[\w.-]{1,64}@[\w.-]{1,253}(?::[^\s$#]{0,1024})?\s?[$#]\s*(\S.*)$/;
+
+function hasHeredocInput(command) {
+  let quote = "";
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index];
+    if (char === "\\" && quote !== "'") { index += 1; continue; }
+    if (quote) { if (char === quote) quote = ""; continue; }
+    if (char === "'" || char === '"') { quote = char; continue; }
+    if (char === "#" && (index === 0 || /\s/.test(command[index - 1]))) return false;
+    if (command.startsWith("<<", index) && command[index - 1] !== "<" && command[index + 2] !== "<") {
+      return /^<<-?\s*(?:'[^'\r\n]+'|"[^"\r\n]+"|[\w.-]+)(?:\s|$)/.test(command.slice(index));
+    }
+  }
+  return false;
+}
+
+// Recovery keys do not make an unknown shell idle or authorize a new command.
+// Require visible pending shell input; never interrupt an arbitrary program.
+function isShellInputRecovery(ptyManager, paneId, control) {
+  if ((control !== "\x03" && control !== "\x15") || typeof ptyManager?.read !== "function") return false;
+  let lines;
+  try { lines = ptyManager.read(paneId, 200); } catch { return false; }
+  if (!Array.isArray(lines)) return false;
+  const clean = lines.map((line) => String(line ?? "").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").trim());
+  const last = clean.findLastIndex(Boolean);
+  if (last < 0) return false;
+  if (POSIX_PENDING_INPUT.test(clean[last])) return true;
+  if (control !== "\x03" || clean[last] !== ">") return false;
+  for (let index = last - 1; index >= 0; index -= 1) {
+    const command = clean[index].match(POSIX_PENDING_INPUT)?.[1];
+    if (command) return hasHeredocInput(command);
+  }
+  return false;
+}
+
 /**
  * Infer idleness for shells without explicit execution state (e.g. SSH terminals,
  * where the remote shell emits no integration markers). Returns false for an
@@ -147,4 +183,4 @@ function shellWriteGuard(info, fromPaneId) {
   return { ok: true };
 }
 
-module.exports = { paneSafety, shellWriteGuard, inferShellBusyFromPrompt, isGitDiffPager, isSystemctlPager };
+module.exports = { paneSafety, shellWriteGuard, inferShellBusyFromPrompt, isGitDiffPager, isSystemctlPager, isShellInputRecovery };
