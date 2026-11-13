@@ -10,10 +10,16 @@ const IDLE_PROMPT_PATTERNS = [
   /^[A-Za-z]:\\[^<>|"\r\n]{0,1024}>\s*$/,
 ];
 
+// When a command writes no final newline, the next prompt can be appended to
+// its output. Only accept a suffix that exactly matches a prompt previously
+// echoed with a command in the same buffer. A prompt-shaped suffix by itself
+// is not enough evidence.
+const POSIX_COMMAND_PROMPT = /^((?:\([^()]{1,64}\)\s*)?[\w.-]{1,64}@[\w.-]{1,253}(?::[^\s$#]{0,1024})?\s?[$#])\s+\S/;
 /**
  * Infer idleness for shells without explicit execution state (e.g. SSH terminals,
- * where the remote shell emits no integration markers). Returns false only when
- * the last non-blank line is an idle shell prompt; otherwise null (unknown).
+ * where the remote shell emits no integration markers). Returns false for an
+ * idle prompt or a previously observed prompt appended to output; otherwise
+ * null (unknown). Prompt recognition is a heuristic, not authentication.
  */
 function inferShellBusyFromPrompt(ptyManager, paneId) {
   if (typeof ptyManager?.read !== "function") return null;
@@ -30,7 +36,16 @@ function inferShellBusyFromPrompt(ptyManager, paneId) {
       const redraws = line.split("\r").map((part) => part.trim()).filter(Boolean);
       if (redraws.length && redraws.every((part) => part === redraws[0])) line = redraws[0];
     }
-    return IDLE_PROMPT_PATTERNS.some((pattern) => pattern.test(line.trimStart())) ? false : null;
+    if (IDLE_PROMPT_PATTERNS.some((pattern) => pattern.test(line.trimStart()))) return false;
+    if (!line.includes("\r")) {
+      for (let previous = index - 1; previous >= 0; previous -= 1) {
+        const candidate = String(lines[previous] ?? "")
+          .replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").trimStart();
+        const prompt = candidate.match(POSIX_COMMAND_PROMPT)?.[1];
+        if (prompt && line.length > prompt.length && line.endsWith(prompt)) return false;
+      }
+    }
+    return null;
   }
   return null;
 }

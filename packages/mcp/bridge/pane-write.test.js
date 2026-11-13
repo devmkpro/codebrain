@@ -16,6 +16,15 @@ function setup(agent, role = "worker", withMemory = true) {
 }
 
 describe("pane_write transport", () => {
+  it("accepts the SSH owner after output without a newline and rejects another pane", async () => {
+    const { api, pty, opts } = setup("shell");
+    opts.paneConfigs.set("p", { agent: "shell", ownerPaneId: "owner" });
+    pty.read = () => ["user@host:~$ cat state.json", '{}user@host:~$ '];
+    expect((await api.writePane("p", "echo ok", false, { fromPaneId: "other" })).code).toBe("shell_owner_mismatch");
+    expect(await api.writePane("p", "echo ok", false, { fromPaneId: "owner" })).toEqual({ ok: true });
+    expect(pty.writeSilent).toHaveBeenCalledExactlyOnceWith("p", "echo ok", true);
+  });
+
   it("allows raw q in an owned git diff pager", async () => {
     const { api, pty, opts } = setup("shell");
     opts.paneConfigs.get("p").shellBusy = null;

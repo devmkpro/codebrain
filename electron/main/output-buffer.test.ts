@@ -26,6 +26,12 @@ it("does not duplicate a partial line when it is completed and keeps the request
   expect(buffer.readPlain()).toEqual([]);
 });
 
+it("recognizes a known SSH prompt appended to output without a newline", () => {
+  const buffer = new OutputBuffer();
+  buffer.push('maike@aiparts:~$ cat state.json\r\n{"id":"arena"}maike@aiparts:~$ ');
+  expect(inferShellBusyFromPrompt({ read: (_id: string, n: number) => buffer.readPlain(n) }, "ssh")).toBe(false);
+});
+
 it.each(["\x07", "\x1b\\", "\x9c"])("strips OSC terminated by %j consistently across Node versions", terminator => {
   const buffer = new OutputBuffer();
   buffer.push(`\x1b]0;Terminal title${terminator}deploy@example-host:~$ `);

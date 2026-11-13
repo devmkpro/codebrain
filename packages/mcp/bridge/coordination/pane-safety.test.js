@@ -36,6 +36,17 @@ describe("inferShellBusyFromPrompt", () => {
     expect(inferShellBusyFromPrompt(ptyWith(["program output\ruser@host:~$"]), "ssh")).toBeNull();
   });
 
+  it("reconhece o prompt conhecido após saída sem quebra de linha", () => {
+    const lines = ["maike@aiparts:~$ cat state.json", '{"id":"arena"}maike@aiparts:~$ '];
+    expect(inferShellBusyFromPrompt(ptyWith(lines), "ssh")).toBe(false);
+  });
+
+  it("não aceita um sufixo de prompt sem comando anterior correspondente", () => {
+    expect(inferShellBusyFromPrompt(ptyWith(["output maike@aiparts:~$ "]), "ssh")).toBeNull();
+    expect(inferShellBusyFromPrompt(ptyWith(["other@host:~$ cat file", "output maike@aiparts:~$ "]), "ssh")).toBeNull();
+    expect(inferShellBusyFromPrompt(ptyWith(["maike@aiparts:~$ cat file", "output maike@aiparts:~$ still running"]), "ssh")).toBeNull();
+  });
+
   it("sem buffer legível o estado continua desconhecido", () => {
     expect(inferShellBusyFromPrompt({}, "ssh")).toBeNull();
     expect(inferShellBusyFromPrompt(ptyWith([]), "ssh")).toBeNull();
