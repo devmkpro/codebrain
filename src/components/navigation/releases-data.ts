@@ -14,6 +14,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "2.0.9",
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "recupera entrada pendente e heredocs em terminais SSH"
+      },
+      {
+        "kind": "fix",
+        "text": "reconhece prompt SSH apos saida sem quebra de linha"
+      }
+    ]
+  },
+  {
     "version": "2.0.8",
     "date": "novembro 2026",
     "highlights": [
