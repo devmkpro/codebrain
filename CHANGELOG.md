@@ -2,6 +2,15 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.10] — 2026-11-17
+
+### Features
+- Adiciona o Diário neural do GitLab: conecta gitlab.com ou GitLab self-hosted por personal access token, guardado cifrado no chaveiro do sistema e nunca devolvido à interface.
+- Resume diariamente, em linguagem natural, todos os commits do dia (git inteiro ou só os do usuário), com harness e modelo padrão escolhidos: Claude CLI, Codex CLI ou providers de API nos formatos OpenAI e Anthropic.
+- Desenha um mapa neural radial do dia com projetos, temas e arquivos, com zoom, arrasto e detalhes de commits e autores.
+- Mostra o diário em uma aba no Início, ao lado do escritório, além da Central e de um atalho em Configurações.
+- Agenda o resumo diário e recupera os dias em que o app ficou fechado.
+
 ## [2.0.9] — 2026-11-13
 
 ### Fixes
