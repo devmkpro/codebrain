@@ -108,3 +108,5 @@ decompile.mjs
 # ── Local scripts (dev/build/release .bats) ─────────────────────────────────
 local/
 .github/*
+.kiro/*
+.vscode/*
