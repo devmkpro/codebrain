@@ -8,10 +8,12 @@ import { createGitLabClient, normalizeGitLabUrl } from "./gitlab-client";
 import { createGitDigestService } from "./git-digest-service";
 import { createTokenStore, type TokenSafeStorage } from "./token-store";
 
+// Simula um chaveiro seguro em qualquer SO; no CI (Linux) o código exige backend conhecido.
 const fakeSafeStorage = (available = true): TokenSafeStorage => ({
   isEncryptionAvailable: () => available,
   encryptString: (value) => Buffer.from(`enc:${Buffer.from(value).toString("base64")}`),
   decryptString: (value) => Buffer.from(value.toString().slice(4), "base64").toString(),
+  getSelectedStorageBackend: () => "gnome_libsecret",
 });
 
 const project = (): GitDigestProject => ({
@@ -130,13 +132,14 @@ describe("token store e serviço", () => {
     expect(() => store.set("c1", "glpat-fixture-0001")).toThrow();
   });
 
-  it("recusa chaveiro basic_text no Linux", () => {
+  it("recusa chaveiro basic_text no Linux e aceita libsecret", () => {
     const store = createTokenStore(path.join(dir, "t.json"), { ...fakeSafeStorage(), getSelectedStorageBackend: () => "basic_text" }, "linux");
     expect(store.status().available).toBe(false);
+    expect(createTokenStore(path.join(dir, "t.json"), fakeSafeStorage(), "linux").status().available).toBe(true);
   });
 
   it("verifica o token, salva cifrado e nunca devolve o segredo na config", async () => {
-    const tokens = createTokenStore(path.join(dir, "t.json"), fakeSafeStorage());
+    const tokens = createTokenStore(path.join(dir, "t.json"), fakeSafeStorage(), "linux");
     const service = createGitDigestService({
       dir,
       tokens,
@@ -170,7 +173,7 @@ describe("token store e serviço", () => {
     const urls: string[] = [];
     const service = createGitDigestService({
       dir,
-      tokens: createTokenStore(path.join(dir, "t.json"), fakeSafeStorage()),
+      tokens: createTokenStore(path.join(dir, "t.json"), fakeSafeStorage(), "linux"),
       now: () => new Date(2026, 10, 17, 9),
       summarize: async (args) => {
         onSummarize(args);
@@ -224,7 +227,7 @@ describe("token store e serviço", () => {
   });
 
   it("não grava diário quando todas as conexões falham", async () => {
-    const tokens = createTokenStore(path.join(dir, "t.json"), fakeSafeStorage());
+    const tokens = createTokenStore(path.join(dir, "t.json"), fakeSafeStorage(), "linux");
     let fail = false;
     const service = createGitDigestService({
       dir,
