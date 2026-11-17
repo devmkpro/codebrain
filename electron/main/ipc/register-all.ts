@@ -22,6 +22,7 @@ import { registerOperationsHandlers } from "./register-operations";
 import { registerHarnessHandlers } from "./register-harness";
 import { registerAccessVaultHandlers } from "./register-access-vault";
 import { registerOfficeHandlers } from "./register-office";
+import { registerGitDigestHandlers } from "./register-git-digest";
 import { getAccessVault } from "../services/access-vault-runtime";
 
 export function registerAllIpcHandlers(ctx: AppContext): void {
@@ -51,6 +52,7 @@ export function registerAllIpcHandlers(ctx: AppContext): void {
     ["operations", registerOperationsHandlers],
     ["harness", registerHarnessHandlers],
     ["office", registerOfficeHandlers],
+    ["git-digest", registerGitDigestHandlers],
     ["access-vault", (context) => { registerAccessVaultHandlers(context, { vault: getAccessVault(context) }); }],
   ];
   for (const [name, fn] of groups) {

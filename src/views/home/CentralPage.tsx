@@ -7,6 +7,7 @@ import { AccountsSection } from "../../components/central/AccountsSection";
 import { AccessVaultSection } from "../../components/central/AccessVaultSection";
 import { central, useResource } from "../../components/central/api";
 import { CatalogSection } from "../../components/central/CatalogSection";
+import { DiarySection } from "../../components/central/DiarySection";
 import { FindingsSection } from "../../components/central/FindingsSection";
 import { HarnessSection } from "../../components/central/HarnessSection";
 import { basename } from "../../components/central/logic";
@@ -23,6 +24,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "findings", label: "Findings" },
   { id: "midia", label: "Mídia" },
   { id: "acessos", label: "SSH e máquinas" },
+  { id: "diario", label: "Diário GitLab" },
 ];
 
 function isSectionId(value: string | undefined): value is SectionId {
@@ -95,7 +97,7 @@ export function CentralPage() {
     go(SECTIONS[(move[event.key] + SECTIONS.length) % SECTIONS.length].id, true);
   };
 
-  // 1 a 7 trocam de seção de qualquer ponto da página, fora de campos de texto.
+  // 1 a 8 trocam de seção de qualquer ponto da página, fora de campos de texto.
   const onPageKey = (event: React.KeyboardEvent) => {
     if (event.ctrlKey || event.metaKey || event.altKey || isEditable(event.target)) return;
     const target = SECTIONS[Number(event.key) - 1];
@@ -154,7 +156,7 @@ export function CentralPage() {
                 {workspace ? basename(workspace) : "sem workspace"}
               </span>
             )}
-            <span className="cbc-nav-hint">teclas 1 a 7 trocam de seção</span>
+            <span className="cbc-nav-hint">teclas 1 a 8 trocam de seção</span>
           </div>
         </nav>
 
@@ -174,6 +176,7 @@ export function CentralPage() {
           )}
           {section === "midia" && <MediaSection key={workspace} workspace={workspace} />}
           {section === "acessos" && <AccessVaultSection />}
+          {section === "diario" && <DiarySection />}
         </main>
       </div>
     </div>

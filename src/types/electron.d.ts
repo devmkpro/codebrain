@@ -2,6 +2,7 @@
 
 import type { OperationsSnapshot } from "./operations";
 import type { AccessVaultBridge } from "./access-vault";
+import type { GitDigestBridge } from "./git-digest";
 import type { NativeSession, NativeResumePane } from "./native-session";
 
 export interface AuthStatus {
@@ -532,6 +533,7 @@ export interface CodebrainApp {
     list: (args: { workspace: string }) => Promise<HarnessResult<{ items: MediaItem[] }>>;
     generate: (args: { kind: MediaKind; prompt: string; provider?: string; size?: string; style?: string; workspace: string }) => Promise<{ ok: boolean; path?: string; relativePath?: string; kind?: MediaKind; provider?: string; model?: string; error?: string }>;
   };
+  gitDigest: GitDigestBridge;
   conversation: {
     list: (args: { paneId: string; workspace?: string; limit?: number }) => Promise<{ ok: boolean; messages?: AgentMessage[]; count?: number; error?: string }>;
     send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => Promise<{ ok: boolean; id?: string; error?: string }>;

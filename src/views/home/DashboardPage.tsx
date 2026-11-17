@@ -10,6 +10,8 @@ import { usePaletteStore }   from '../../stores/palette-store';
 import { usePaneLauncherStore } from '../../stores/pane-launcher-store';
 import { OperationsBoard } from '../../components/operations/OperationsBoard';
 import { OfficeView } from '../../components/office/OfficeView';
+import { DiarySection } from '../../components/central/DiarySection';
+import '../../components/central/central.css';
 import { useWorkspaceRegistry } from '../../components/operations/useWorkspaceRegistry';
 import { operationWorkspacePaths } from '../../components/operations/workspace-paths';
 import { derivePaneActivity, activityPresentation, type PaneActivity } from '../../components/shell/pane-status';
@@ -197,7 +199,7 @@ function FirstRun({ launching, onOpen, onPalette, onProviders }: {
 }
 
 // ─── Página ───────────────────────────────────────────────────────────────────
-type HomeView = 'office' | 'panes' | 'board' | 'tasks';
+type HomeView = 'office' | 'diary' | 'panes' | 'board' | 'tasks';
 
 export function DashboardPage() {
   const { navigate } = useRouter();
@@ -357,8 +359,9 @@ export function DashboardPage() {
     providers.length === 0 ? 'nenhum provider' : plural(providers.length, 'provider', 'providers'),
   ].filter(Boolean).join(' · ');
 
-  const VIEWS: { id: HomeView; label: string; count: number }[] = [
+  const VIEWS: { id: HomeView; label: string; count?: number }[] = [
     { id: 'office', label: 'escritório', count: workspaceCount },
+    { id: 'diary', label: 'diário' },
     { id: 'panes', label: 'agentes', count: panes.length },
     { id: 'board', label: 'operações', count: boardWorkspaces.length },
     { id: 'tasks', label: 'tasks', count: tasks.length },
@@ -414,7 +417,7 @@ export function DashboardPage() {
                       className="cb-tab"
                     >
                       {view.label}
-                      <span className="text-xs text-cb-fg-2 tabular-nums">{view.count}</span>
+                      {view.count !== undefined && <span className="text-xs text-cb-fg-2 tabular-nums">{view.count}</span>}
                     </button>
                   ))}
                 </div>
@@ -446,6 +449,10 @@ export function DashboardPage() {
                         }}
                       />
                     )
+                ) : activeView === 'diary' ? (
+                  <div className="cbc-diary-home">
+                    <DiarySection embedded />
+                  </div>
                 ) : activeView === 'board' ? (
                   <OperationsBoard
                     workspacePaths={boardWorkspaces}

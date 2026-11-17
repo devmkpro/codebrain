@@ -22,9 +22,20 @@ export interface CliDeciderRequest {
   timeoutMs: number;
   signal: AbortSignal;
 }
+/** Texto livre (ex.: Diário GitLab) no mesmo modo isolado, sem ferramentas. */
+export interface CliCompletionRequest {
+  providerId: string;
+  model: string;
+  /** Fixo do main process; nunca conteúdo vindo de dados externos. */
+  systemPrompt: string;
+  input: string;
+  timeoutMs: number;
+  signal?: AbortSignal;
+}
 export interface CliDecider {
   listProviders(): Promise<CliDeciderProvider[]>;
   run(request: CliDeciderRequest): Promise<string>;
+  complete(request: CliCompletionRequest): Promise<string>;
 }
 
 // Verified with installed --help and https://code.claude.com/docs/en/cli-reference.
@@ -255,6 +266,34 @@ export function getCliDecider(ctx: AppContext): CliDecider {
       if (results.size >= 64) results.delete(results.keys().next().value!);
       results.set(cacheKey, { text, expires: Date.now() + RESULT_TTL });
       return text;
+    },
+    async complete(request) {
+      const started = Date.now();
+      const budget = Number.isFinite(request.timeoutMs) ? Math.min(240_000, Math.max(1_000, Math.floor(request.timeoutMs))) : 120_000;
+      if (request.signal?.aborted) throw new Error("CLI cancelado");
+      if (request.providerId !== "cli:claude") throw new Error("CLI sem modo isolado confirmado");
+      if (typeof request.model !== "string" || !models().includes(request.model)) throw new Error("Modelo ausente no catálogo local do Claude");
+      if (typeof request.systemPrompt !== "string" || !request.systemPrompt.trim() || request.systemPrompt.length > 4_000 ||
+          /[\x00-\x09\x0b-\x1f\x7f]/.test(request.systemPrompt)) throw new Error("Instrução de sistema inválida");
+      if (typeof request.input !== "string" || !request.input || request.input.length > 160_000) throw new Error("Entrada do CLI inválida");
+      try { await withinBudget(Promise.resolve(ctx.cliDetector?.getAllAsync?.()), budget, request.signal); }
+      catch { throw new Error("Inventário CLI indisponível, cancelado ou sem tempo"); }
+      if (!await withinBudget(supported(), budget, request.signal))
+        throw new Error("Claude sem flags de isolamento confirmadas ou política gerenciada presente");
+      const remaining = budget - (Date.now() - started);
+      if (remaining <= 0 || request.signal?.aborted) throw new Error("CLI cancelado ou sem tempo");
+      // Dados externos (commits) só entram por stdin; o argv leva a instrução fixa.
+      const args = ["--print", "--safe-mode", "--tools", "", "--disable-slash-commands",
+        "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "",
+        "--settings", '{"disableAllHooks":true,"autoMemoryEnabled":false}',
+        "--no-session-persistence", "--output-format", "json", "--model", request.model,
+        "--system-prompt", request.systemPrompt];
+      const output = await execute(installation()!.path!, args, request.input, remaining, request.signal);
+      let envelope: any;
+      try { envelope = JSON.parse(output); } catch { throw new Error("Resposta inválida do Claude CLI"); }
+      if (!envelope || envelope.type !== "result" || envelope.is_error || envelope.subtype !== "success" || typeof envelope.result !== "string")
+        throw new Error("Claude CLI não concluiu a resposta");
+      return envelope.result;
     },
   };
   instances.set(ctx, service);

@@ -216,6 +216,23 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     generate: (args: unknown) => ipcRenderer.invoke("media:generate", args),
   },
 
+  gitDigest: {
+    getConfig: () => ipcRenderer.invoke("gitDigest:getConfig"),
+    saveSettings: (args: unknown) => ipcRenderer.invoke("gitDigest:saveSettings", args),
+    upsertConnection: (args: unknown) => ipcRenderer.invoke("gitDigest:upsertConnection", args),
+    removeConnection: (args: { id: string }) => ipcRenderer.invoke("gitDigest:removeConnection", args),
+    testConnection: (args: { id: string }) => ipcRenderer.invoke("gitDigest:testConnection", args),
+    list: () => ipcRenderer.invoke("gitDigest:list"),
+    get: (args: { date: string }) => ipcRenderer.invoke("gitDigest:get", args),
+    generate: (args?: { date?: string }) => ipcRenderer.invoke("gitDigest:generate", args ?? {}),
+    providers: () => ipcRenderer.invoke("gitDigest:providers"),
+    onUpdated: (callback: (date: string) => void) => {
+      const handler = (_evt: unknown, date: string) => callback(date);
+      ipcRenderer.on("gitDigest:updated", handler);
+      return () => ipcRenderer.off("gitDigest:updated", handler);
+    },
+  },
+
   conversation: {
     list: (args: { paneId: string; workspace?: string; limit?: number }) => ipcRenderer.invoke("conversation:list", args),
     send: (args: { toPane: string; content: string; workspace?: string; parentId?: string }) => ipcRenderer.invoke("conversation:send", args),

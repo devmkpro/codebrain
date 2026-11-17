@@ -2,7 +2,7 @@
    Ficam aqui, e não em electron.d.ts, porque a Central só depende do subconjunto
    que usa, e tolera campo ausente vindo de uma versão mais velha do processo main. */
 
-export type SectionId = "missao" | "tarefas" | "catalogo" | "contas" | "findings" | "midia" | "acessos";
+export type SectionId = "missao" | "tarefas" | "catalogo" | "contas" | "findings" | "midia" | "acessos" | "diario";
 
 export type Tier = "fast" | "balanced" | "deep";
 export type Effort = "low" | "medium" | "high";

@@ -24,8 +24,9 @@ import { normalizedVoiceMode, outputModeForInteractionMode } from '../../stores/
 import { HOST_LABELS } from '../../lib/resolve-spawn-target';
 import { Badge, Prompt, Section as SectionBlock, SectionRule, SettingRow, Toggle } from '../../components/ui/primitives';
 import { useSectionNavigation } from '../../components/shell/section-navigation';
+import { navigate } from '../../lib/router';
 
-type Section = 'terminal' | 'shell' | 'providers' | 'preferredAgent' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'lab' | 'advanced';
+type Section = 'terminal' | 'shell' | 'providers' | 'preferredAgent' | 'spawn' | 'envvars' | 'skill' | 'marketplace' | 'voice' | 'notifications' | 'discord' | 'gitlab' | 'lab' | 'advanced';
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
 function Stepper({ value, onIncrease, onDecrease, onReset, unit = '' }: {
@@ -99,6 +100,7 @@ const NAV_GROUPS: { label: string; items: { id: Section; icon: React.ReactNode; 
     { id: 'notifications', icon: <Bell size={13} />, label: 'Notificações' },
     { id: 'voice', icon: <Mic size={13} />, label: 'Voz' },
     { id: 'discord', icon: <Gamepad2 size={13} />, label: 'Discord' },
+    { id: 'gitlab', icon: <GitPullRequest size={13} />, label: 'GitLab · Diário' },
   ] },
   { label: 'sistema', items: [
     { id: 'lab', icon: <FlaskConical size={13} />, label: 'Laboratório' },
@@ -1431,6 +1433,18 @@ export function SettingsPage() {
             </button>
 
             {discordMsg && <p className="text-xs text-cb-fg-1 mt-1">{discordMsg}</p>}
+          </SectionCard>
+
+          {/* ── GitLab · Diário ──────────────────────────────────────── */}
+          <SectionCard id="gitlab" icon={<GitPullRequest size={13} />} title="GitLab · Diário neural" badge="gitlab.com / self-hosted" active={open.includes('gitlab')} onToggle={toggleSection}>
+            <p className="cb-help">
+              Conecte o GitLab (gitlab.com ou self-hosted) com um personal access token de escopo <code>read_api</code>. O token fica
+              cifrado pelo chaveiro do sistema e nunca volta para a interface. Todo dia o Codebrain resume o que você commitou, com o
+              harness e o modelo padrão que você escolher, e desenha um mapa neural das edições.
+            </p>
+            <button type="button" className="cb-btn w-full justify-center" onClick={() => navigate('/central', { query: { s: 'diario' } })}>
+              <GitPullRequest size={11} /> Configurar token, harness e modelo
+            </button>
           </SectionCard>
 
           <SectionRule label="sistema" className="mt-5" />

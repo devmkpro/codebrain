@@ -134,3 +134,41 @@ export function mediaCredentials(providers: readonly HarnessProvider[]): MediaCr
   }
   return credentials;
 }
+
+/**
+ * Credenciais no formato Anthropic Messages (`/v1/messages`) para providers
+ * `anthropic-compat` (Anthropic, MiMo via Claude, 9router...). Só o nome da
+ * variável do próprio provider é aceito, nunca a chave de outro serviço.
+ */
+export function anthropicCredentials(
+  providers: readonly HarnessProvider[],
+  providerId?: string | null
+): (ProviderCredentials & { bearer: boolean }) | null {
+  const provider = providers.find((candidate) => candidate.id === providerId);
+  if (!provider || provider.type !== "anthropic-compat") return null;
+  const env = provider.env ?? {};
+  const registry = PROVIDER_REGISTRY.find((entry) => entry.id === provider.id);
+  const names = provider.tokenEnvVar
+    ? [provider.tokenEnvVar]
+    : [...(registry?.tokenEnvVar ? [registry.tokenEnvVar] : []), "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
+  let apiKey: string | null = null;
+  let source = "";
+  for (const name of names) {
+    const value = typeof env[name] === "string" ? env[name].trim() : "";
+    if (value && !/^\*+$/.test(value) && !/[\r\n\x00-\x1f\x7f]/.test(value)) {
+      apiKey = value;
+      source = name;
+      break;
+    }
+  }
+  const rawBase = env.ANTHROPIC_BASE_URL || provider.baseUrl || registry?.baseUrl;
+  if (!apiKey || !rawBase) return null;
+  try {
+    const url = new URL(rawBase.trim());
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) return null;
+    // ANTHROPIC_API_KEY vai em x-api-key; tokens de gateway (AUTH_TOKEN) vão como Bearer, igual ao Claude Code.
+    return { baseUrl: url.href.replace(/\/+$/, "").replace(/\/v1$/, ""), apiKey, bearer: source !== "ANTHROPIC_API_KEY" };
+  } catch {
+    return null;
+  }
+}

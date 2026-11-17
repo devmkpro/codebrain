@@ -429,3 +429,112 @@ div.cbc-tile-media { display: flex; }
 }
 .cbm-mode:hover { border-color: var(--cb-line-2); background: var(--cb-bg-2); }
 .cbm-mode[aria-checked="true"] { border-color: var(--cb-accent); background: var(--cb-accent-wash); }
+
+/* ── Diário neural ─────────────────────────────────────────────────────────── */
+.cbc-neural-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .cbc-neural-layout { grid-template-columns: 1fr; }
+}
+.cbc-neural {
+  position: relative;
+  border: 1px solid var(--cb-line-1);
+  background: radial-gradient(circle at 50% 50%, var(--cb-accent-wash) 0%, var(--cb-bg-0) 62%);
+  color: var(--cb-fg-0);
+  min-height: 420px;
+}
+.cbc-neural-tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 1;
+}
+.cbc-neural-svg {
+  display: block;
+  width: 100%;
+  height: min(72vh, 760px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.cbc-neural-svg:active { cursor: grabbing; }
+.cbc-neural-ring { fill: none; stroke: var(--cb-line-0); stroke-dasharray: 2 6; }
+.cbc-neural-edge {
+  fill: none;
+  stroke-width: 1.4;
+  stroke-opacity: 0.45;
+  transition: stroke-opacity 160ms ease, stroke-width 160ms ease;
+}
+.cbc-neural-edge[data-kind="synapse"] { stroke-dasharray: 3 5; stroke-opacity: 0.35; }
+.cbc-neural-edge[data-dim] { stroke-opacity: 0.08; }
+.cbc-neural-edge[data-lit] {
+  stroke-opacity: 0.95;
+  stroke-width: 2.2;
+  stroke-dasharray: 6 8;
+  animation: cbc-neural-flow 1.4s linear infinite;
+}
+@keyframes cbc-neural-flow { to { stroke-dashoffset: -28; } }
+.cbc-neural-node { cursor: pointer; outline: none; transition: opacity 160ms ease; }
+.cbc-neural-node[data-dim] { opacity: 0.22; }
+.cbc-neural-halo { opacity: 0; transition: opacity 160ms ease; }
+.cbc-neural-node:hover .cbc-neural-halo,
+.cbc-neural-node:focus-visible .cbc-neural-halo,
+.cbc-neural-node[data-selected] .cbc-neural-halo { opacity: 0.28; }
+.cbc-neural-core { stroke: var(--cb-bg-0); stroke-width: 1.5; }
+.cbc-neural-node:focus-visible .cbc-neural-core { stroke: var(--cb-fg-0); stroke-width: 2; }
+.cbc-neural-node[data-kind="day"] .cbc-neural-core { animation: cbc-neural-pulse 3.2s ease-in-out infinite; }
+@keyframes cbc-neural-pulse { 50% { opacity: 0.78; } }
+.cbc-neural-label {
+  fill: var(--cb-fg-1);
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: var(--cb-bg-0);
+  stroke-width: 3px;
+  pointer-events: none;
+}
+.cbc-neural-label[data-kind="day"] { fill: var(--cb-fg-0); font-size: 14px; font-weight: 600; }
+.cbc-neural-label[data-kind="project"] { fill: var(--cb-fg-0); font-size: 13px; font-weight: 600; stroke-width: 5px; }
+.cbc-neural-label[data-kind="theme"] { font-size: 10.5px; fill: var(--cb-fg-1); }
+.cbc-neural-label[data-kind="file"] { font-size: 10px; fill: var(--cb-fg-2); }
+.cbc-neural-detail {
+  border: 1px solid var(--cb-line-1);
+  background: var(--cb-bg-1);
+  color: var(--cb-fg-0);
+  padding: 12px;
+  max-height: min(72vh, 760px);
+  overflow: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbc-neural-edge[data-lit],
+  .cbc-neural-node[data-kind="day"] .cbc-neural-core { animation: none; }
+}
+
+/* Resumo do dia em texto corrido, acima do mapa. */
+.cbc-diary-summary {
+  border: 1px solid var(--cb-line-1);
+  border-left: 3px solid var(--cb-accent);
+  background: var(--cb-bg-1);
+  color: var(--cb-fg-1);
+  padding: 14px 16px;
+  max-width: 78ch;
+}
+.cbc-diary-summary h3 {
+  color: var(--cb-fg-0);
+  font-size: var(--cb-text-md, 15px);
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.cbc-diary-summary p {
+  font-size: var(--cb-text-sm, 13px);
+  line-height: 1.65;
+  margin: 0 0 8px;
+}
+.cbc-diary-summary p:last-child { margin-bottom: 0; }
+/* Na aba do Início, o diário herda o fundo da página. */
+.cbc-diary-home { color: var(--cb-fg-1); }
