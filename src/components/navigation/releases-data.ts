@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "2.0.10",
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "adiciona diario neural do GitLab com resumo diario e mapa das edicoes"
+      }
+    ]
+  },
+  {
     "version": "2.0.9",
     "date": "novembro 2026",
     "highlights": [
