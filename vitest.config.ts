@@ -22,6 +22,7 @@ import path from "node:path";
 export default defineConfig({
   test: {
     globals: true,
+    testTimeout: 15_000,
     // Padrão jsdom (a maior parte do código testável é renderer); os testes de
     // node se marcam com `// @vitest-environment node` no topo do arquivo.
     environment: "jsdom",

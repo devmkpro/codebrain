@@ -9,10 +9,13 @@ const require = createRequire(import.meta.url);
 const { createMCPBridge } = require("./bridge.js");
 let root;
 beforeEach(() => {
-  vi.useFakeTimers(); root = fs.mkdtempSync(path.join(os.tmpdir(), "cb-feedback-memory-"));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), "cb-feedback-memory-"));
   vi.spyOn(require("./bridge/request-logger.js"), "getRequestLogger").mockReturnValue({});
 });
-afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  fs.rmSync(root, { recursive: true, force: true });
+});
 describe("automatic file memory workspace attribution", () => {
   it("resolves a relative filename from the workspace, not the Codebrain process cwd", async () => {
     const write = vi.fn(() => ({ ok: true }));
