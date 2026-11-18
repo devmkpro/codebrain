@@ -202,7 +202,11 @@ async function spawnPaneOnce(
       ? { provider: config.agent!, id: config.claudeSessionId, confidence: "high" as const, capturedAt: Date.now(), source: "legacy-explicit-id" } : undefined);
     if (requestedSession && requestedSession.confidence !== "high") throw new Error("O ID desta conversa ainda não foi confirmado; informe o ID nativo para retomar.");
     if (requestedSession && (config.initialPrompt || config.sessionContext)) throw new Error("Retomar não pode reenviar um prompt inicial. Envie uma nova mensagem após a retomada.");
-    if (config.agent !== "shell") await ctx.cliDetector?.getAllAsync?.();
+    if (config.agent !== "shell") {
+      if (!ctx.cliDetector?.getAll?.()) {
+        await ctx.cliDetector?.getAllAsync?.();
+      }
+    }
     const parent = config.parentPaneId ? ctx.paneConfigs.get(config.parentPaneId) : undefined;
     let parentActor: any;
     if (config.parentPaneId && !parent) {
@@ -302,7 +306,9 @@ async function spawnPaneOnce(
     let adapter: CodebrainAdapterResult | undefined;
     if (agent !== "shell") {
       adapter = prepareCodebrainAdapter({ cwd, workspacePath, paneId, agent, agentName: config.agentName, allowedSkills: config.allowedSkills, env: { ...process.env, ...env } });
-      config = { ...config, allowedSkills: adapter.allowedSkills };
+      if (config.allowedSkills !== undefined || config.agentName) {
+        config = { ...config, allowedSkills: adapter.allowedSkills };
+      }
     }
     const buildSystemPrompt = (context: AppContext, data: Parameters<typeof buildBaseSystemPrompt>[1]): string => {
       const file = buildBaseSystemPrompt(context, data);

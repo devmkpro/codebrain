@@ -4,6 +4,14 @@ import { MODEL_MAP_BY_TYPE, PROVIDER_REGISTRY, getProviderTypeForModel } from ".
 import { getEnhancedProviders } from "../providers";
 import { isGenericHarness } from "./cli-registry";
 import { sortModelIds } from "../../../../src/lib/model-catalog-order";
+import {
+  getDriverByProviderId,
+  getHarnessDriver,
+  harnessIdForProvider,
+  isVirtualHarnessProvider,
+  providerIdForHarness,
+  resolveDriverModels,
+} from "./harness-driver";
 
 const ENHANCED_MODEL_MAP = MODEL_MAP_BY_TYPE;
 
@@ -30,10 +38,20 @@ export function resolveProvider(
   ctx: AppContext,
   config: { agent?: string; providerId?: string; model?: string },
 ): ResolvedProvider {
-  let agent = config.agent ?? "openclaude";
+  let agent = config.agent === "gemini-cli" ? "gemini" : (config.agent ?? "openclaude");
   let providerId = config.providerId ?? null;
   let model = config.model;
   let provider: any = null;
+
+  if (providerId === "gemini-cli") {
+    return {
+      agent,
+      provider: null,
+      providerId: null,
+      model,
+      error: `Provider "gemini-cli" was removed. Configure Google Gemini API or use Antigravity CLI.`,
+    };
+  }
 
   // ── Read preferredAgent from configStore (set by user in Settings/Header) ──
   let preferredAgent: string | undefined;
@@ -45,6 +63,12 @@ export function resolveProvider(
   // ── Early exit: shell agent needs no provider ──────────────────────────────
   if (agent === "shell") {
     return { agent, provider: null, providerId: null, model: undefined };
+  }
+
+  // Infer agent from providerId if agent was not explicitly provided
+  if (!config.agent && providerId) {
+    const inferred = harnessIdForProvider(providerId);
+    if (inferred) agent = inferred;
   }
 
   // Registry harnesses sign in with their own CLI and take no Codebrain provider.
@@ -65,121 +89,44 @@ export function resolveProvider(
     }
     return { agent, provider: null, providerId: null, model };
   };
-  if (isGenericHarness(agent)) return resolveHarness();
+  if (isGenericHarness(agent) || agent === "gemini") return resolveHarness();
 
   // A native CLI explicitly requested by the caller is authoritative. Without
   // this pin, the inheritance step can copy the previous pane's Claude provider
   // into a `pane_spawn({ agent: "codex" })` request and silently launch Claude.
-  const nativeProvider: Record<string, string> = {
-    claude: "claude-oauth", codex: "codex-oauth", gemini: "gemini-cli", "gemini-cli": "gemini-cli",
-    kimi: "kimi", cursor: "cursor", copilot: "copilot",
-  };
-  if (!providerId && config.agent) providerId = nativeProvider[agent] ?? null;
-
-  // ── Step 0: claude-oauth virtual provider ───────────────────────────────────
-  if (providerId === "claude-oauth") {
-    agent = "claude";
-    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "claude-oauth");
-    const registryModels = registryTemplate?.models ?? [];
-    const anthropicTemplate = PROVIDER_REGISTRY.find((t) => t.id === "anthropic");
-    const anthropicModels = anthropicTemplate?.models ?? [];
-    // Model refresh persists the OAuth catalog in the provider store. Keeping
-    // that list here is essential: otherwise a newly available Claude model
-    // (for example Opus 5) is treated as foreign and gets rerouted to a
-    // generic Anthropic/OpenClaude provider during validation.
-    const savedModels = ctx.providerStore.listFull()
-      .find((item: any) => item.id === "claude-oauth")?.models ?? [];
-    provider = {
-      id: "claude-oauth",
-      type: "anthropic-compat",
-      host: "claude",
-      models: [...new Set([...savedModels, ...registryModels, ...anthropicModels])],
-      env: {},
-    };
-    log.info(`[resolveProvider] claude-oauth → agent="claude", ${provider.models.length} models`);
+  if (!providerId && config.agent) {
+    providerId = providerIdForHarness(agent);
   }
 
-  // ── Step 0b: codex-oauth virtual provider ────────────────────────────────────
-  if (providerId === "codex-oauth") {
-    agent = "codex";
-    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "codex-oauth");
-    const registryModels = registryTemplate?.models ?? [];
-    const codexTemplate = PROVIDER_REGISTRY.find((t) => t.id === "codex");
-    const codexApiModels = codexTemplate?.models ?? [];
+  // ── Universal Harness Driver Resolution ─────────────────────────────────────
+  const driver = providerId ? getDriverByProviderId(providerId) : undefined;
+  if (driver && !provider) {
+    agent = driver.host;
+    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === driver.virtualProviderId);
+    let canonical = driver.getCanonicalModels();
+    if (driver.harnessId === "claude") {
+      const anthropicTemplate = PROVIDER_REGISTRY.find((t) => t.id === "anthropic");
+      canonical = [...new Set([...canonical, ...(anthropicTemplate?.models ?? [])])];
+    } else if (driver.harnessId === "codex") {
+      const codexTemplate = PROVIDER_REGISTRY.find((t) => t.id === "codex");
+      canonical = [...new Set([...canonical, ...(codexTemplate?.models ?? [])])];
+    }
+    const saved = ctx.providerStore.listFull().find((item: any) => item.id === driver.virtualProviderId);
+    const models = resolveDriverModels(driver, saved, canonical);
     provider = {
-      id: "codex-oauth",
-      type: "codex",
-      host: "codex",
-      models: [...new Set([...registryModels, ...codexApiModels])],
+      id: driver.virtualProviderId,
+      type: driver.type,
+      host: driver.host,
+      baseUrl: driver.baseUrl ?? registryTemplate?.baseUrl,
+      models,
       env: {},
     };
-    log.info(`[resolveProvider] codex-oauth → agent="codex", ${provider.models.length} models`);
-  }
-
-  // ── Step 0c: gemini-cli virtual provider ─────────────────────────────────────
-  if (providerId === "gemini-cli") {
-    agent = "gemini-cli";
-    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "gemini-cli");
-    const registryModels = registryTemplate?.models ?? [];
-    provider = {
-      id: "gemini-cli",
-      type: "gemini-cli",
-      host: "gemini-cli",
-      models: [...new Set([...registryModels])],
-      env: {},
-    };
-    log.info(`[resolveProvider] gemini-cli → agent="gemini-cli", ${provider.models.length} models`);
-  }
-
-  // ── Step 0d: kimi CLI virtual provider ──────────────────────────────────────
-  if (providerId === "kimi") {
-    agent = "kimi";
-    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "kimi");
-    const registryModels = registryTemplate?.models ?? [];
-    provider = {
-      id: "kimi",
-      type: "openai-compat",
-      host: "kimi",
-      baseUrl: registryTemplate?.baseUrl ?? "https://api.moonshot.cn/v1",
-      models: [...new Set([...registryModels])],
-      env: {},
-    };
-    log.info(`[resolveProvider] kimi → agent="kimi", ${provider.models.length} models`);
-  }
-
-  // ── Step 0e: cursor CLI virtual provider ────────────────────────────────────
-  if (providerId === "cursor") {
-    agent = "cursor";
-    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "cursor");
-    const registryModels = registryTemplate?.models ?? [];
-    provider = {
-      id: "cursor",
-      type: "openai-compat",
-      host: "cursor",
-      models: [...new Set([...registryModels])],
-      env: {},
-    };
-    log.info(`[resolveProvider] cursor → agent="cursor", ${provider.models.length} models`);
-  }
-
-  // ── Step 0g: copilot CLI virtual provider ───────────────────────────────────
-  if (providerId === "copilot") {
-    agent = "copilot";
-    const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "copilot");
-    const registryModels = registryTemplate?.models ?? [];
-    provider = {
-      id: "copilot",
-      type: "openai-compat",
-      host: "copilot",
-      models: [...new Set([...registryModels])],
-      env: {},
-    };
-    log.info(`[resolveProvider] copilot → agent="copilot", ${provider.models.length} models`);
+    log.info(`[resolveProvider] ${driver.virtualProviderId} → agent="${agent}", ${provider.models.length} models`);
   }
 
   // Native CLI catalogs are authoritative, including user-edited lists. Never
   // reinsert static models or use another CLI's catalog to pick a default.
-  const isNativeProvider = () => Object.values(nativeProvider).includes(providerId ?? "");
+  const isNativeProvider = () => Boolean(driver) || isVirtualHarnessProvider(providerId ?? "");
   if (provider && isNativeProvider()) {
     const saved = ctx.providerStore.listFull().find((item: any) => item.id === providerId);
     if (Array.isArray(saved?.models) && (saved.models.length || saved.modelsMode === "manual")) {
@@ -193,20 +140,18 @@ export function resolveProvider(
     const registryTemplate = PROVIDER_REGISTRY.find((t) => t.id === "mimo-claude");
     const registryModels = registryTemplate?.models ?? [];
     // Inherit MIMO key from the configured mimo provider in the store.
-    // The main MIMO provider (mimo-compat/openclaude) stores the key as OPENAI_API_KEY
-    // or ANTHROPIC_AUTH_TOKEN. We check ALL possible locations.
     const mimoStoreProvider = ctx.providerStore.listFull().find((p: any) =>
       (p.id || "").toLowerCase().includes("mimo") || (p.label || "").toLowerCase().includes("mimo")
     );
     const mimoKey = mimoStoreProvider?.env?.["ANTHROPIC_AUTH_TOKEN"]
       || mimoStoreProvider?.env?.["MIMO_API_KEY"]
       || mimoStoreProvider?.env?.["ANTHROPIC_API_KEY"]
-      || mimoStoreProvider?.env?.["OPENAI_API_KEY"]  // MIMO openclaude adapter stores key here
-      || (mimoStoreProvider as any)?.apiKey  // direct property fallback
+      || mimoStoreProvider?.env?.["OPENAI_API_KEY"]
+      || (mimoStoreProvider as any)?.apiKey
       || "";
     const mimoBaseUrl = mimoStoreProvider?.env?.["ANTHROPIC_BASE_URL"]
       || registryTemplate?.baseUrl
-      || "https://token-plan-ams.xiaomimimo.com/anthropic"; // AMS cluster (user's region)
+      || "https://token-plan-ams.xiaomimimo.com/anthropic";
     provider = {
       id: "mimo-claude",
       type: "anthropic-compat",
@@ -219,13 +164,11 @@ export function resolveProvider(
     log.info(`[resolveProvider] mimo-claude → agent="claude", key=${mimoKey ? "SET" : "MISSING"}, baseUrl=${mimoBaseUrl}`);
     if (!mimoKey) {
       log.warn(`[resolveProvider] mimo-claude: NO API KEY FOUND in mimo store provider! Check provider env vars.`);
-      log.warn(`[resolveProvider] mimo store provider env keys: ${Object.keys(mimoStoreProvider?.env || {}).join(", ") || "none"}`);
     }
   }
 
   // ── Step 1: Explicit providerId ─────────────────────────────────────────────
-  const VIRTUAL_PROVIDER_IDS = ["claude-oauth", "codex-oauth", "gemini-cli", "kimi", "cursor", "copilot", "mimo-claude"];
-  if (!provider && providerId && !VIRTUAL_PROVIDER_IDS.includes(providerId)) {
+  if (!provider && providerId && !isVirtualHarnessProvider(providerId)) {
     provider = ctx.providerStore.listFull().find((p: any) => p.id === providerId) ?? null;
     if (!provider) {
       return {
@@ -256,15 +199,6 @@ export function resolveProvider(
                 ?? null;
         if (provider) {
           log.info(`[resolveProvider] codex agent + model "${model}" (${targetType}) → pinned to "${provider.id}"`);
-        }
-      }
-
-      // gemini-cli agent + gemini-* model → gemini-cli provider (native CLI)
-      if (!provider && (agent === "gemini" || agent === "gemini-cli") && targetType === "gemini-compat") {
-        provider = allProviders.find((p: any) => p.id === "gemini-cli") ?? null;
-        if (provider) {
-          agent = "gemini-cli"; // normalize agent to canonical name
-          log.info(`[resolveProvider] gemini-cli agent + model "${model}" → pinned to gemini-cli provider`);
         }
       }
 
@@ -329,8 +263,8 @@ export function resolveProvider(
       // Fallback: if no direct provider found (e.g. anthropic-compat unavailable),
       // try OpenRouter or any openai-compat provider that might proxy the model.
       // IMPORTANT: only use OpenRouter as last resort — never for agent-pinned CLIs
-      // (codex, gemini, kimi) because OpenRouter uses openclaude, not their native binary.
-      const isAgentPinnedCli = agent === "codex" || agent === "gemini" || agent === "gemini-cli" || agent === "kimi" || agent === "cursor" || agent === "copilot";
+      // (codex, kimi) because OpenRouter uses openclaude, not their native binary.
+      const isAgentPinnedCli = agent === "codex" || agent === "kimi" || agent === "cursor" || agent === "copilot";
       if (!provider && targetType !== "openai-compat" && !isAgentPinnedCli) {
         provider = allProviders.find((p: any) => {
           if (p.type !== "openai-compat") return false;
@@ -390,7 +324,7 @@ export function resolveProvider(
       provider = providerId ? ctx.providerStore.listFull().find((p: any) => p.id === providerId) ?? null : null;
     }
     // Cloning a registry harness pane: same pin as the early return above.
-    if (isGenericHarness(agent)) {
+    if (isGenericHarness(agent) || agent === "gemini") {
       return resolveHarness();
     }
   }
@@ -404,14 +338,8 @@ export function resolveProvider(
     if (agent === "claude") {
       provider = allProviders.find((p: any) => p.id === "claude-oauth") ?? null;
     }
-    if (!provider && agent === "gemini") {
-      provider = allProviders.find((p: any) => p.host === "gemini" || p.id?.toLowerCase().includes("gemini")) ?? null;
-    }
     if (!provider && agent === "codex") {
       provider = allProviders.find((p: any) => p.id === "codex-oauth") ?? null;
-    }
-    if (!provider && agent === "gemini-cli") {
-      provider = allProviders.find((p: any) => p.id === "gemini-cli") ?? null;
     }
     if (!provider) provider = allProviders.find((p: any) => p.type === "mimo-compat") ?? null;
     if (!provider) provider = allProviders.find((p: any) => p.type === "anthropic-compat") ?? null;

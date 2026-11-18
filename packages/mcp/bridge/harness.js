@@ -37,6 +37,26 @@ const DEFAULT_TIER_MODELS = {
   kiro: { fast: "claude-haiku-5.5", balanced: "claude-sonnet-5.5", deep: "claude-opus-5.5" },
   // docs.x.ai/build/settings só documenta grok-build para sessões de código.
   grok: { balanced: "grok-build" },
+  copilot: {
+    fast: "gpt-4.1-mini",
+    balanced: "gpt-5.4",
+    deep: "gpt-5.5",
+  },
+  cursor: {
+    fast: "gpt-4o-mini",
+    balanced: "claude-sonnet-4-6",
+    deep: "claude-opus-4-6",
+  },
+  opencode: {
+    fast: "deepseek-chat",
+    balanced: "deepseek-coder",
+    deep: "claude-sonnet-4-6",
+  },
+  openclaude: {
+    fast: "gemini-3.5-flash",
+    balanced: "mimo-v2.5",
+    deep: "mimo-v2.5-pro",
+  },
 };
 
 const DEFAULT_DECIDER = {

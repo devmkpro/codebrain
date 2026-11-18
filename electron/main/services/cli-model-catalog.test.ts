@@ -51,6 +51,7 @@ describe("CLI model discovery", () => {
       "openai/gpt-5.9\nopenai/gpt-5.10",
     ],
     ["grok", "  models  List available models", ["models"], "grok-4.9\ngrok-4.10"],
+    ["antigravity", "  models  List available models", ["models"], "gemini-3.9-pro\ngemini-3.10-pro"],
   ])("%s executes only its advertised listing command", async (cli, help, command, output) => {
     const run = vi.fn(async (_binary, args) =>
       args.includes("--help") ? (args[0] === "models" ? "--refresh" : help) : output
@@ -141,5 +142,18 @@ describe("CLI model discovery", () => {
         "codex"
       ).models
     ).toEqual(["b", "a"]);
+  });
+  it("parses tab-separated models and unversioned orchestrator IDs for antigravity", () => {
+    const output = `Fetching available models...
+gemini-4-carbon-medium\tGemini 4 Carbon (Medium)
+gemini-4-carbon-high\tGemini 4 Carbon (High)
+gemini-pro-orchestrator\tOrchestrator (Carbon)
+claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)`;
+    const result = parseModelCatalog(output, "antigravity");
+    expect(result.models).toContain("gemini-4-carbon-medium");
+    expect(result.models).toContain("gemini-4-carbon-high");
+    expect(result.models).toContain("gemini-pro-orchestrator");
+    expect(result.models).toContain("claude-sonnet-4-6");
+    expect(result.models).not.toContain("Fetching");
   });
 });

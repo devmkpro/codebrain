@@ -71,7 +71,7 @@ export class ProviderStore {
   private suppressNextWatch = false;
   private watcher: fs.FSWatcher | null = null;
   private changeListeners: Array<() => void> = [];
-  cliPresence: Record<string, boolean> = { gemini: false, codex: false };
+  cliPresence: Record<string, boolean> = { antigravity: false, codex: false };
 
   constructor(private readonly filePath: string) {
     this.load();

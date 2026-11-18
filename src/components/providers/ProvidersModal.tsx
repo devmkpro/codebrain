@@ -14,7 +14,6 @@ import { ProviderForm } from "./ProviderForm";
 const CATALOG_ONLY_PROVIDER_IDS = new Set([
   "claude-oauth",
   "codex-oauth",
-  "gemini-cli",
   "kimi",
   "cursor",
   "copilot",
@@ -167,7 +166,7 @@ export function ProvidersModal({
           reason: res?.reason,
           hint: res?.hint,
           route: baseUrl,
-          integration: integ.host === "openclaude" ? "OpenClaude" : integ.host === "gemini" ? "Gemini" : integ.type === "mimo-compat" ? "MIMO" : "Custom"
+          integration: integ.host === "openclaude" ? "OpenClaude" : integ.type === "mimo-compat" ? "MIMO" : "Custom"
         });
       }
       if (results.length === 0) {
@@ -220,12 +219,7 @@ export function ProvidersModal({
           await remove(p.id);
         }
       }
-      const detected = await window.codeBrainApp.cli.detect().catch(() => ({}));
-      const geminiFound = detected?.gemini?.found ?? false;
-      const eligible = bulkTemplate.integrations.filter(i => {
-        if (i.host === "gemini") return geminiFound;
-        return true;
-      });
+      const eligible = bulkTemplate.integrations;
       if (eligible.length === 0) {
         setError(`Nenhum CLI compatível instalado pra ${bulkTemplate.label}.`);
         setBulkSaving(false);

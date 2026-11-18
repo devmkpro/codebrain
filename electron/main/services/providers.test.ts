@@ -276,12 +276,11 @@ describe("provider model discovery", () => {
 
   it("every installed harness uses descending numeric release order in the provider selector", () => {
     const entries = CLI_REGISTRY.filter(
-      (entry) => entry.id !== "openclaude" && entry.capabilities.model
+      (entry) => entry.id !== "openclaude" && entry.id !== "gemini" && entry.capabilities.model
     );
     const nativeIds: Record<string, string> = {
       claude: "claude-oauth",
       codex: "codex-oauth",
-      gemini: "gemini-cli",
       kimi: "kimi",
       cursor: "cursor",
       copilot: "copilot",
@@ -304,6 +303,39 @@ describe("provider model discovery", () => {
         "m-5.9",
         "auto",
       ]);
+  });
+
+  it("removes gemini-cli from providers while keeping Google Gemini API and detected Antigravity CLI", () => {
+    const ctx = {
+      providerStore: {
+        listFull: () => [
+          { id: "gemini-cli", label: "Gemini CLI", models: ["gemini-3.1-pro-preview"] },
+          { id: "gemini-api", label: "Google Gemini", type: "gemini-compat", host: "openclaude", models: ["gemini-3.5-flash"] },
+        ],
+      },
+      cliDetector: {
+        getAll: () => ({
+          gemini: { found: true, path: "gemini.cmd" },
+          antigravity: { found: true, path: "C:\\Users\\a\\AppData\\Local\\agy\\bin\\agy.exe", version: "1.0.0" },
+        }),
+      },
+    } as any;
+    const all = getEnhancedProviders(ctx);
+    expect(all.find((provider) => provider.id === "gemini-cli")).toBeUndefined();
+    expect(all.find((provider) => provider.id === "gemini-api")).toMatchObject({
+      label: "Google Gemini",
+      type: "gemini-compat",
+      host: "openclaude",
+    });
+    const agy = all.find((provider) => provider.id === "antigravity-cli");
+    expect(agy).toMatchObject({
+      label: "Antigravity CLI",
+      host: "antigravity",
+      type: "cli",
+      isVirtual: true,
+    });
+    expect(agy?.models.length).toBeGreaterThan(0);
+    expect(agy?.models).toContain("gemini-4-carbon-high");
   });
 
   it("endpoint source timestamps determine order instead of recommendation order", async () => {

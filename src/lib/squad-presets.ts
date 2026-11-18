@@ -70,7 +70,37 @@ export const CLAUDE_CODEX_PRESET: SquadPreset = {
   workers: [{ role: "backend" }, { role: "frontend" }, { role: "tester" }],
 };
 
-export const SQUAD_PRESETS: SquadPreset[] = [CLAUDE_CODEX_PRESET];
+export const ANTIGRAVITY_CODEX_PRESET: SquadPreset = {
+  id: "antigravity-codex",
+  label: "Antigravity + Codex",
+  description: "Antigravity orquestra, workers Codex executam",
+  orchestratorProviders: ["antigravity-cli", "antigravity"],
+  orchestratorModels: ["gemini-4-carbon-high", "gemini-4-argon-high", "claude-sonnet-4-6"],
+  orchestratorModelPattern: /(carbon|argon|sonnet)/i,
+  workerProviders: ["codex-oauth", "codex"],
+  workerModels: ["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"],
+  workerModelPattern: /^gpt-5\.6/i,
+  workers: [{ role: "backend" }, { role: "frontend" }, { role: "tester" }],
+};
+
+export const CLAUDE_ANTIGRAVITY_PRESET: SquadPreset = {
+  id: "claude-antigravity",
+  label: "Claude + Antigravity",
+  description: "Opus orquestra, workers Antigravity executam",
+  orchestratorProviders: ["claude-oauth", "anthropic", "mimo-claude"],
+  orchestratorModels: ["claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6"],
+  orchestratorModelPattern: /opus/i,
+  workerProviders: ["antigravity-cli", "antigravity"],
+  workerModels: ["gemini-4-carbon-medium", "gemini-3.8-flash-high", "gemini-3.8-flash-medium"],
+  workerModelPattern: /(carbon|flash)/i,
+  workers: [{ role: "backend" }, { role: "frontend" }, { role: "tester" }],
+};
+
+export const SQUAD_PRESETS: SquadPreset[] = [
+  CLAUDE_CODEX_PRESET,
+  ANTIGRAVITY_CODEX_PRESET,
+  CLAUDE_ANTIGRAVITY_PRESET,
+];
 
 function pickProvider(
   providers: PresetProvider[],

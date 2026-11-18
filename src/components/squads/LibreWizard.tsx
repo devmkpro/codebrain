@@ -70,7 +70,7 @@ export function LibreWizard({ open, onClose, onSpawn, activeWorkspace }: LibreWi
   const orchestratorProvider = providers.find((p: any) => p.id === orchestrator?.providerId);
   const orchestratorCli = orchestratorProvider?.host === "claude" ? "Claude Code CLI"
     : orchestratorProvider?.host === "codex" ? "Codex"
-      : orchestratorProvider?.host === "gemini" || orchestratorProvider?.host === "gemini-cli" ? "Gemini CLI"
+      : orchestratorProvider?.host === "antigravity" ? "Antigravity CLI"
         : "OpenClaude";
 
   const workerAllocated = slots.reduce((s, sl) => s + sl.count, 0);

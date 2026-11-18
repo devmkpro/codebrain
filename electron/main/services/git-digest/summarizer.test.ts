@@ -22,13 +22,15 @@ const providers: HarnessProvider[] = [
 describe("listSummarizerOptions", () => {
   it("lista CLIs detectadas e todos os providers, marcando os indisponíveis", async () => {
     const options = await listSummarizerOptions({
-      providers,
+      providers: [...providers, { id: "antigravity-cli", type: "cli", env: {} }],
       cli: cli(),
-      clis: { claude: { found: true }, codex: { found: true, path: process.platform === "win32" ? "C:\\x\\codex.exe" : "/usr/bin/codex" }, gemini: { found: true } },
+      clis: { claude: { found: true }, codex: { found: true, path: process.platform === "win32" ? "C:\\x\\codex.exe" : "/usr/bin/codex" }, antigravity: { found: true }, gemini: { found: true } },
     });
     const byId = Object.fromEntries(options.map((option) => [option.id, option]));
     expect(byId["cli:claude"].available).toBe(true);
     expect(byId["cli:codex"]).toMatchObject({ available: true, models: ["gpt-5.5"] });
+    expect(byId["cli:antigravity"]).toMatchObject({ label: "Antigravity CLI", available: false });
+    expect(byId["antigravity-cli"]).toBeUndefined();
     expect(byId["cli:gemini"]).toMatchObject({ available: false });
     expect(byId.openai.available).toBe(true);
     expect(byId.anthropic.available).toBe(true);

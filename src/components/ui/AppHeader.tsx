@@ -172,7 +172,7 @@ function PreferredAgentDropdown() {
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-[#12121A] border border-white/10 shadow-2xl py-1 z-[100]">
-          {[null, 'claude', 'openclaude', 'gemini', 'codex'].map(host => (
+          {[null, 'claude', 'openclaude', 'antigravity', 'codex'].map(host => (
             <button key={host ?? 'auto'} onClick={() => pick(host)}
               className={`w-full text-left px-3 py-1.5 text-[10px] font-mono transition-colors ${
                 preferredAgent === host ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -271,7 +271,7 @@ function GlobalActionsMenu({ onProviders, onSquad }: { onProviders: () => void; 
           <div className="px-3 py-1 text-[9px] font-mono uppercase tracking-widest text-slate-600 flex items-center gap-1.5">
             <Cpu size={10} /> Agent/CLI Preferido
           </div>
-          {[null, 'claude', 'openclaude', 'gemini', 'codex'].map(host => (
+          {[null, 'claude', 'openclaude', 'antigravity', 'codex'].map(host => (
             <button key={host ?? 'auto'} onClick={() => setAgent(host)}
               className={`w-full text-left px-3 py-1.5 text-[10px] font-mono transition-colors ${
                 preferredAgent === host ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -864,10 +864,10 @@ function PaneMenu({
 
   // Sort providers intelligently:
   // 1. OAuth/native plan (claude-oauth) first
-  // 2. Native CLI agents (codex, gemini-cli, kimi, cursor, copilot) — by model count desc
+  // 2. Native CLI agents (codex, antigravity, kimi, cursor, copilot) — by model count desc
   // 3. Compat adapters (anthropic-compat, mimo-compat) — by model count desc
   // 4. Generic API / openai-compat — by model count desc
-  const NATIVE_CLI_KEYWORDS = ['codex', 'gemini cli', 'gemini-cli', 'kimi', 'cursor', 'copilot', 'github'];
+  const NATIVE_CLI_KEYWORDS = ['codex', 'antigravity', 'kimi', 'cursor', 'copilot', 'github'];
   const providerSortKey = (p: any): number => {
     if (p.type === 'oauth') return 0;
     const label = (p.label ?? '').toLowerCase();
@@ -955,7 +955,7 @@ function PaneMenu({
                   )}
                   {(() => {
                     const isPlanBased = p.type === 'oauth' ||
-                      ['gemini', 'kimi', 'codex', 'copilot', 'cursor', 'antigravity'].includes(p.host ?? '') ||
+                      ['kimi', 'codex', 'copilot', 'cursor', 'antigravity'].includes(p.host ?? '') ||
                       NATIVE_CLI_KEYWORDS.some(k => (p.label ?? '').toLowerCase().includes(k));
                     // Only show "plano" badge if the label doesn't already make it obvious
                     const labelLower = (p.label ?? '').toLowerCase();

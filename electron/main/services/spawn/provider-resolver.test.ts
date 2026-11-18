@@ -46,7 +46,7 @@ describe("provider resolver compatibility", () => {
   });
 
   it.each([
-    ["claude", "claude-oauth"], ["codex", "codex-oauth"], ["gemini-cli", "gemini-cli"],
+    ["claude", "claude-oauth"], ["codex", "codex-oauth"],
     ["kimi", "kimi"], ["cursor", "cursor"], ["copilot", "copilot"],
   ])("uses the refreshed %s catalog for defaults and validation", (agent, providerId) => {
     const ctx = context([{ id: providerId, host: agent, models: ["release-99.10", "release-99.9"], modelsMode: "manual" }]);
@@ -165,5 +165,24 @@ describe("provider resolver compatibility", () => {
     ctx.paneRegistry.set("previous", { spawnedAt: Date.now() });
 
     expect(resolveProvider(ctx, {})).toMatchObject({ agent: "kiro", provider: null, providerId: null, model: "claude-opus-5.5" });
+  });
+
+  it("rejects removed gemini-cli provider and resolves antigravity as a standalone harness", () => {
+    const ctx = context([
+      { id: "gemini-cli", host: "gemini-cli", models: ["gemini-3.1-pro-preview"] },
+      { id: "antigravity-cli", host: "antigravity", models: ["gemini-4-carbon-high", "gemini-3.8-flash"] },
+    ]);
+    expect(resolveProvider(ctx, { providerId: "gemini-cli" }).error).toMatch(/gemini-cli.*removed/i);
+    expect(resolveProvider(ctx, { agent: "antigravity", model: "gemini-3.8-flash" })).toMatchObject({
+      agent: "antigravity",
+      provider: null,
+      providerId: null,
+      model: "gemini-3.8-flash",
+    });
+    // Inferred harness from providerId: "antigravity-cli"
+    const inferred = resolveProvider(ctx, { providerId: "antigravity-cli", model: "gemini-4-carbon-high" });
+    expect(inferred.agent).toBe("antigravity");
+    expect(inferred.model).toBe("gemini-4-carbon-high");
+    expect(inferred.error).toBeUndefined();
   });
 });

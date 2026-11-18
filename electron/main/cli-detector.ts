@@ -20,10 +20,10 @@ export interface AllCliInfo {
   kimi: CliInfo;
   cursor: CliInfo;
   copilot: CliInfo;
+  antigravity: CliInfo;
   kiro?: CliInfo;
   opencode?: CliInfo;
   grok?: CliInfo;
-  antigravity?: CliInfo;
   hermes?: CliInfo;
   muse?: CliInfo;
   commandcode?: CliInfo;
@@ -93,7 +93,22 @@ function commonPaths(binary: string): string[] {
 }
 
 function tryWhich(binary: string): string | null {
-  // Stage 1: native which/where command
+  // Stage 0: Fast in-memory PATH check (instant, zero process spawning)
+  const fromPath = findInPathValue(binary, process.env.PATH || "");
+  if (fromPath) return fromPath;
+
+  // Stage 1: Fast fallback candidate directories check via fs.existsSync
+  for (const candidate of fallbackPaths(binary)) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  // Stage 2 (Windows): check user/system PATH in registry (catches fresh installs)
+  if (IS_WIN) {
+    const fromReg = detectFromWinRegistrySync(binary);
+    if (fromReg) return fromReg;
+  }
+
+  // Stage 3: native which/where command fallback
   try {
     const cmd = IS_WIN ? `where ${JSON.stringify(binary)}` : `which ${JSON.stringify(binary)}`;
     const result = execSync(cmd, {
@@ -111,7 +126,7 @@ function tryWhich(binary: string): string | null {
     if (preferred) return preferred;
   } catch {}
 
-  // Stage 2 (Linux/macOS): try command -v in login shell
+  // Stage 4 (Linux/macOS): try command -v in login shell
   if (!IS_WIN) {
     try {
       const shell = process.env["SHELL"] ?? "/bin/bash";
@@ -124,23 +139,86 @@ function tryWhich(binary: string): string | null {
     } catch {}
   }
 
-  // Stage 3: check commonPaths candidates
-  for (const candidate of fallbackPaths(binary)) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
   return null;
 }
 
 function fallbackPaths(binary: string): string[] {
+  const home = os.homedir();
   const searchEnv = {
     ...process.env,
-    LOCALAPPDATA: process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
+    LOCALAPPDATA: process.env.LOCALAPPDATA || path.join(home, "AppData", "Local"),
+    APPDATA: process.env.APPDATA || path.join(home, "AppData", "Roaming"),
   };
   return [
-    ...harnessSearchPaths(binary, process.platform, searchEnv, os.homedir()),
+    ...harnessSearchPaths(binary, process.platform, searchEnv, home),
     ...commonPaths(binary),
   ];
+}
+
+function findInPathValue(binary: string, pathValue: string): string | null {
+  const exts = IS_WIN ? [".exe", ".cmd", ".bat", ""] : [""];
+  for (const rawDir of pathValue.split(path.delimiter)) {
+    const dir = rawDir.trim().replace(/^"|"$/g, "");
+    if (!dir || !path.isAbsolute(dir) || (IS_WIN && /^\\\\/.test(dir))) continue;
+    for (const ext of exts) {
+      const candidate = path.join(dir, `${binary}${ext}`);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+function expandWinEnv(value: string): string {
+  const home = os.homedir();
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    USERPROFILE: process.env.USERPROFILE || home,
+    LOCALAPPDATA: process.env.LOCALAPPDATA || path.join(home, "AppData", "Local"),
+    APPDATA: process.env.APPDATA || path.join(home, "AppData", "Roaming"),
+  };
+  return value.replace(/%([^%]+)%/g, (match, name: string) => env[name] ?? env[name.toUpperCase()] ?? match);
+}
+
+async function readWinRegistryPathAsync(): Promise<string> {
+  if (!IS_WIN) return "";
+  const regExe = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "reg.exe");
+  const keys = [
+    "HKCU\\Environment",
+    "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+  ];
+  const parts: string[] = [];
+  for (const key of keys) {
+    const out = await runProbe(regExe, ["query", key, "/v", "Path"]);
+    const rawPath = out?.match(/Path\s+REG(?:_EXPAND)?_SZ\s+(.+)/i)?.[1]?.trim();
+    if (rawPath) parts.push(expandWinEnv(rawPath));
+  }
+  return parts.join(path.delimiter);
+}
+
+let cachedWinRegistryPathSync: string | null = null;
+function detectFromWinRegistrySync(binary: string): string | null {
+  if (!IS_WIN) return null;
+  if (cachedWinRegistryPathSync === null) {
+    const regExe = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "reg.exe");
+    const keys = [
+      "HKCU\\Environment",
+      "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+    ];
+    const parts: string[] = [];
+    for (const key of keys) {
+      try {
+        const out = execSync(`"${regExe}" query "${key}" /v Path`, {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+          timeout: 1500,
+        });
+        const rawPath = out.match(/Path\s+REG(?:_EXPAND)?_SZ\s+(.+)/i)?.[1]?.trim();
+        if (rawPath) parts.push(expandWinEnv(rawPath));
+      } catch {}
+    }
+    cachedWinRegistryPathSync = parts.join(path.delimiter);
+  }
+  return findInPathValue(binary, cachedWinRegistryPathSync);
 }
 
 function runProbe(file: string, args: string[]): Promise<string | null> {
@@ -151,7 +229,8 @@ function runProbe(file: string, args: string[]): Promise<string | null> {
       windowsHide: true,
       maxBuffer: 256 * 1024,
     };
-    const done = (error: Error | null, stdout: string) => resolve(error ? null : stdout.trim());
+    const done = (error: Error | null, stdout: string, stderr?: string) =>
+      resolve(error ? null : (stdout.trim() || (stderr ?? "").trim()));
     // Windows cannot execFile a .cmd/.bat shim; names/arguments here come only from the registry.
     if (IS_WIN && /\.(cmd|bat)$/i.test(file)) {
       if (/["\r\n]/.test(file)) return resolve(null);
@@ -160,14 +239,19 @@ function runProbe(file: string, args: string[]): Promise<string | null> {
   });
 }
 
-async function detectCliAsync(binary: string, requireVersion = false): Promise<CliInfo> {
-  const output = await runProbe(IS_WIN ? "where.exe" : "which", [binary]);
-  const lines = (output ?? "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+async function detectCliAsync(binary: string, requireVersion = false, winRegistryPath = ""): Promise<CliInfo> {
   let found =
-    (IS_WIN ? lines.find((line) => /\.(cmd|exe|bat)$/i.test(line)) : lines[0]) ?? lines[0];
+    findInPathValue(binary, process.env.PATH || "") ??
+    fallbackPaths(binary).find((candidate) => fs.existsSync(candidate));
+  if (!found) {
+    const output = await runProbe(IS_WIN ? "where.exe" : "which", [binary]);
+    const lines = (output ?? "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    found =
+      (IS_WIN ? lines.find((line) => /\.(cmd|exe|bat)$/i.test(line)) : lines[0]) ?? lines[0];
+  }
   if (!found && !IS_WIN) {
     const candidate = await runProbe(process.env.SHELL || "/bin/bash", [
       "-lic",
@@ -175,7 +259,7 @@ async function detectCliAsync(binary: string, requireVersion = false): Promise<C
     ]);
     if (candidate && fs.existsSync(candidate)) found = candidate;
   }
-  if (!found) found = fallbackPaths(binary).find((candidate) => fs.existsSync(candidate));
+  if (!found && winRegistryPath) found = findInPathValue(binary, winRegistryPath) ?? undefined;
   if (!found) return { found: false };
   const version = await runProbe(found, ["--version"]);
   if (requireVersion && !version) return { found: false };
@@ -197,7 +281,7 @@ function tryVersion(binPath: string): string | undefined {
 function detectCli(binary: string, requireVersion = false): CliInfo {
   const found = tryWhich(binary);
   if (!found) return { found: false };
-  const version = tryVersion(found);
+  const version = requireVersion ? tryVersion(found) : undefined;
   // For some CLIs (e.g. cursor-agent), the file may exist but not be functional.
   // requireVersion=true means we only report found if --version succeeds.
   if (requireVersion && !version) return { found: false };
@@ -212,6 +296,7 @@ export class CliDetector {
   redetectAsync(): Promise<AllCliInfo> {
     if (this.pending) return this.pending;
     this.pending = (async () => {
+      const winRegistryPath = IS_WIN ? await readWinRegistryPathAsync() : "";
       const entries: Array<readonly [string, CliInfo]> = new Array(CLI_REGISTRY.length);
       let next = 0;
       // A startup refresh must not fan out one child process per harness. Each
@@ -222,13 +307,13 @@ export class CliDetector {
           const entry = CLI_REGISTRY[index];
           let result: CliInfo = { found: false };
           for (const binary of entry.binaries) {
-            result = await detectCliAsync(binary, entry.requireVersion);
+            result = await detectCliAsync(binary, entry.requireVersion, winRegistryPath);
             if (result.found) break;
           }
           entries[index] = [entry.id, result];
         }
       }));
-      const proxy = await detectCliAsync("9router");
+      const proxy = await detectCliAsync("9router", false, winRegistryPath);
       this.cache = {
         ...Object.fromEntries(entries),
         "9router": proxy,

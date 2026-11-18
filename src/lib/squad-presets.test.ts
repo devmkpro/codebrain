@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   CLAUDE_CODEX_PRESET,
+  ANTIGRAVITY_CODEX_PRESET,
+  CLAUDE_ANTIGRAVITY_PRESET,
   resolveSquadPreset,
   resetPresetIds,
   type PresetProvider,
@@ -65,5 +67,34 @@ describe("resolveSquadPreset", () => {
     const resolved = resolveSquadPreset(CLAUDE_CODEX_PRESET, [claudeOauth, codexOauth]);
     const ids = resolved!.workers.map((w) => w.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("resolves Antigravity + Codex multi-harness squad preset", () => {
+    const antigravity: PresetProvider = {
+      id: "antigravity-cli",
+      label: "Antigravity CLI",
+      models: ["gemini-4-carbon-high", "gemini-4-carbon-medium"],
+    };
+    const resolved = resolveSquadPreset(ANTIGRAVITY_CODEX_PRESET, [antigravity, codexOauth]);
+    expect(resolved).not.toBeNull();
+    expect(resolved!.orchestrator).toEqual({
+      providerId: "antigravity-cli",
+      model: "gemini-4-carbon-high",
+    });
+    expect(resolved!.workers[0].providerId).toBe("codex-oauth");
+    expect(resolved!.workers[0].model).toBe("gpt-5.6-terra");
+  });
+
+  it("resolves Claude + Antigravity multi-harness squad preset", () => {
+    const antigravity: PresetProvider = {
+      id: "antigravity-cli",
+      label: "Antigravity CLI",
+      models: ["gemini-4-carbon-medium", "gemini-3.8-flash-high"],
+    };
+    const resolved = resolveSquadPreset(CLAUDE_ANTIGRAVITY_PRESET, [claudeOauth, antigravity]);
+    expect(resolved).not.toBeNull();
+    expect(resolved!.orchestrator.providerId).toBe("claude-oauth");
+    expect(resolved!.workers[0].providerId).toBe("antigravity-cli");
+    expect(resolved!.workers[0].model).toBe("gemini-4-carbon-medium");
   });
 });

@@ -49,9 +49,12 @@ export const runModelCommand: ModelCommandRunner = (binary, args) =>
         windowsHide: true,
         cwd: os.tmpdir(),
       },
-      (error, stdout) => {
+      (error, stdout, stderr) => {
         if (error) reject(new Error("consulta de modelos falhou ou excedeu 8 segundos"));
-        else resolve(stdout);
+        else {
+          const out = stdout && stdout.trim().length > 0 ? stdout : (stderr || "");
+          resolve(out);
+        }
       }
     );
   });
@@ -102,12 +105,12 @@ export function parseModelCatalog(
       const id = line
         .trim()
         .replace(/^[*•]\s*/, "")
-        .split(/\s+(?:-|—|\(|\[)|\s{2,}/)[0];
+        .split(/\t|\s+(?:-|—|\(|\[)|\s{2,}/)[0];
       if (
         /^[a-zA-Z0-9][\w./:+-]*$/.test(id) &&
         (cli !== "opencode" || id.includes("/")) &&
-        (/\d|\//.test(id) || /^(auto|default|opus|sonnet|haiku|fable|grok-build)$/.test(id)) &&
-        !/^(available|models?|loading|error|usage|id)$/i.test(id)
+        (/\d|\//.test(id) || /^(auto|default|opus|sonnet|haiku|fable|grok-build)$/.test(id) || cli === "antigravity") &&
+        !/^(available|models?|loading|error|usage|id|fetching)$/i.test(id)
       )
         ids.push(id);
     }
@@ -196,8 +199,8 @@ export function createCliModelCatalog(
       args = ["chat", "--list-models", "--format", "json"];
     else if (help.includes("--list-models")) args = ["--list-models"];
     else if (
-      ["opencode", "grok"].includes(cli) &&
-      /^\s*(?:opencode\s+|grok\s+)?models\b[^\n]*(?:list|available)/im.test(help)
+      ["opencode", "grok", "antigravity"].includes(cli) &&
+      /^\s*(?:opencode\s+|grok\s+|agy\s+)?models\b[^\n]*(?:list|available)/im.test(help)
     ) {
       args = ["models"];
       if (cli === "opencode" && (await run(binary, ["models", "--help"])).includes("--refresh"))

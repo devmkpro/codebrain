@@ -314,6 +314,7 @@ export const CLI_REGISTRY: readonly HarnessEntry[] = [
   {
     id: "antigravity",
     label: "Antigravity CLI",
+    supportedPlatforms: ["darwin", "linux", "win32"],
     binaries: ["agy"],
     install: {
       via: "script",
@@ -330,7 +331,25 @@ export const CLI_REGISTRY: readonly HarnessEntry[] = [
     confirmedBy: "official-docs",
     docsUrl: "https://antigravity.google/docs/cli/reference",
     spawn: "generic",
-    searchDirs: { win: ["%LOCALAPPDATA%\\agy\\bin"] },
+    searchDirs: {
+      win: [
+        "%LOCALAPPDATA%\\agy\\bin",
+        "%APPDATA%\\Antigravity\\bin",
+        "%LOCALAPPDATA%\\Programs\\Antigravity\\bin",
+        "%LOCALAPPDATA%\\Antigravity\\bin",
+        "~\\.gemini\\antigravity-cli\\bin",
+        "~\\.gemini\\antigravity\\bin",
+        "~\\.antigravity\\bin",
+        "~\\.local\\bin",
+      ],
+      unix: [
+        "~/.local/bin",
+        "~/.antigravity/bin",
+        "~/.gemini/antigravity-cli/bin",
+        "~/.gemini/antigravity/bin",
+        "/Applications/Antigravity.app/Contents/Resources/app/bin",
+      ],
+    },
     generic: {
       model: { flag: "--model" },
       effort: { flag: "--effort" },

@@ -110,21 +110,27 @@ export function prepareCodebrainAdapter(input: CodebrainAdapterInput): Codebrain
   ensurePortableDirectory(input.cwd, path.relative(input.cwd, adapterDir));
   const items: { kind: string; name: string; description: string; origin: string; sourcePath: string; sourceEntrypoint?: string; entrypoint: string; resources: string[]; nativePath?: string }[] = [];
   const nativeDir = harness?.verified && harness.capabilities.skills ? registrySkillDirectory(harness.id, input.cwd, input.env, true) : null;
+  const shouldEagerCopy = input.allowedSkills !== undefined || Boolean(selectedAgent);
   const stage = (item: CatalogItem) => {
     const install = preferredCatalogInstall(item, workspace);
     if (catalogInstructions(install) === null) { warnings.push(`${item.kind} ${item.name}: entrypoint ausente ou inválido`); return; }
-    const destination = copyCatalogInstall(item, install, path.join(adapterDir, item.kind === "skill" ? "skills" : "agents"));
-    if (!destination) throw new Error(`Bundle de adapter já existe: ${item.name}`);
-    copied.push(destination);
-    let nativePath: string | undefined;
-    if (nativeDir && item.kind === "skill") {
-      try { nativePath = copyCatalogInstall(item, install, nativeDir) ?? undefined; if (nativePath) copied.push(nativePath); }
-      catch { warnings.push(`${item.name}: instalação nativa indisponível; use o entrypoint portável`); }
+    if (shouldEagerCopy) {
+      const destination = copyCatalogInstall(item, install, path.join(adapterDir, item.kind === "skill" ? "skills" : "agents"));
+      if (!destination) throw new Error(`Bundle de adapter já existe: ${item.name}`);
+      copied.push(destination);
+      let nativePath: string | undefined;
+      if (nativeDir && item.kind === "skill") {
+        try { nativePath = copyCatalogInstall(item, install, nativeDir) ?? undefined; if (nativePath) copied.push(nativePath); }
+        catch { warnings.push(`${item.name}: instalação nativa indisponível; use o entrypoint portável`); }
+      }
+      items.push({ kind: item.kind, name: item.name, description: item.description, origin: install.cli, sourcePath: install.path, sourceEntrypoint: install.entrypoint, entrypoint: path.join(destination, "SKILL.md"), resources: portableFiles(destination), ...(nativePath ? { nativePath } : {}) });
+    } else {
+      const entrypoint = install.entrypoint && install.sourceRoot ? path.join(install.sourceRoot, install.entrypoint) : path.join(install.path, "SKILL.md");
+      items.push({ kind: item.kind, name: item.name, description: item.description, origin: install.cli, sourcePath: install.path, sourceEntrypoint: install.entrypoint, entrypoint, resources: install.resources ?? [] });
     }
-    items.push({ kind: item.kind, name: item.name, description: item.description, origin: install.cli, sourcePath: install.path, sourceEntrypoint: install.entrypoint, entrypoint: path.join(destination, "SKILL.md"), resources: portableFiles(destination), ...(nativePath ? { nativePath } : {}) });
   };
   for (const skill of skills) stage(skill);
-  if (selectedAgent) stage(selectedAgent);
+  if (selectedAgent && !skills.some(s => s.name === selectedAgent.name)) stage(selectedAgent);
   const documents = discoverCodebrainContext(workspace).flatMap(document => {
     if (fs.statSync(document.path).size > 256_000) { warnings.push(`${document.kind}: documento grande mantido fora do contexto`); return []; }
     const relative = path.relative(path.join(document.origin === "global" ? os.homedir() : workspace, ".codebrain"), document.path);

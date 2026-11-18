@@ -18,10 +18,10 @@ export function ProviderList({
         // Virtual providers are auto-detected CLIs — they live only in memory, not in providers.json.
         // Deleting them does nothing, so hide the button. Identify by known virtual IDs or CLI-only types.
         // Exception: "mimo-claude" is virtual but needs an API key → show edit button (no delete).
-        const VIRTUAL_IDS = ["codex-oauth", "gemini-cli", "kimi", "cursor", "copilot"];
+        const VIRTUAL_IDS = ["codex-oauth", "kimi", "cursor", "copilot"];
         const isMimoClaude = p.id === "mimo-claude";
         const isBuiltin = VIRTUAL_IDS.includes(p.id) || p.type === "oauth" || p.isVirtual === true;
-        const typeLabel = p.type === "oauth" ? "OAuth" : p.type === "anthropic-compat" ? `Anthropic → ${p.host ?? "claude"}` : p.type === "gemini-compat" ? `Gemini → ${p.host ?? "gemini"}` : p.type === "mimo-compat" ? `MIMO → ${p.host ?? "openclaude"}` : p.type === "openai-compat" ? `OpenAI → ${p.host ?? "openclaude"}` : "custom";
+        const typeLabel = p.type === "oauth" ? "OAuth" : p.type === "anthropic-compat" ? `Anthropic → ${p.host ?? "claude"}` : p.type === "gemini-compat" ? `Gemini → ${p.host ?? "openclaude"}` : p.type === "mimo-compat" ? `MIMO → ${p.host ?? "openclaude"}` : p.type === "openai-compat" ? `OpenAI → ${p.host ?? "openclaude"}` : "custom";
         const url = p.env?.ANTHROPIC_BASE_URL ?? p.env?.GEMINI_BASE_URL ?? p.env?.OPENAI_BASE_URL;
         const hasKey = p.env?.ANTHROPIC_AUTH_TOKEN && !/^\*+$/.test(p.env.ANTHROPIC_AUTH_TOKEN);
         return <div key={p.id} className="group flex min-h-16 items-center gap-3 rounded-cb-1 border border-cb-line-0 bg-cb-bg-1 px-3 py-2 hover:border-cb-line-2 hover:bg-cb-bg-2">

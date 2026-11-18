@@ -8,9 +8,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("detects automatically on mount without a card click, including installed Kiro", async () => {
+it("detects automatically on mount without a card click, including installed Antigravity and Kiro", async () => {
   const redetect = vi.fn().mockResolvedValue([]);
   const registry = vi.fn().mockResolvedValue([
+    { id: "antigravity", label: "Antigravity CLI", version: "1.0.0", found: true, verified: true },
     { id: "kiro", label: "Kiro CLI", version: "detected version", found: true, verified: true },
     { id: "experimental", label: "Experimental", found: true, verified: false },
     { id: "missing", label: "Missing", found: false, verified: true },
@@ -18,10 +19,11 @@ it("detects automatically on mount without a card click, including installed Kir
   const installCli = vi.fn();
   vi.stubGlobal("codeBrainApp", { cli: { redetect, registry, installCli } });
   render(<HarnessDetection />);
+  await screen.findByText("Antigravity CLI");
   await screen.findByText("Kiro CLI");
   expect(redetect).toHaveBeenCalledTimes(1);
   expect(registry).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("2 de 3 detectados")).toBeTruthy();
+  expect(screen.getByText("3 de 4 detectados")).toBeTruthy();
   expect(screen.getByText("Experimental · experimental")).toBeTruthy();
   expect(installCli).not.toHaveBeenCalled();
 });

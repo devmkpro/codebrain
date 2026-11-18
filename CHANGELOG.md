@@ -2,6 +2,17 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.11] — 2026-11-18
+
+### Features
+- Integra a CLI Antigravity como harness detectável nativo com suporte aos modelos Gemini 4 Carbon e Gemini 3.8 Flash.
+- Arquitetura Universal de Harness Drivers para padronizar adaptadores de protocolo (MiMo, OpenAI, Anthropic, Gemini, Grok, Kiro, Codex, Claude).
+- Orquestração multi-agente com persistência durável no memoryStore para handoffs e mensagens entre panes sem perda de evidências.
+
+### Fixes
+- Elimina travamento ao abrir panes (Kiro, Claude, Codex, Antigravity) através de indexação lazy de skills e otimização da leitura do catálogo com cache em memória.
+- Remove provider legado gemini-cli e corrige a resolução de modelos por provider compatível.
+
 ## [2.0.10] — 2026-11-17
 
 ### Features

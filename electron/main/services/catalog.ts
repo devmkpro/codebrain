@@ -83,12 +83,24 @@ function loadMeta(): CatalogMeta {
   }
 }
 
+interface CatalogCacheEntry {
+  workspace: string | null;
+  items: CatalogItem[];
+  expiresAt: number;
+}
+let catalogCache: CatalogCacheEntry | null = null;
+
+export function invalidateCatalogCache(): void {
+  catalogCache = null;
+}
+
 function saveMeta(meta: CatalogMeta): void {
   const target = metaPath();
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const tmp = `${target}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(meta, null, 2), "utf-8");
   fs.renameSync(tmp, target);
+  invalidateCatalogCache();
 }
 
 export function setCatalogMeta(update: {
@@ -203,13 +215,28 @@ export function portableFile(root: string, relative: string): string | null {
 
 export function portableFiles(root: string): string[] {
   const files: string[] = [];
+  try {
+    if (fs.lstatSync(root).isSymbolicLink()) return [];
+  } catch {
+    return [];
+  }
   const walk = (dir: string) => {
-    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const item of entries) {
+      if (!isPortablePath(item.name)) continue;
+      if (item.isSymbolicLink()) continue;
       const file = path.join(dir, item.name);
-      const relative = path.relative(root, file);
-      if (!portableFile(root, relative)) continue;
-      if (item.isDirectory()) walk(file);
-      else if (item.isFile()) files.push(relative);
+      if (item.isDirectory()) {
+        walk(file);
+      } else if (item.isFile()) {
+        const relative = path.relative(root, file);
+        if (isPortablePath(relative)) files.push(relative);
+      }
     }
   };
   try { walk(root); } catch { /* diretório ausente/inacessível */ }
@@ -308,8 +335,13 @@ function readSkillsDir(dir: string): FoundEntry[] {
   }
   const found: FoundEntry[] = [];
   for (const entry of names) {
-    if (!isPortablePath(entry) || !portableFile(dir, entry)) continue;
+    if (!isPortablePath(entry)) continue;
     const entryPath = path.join(dir, entry);
+    try {
+      if (fs.lstatSync(entryPath).isSymbolicLink()) continue;
+    } catch {
+      continue;
+    }
     if (isDirectory(entryPath)) {
       const skill = readSkillDir(entryPath, entry);
       if (skill) found.push(skill);
@@ -389,11 +421,18 @@ function skillSources(
   workspace: string | null | undefined,
   extraSources: readonly SkillSource[]
 ): SkillSource[] {
-  const sources: SkillSource[] = [
-    ...(workspace ? [{ cli: "codebrain", dir: path.join(workspace, ".codebrain", "skills") }] : []),
-    { cli: "codebrain", dir: path.join(os.homedir(), ".codebrain", "skills") },
-    ...accountSkillDirs(), ...extraSources,
-  ];
+  const sources: SkillSource[] = [];
+  const seen = new Set<string>();
+  const add = (cli: string, dir: string) => {
+    const key = `${cli}:${path.resolve(dir)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    sources.push({ cli, dir });
+  };
+  if (workspace) add("codebrain", path.join(workspace, ".codebrain", "skills"));
+  add("codebrain", path.join(os.homedir(), ".codebrain", "skills"));
+  for (const s of accountSkillDirs()) add(s.cli, s.dir);
+  for (const s of extraSources) add(s.cli, s.dir);
   // Read only the paths declared by the registry; no inferred account homes.
   for (const entry of CLI_REGISTRY) {
     if (!entry.capabilities.skills || !entry.skillsDir) continue;
@@ -405,17 +444,12 @@ function skillSources(
           /^\$XDG_CONFIG_HOME(?=[/\\]|$)/,
           process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")
         );
-      if (path.isAbsolute(dir)) sources.push({ cli: entry.id, dir });
+      if (path.isAbsolute(dir)) add(entry.id, dir);
     }
     if (workspace && entry.skillsDir.project)
-      sources.push({ cli: entry.id, dir: path.join(workspace, entry.skillsDir.project) });
+      add(entry.id, path.join(workspace, entry.skillsDir.project));
   }
-  sources.push({ cli: "codebrain", dir: path.join(os.homedir(), ".codebrain", "skills") });
-  if (workspace) {
-    sources.push({ cli: "claude", dir: path.join(workspace, ".claude", "skills") });
-    sources.push({ cli: "codebrain", dir: path.join(workspace, ".codebrain", "skills") });
-  }
-  sources.push({ cli: "bundled", dir: bundledRoleSkillsDir() });
+  add("bundled", bundledRoleSkillsDir());
   return sources;
 }
 
@@ -431,6 +465,10 @@ export function scanCatalog(
   workspace?: string | null,
   extraSources: readonly SkillSource[] = []
 ): CatalogItem[] {
+  const normWorkspace = workspace ? path.resolve(workspace) : null;
+  if (extraSources.length === 0 && catalogCache && catalogCache.workspace === normWorkspace && Date.now() < catalogCache.expiresAt) {
+    return catalogCache.items;
+  }
   const meta = loadMeta();
   const builtin = new Set(bundledRoleSkillNames());
   const items = new Map<string, CatalogItem>();
@@ -464,7 +502,15 @@ export function scanCatalog(
   for (const dir of agentDirs(workspace)) {
     for (const agent of readAgentsDir(dir)) merge("agent", dir.includes(`${path.sep}.codebrain${path.sep}`) ? "codebrain" : "claude", agent);
   }
-  return [...items.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const result = [...items.values()].sort((a, b) => a.name.localeCompare(b.name));
+  if (extraSources.length === 0) {
+    catalogCache = {
+      workspace: normWorkspace,
+      items: result,
+      expiresAt: Date.now() + 15_000,
+    };
+  }
+  return result;
 }
 
 /** Agente de mesmo nome no workspace vence o global. */
@@ -557,6 +603,7 @@ export function copyCatalogInstall(item: CatalogItem, install: CatalogInstall, t
     const base = install.entrypoint && path.dirname(install.entrypoint) !== "." ? `Relative paths below are based on ${JSON.stringify(path.dirname(install.entrypoint))}.\n\n` : "";
     fs.writeFileSync(path.join(destination, "SKILL.md"), header + base + body, "utf-8");
   }
+  invalidateCatalogCache();
   return destination;
 }
 

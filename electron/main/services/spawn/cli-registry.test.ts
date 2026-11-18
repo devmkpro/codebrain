@@ -143,6 +143,16 @@ describe("registry helpers", () => {
   it("expands install directories per platform", () => {
     const windows = harnessSearchPaths("kiro-cli", "win32", { LOCALAPPDATA: "C:\\Users\\a\\AppData\\Local" }, "C:\\Users\\a");
     expect(windows[0]).toBe("C:\\Users\\a\\AppData\\Local\\Kiro-Cli\\kiro-cli.exe");
+    const agyWin = harnessSearchPaths(
+      "agy",
+      "win32",
+      { LOCALAPPDATA: "C:\\Users\\a\\AppData\\Local", APPDATA: "C:\\Users\\a\\AppData\\Roaming" },
+      "C:\\Users\\a",
+    );
+    expect(agyWin).toContain("C:\\Users\\a\\AppData\\Local\\agy\\bin\\agy.exe");
+    expect(agyWin).toContain("C:\\Users\\a\\AppData\\Roaming\\Antigravity\\bin\\agy.exe");
+    expect(harnessSearchPaths("agy", "linux", {}, "/home/a")).toContain("/home/a/.local/bin/agy");
+    expect(entry("antigravity").supportedPlatforms).toEqual(["darwin", "linux", "win32"]);
     expect(harnessSearchPaths("opencode", "linux", {}, "/home/a")).toEqual(["/home/a/.opencode/bin/opencode"]);
     expect(harnessSearchPaths("kiro-cli", "win32", {}, "C:\\Users\\a")).toEqual([]);
     expect(harnessSearchPaths("not-a-cli", "linux", {}, "/home/a")).toEqual([]);

@@ -98,13 +98,13 @@ describe("deciderCredentials", () => {
 });
 
 describe("listDeciderProviders", () => {
-  it("three detected native CLI providers do not imply three API credentials", () => {
+  it("detected native CLI harnesses do not imply API credentials and omit removed gemini-cli", () => {
     const ctx = {
       providerStore: { listFull: () => [] },
-      cliDetector: { getAll: () => ({ claude: { found: true }, codex: { found: true }, gemini: { found: true } }) },
+      cliDetector: { getAll: () => ({ claude: { found: true }, codex: { found: true }, gemini: { found: true }, antigravity: { found: true } }) },
     } as any;
     const providers = getEnhancedProviders(ctx);
-    expect(providers.map(provider => provider.id).sort()).toEqual(["claude-oauth", "codex-oauth", "gemini-cli"]);
+    expect(providers.map(provider => provider.id).sort()).toEqual(["antigravity-cli", "claude-oauth", "codex-oauth"]);
     expect(providers.every(provider => Object.keys(provider.env).length === 0)).toBe(true);
     expect(listDeciderProviders(providers)).toEqual([]);
   });

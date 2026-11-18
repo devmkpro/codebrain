@@ -21,7 +21,7 @@ describe("paneDisplayName", () => {
 
 describe("cliIdentity", () => {
   it("knows every supported CLI and colors them with tokens", () => {
-    for (const agent of ["claude", "codex", "gemini", "kimi", "cursor", "copilot", "openclaude", "shell"]) {
+    for (const agent of ["claude", "codex", "antigravity", "gemini", "kimi", "cursor", "copilot", "openclaude", "shell"]) {
       expect(cliIdentity(agent).label).toBe(agent);
       expect(cliIdentity(agent).color).toMatch(/^var\(--cb-/);
     }

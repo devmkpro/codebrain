@@ -251,7 +251,7 @@ export function SettingsPage() {
   const [cliStatus,        setCliStatus]        = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [claudeCliStatus,  setClaudeCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [codexCliStatus,   setCodexCliStatus]   = useState<{ found: boolean; path?: string; version?: string } | null>(null);
-  const [geminiCliStatus,  setGeminiCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
+  const [antigravityCliStatus, setAntigravityCliStatus] = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [kimiCliStatus,    setKimiCliStatus]    = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [cursorCliStatus,  setCursorCliStatus]  = useState<{ found: boolean; path?: string; version?: string } | null>(null);
   const [copilotCliStatus, setCopilotCliStatus] = useState<{ found: boolean; path?: string; version?: string } | null>(null);
@@ -351,7 +351,7 @@ export function SettingsPage() {
         setCliStatus(s?.openclaude ?? null);
         setClaudeCliStatus(s?.claude ?? null);
         setCodexCliStatus(s?.codex ?? null);
-        setGeminiCliStatus(s?.gemini ?? null);
+        setAntigravityCliStatus(s?.antigravity ?? null);
         setKimiCliStatus(s?.kimi ?? null);
         setCursorCliStatus(s?.cursor ?? null);
         setCopilotCliStatus(s?.copilot ?? null);
@@ -434,7 +434,7 @@ export function SettingsPage() {
         const oc = res.find((r: any) => r.name === 'openclaude');
         const cl = res.find((r: any) => r.name === 'claude');
         const cx = res.find((r: any) => r.name === 'codex');
-        const gc = res.find((r: any) => r.name === 'gemini');
+        const ag = res.find((r: any) => r.name === 'antigravity');
         const ki = res.find((r: any) => r.name === 'kimi');
         const cu = res.find((r: any) => r.name === 'cursor');
         const co = res.find((r: any) => r.name === 'copilot');
@@ -442,7 +442,7 @@ export function SettingsPage() {
         if (oc) setCliStatus(oc);
         if (cl) setClaudeCliStatus(cl);
         if (cx) setCodexCliStatus(cx);
-        if (gc) setGeminiCliStatus(gc);
+        if (ag) setAntigravityCliStatus(ag);
         if (ki) setKimiCliStatus(ki);
         if (cu) setCursorCliStatus(cu);
         if (co) setCopilotCliStatus(co);
@@ -451,7 +451,7 @@ export function SettingsPage() {
         setCliStatus(res?.openclaude ?? res);
         setClaudeCliStatus(res?.claude ?? null);
         setCodexCliStatus(res?.codex ?? null);
-        setGeminiCliStatus(res?.gemini ?? null);
+        setAntigravityCliStatus(res?.antigravity ?? null);
         setKimiCliStatus(res?.kimi ?? null);
         setCursorCliStatus(res?.cursor ?? null);
         setCopilotCliStatus(res?.copilot ?? null);
@@ -699,7 +699,7 @@ export function SettingsPage() {
                   <option value="">Automático (nenhum)</option>
                   <option value="claude">Claude Code CLI</option>
                   <option value="openclaude">OpenClaude</option>
-                  <option value="gemini">Gemini CLI</option>
+                  <option value="antigravity">Antigravity CLI</option>
                   <option value="codex">Codex</option>
                 </select>
               </div>
@@ -987,15 +987,15 @@ export function SettingsPage() {
 
             <Divider />
 
-            {/* Gemini CLI (Google) */}
+            {/* Antigravity CLI (Google) */}
             <CliRow
-              label="Gemini CLI (Google)"
-              description={<>CLI nativo da Google — provider <span className="font-mono">Gemini CLI</span>. A instalação automática usa <span className="font-mono">npm</span>, portanto requer Node.js.</>}
-              status={geminiCliStatus}
-              installKey="gemini"
+              label="Antigravity CLI (Google)"
+              description={<>Harness CLI da Google — binário <span className="font-mono">agy</span>. Usa o instalador oficial (PowerShell no Windows / shell no macOS e Linux); não requer Node.js.</>}
+              status={antigravityCliStatus}
+              installKey="antigravity"
               cliBusy={cliBusy}
               onDetect={handleRedetectCli}
-              onInstalled={(k) => { setGeminiCliStatus({ found: true }); }}
+              onInstalled={() => { setAntigravityCliStatus({ found: true }); }}
               setCliBusy={setCliBusy}
             />
 

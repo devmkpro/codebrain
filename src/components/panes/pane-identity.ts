@@ -26,6 +26,7 @@ export interface CliIdentity {
 const CLIS: Record<string, CliIdentity> = {
   claude: { label: "claude", color: "var(--cb-ansi-bright-red)" },
   codex: { label: "codex", color: "var(--cb-ansi-green)" },
+  antigravity: { label: "antigravity", color: "var(--cb-ansi-bright-blue)" },
   gemini: { label: "gemini", color: "var(--cb-ansi-blue)" },
   kimi: { label: "kimi", color: "var(--cb-ansi-cyan)" },
   cursor: { label: "cursor", color: "var(--cb-ansi-white)" },

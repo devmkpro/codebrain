@@ -7,17 +7,19 @@ import { CLI_REGISTRY } from "./spawn/cli-registry";
 import { createCliModelCatalog, MODEL_CATALOG_TTL_MS } from "./cli-model-catalog";
 import { sortModelIds, type ModelReleaseInfo } from "../../../src/lib/model-catalog-order";
 
+import {
+  HARNESS_DRIVERS,
+  providerIdForHarness,
+  resolveDriverModels,
+  ANTIGRAVITY_CANONICAL_MODELS,
+  isVirtualHarnessProvider,
+} from "./spawn/harness-driver";
+
 const cliCatalogs = new WeakMap<object, ReturnType<typeof createCliModelCatalog>>();
 const syncInFlight = new WeakMap<object, Map<string, Promise<ProviderModelSyncSummary>>>();
-const NATIVE_PROVIDER_IDS: Record<string, string> = {
-  claude: "claude-oauth",
-  codex: "codex-oauth",
-  gemini: "gemini-cli",
-  kimi: "kimi",
-  cursor: "cursor",
-  copilot: "copilot",
-};
-export const providerIdForHarness = (cli: string) => NATIVE_PROVIDER_IDS[cli] ?? `${cli}-cli`;
+
+export { providerIdForHarness };
+export const ANTIGRAVITY_MODELS = ANTIGRAVITY_CANONICAL_MODELS;
 
 /**
  * Merge user-saved models with template models.
@@ -80,102 +82,104 @@ function claudeProviderModels(saved: any, canonical: string[]): string[] {
 
 export function getEnhancedProviders(ctx: AppContext) {
   const list = ctx.providerStore.listFull();
-  const claudeDetected = ctx.cliDetector?.getAll()?.claude?.found ?? false;
+  const detected = ctx.cliDetector?.getAll() ?? {};
+  const claudeDetected = (detected as any)?.claude?.found ?? false;
 
-  // Virtual Claude OAuth provider — appears when Claude CLI is installed
-  // Respect user-saved models (e.g. after "Detectar modelos") over hardcoded template defaults
-  const claudeOAuthTemplate = PROVIDER_REGISTRY.find((t) => t.id === "claude-oauth");
-  const claudeOAuthSaved = list.find((p) => p.id === "claude-oauth");
-  const claudeOAuthProvider =
-    claudeDetected && claudeOAuthTemplate
-      ? [
-          {
-            id: claudeOAuthTemplate.id,
-            label: claudeOAuthSaved?.label?.trim() || claudeOAuthTemplate.label,
-            type: claudeOAuthTemplate.type as "oauth",
-            host: claudeOAuthTemplate.host,
-            models: claudeProviderModels(claudeOAuthSaved, claudeOAuthTemplate.models),
-            modelsMode: claudeOAuthSaved?.modelsMode ?? "auto",
-            env: {},
-            isVirtual: true,
-          },
-        ]
-      : [];
+  // 1. Build virtual providers for all detected CLI harnesses using HARNESS_DRIVERS
+  const virtualProviders: any[] = [];
+  const virtualIds = new Set<string>();
 
-  // Virtual Codex OAuth provider — appears when Codex CLI is installed
-  const codexDetected = ctx.cliDetector?.getAll()?.codex?.found ?? false;
-  const codexOAuthTemplate = PROVIDER_REGISTRY.find((t) => t.id === "codex-oauth");
-  const codexOAuthSaved = list.find((p) => p.id === "codex-oauth");
-  const codexOAuthProvider =
-    codexDetected && codexOAuthTemplate
-      ? [
-          {
-            id: codexOAuthTemplate.id,
-            label: codexOAuthSaved?.label?.trim() || codexOAuthTemplate.label,
-            type: codexOAuthTemplate.type as any,
-            host: codexOAuthTemplate.host,
-            models: virtualProviderModels(codexOAuthSaved, codexOAuthTemplate.models),
-            modelsMode: codexOAuthSaved?.modelsMode ?? "auto",
-            env: {},
-            isVirtual: true,
-          },
-        ]
-      : [];
+  for (const driver of Object.values(HARNESS_DRIVERS)) {
+    virtualIds.add(driver.virtualProviderId);
+    if ((detected as any)[driver.harnessId]?.found) {
+      const saved = list.find((p) => p.id === driver.virtualProviderId);
+      virtualProviders.push({
+        id: driver.virtualProviderId,
+        label: saved?.label?.trim() || driver.label,
+        type: driver.type,
+        host: driver.host,
+        models: resolveDriverModels(driver, saved),
+        modelsMode: saved?.modelsMode ?? "auto",
+        env: {},
+        isVirtual: true,
+        ...(driver.baseUrl ? { baseUrl: driver.baseUrl } : {}),
+      });
+    }
+  }
 
-  // Filter out the virtual claude-oauth and Gemini CLI label to avoid duplicates
-  // Virtual Gemini CLI provider — appears when gemini CLI is installed
-  const geminiCliDetected = ctx.cliDetector?.getAll()?.gemini?.found ?? false;
-  const geminiCliTemplate = PROVIDER_REGISTRY.find((t) => t.id === "gemini-cli");
-  const geminiCliSaved = list.find((p) => p.id === "gemini-cli");
-  const geminiCliProvider =
-    geminiCliDetected && geminiCliTemplate
-      ? [
-          {
-            id: geminiCliTemplate.id,
-            label: geminiCliSaved?.label?.trim() || geminiCliTemplate.label,
-            type: geminiCliTemplate.type as any,
-            host: geminiCliTemplate.host,
-            models: virtualProviderModels(geminiCliSaved, geminiCliTemplate.models),
-            modelsMode: geminiCliSaved?.modelsMode ?? "auto",
-            env: {},
-            isVirtual: true,
-          },
-        ]
-      : [];
+  // Fallback for any other CLI in CLI_REGISTRY with model capability
+  for (const entry of CLI_REGISTRY) {
+    if (!entry.capabilities.model || entry.id === "openclaude" || entry.id === "gemini") continue;
+    const id = providerIdForHarness(entry.id);
+    virtualIds.add(id);
+    if ((detected as any)[entry.id]?.found && !virtualProviders.some((p) => p.id === id)) {
+      const saved = list.find((provider) => provider.id === id);
+      virtualProviders.push({
+        ...saved,
+        id,
+        label: saved?.label || entry.label,
+        host: entry.id,
+        type: "cli",
+        env: {},
+        models: virtualProviderModels(saved, []),
+        isVirtual: true,
+        modelsMode: saved?.modelsMode ?? "auto",
+      });
+    }
+  }
 
-  const VIRTUAL_IDS = [
-    "claude-oauth",
-    "codex-oauth",
-    "gemini-cli",
-    "kimi",
-    "cursor",
-    "copilot",
-    "mimo-claude",
-  ];
+  // 2. Virtual MIMO via Claude adapter
+  virtualIds.add("mimo-claude");
+  const mimoClaudeTemplate = PROVIDER_REGISTRY.find((t) => t.id === "mimo-claude");
+  const mimoConfigured = list.find((p) => {
+    const label = p.label?.toLowerCase() || "";
+    const id = (p.id || "").toLowerCase();
+    return id.includes("mimo") || label.includes("mimo");
+  });
+  if (claudeDetected && mimoConfigured && mimoClaudeTemplate) {
+    const mimoKey =
+      mimoConfigured?.env?.["ANTHROPIC_AUTH_TOKEN"] ||
+      mimoConfigured?.env?.["MIMO_API_KEY"] ||
+      mimoConfigured?.env?.["ANTHROPIC_API_KEY"] ||
+      mimoConfigured?.env?.["OPENAI_API_KEY"] ||
+      "";
+    const mimoBaseUrl =
+      mimoConfigured?.env?.["ANTHROPIC_BASE_URL"] ||
+      mimoClaudeTemplate?.baseUrl ||
+      "https://token-plan-ams.xiaomimimo.com/anthropic";
+    virtualProviders.push({
+      id: mimoClaudeTemplate.id,
+      label: mimoClaudeTemplate.label,
+      type: mimoClaudeTemplate.type as any,
+      host: mimoClaudeTemplate.host,
+      baseUrl: mimoBaseUrl,
+      models: mimoConfigured?.models?.length
+        ? [...mimoConfigured.models]
+        : [...mimoClaudeTemplate.models],
+      env: mimoKey ? { ANTHROPIC_AUTH_TOKEN: mimoKey, MIMO_API_KEY: mimoKey } : {},
+      isVirtual: true,
+    });
+  }
+
+  // 3. User configured providers from store (excluding virtual IDs and legacy Gemini CLI)
+  virtualIds.add("gemini-cli");
   const filtered = list
-    .filter((p) => !VIRTUAL_IDS.includes(p.id) && !p.label?.includes("Gemini CLI"))
+    .filter((p) => !virtualIds.has(p.id) && !p.label?.includes("Gemini CLI"))
     .map((p) => {
-      // Look up the canonical template by id
+      // Look up canonical template by id
       const template = PROVIDER_REGISTRY.find((t) => t.id === p.id);
       if (template) {
-        // For MIMO (openclaude), always use the registry label so it reads
-        // "MIMO via OpenClaude" instead of user-saved "MIMO".
         const label = template.id === "mimo" ? template.label : p.label;
         return {
           ...p,
           label,
-          // Respect user-saved host (e.g. "claude" for mimo-claude path).
-          // Only fall back to template.host if the user hasn't explicitly set one.
           host: p.host || template.host,
           type: template.type as any,
-          // Respect user-saved models for existing providers; only merge template defaults for new ones
           models: mergeModels(p.models, template.models, true),
         };
       }
 
-      // Fallback: detect by label/id keywords (for custom providers).
-      // Match the MOST SPECIFIC template first (most keywords matched) to avoid
-      // false positives from short keywords like "mimo" matching "mimo-claude".
+      // Heuristic match for custom providers
       const label = p.label?.toLowerCase() || "";
       const id = (p.id || "").toLowerCase();
       let bestMatch: (typeof PROVIDER_REGISTRY)[number] | null = null;
@@ -201,146 +205,10 @@ export function getEnhancedProviders(ctx: AppContext) {
         };
       }
 
-      // Unknown provider — default to openclaude, but keep user-saved models
       return { ...p, host: p.host || "openclaude" };
     });
 
-  // Virtual Kimi CLI provider — appears when Kimi CLI is installed
-  const kimiDetected = ctx.cliDetector?.getAll()?.kimi?.found ?? false;
-  const kimiTemplate = PROVIDER_REGISTRY.find((t) => t.id === "kimi");
-  const kimiSaved = list.find((p) => p.id === "kimi");
-  const kimiProvider =
-    kimiDetected && kimiTemplate
-      ? [
-          {
-            id: kimiTemplate.id,
-            label: kimiSaved?.label?.trim() || kimiTemplate.label,
-            type: kimiTemplate.type as any,
-            host: kimiTemplate.host,
-            models: virtualProviderModels(kimiSaved, kimiTemplate.models),
-            modelsMode: kimiSaved?.modelsMode ?? "auto",
-            env: {},
-            isVirtual: true,
-          },
-        ]
-      : [];
-
-  // Virtual Cursor CLI provider — appears when Cursor CLI is installed
-  const cursorDetected = ctx.cliDetector?.getAll()?.cursor?.found ?? false;
-  const cursorTemplate = PROVIDER_REGISTRY.find((t) => t.id === "cursor");
-  const cursorSaved = list.find((p) => p.id === "cursor");
-  const cursorProvider =
-    cursorDetected && cursorTemplate
-      ? [
-          {
-            id: cursorTemplate.id,
-            label: cursorSaved?.label?.trim() || cursorTemplate.label,
-            type: cursorTemplate.type as any,
-            host: cursorTemplate.host,
-            models: virtualProviderModels(cursorSaved, cursorTemplate.models),
-            modelsMode: cursorSaved?.modelsMode ?? "auto",
-            env: {},
-            isVirtual: true,
-          },
-        ]
-      : [];
-
-  // Virtual Copilot CLI provider — appears when Copilot CLI is installed
-  const copilotDetected = ctx.cliDetector?.getAll()?.copilot?.found ?? false;
-  const copilotTemplate = PROVIDER_REGISTRY.find((t) => t.id === "copilot");
-  const copilotSaved = list.find((p) => p.id === "copilot");
-  const copilotProvider =
-    copilotDetected && copilotTemplate
-      ? [
-          {
-            id: copilotTemplate.id,
-            label: copilotSaved?.label?.trim() || copilotTemplate.label,
-            type: copilotTemplate.type as any,
-            host: copilotTemplate.host,
-            models: virtualProviderModels(copilotSaved, copilotTemplate.models),
-            modelsMode: copilotSaved?.modelsMode ?? "auto",
-            env: {},
-            isVirtual: true,
-          },
-        ]
-      : [];
-
-  // Virtual MIMO via Claude provider — appears when Claude CLI is installed AND user has a MIMO provider configured
-  const mimoClaudeTemplate = PROVIDER_REGISTRY.find((t) => t.id === "mimo-claude");
-  const mimoConfigured = list.find((p) => {
-    const label = p.label?.toLowerCase() || "";
-    const id = (p.id || "").toLowerCase();
-    return id.includes("mimo") || label.includes("mimo");
-  });
-  const hasMimoConfigured = !!mimoConfigured;
-  // Inherit the MIMO API key from the configured mimo provider.
-  // The key may be stored in various env var names depending on the provider adapter
-  // (MIMO uses openai-compat → OPENAI_API_KEY, or mimo-compat → MIMO_API_KEY/ANTHROPIC_AUTH_TOKEN).
-  // We check ALL possible locations to ensure the key is found.
-  const mimoKey =
-    mimoConfigured?.env?.["ANTHROPIC_AUTH_TOKEN"] ||
-    mimoConfigured?.env?.["MIMO_API_KEY"] ||
-    mimoConfigured?.env?.["ANTHROPIC_API_KEY"] ||
-    mimoConfigured?.env?.["OPENAI_API_KEY"] || // MIMO openclaude adapter stores key here
-    "";
-  // Inherit baseUrl from the user's configured MIMO provider (ANTHROPIC_BASE_URL),
-  // falling back to the template default. This ensures the correct regional endpoint
-  // (ams/sgp/cn) is used instead of the hardcoded template URL.
-  const mimoBaseUrl =
-    mimoConfigured?.env?.["ANTHROPIC_BASE_URL"] ||
-    mimoClaudeTemplate?.baseUrl ||
-    "https://token-plan-ams.xiaomimimo.com/anthropic";
-  const mimoClaudeProvider =
-    claudeDetected && hasMimoConfigured && mimoClaudeTemplate
-      ? [
-          {
-            id: mimoClaudeTemplate.id,
-            label: mimoClaudeTemplate.label,
-            type: mimoClaudeTemplate.type as any,
-            host: mimoClaudeTemplate.host,
-            baseUrl: mimoBaseUrl,
-            models: mimoConfigured?.models?.length
-              ? [...mimoConfigured.models]
-              : [...mimoClaudeTemplate.models],
-            env: mimoKey ? { ANTHROPIC_AUTH_TOKEN: mimoKey, MIMO_API_KEY: mimoKey } : {},
-          },
-        ]
-      : [];
-
-  const all: any[] = [
-    ...claudeOAuthProvider,
-    ...codexOAuthProvider,
-    ...geminiCliProvider,
-    ...kimiProvider,
-    ...cursorProvider,
-    ...copilotProvider,
-    ...mimoClaudeProvider,
-    ...filtered,
-  ];
-  const detected = ctx.cliDetector?.getAll() ?? {};
-  for (const entry of CLI_REGISTRY) {
-    if (
-      !entry.capabilities.model ||
-      entry.id === "openclaude" ||
-      !(detected as any)[entry.id]?.found
-    )
-      continue;
-    const id = providerIdForHarness(entry.id);
-    if (!all.some((provider) => provider.id === id)) {
-      const saved = list.find((provider) => provider.id === id);
-      all.push({
-        ...saved,
-        id,
-        label: saved?.label || entry.label,
-        host: entry.id,
-        type: "cli",
-        env: {},
-        models: saved?.models ?? [],
-        isVirtual: true,
-        modelsMode: saved?.modelsMode ?? "auto",
-      });
-    }
-  }
+  const all: any[] = [...virtualProviders, ...filtered];
   return all.map((provider) => {
     const saved = list.find((entry) => entry.id === provider.id);
     return {

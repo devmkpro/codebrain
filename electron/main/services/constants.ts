@@ -14,7 +14,7 @@ export interface ProviderTemplate {
   label: string;         // display name
   icon: string;          // UI icon
   type: string;          // provider type: "mimo-compat" | "anthropic-compat" | "gemini-compat" | "openai-compat" | "oauth"
-  host: string;          // CLI binary: "openclaude" | "claude" | "gemini"
+  host: string;          // CLI binary: "openclaude" | "claude" | "codex"
   baseUrl?: string;      // API base URL (omit for OAuth/local)
   tokenEnvVar?: string;  // env var name for API key
   signupUrl?: string;    // signup URL for UI
@@ -115,17 +115,6 @@ export const PROVIDER_REGISTRY: ProviderTemplate[] = [
     signupUrl: "https://chatgpt.com/codex",
     models: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark"],
     labelIncludes: ["codex"],
-  },
-  {
-    id: "gemini-cli",
-    label: "Gemini CLI",
-    icon: "G",
-    type: "gemini-cli",
-    host: "gemini-cli",
-    tokenEnvVar: "GEMINI_API_KEY",
-    signupUrl: "https://aistudio.google.com/app/apikey",
-    models: ["gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview"],
-    labelIncludes: ["gemini"],
   },
   {
     id: "openrouter",
@@ -314,7 +303,7 @@ export const MODEL_MAP_BY_TYPE: Record<string, string[]> = Object.fromEntries(
 /** Reverse lookup: model name → provider type */
 const MODEL_TO_TYPE: Record<string, string> = {};
 for (const tpl of PROVIDER_REGISTRY) {
-  if (tpl.type === "oauth" || tpl.type === "gemini-cli" || tpl.id === "mimo-claude") continue; // Skip virtual providers — models overlap
+  if (tpl.type === "oauth" || tpl.id === "mimo-claude") continue; // Skip virtual providers — models overlap
   for (const m of tpl.models) {
     MODEL_TO_TYPE[m] = tpl.type;
   }
@@ -371,7 +360,7 @@ export const CLAUDE_OAUTH_MODELS = PROVIDER_REGISTRY.find(t => t.id === "claude-
 // Derived from PROVIDER_REGISTRY. When adding a new provider, the registry is
 // the single source — this is auto-generated from it for UI compatibility.
 export const BUILTIN_TEMPLATES = PROVIDER_REGISTRY
-  .filter(t => t.id !== "claude-oauth" && t.id !== "codex-oauth" && t.id !== "gemini-cli" && t.id !== "mimo-claude") // virtual providers, not user-configurable templates
+  .filter(t => t.id !== "claude-oauth" && t.id !== "codex-oauth" && t.id !== "mimo-claude") // virtual providers, not user-configurable templates
   .map(t => ({
     id: t.id,
     label: t.label,

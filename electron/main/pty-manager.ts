@@ -221,7 +221,13 @@ function which(binary: string): string | null {
 
   const fromPath = findInPath(binary, process.env.PATH ?? process.env.Path ?? "");
   if (fromPath) return remember(fromPath);
-  for (const candidate of [...harnessSearchPaths(binary), ...commonPaths(binary)]) {
+  const home = nodeos.homedir();
+  const searchEnv = {
+    ...process.env,
+    LOCALAPPDATA: process.env.LOCALAPPDATA || nodepath.join(home, "AppData", "Local"),
+    APPDATA: process.env.APPDATA || nodepath.join(home, "AppData", "Roaming"),
+  };
+  for (const candidate of [...harnessSearchPaths(binary, process.platform, searchEnv, home), ...commonPaths(binary)]) {
     if (executableFile(candidate)) return remember(candidate);
   }
 

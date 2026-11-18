@@ -38,6 +38,21 @@ async function deliverHandoff(ptyManager, opts, queues, paneId, message) {
       acknowledged: false,
       reason: "no_unambiguous_destination",
     };
+
+  // Durable record: always store handoff in memoryStore so completion evidence is never lost across turns/restarts
+  try {
+    const identity = paneIdentity(opts, paneId);
+    if (opts.memoryStore?.saveAgentMessage) {
+      opts.memoryStore.saveAgentMessage({
+        fromPane: paneId,
+        toPane: destination,
+        content: message,
+        type: "result",
+        workspace: identity?.workspace || null,
+      });
+    }
+  } catch {}
+
   // Queue by destination, not sender: two workers must not interleave a paste.
   const previous = queues.get(destination) || Promise.resolve();
   const pending = previous
@@ -62,7 +77,7 @@ async function deliverHandoff(ptyManager, opts, queues, paneId, message) {
           };
         ptyManager.write(destination, "\r");
         // This confirms only the stdin write, not that the remote model read it.
-        return { paneId: destination, delivered: true, acknowledged: false, via: "stdin" };
+        return { paneId: destination, delivered: true, acknowledged: false, via: "stdin", stored: true };
       } catch (error) {
         return {
           paneId: destination,

@@ -17,8 +17,21 @@ export interface SummarizerEnvironment {
   fetchFn?: typeof fetch;
 }
 
-const CLI_LABELS: Record<string, string> = { gemini: "Gemini CLI", kimi: "Kimi CLI", cursor: "Cursor CLI", copilot: "Copilot CLI", openclaude: "OpenClaude" };
-const CLI_TYPES = new Set(["oauth", "codex", "gemini-cli"]);
+const CLI_LABELS: Record<string, string> = {
+  antigravity: "Antigravity CLI",
+  gemini: "Gemini CLI",
+  kimi: "Kimi CLI",
+  cursor: "Cursor CLI",
+  copilot: "Copilot CLI",
+  kiro: "Kiro CLI",
+  opencode: "OpenCode",
+  grok: "Grok Build",
+  hermes: "Hermes Agent",
+  muse: "Muse Code",
+  commandcode: "Command Code",
+  openclaude: "OpenClaude",
+};
+const CLI_TYPES = new Set(["oauth", "codex", "cli"]);
 const MAX_RESPONSE_CHARS = 64_000;
 
 const modelsOf = (providers: readonly HarnessProvider[], id: string) =>

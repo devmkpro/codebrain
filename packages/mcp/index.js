@@ -95,10 +95,9 @@ function createCodebrainMCPServer(bridge) {
       agent: z
         .enum([
           "claude",
+          "openclaude",
           "codex",
           "gemini",
-          "gemini-cli",
-          "openclaude",
           "kimi",
           "cursor",
           "copilot",
@@ -111,9 +110,10 @@ function createCodebrainMCPServer(bridge) {
           "commandcode",
           "shell",
         ])
+        .or(z.string())
         .optional()
         .describe(
-          "Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it (for example, Codex → codex). Omit only when the user did not choose a CLI."
+          "Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it (for example, Codex → codex, Antigravity → antigravity). Omit only when the user did not choose a CLI."
         ),
       providerId: z.string().optional().describe("Provider ID to use for the new pane."),
       accountId: z.string().optional().describe("Explicit account ID when the user selected a configured CLI account."),
@@ -241,10 +241,9 @@ function createCodebrainMCPServer(bridge) {
       agent: z
         .enum([
           "claude",
+          "openclaude",
           "codex",
           "gemini",
-          "gemini-cli",
-          "openclaude",
           "kimi",
           "cursor",
           "copilot",
@@ -255,7 +254,9 @@ function createCodebrainMCPServer(bridge) {
           "hermes",
           "muse",
           "commandcode",
+          "shell",
         ])
+        .or(z.string())
         .optional()
         .describe(
           "Exact CLI binary to open. When the user names a CLI, this field is REQUIRED and must match it."

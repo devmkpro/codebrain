@@ -122,3 +122,29 @@ it("finds a CLI from PATH without waiting for a user action", async () => {
     path: installed,
   });
 });
+
+it.skipIf(process.platform !== "win32")(
+  "finds installed Antigravity CLI (agy) through fallback paths when PATH and LOCALAPPDATA are absent",
+  async () => {
+    vi.stubEnv("LOCALAPPDATA", "");
+    const installed = path.join(os.homedir(), "AppData", "Local", "agy", "bin", "agy.exe");
+    vi.mocked(fs.existsSync).mockImplementation((file) => file === installed);
+    vi.mocked(execFile).mockImplementation(((
+      file: string,
+      _args: string[],
+      _options: unknown,
+      done: (error: Error | null, value: string) => void
+    ) => {
+      queueMicrotask(() =>
+        done(
+          file === installed ? null : new Error("not on PATH"),
+          file === installed ? "agy 1.2.0" : ""
+        )
+      );
+      return {};
+    }) as typeof execFile);
+    const detector = new CliDetector();
+    const result = await detector.redetectAsync();
+    expect(result.antigravity).toEqual({ found: true, path: installed, version: "agy 1.2.0" });
+  }
+);

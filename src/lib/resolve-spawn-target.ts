@@ -20,7 +20,7 @@ interface ResolveOpts {
   model?: string;
   /** All installed providers (any shape — uses id, host, type, models, env). */
   providers: any[];
-  /** Global preferred agent: 'claude' | 'openclaude' | 'gemini' | 'codex' | null. */
+  /** Global preferred agent: 'claude' | 'openclaude' | 'antigravity' | 'codex' | null. */
   preferredAgent?: string | null;
   /** Per-provider default models from localStorage. */
   providerDefaultModels?: Record<string, string>;
@@ -178,6 +178,13 @@ export function resolveSpawnTarget(opts: ResolveOpts & {
 export const HOST_LABELS: Record<string, string> = {
   claude: "Claude Code CLI",
   openclaude: "OpenClaude",
+  antigravity: "Antigravity CLI",
   gemini: "Gemini CLI",
   codex: "Codex",
+  kimi: "Kimi Code",
+  cursor: "Cursor CLI",
+  copilot: "GitHub Copilot CLI",
+  kiro: "Kiro CLI",
+  opencode: "OpenCode",
+  grok: "Grok Build",
 };

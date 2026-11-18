@@ -62,6 +62,7 @@ export const NODE_R = 30;
 export const AGENT_COLORS = {
   claude: "#ef4444",
   codex: "#3b82f6",
+  antigravity: "#06b6d4",
   gemini: "#22c55e",
   opencode: "#a855f7",
   shell: "#6b7280"
