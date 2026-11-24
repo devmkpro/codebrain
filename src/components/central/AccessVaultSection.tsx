@@ -1,4 +1,5 @@
 import React from "react";
+import { MAX_SSM_LAUNCHER_BYTES } from "../../types/access-vault";
 import type {
   AccessCredential, AccessCredentialInput, AccessCredentialKind, AccessHost, AccessHostInput,
   AccessVaultBridge, AccessVaultInventory, AccessVaultResult, AccessVaultStatus,
@@ -180,6 +181,7 @@ export function AccessVaultSection() {
   const [notice, setNotice] = React.useState("");
   const action = useAction();
   const mutation = React.useRef(false);
+  const ssmLauncher = React.useRef<HTMLInputElement>(null);
 
   const saved = () => { setEditor(null); setNotice("Cadastro salvo no cofre."); resource.reload(); };
   async function remove() {
@@ -193,6 +195,25 @@ export function AccessVaultSection() {
     mutation.current = false;
     if (result) { setConfirm(null); setNotice("Cadastro removido do cofre."); resource.reload(); }
   }
+  async function importSsmLauncher(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || mutation.current) return;
+    mutation.current = true;
+    setNotice("");
+    const result = await action.run(async () => {
+      if (file.size > MAX_SSM_LAUNCHER_BYTES) throw new Error("O launcher SSM deve ter até 64 KB.");
+      return checked(await api().importSsmLauncher({ contents: await file.text() }));
+    });
+    mutation.current = false;
+    if (result) {
+      setNotice(result.imported
+        ? `Túneis SSM configurados para ${result.imported} acesso(s). Entradas ignoradas: ${result.skipped ?? 0}.`
+        : "Nenhuma entrada nova corresponde aos hosts cadastrados.");
+      resource.reload();
+    }
+  }
+
   async function connect(host: AccessHost) {
     if (mutation.current) return;
     mutation.current = true;
@@ -219,7 +240,15 @@ export function AccessVaultSection() {
       {editor?.kind === "credential" && <CredentialForm key={`credential-${editor.item?.id ?? "new"}`} credential={editor.item} onSaved={saved} onCancel={() => setEditor(null)} />}
       {editor?.kind === "host" && <HostForm key={`host-${editor.item?.id ?? "new"}`} host={editor.item} credentials={data.credentials} onSaved={saved} onCancel={() => setEditor(null)} />}
       <section aria-label="Hosts SSH" className="space-y-3">
-        <div className="flex items-center justify-between gap-3"><h3 className="text-sm text-cb-fg-0">Hosts SSH ({data.hosts.length})</h3><Btn tone="accent" disabled={action.busy || editor !== null} onClick={() => { action.clearError(); setNotice(""); setEditor({ kind: "host" }); }}>Novo host SSH</Btn></div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm text-cb-fg-0">Hosts SSH ({data.hosts.length})</h3>
+          <div className="flex flex-wrap gap-2">
+            <input ref={ssmLauncher} type="file" accept=".bat,.cmd" aria-label="Arquivo do launcher SSM" hidden onChange={event => void importSsmLauncher(event)} />
+            <Btn disabled={action.busy || editor !== null} onClick={() => ssmLauncher.current?.click()}>Importar túneis SSM do .bat</Btn>
+            <Btn tone="accent" disabled={action.busy || editor !== null} onClick={() => { action.clearError(); setNotice(""); setEditor({ kind: "host" }); }}>Novo host SSH</Btn>
+          </div>
+        </div>
+        <p className="text-xs text-cb-fg-2">Importe uma vez para que o Codebrain abra os túneis dos hosts correspondentes com o perfil AWS CLI autenticado.</p>
         {data.hosts.length === 0 && <p className="text-xs text-cb-fg-2">Nenhum host cadastrado. O cadastro não abre uma conexão.</p>}
         {data.hosts.map(host => <article key={host.id} className="border-b border-cb-line-0 py-3 space-y-2">
           <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm text-cb-fg-0">{host.label}</h4><Tag>{host.allowAgentAccess ? "Agentes: solicitações permitidas" : "Agentes: bloqueado"}</Tag></div>

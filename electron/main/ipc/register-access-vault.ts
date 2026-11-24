@@ -71,6 +71,10 @@ export function registerAccessVaultHandlers(ctx: AppContext, options: AccessVaul
   handle("list", async () => ({ ok: true, ...await vault.list({ source: "user" }) }));
   handle("saveCredential", async args => ({ ok: true, credential: await vault.upsertCredential(args) }));
   handle("saveHost", async args => ({ ok: true, host: await vault.upsertHost(args, { source: "user" }) }));
+  handle("importSsmLauncher", async args => {
+    validArgs(args, ["contents"]);
+    return { ok: true, ...await vault.importSsmLauncher(args.contents) };
+  });
   handle("deleteCredential", async args => {
     validArgs(args, ["id", "confirmed"]);
     if (args.confirmed !== true) throw new AccessVaultError("CONFIRMATION_REQUIRED", "Confirme a exclusão da credencial.");

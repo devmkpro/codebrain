@@ -2,6 +2,13 @@
 export type AccessCredentialKind = "api-key" | "password" | "ssh-key-path";
 export type AccessSource = "user" | "agent";
 
+export const MAX_SSM_LAUNCHER_BYTES = 64 * 1024;
+
+export interface SsmLauncherImportResult {
+  imported: number;
+  skipped: number;
+}
+
 export interface SsmTunnelConfig {
   instanceId: string;
   region: string;
@@ -82,4 +89,5 @@ export interface AccessVaultBridge {
   deleteHost(input: { id: string; confirmed: true }): Promise<AccessVaultResult>;
   openSsh(input: { hostId: string }): Promise<AccessVaultResult<{ paneId: string; interactive: boolean }>>;
   loginSso(input: { profile: string }): Promise<AccessVaultResult>;
+  importSsmLauncher(input: { contents: string }): Promise<AccessVaultResult<SsmLauncherImportResult>>;
 }

@@ -27,6 +27,7 @@ describe("access vault IPC boundary", () => {
       upsertHost: vi.fn().mockResolvedValue({ id: "host-fixture", allowAgentAccess: false }),
       deleteCredential: vi.fn().mockResolvedValue(undefined), deleteHost: vi.fn().mockResolvedValue(undefined),
       openSsh: vi.fn().mockResolvedValue({ paneId: "ssh-test", interactive: false }),
+      importSsmLauncher: vi.fn().mockResolvedValue({ imported: 2, skipped: 1 }),
     };
     const frame = { url: pathToFileURL(path.join(process.cwd(), "out", "renderer", "index.html")).href };
     main = { mainFrame: frame, isDestroyed: () => false };
@@ -38,12 +39,23 @@ describe("access vault IPC boundary", () => {
   const invoke = (name: string, args?: unknown) => handlers.get(`accessVault:${name}`)!(event, args);
 
   it("registers only metadata CRUD and terminal operations, without reveal/getSecret", async () => {
-    expect([...handlers.keys()].sort()).toEqual(["accessVault:deleteCredential", "accessVault:deleteHost", "accessVault:list", "accessVault:loginSso", "accessVault:openSsh", "accessVault:saveCredential", "accessVault:saveHost", "accessVault:status"]);
+    expect([...handlers.keys()].sort()).toEqual(["accessVault:deleteCredential", "accessVault:deleteHost", "accessVault:importSsmLauncher", "accessVault:list", "accessVault:loginSso", "accessVault:openSsh", "accessVault:saveCredential", "accessVault:saveHost", "accessVault:status"]);
     expect(await invoke("list")).toEqual({ ok: true, hosts: [], credentials: [] });
     expect(vault.list).toHaveBeenCalledWith({ source: "user" });
     const response = await invoke("saveCredential", { label: "Fixture", kind: "password", secret: "TEST-ONLY-SECRET" });
     expect(JSON.stringify(response)).not.toContain("TEST-ONLY-SECRET");
     expect(response.credential).not.toHaveProperty("secret");
+  });
+
+  it("imports only launcher text sent from the trusted main frame", async () => {
+    const contents = "launcher fixture";
+    expect((await invoke("importSsmLauncher", { contents, path: "untrusted.bat" })).code).toBe("INVALID_INPUT");
+    event.sender = {};
+    expect((await invoke("importSsmLauncher", { contents })).code).toBe("IPC_FORBIDDEN");
+    expect(vault.importSsmLauncher).not.toHaveBeenCalled();
+    event.sender = main;
+    expect(await invoke("importSsmLauncher", { contents })).toEqual({ ok: true, imported: 2, skipped: 1 });
+    expect(vault.importSsmLauncher).toHaveBeenCalledExactlyOnceWith(contents);
   });
 
   it("rejects an unrelated webContents and a child frame", async () => {

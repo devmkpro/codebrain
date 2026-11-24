@@ -268,6 +268,7 @@ contextBridge.exposeInMainWorld("codeBrainApp", {
     deleteHost: (input: { id: string; confirmed: true }) => ipcRenderer.invoke("accessVault:deleteHost", input),
     openSsh: (input: { hostId: string }) => ipcRenderer.invoke("accessVault:openSsh", input),
     loginSso: (input: { profile: string }) => ipcRenderer.invoke("accessVault:loginSso", input),
+    importSsmLauncher: (input: { contents: string }) => ipcRenderer.invoke("accessVault:importSsmLauncher", input),
   },
 
   workspace: {

@@ -5289,7 +5289,7 @@ function createCodebrainMCPServer(bridge) {
   );
   server.tool(
     "access_ssh_open",
-    "Open or reuse a visible SSH terminal for an authorized machine. A successful result means the terminal started, not that SSH authenticated: inspect pane_read for the prompt or errors. Returns paneId and reused, never credentials. Password authentication requires the user to open the terminal.",
+    "Open or reuse a visible SSH terminal for an authorized machine. A host with ssmTunnel opens its own AWS tunnel using the authenticated AWS CLI profile. Loopback-only AWS hosts can be converted by the user in Central → Acessos with Importar túneis SSM do .bat. Inspect pane_read for the SSH prompt after opening. Password authentication requires the user to open the terminal.",
     {
       hostId: z.string().uuid(),
       callerPaneId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/).optional().describe("Your pane ID. Makes you the terminal's owner so pane_write (with fromPaneId) can type in the visible SSH terminal."),

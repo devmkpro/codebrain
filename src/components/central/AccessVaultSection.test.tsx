@@ -32,10 +32,26 @@ describe("AccessVaultSection", () => {
       deleteHost: vi.fn().mockResolvedValue({ ok: true }), deleteCredential: vi.fn().mockResolvedValue({ ok: true }),
       openSsh: vi.fn().mockResolvedValue({ ok: true, paneId: "ssh-fixture", interactive: false }),
       loginSso: vi.fn().mockResolvedValue({ ok: true }),
+      importSsmLauncher: vi.fn().mockResolvedValue({ ok: true, imported: 2, skipped: 1 }),
     };
     vi.stubGlobal("codeBrainApp", { accessVault: bridge });
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  it("imports a selected launcher and reloads the vault inventory", async () => {
+    render(<AccessVaultSection />);
+    const button = await screen.findByRole("button", { name: "Importar túneis SSM do .bat" });
+    const input = screen.getByLabelText("Arquivo do launcher SSM");
+    const filePicker = vi.spyOn(input, "click");
+    fireEvent.click(button);
+    expect(filePicker).toHaveBeenCalledOnce();
+    const launcher = new File(["launcher fixture"], "fixture-ssm.bat");
+    Object.defineProperty(launcher, "text", { value: async () => "launcher fixture" });
+    fireEvent.change(input, { target: { files: [launcher] } });
+    await screen.findByText("Túneis SSM configurados para 2 acesso(s). Entradas ignoradas: 1.");
+    expect(bridge.importSsmLauncher).toHaveBeenCalledExactlyOnceWith({ contents: "launcher fixture" });
+    await waitFor(() => expect(bridge.list).toHaveBeenCalledTimes(2));
+  });
 
   it("renders only persisted metadata and keeps saved secret fields empty on edit", async () => {
     bridge.list.mockResolvedValue({ ok: true, hosts: [host], credentials: [{ ...credential, secret: "NEVER-DISPLAY-STORED-SECRET" }] });

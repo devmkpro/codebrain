@@ -2,9 +2,10 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
+import { MAX_SSM_LAUNCHER_BYTES } from "../../../src/types/access-vault";
 import type {
   AccessCredential, AccessCredentialInput, AccessHost, AccessHostInput, AccessSource, SsmTunnelConfig,
-  AccessVaultInventory, AccessVaultStatus,
+  AccessVaultInventory, AccessVaultStatus, SsmLauncherImportResult,
 } from "../../../src/types/access-vault";
 
 /** The synchronous interface is supported by Electron 33. Never use plaintext fallback. */
@@ -119,6 +120,38 @@ function validateSsmTunnel(input: unknown): SsmTunnelConfig | undefined {
       !Number.isInteger(localPort) || (localPort as number) < 1 || (localPort as number) > 65535)
     fail("INVALID_SSM", "Informe instância, região, perfil AWS e porta local válidos.");
   return { instanceId, region, profile, localPort: localPort as number };
+}
+
+/** Read the launcher format as data. Never evaluate batch syntax. */
+function parseSsmLauncher(contents: unknown) {
+  const invalid = () => fail("INVALID_SSM_LAUNCHER", "Selecione um launcher .bat com perfil AWS e entradas call :tunnel no formato do AWS SSM.");
+  if (typeof contents !== "string" || Buffer.byteLength(contents) > MAX_SSM_LAUNCHER_BYTES || contents.includes("\0"))
+    return invalid();
+
+  const lines = contents.split(/\r?\n/).map(line => line.trim());
+  const profiles = lines.filter(line => /^set\s+"?PROFILE=/i.test(line));
+  const profile = profiles.length === 1 && /^set\s+(?:"PROFILE=([\w.@+-]+)"|PROFILE=([\w.@+-]+))$/i.exec(profiles[0]);
+  const commands = lines.filter(line => /^start\s+.*\bssm\s+start-session\b/i.test(line));
+  const command = commands.length === 1 && /^start\s+"[^"]+"\s+(?:\/min\s+)?"%AWSCLI%"\s+ssm\s+start-session\s+--target\s+"%INSTANCE%"\s+--document-name\s+AWS-StartPortForwardingSession\s+--parameters\s+portNumber="?([0-9]{1,5})"?,localPortNumber="%PORT%"\s+--profile\s+"%PROFILE%"\s+--region\s+"%REGION%"$/i.exec(commands[0]);
+  if (!profile || !command) return invalid();
+  const remotePort = Number(command[1]);
+  if (remotePort < 1 || remotePort > 65535) return invalid();
+
+  const entries = new Map<number, { name: string; config: SsmTunnelConfig }>();
+  for (const line of lines.filter(line => /^call\s+:tunnel(?:\s|$)/i.test(line))) {
+    const match = /^call\s+:tunnel\s+(i-[a-f0-9]+)\s+([a-z0-9-]+)\s+(\d{1,5})\s+([a-z0-9_.-]+)$/i.exec(line);
+    if (!match) return invalid();
+    const [, instanceId, region, port, name] = match;
+    const localPort = Number(port);
+    if (entries.has(localPort)) return invalid();
+    const config = validateSsmTunnel({
+      instanceId: instanceId.toLowerCase(), region: region.toLowerCase(),
+      profile: profile[1] ?? profile[2], localPort,
+    })!;
+    entries.set(localPort, { name: name.toLowerCase(), config });
+  }
+  if (!entries.size) return invalid();
+  return { entries, remotePort };
 }
 
 export function createAccessVault(options: AccessVaultOptions) {
@@ -327,6 +360,36 @@ export function createAccessVault(options: AccessVaultOptions) {
     });
   }
 
+  async function importSsmLauncher(contents: unknown): Promise<SsmLauncherImportResult> {
+    const { entries, remotePort } = parseSsmLauncher(contents);
+    return locked(async () => {
+      const doc = await read();
+      const occupied = new Set(doc.hosts.flatMap(host => host.ssmTunnel ? [host.ssmTunnel.localPort] : []));
+      const candidates = new Map<number, AccessHost[]>();
+      for (const host of doc.hosts) {
+        if (host.hostname !== "127.0.0.1" || host.ssmTunnel || occupied.has(host.port)) continue;
+        const entry = entries.get(host.port);
+        if (!entry || ![entry.name, `aws ssm - ${entry.name}`].includes(host.label.toLowerCase())) continue;
+        const matches = candidates.get(host.port) ?? [];
+        matches.push(host);
+        candidates.set(host.port, matches);
+      }
+
+      const updated = new Map<string, AccessHost>();
+      const now = new Date().toISOString();
+      for (const [port, matches] of candidates) {
+        if (matches.length !== 1) continue;
+        const [host] = matches;
+        updated.set(host.id, { ...host, port: remotePort, ssmTunnel: entries.get(port)!.config, updatedAt: now });
+      }
+      if (updated.size) {
+        doc.hosts = doc.hosts.map(host => updated.get(host.id) ?? host);
+        await write(doc);
+      }
+      return { imported: updated.size, skipped: entries.size - updated.size };
+    });
+  }
+
   async function deleteHost(hostId: string) {
     id(hostId);
     return locked(async () => {
@@ -349,7 +412,8 @@ export function createAccessVault(options: AccessVaultOptions) {
       // Isolated endpoints remain the default. A user-approved alias explicitly
       // opts into the local config's identity and jump route. Explicit host
       // user/port always win, avoiding the Windows username for IP endpoints.
-      const args = [...(host.useSshConfig ? [] : ["-F", "none", "-o", "ProxyCommand=none", "-o", "ProxyJump=none"]),
+      const args = [...(host.useSshConfig ? [] : ["-F", "none"]),
+        ...(host.ssmTunnel || !host.useSshConfig ? ["-o", "ProxyCommand=none", "-o", "ProxyJump=none"] : []),
         "-o", "StrictHostKeyChecking=yes", "-o", "PermitLocalCommand=no",
         "-o", "ForwardAgent=no", "-o", "ForwardX11=no", "-o", "ClearAllForwardings=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none",
         "-o", "CanonicalizeHostname=no", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3", "-o", `BatchMode=${interactive ? "no" : "yes"}`];
@@ -415,7 +479,7 @@ export function createAccessVault(options: AccessVaultOptions) {
     } finally { connectionPending = false; }
   }
 
-  return { status, list, upsertCredential, deleteCredential, upsertHost, deleteHost, openSsh };
+  return { status, list, upsertCredential, deleteCredential, upsertHost, importSsmLauncher, deleteHost, openSsh };
 }
 
 export type AccessVault = ReturnType<typeof createAccessVault>;

@@ -27,6 +27,15 @@ function testSafeStorage(): VaultSafeStorage {
 }
 
 const hostInput = { label: "Fixture host", hostname: "fixture.example.invalid", username: "tester", port: 2222 };
+const launcher = [
+  "@echo off",
+  'set "PROFILE=fixture"',
+  "call :tunnel i-0123456789abcdef0 us-east-1 2223 project-dev",
+  "call :tunnel i-0fedcba9876543210 sa-east-1 2224 project-test",
+  "call :tunnel i-0123456789abcdef1 us-east-1 2225 unknown-host",
+  ":tunnel",
+  'start "%NAME% SSM tunnel" /min "%AWSCLI%" ssm start-session --target "%INSTANCE%" --document-name AWS-StartPortForwardingSession --parameters portNumber="22",localPortNumber="%PORT%" --profile "%PROFILE%" --region "%REGION%"',
+].join("\r\n");
 
 describe("access vault", () => {
   let fixture: string;
@@ -67,6 +76,37 @@ describe("access vault", () => {
     const changed = await vault.upsertHost({ ...hostInput, id: host.id, ssmTunnel: { ...ssmTunnel, localPort: 2223 } }, { source: "agent" });
     expect(changed.allowAgentAccess).toBe(false);
     await expect(vault.upsertHost({ ...hostInput, ssmTunnel: { ...ssmTunnel, instanceId: "i-evil;echo" } })).rejects.toMatchObject({ code: "INVALID_SSM" });
+  });
+
+  it("imports confirmed launcher routes into matching loopback hosts without granting agent access", async () => {
+    const vault = createAccessVault(options);
+    const active = await vault.upsertHost({ ...hostInput, hostname: "127.0.0.1", label: "AWS SSM - project-dev", port: 2223, useSshConfig: true, allowAgentAccess: true });
+    const blocked = await vault.upsertHost({ ...hostInput, hostname: "127.0.0.1", label: "AWS SSM - project-test", port: 2224 });
+    const unrelated = await vault.upsertHost({ ...hostInput, hostname: "127.0.0.1", label: "Other host", port: 2225 });
+
+    expect(await vault.importSsmLauncher(launcher)).toEqual({ imported: 2, skipped: 1 });
+    expect(await vault.importSsmLauncher(launcher)).toEqual({ imported: 0, skipped: 3 });
+    const { hosts } = await createAccessVault(options).list();
+    expect(hosts.find(host => host.id === unrelated.id)).toEqual(unrelated);
+    expect(hosts.find(host => host.id === active.id)).toMatchObject({
+      port: 22, useSshConfig: true, allowAgentAccess: true,
+      ssmTunnel: { instanceId: "i-0123456789abcdef0", region: "us-east-1", profile: "fixture", localPort: 2223 },
+    });
+    expect(hosts.find(host => host.id === blocked.id)).toMatchObject({ allowAgentAccess: false });
+    await expect(vault.openSsh(blocked.id, { source: "agent" })).rejects.toMatchObject({ code: "AGENT_ACCESS_DENIED" });
+    await vault.openSsh(active.id, { source: "agent" });
+    expect(options.openSshPane).toHaveBeenCalledWith(expect.objectContaining({
+      ssmRemotePort: 22,
+      args: expect.arrayContaining(["ProxyCommand=none", "ProxyJump=none", "-p", "2223"]),
+    }));
+  });
+
+  it("rejects ambiguous launcher entries atomically", async () => {
+    const vault = createAccessVault(options);
+    const host = await vault.upsertHost({ ...hostInput, hostname: "127.0.0.1", label: "AWS SSM - project-dev", port: 2223 });
+    const ambiguous = launcher.replace("2224 project-test", "2223 project-test");
+    await expect(vault.importSsmLauncher(ambiguous)).rejects.toMatchObject({ code: "INVALID_SSM_LAUNCHER" });
+    expect((await vault.list()).hosts).toEqual([host]);
   });
 
   it("roundtrips encrypted data and never serializes secrets in public CRUD/list results", async () => {
