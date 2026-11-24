@@ -14,9 +14,28 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "2.0.12",
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "importar launchers AWS SSM para conexoes gerenciadas"
+      }
+    ]
+  },
+  {
     "version": "2.0.11",
-    "date": "em desenvolvimento",
-    "highlights": []
+    "date": "novembro 2026",
+    "highlights": [
+      {
+        "kind": "fix",
+        "text": "remove fakeTimers and increase vitest timeout for container runners"
+      },
+      {
+        "kind": "feat",
+        "text": "release v2.0.11 with Antigravity CLI, Universal Harness Drivers and ultra-fast pane spawn"
+      }
+    ]
   },
   {
     "version": "2.0.10",
