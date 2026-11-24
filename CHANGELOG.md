@@ -2,6 +2,13 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.12] — 2026-11-24
+
+### Fixes
+
+- Permite importar uma vez os parâmetros de um launcher AWS SSM para que agentes abram os túneis dos hosts correspondentes com o perfil AWS CLI autenticado.
+- Tenta novamente quando a instância está temporariamente desconectada e informa erros de autenticação, permissão, plugin e porta local.
+
 ## [2.0.11] — 2026-11-18
 
 ### Features
