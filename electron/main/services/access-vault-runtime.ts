@@ -4,9 +4,22 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { safeSend, type AppContext } from "../context";
 import { AccessVaultError, createAccessVault, type AccessVault, type SshLaunchPlan } from "./access-vault";
-import { startSsmTunnel, stopSsmTunnel } from "./ssm-tunnel";
+import { createSsmTunnelManager, type SsmTunnelManager } from "./ssm-tunnel-manager";
 
 const instances = new WeakMap<AppContext, AccessVault>();
+const tunnels = new WeakMap<AppContext, SsmTunnelManager>();
+
+/** One app-owned SSM tunnel per host, shared by its SSH panes and healed in the background. */
+export function getSsmTunnelManager(ctx: AppContext): SsmTunnelManager {
+  let manager = tunnels.get(ctx);
+  if (!manager) {
+    const created = createSsmTunnelManager();
+    app.once("before-quit", () => created.stopAll());
+    tunnels.set(ctx, created);
+    manager = created;
+  }
+  return manager;
+}
 
 function systemSsh(): string {
   const candidates = process.platform === "win32"
@@ -35,10 +48,8 @@ export function getAccessVault(ctx: AppContext): AccessVault {
       for (const [existingId, config] of ctx.paneConfigs) {
         const ssh = config as typeof config & { sshHostId?: string; sshSignature?: string; ownerPaneId?: string; sshTunnel?: boolean };
         if (ssh.sshHostId !== plan.hostId || !ctx.ptyManager.hasPane(existingId)) continue;
-        if (plan.forceNew) {
-          if (plan.ssmTunnel) throw new AccessVaultError("SSH_IN_USE", "A porta do túnel SSM já está em uso por uma sessão SSH ativa.");
-          continue;
-        }
+        // The SSM tunnel is shared, so a separate session on the same host is fine.
+        if (plan.forceNew) continue;
         if (ssh.sshSignature !== signature && (plan.tunnel || ssh.sshTunnel)) continue;
         if (ssh.sshSignature !== signature || ssh.ownerPaneId !== plan.ownerPaneId) {
           throw new AccessVaultError("SSH_IN_USE", "Já existe uma sessão SSH para esta máquina com outro acesso ou responsável. Feche-a antes de abrir outra.");
@@ -46,25 +57,12 @@ export function getAccessVault(ctx: AppContext): AccessVault {
         return { paneId: existingId, reused: true };
       }
       const cwd = ctx.currentWorkspacePath || os.homedir();
-      const tunnel = plan.ssmTunnel ? await startSsmTunnel(plan.ssmTunnel, plan.ssmRemotePort ?? 22) : undefined;
-      let paneId: string;
-      try {
-        paneId = await ctx.ptyManager.spawn(
-          { agent: "shell", cwd, workspacePath: cwd },
-          { binary: systemSsh(), args: plan.args },
-        );
-      } catch (error) { if (tunnel) stopSsmTunnel(tunnel); throw error; }
-      if (tunnel) {
-        const shutdown = () => stopSsmTunnel(tunnel);
-        const closeTunnel = (id: string) => {
-          if (id !== paneId) return;
-          ctx.ptyManager.off("exit", closeTunnel);
-          app.off("before-quit", shutdown);
-          shutdown();
-        };
-        ctx.ptyManager.on("exit", closeTunnel);
-        app.once("before-quit", shutdown);
-      }
+      // The tunnel outlives the pane: closing or losing a terminal keeps it warm for the next connect.
+      if (plan.ssmTunnel) await getSsmTunnelManager(ctx).ensure(plan.ssmTunnel, plan.ssmRemotePort ?? 22);
+      const paneId = await ctx.ptyManager.spawn(
+        { agent: "shell", cwd, workspacePath: cwd },
+        { binary: systemSsh(), args: plan.args },
+      );
       const label = `${plan.tunnel ? "Túnel SSH" : "SSH"} · ${plan.label}`;
       ctx.paneConfigs.set(paneId, { agent: "shell", cwd, workspacePath: cwd, label, args: [], sshHostId: plan.hostId, sshSignature: signature, ...(plan.tunnel ? { sshTunnel: true } : {}), ...(plan.ownerPaneId ? { ownerPaneId: plan.ownerPaneId } : {}) } as any);
       ctx.paneRegistry.set(paneId, { paneId, cwd, spawnedAt: Date.now() });
