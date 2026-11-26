@@ -2,6 +2,14 @@
 
 All notable changes to Codebrain will be documented in this file.
 
+## [2.0.13] — 2026-11-26
+
+### Features
+
+- Mantém o túnel AWS SSM aberto em segundo plano, independente do terminal, e o reabre sozinho quando a AWS o derruba.
+- Abre o login SSO no navegador quando a sessão AWS expira durante uma conexão pedida.
+- Permite várias sessões SSH no mesmo host SSM e reconexão pelo agente chamando access_ssh_open novamente.
+
 ## [2.0.12] — 2026-11-24
 
 ### Fixes
