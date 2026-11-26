@@ -14,6 +14,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    "version": "2.0.13",
+    "date": "em desenvolvimento",
+    "highlights": [
+      {
+        "kind": "feat",
+        "text": "manter tunel SSM persistente e reconectar SSH pelo agente"
+      }
+    ]
+  },
+  {
     "version": "2.0.12",
     "date": "novembro 2026",
     "highlights": [
